@@ -1,0 +1,44 @@
+---
+description: Rate how readable and well-structured a summary is with SummarizationCoherenceJudge
+headline: Summarization coherence | Opik Documentation
+og:description: Evaluate summary clarity and structure with Opik's Summarization Coherence
+  Judge, scoring readability from 0.0 to 1.0.
+og:site_name: Opik Documentation
+og:title: Summarization Coherence Metric - Opik
+title: Summarization coherence
+---
+
+# Summarization Coherence Judge
+
+`SummarizationCoherenceJudge` evaluates the writing quality of a summary: structure, clarity, and logical flow. It complements `SummarizationConsistencyJudge` by focusing on how the summary reads rather than whether it is factual, returning a 0.0–1.0 score derived from a raw 0–10 judgement.
+
+```python title="Improving summary readability"
+from opik.evaluation.metrics import SummarizationCoherenceJudge
+
+metric = SummarizationCoherenceJudge()
+
+score = metric.score(
+    output="""SUMMARY: First, the product launched. Revenue grew. Margins fell. Next steps TBD.""",
+)
+
+print(score.value)   # 0.0–1.0 after normalisation
+print(score.reason)
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `str` | **Yes** | Summary text to evaluate. |
+| `input` | `str` | Optional | Original document/talk track for additional context (not required). |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Upgrade when assessing long-form or domain-specific summaries. |
+| `temperature` | `0.0` | Raise slightly (≤0.3) to expose diverse stylistic critiques. |
+| `track` | `True` | Toggle off to skip logging. |
+| `project_name` | `None` | Override when tracking across projects. |
+
+Pair this judge with `SummarizationConsistencyJudge` to ensure summaries are both factual and easy to skim. The evaluator returns a 0–10 integer that Opik normalises to 0–1.

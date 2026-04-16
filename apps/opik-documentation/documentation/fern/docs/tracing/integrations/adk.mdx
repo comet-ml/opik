@@ -50,7 +50,7 @@ pip install opik google-adk
 
 ### Configuring Opik
 
-Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/v1/tracing/sdk_configuration) for detailed instructions on:
 
 - **CLI configuration**: `opik configure`
 - **Code configuration**: `opik.configure()`
@@ -363,7 +363,7 @@ By calling `track_adk_agent_recursive` once on the top-level agent, all child ag
 Opik automatically tracks token usage and cost for all LLM calls during the agent execution, not only for the Gemini LLMs, but including the models accessed via `LiteLLM`.
 
 <Tip>
-  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+  View the complete list of supported models and providers on the [Supported Models](/v1/tracing/supported_models) page.
 </Tip>
 
 ## Agent Graph Visualization
@@ -606,7 +606,7 @@ opik_tracer.flush()
 
 ## Prompts integration
 
-The `OpikTracer` can be used together with the [OPIK prompts library](/docs/opik/prompt_engineering/prompt_management)
+The `OpikTracer` can be used together with the [OPIK prompts library](/v1/prompt_engineering/prompt_management)
 to easily access your existing prompts or create new ones, and then associate them with traces or spans within an ADK agent flow.
 
 ```python

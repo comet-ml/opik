@@ -1,0 +1,213 @@
+---
+description: Start here to integrate Opik into your Semantic Kernel-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: Semantic Kernel | Opik Documentation
+og:description: Leverage Semantic Kernel to integrate LLMs with languages like C#
+  and Python, enabling rapid development of enterprise-grade AI solutions.
+og:site_name: Opik Documentation
+og:title: Build AI Applications with Semantic Kernel - Opik
+title: Observability for Semantic Kernel (Python) with Opik
+---
+
+[Semantic Kernel](https://github.com/microsoft/semantic-kernel) is a powerful open-source SDK from Microsoft. It facilitates the combination of LLMs with popular programming languages like C#, Python, and Java. Semantic Kernel empowers developers to build sophisticated AI applications by seamlessly integrating AI services, data sources, and custom logic, accelerating the delivery of enterprise-grade AI solutions.
+
+Learn more about Semantic Kernel in the [official documentation](https://learn.microsoft.com/en-us/semantic-kernel/overview/).
+
+![Semantic Kernel Integration](/img/tracing/semantic_kernel_integration.png)
+
+## Getting started
+
+To use the Semantic Kernel integration with Opik, you will need to have Semantic Kernel and the required OpenTelemetry packages installed:
+
+```bash
+pip install semantic-kernel opentelemetry-exporter-otlp-proto-http
+```
+
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with Semantic Kernel
+
+<Warning>
+**Important:** By default, Semantic Kernel does not emit spans for AI connectors because they contain experimental `gen_ai` attributes. You **must** set one of these environment variables to enable telemetry:
+
+- `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS_SENSITIVE=true` - Includes **sensitive data** (prompts and completions)
+- `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` - **Non-sensitive data only** (model names, operation names, token usage)
+
+Without one of these variables set, no AI connector spans will be emitted.
+
+For more details, see [Microsoft's Semantic Kernel Environment Variables documentation](https://learn.microsoft.com/en-us/semantic-kernel/concepts/enterprise-readiness/observability/telemetry-with-console?tabs=Powershell-CreateFile%2CEnvironmentFile&pivots=programming-language-python#environment-variables).
+</Warning>
+
+Semantic Kernel has built-in OpenTelemetry support. Enable telemetry and configure the OTLP exporter:
+
+```python
+import asyncio
+import os
+
+# REQUIRED: Enable Semantic Kernel diagnostics
+# Option 1: Include sensitive data (prompts and completions)
+os.environ["SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS_SENSITIVE"] = (
+    "true"
+)
+
+# Option 2: Hide sensitive data (prompts and completions)
+# os.environ["SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS"] = "true"
+
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.semconv.resource import ResourceAttributes
+from opentelemetry.trace import set_tracer_provider
+from semantic_kernel import Kernel
+from semantic_kernel.connectors.ai.function_choice_behavior import (
+    FunctionChoiceBehavior,
+)
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+from semantic_kernel.connectors.ai.prompt_execution_settings import (
+    PromptExecutionSettings,
+)
+from semantic_kernel.functions.kernel_arguments import KernelArguments
+from semantic_kernel.functions.kernel_function_decorator import kernel_function
+
+
+class BookingPlugin:
+    @kernel_function(
+        name="find_available_rooms",
+        description="Find available conference rooms for today.",
+    )
+    def find_available_rooms(
+        self,
+    ) -> list[str]:
+        return ["Room 101", "Room 201", "Room 301"]
+
+    @kernel_function(
+        name="book_room",
+        description="Book a conference room.",
+    )
+    def book_room(self, room: str) -> str:
+        return f"Room {room} booked."
+
+
+def set_up_tracing():
+    # Create a resource to represent the service/sample
+    resource = Resource.create(
+        {ResourceAttributes.SERVICE_NAME: "semantic-kernel-app"}
+    )
+
+    exporter = OTLPSpanExporter()
+
+    # Initialize a trace provider for the application. This is a factory for creating tracers.
+    tracer_provider = TracerProvider(resource=resource)
+    # Span processors are initialized with an exporter which is responsible
+    # for sending the telemetry data to a particular backend.
+    tracer_provider.add_span_processor(BatchSpanProcessor(exporter))
+    # Sets the global default tracer provider
+    set_tracer_provider(tracer_provider)
+
+
+# This must be done before any other telemetry calls
+set_up_tracing()
+
+
+async def main():
+    # Create a kernel and add a service
+    kernel = Kernel()
+    kernel.add_service(OpenAIChatCompletion(ai_model_id="gpt-4.1"))
+    kernel.add_plugin(BookingPlugin(), "BookingPlugin")
+
+    answer = await kernel.invoke_prompt(
+        "Reserve a conference room for me today.",
+        arguments=KernelArguments(
+            settings=PromptExecutionSettings(
+                function_choice_behavior=FunctionChoiceBehavior.Auto(),
+            ),
+        ),
+    )
+    print(answer)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+<Tip>
+**Choosing between the environment variables:**
+
+- Use `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS_SENSITIVE=true` if you want complete visibility into your LLM interactions, including the actual prompts and responses. This is useful for debugging and development.
+
+- Use `SEMANTICKERNEL_EXPERIMENTAL_GENAI_ENABLE_OTEL_DIAGNOSTICS=true` for production environments where you want to avoid logging sensitive data while still capturing important metrics like token usage, model names, and operation performance.
+</Tip>
+
+## Further improvements
+
+If you have any questions or suggestions for improving the Semantic Kernel integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

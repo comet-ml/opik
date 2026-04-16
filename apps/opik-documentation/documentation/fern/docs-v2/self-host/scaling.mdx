@@ -1,0 +1,218 @@
+---
+headline: Scaling Opik | Opik Documentation
+og:description: Learn best practices and configurations for running Opik in production,
+  ensuring resilience and scalability for mission-critical workloads.
+og:site_name: Opik Documentation
+og:title: Scaling Opik for High-Volume Deployments
+subtitle: Comprehensive guide for scaling Opik in production environments
+title: Scaling Opik
+---
+
+Opik is built to power mission-critical workloads at scale. Whether you're running a small proof of concept or a high-volume enterprise deployment, Opik adapts seamlessly to your needs. Its stateless architecture and powerful ClickHouse backed storage make it highly resilient, horizontally scalable, and future-proof for your data growth.
+
+This guide outlines recommended configurations and best practices for running Opik in production.
+
+## Reference Deployment: Live Production Environment
+
+The following is based on an active, high-volume Opik deployment serving real users in production. Use it as a reference when planning your own infrastructure.
+
+### Workload Profile
+
+| Metric | Value |
+|--------|-------|
+| Active users (daily) | ~600 |
+| Traces ingested per day | 4–6 million |
+| Weekly data ingestion | ~100 GB |
+| Total traces stored | 40 million (400 GB) |
+| Total spans stored | 250 million (3.1 TB) |
+| Total data on disk | 5 TB |
+| Select queries per second | ~80 |
+| Insert queries per second | ~20 |
+| Rows inserted per minute | Up to 75K |
+
+### Infrastructure
+
+**Opik Backend** — 10 pods
+- 3 CPU cores, 5 GB memory per pod
+
+**Opik Python Backend** — 12 pods
+- 1.5 CPU cores, 2 GB memory per pod
+
+**Opik Frontend** — 3 pods
+- Lightweight reverse proxy, minimal CPU and memory requirements
+
+**ClickHouse** — 2 replicas, 1 shard
+- 30 CPU cores, 230 GB memory per replica
+- 15 TB gp3 SSD storage per replica (3000 IOPS, 250 MiB/s throughput)
+
+### Key Configuration
+
+| Setting | Value |
+|---------|-------|
+| Async ClickHouse inserts | Enabled |
+| Rate limiting | 10,000 events per 60 seconds per client |
+| Max query execution time | 60 seconds |
+| Max memory per query | 10 GB |
+| Ingestion method | Batch endpoints (up to 1,000 items/request) |
+
+This deployment runs comfortably at 10–20% average CPU utilization on ClickHouse, with headroom for traffic spikes up to 40–50%.
+
+## Built for Growth
+
+Opik is designed with flexibility at its core. As your data grows and query volumes increase, Opik grows with you.
+
+- **Horizontal scaling** - add more replicas of services to instantly handle more traffic
+- **Vertical scaling** - increase CPU, memory, or storage to handle denser workloads  
+- **Seamless elasticity** - scale out during peak usage and scale back during quieter periods
+
+For larger workloads, ClickHouse can be scaled to support enterprise-level deployments. A common configuration includes:
+
+- 62 CPU cores
+- 256 GB RAM
+- 25 TB disk space
+
+ClickHouse's read path can also scale horizontally by increasing replicas, ensuring Opik continues to deliver high performance as usage grows.
+
+## Resilient Services Cluster
+
+Opik services are stateless and fault-tolerant, ensuring high availability across environments. Recommended resources:
+
+| Environment | CPU (vCPU) | RAM (GB) |
+|-------------|------------|----------|
+| Development | 4 | 8 |
+| Production | 13 | 32 |
+
+### Instance Guidance
+
+| Deployment | Instance | vCPUs | Memory (GiB) |
+|------------|----------|-------|--------------|
+| Dev (small) | c7i.large | 2 | 4 |
+| Dev | c7i.xlarge | 4 | 8 |
+| Prod (small) | c7i.2xlarge | 8 | 16 |
+| Prod | c7i.4xlarge | 16 | 32 |
+
+### Backend Service (Scales to Demand)
+
+| Metric | Dev | Prod Small | Prod Large |
+|--------|-----|------------|------------|
+| Replicas | 2 | 5 | 7 |
+| CPU cores | 1 | 2 | 2 |
+| Memory (GiB) | 2 | 9 | 12 |
+
+### Frontend Service (Always Responsive)
+
+| Metric | Dev | Prod Small | Prod Large |
+|--------|-----|------------|------------|
+| Replicas | 2 | 3 | 5 |
+| CPU (millicores) | 5 | 50 | 50 |
+| Memory (MiB) | 16 | 32 | 64 |
+
+## ClickHouse: High-Performance Storage
+
+At the heart of Opik's scalability is ClickHouse, a proven, high-performance analytical database designed for large-scale workloads. Opik leverages ClickHouse for storing traces and spans, ensuring fast queries, robust ingestion, and uncompromising reliability.
+
+### Instance Types
+
+Memory-optimized instances are recommended, with a minimum 4:1 memory-to-CPU ratio:
+
+| Deployment | Instance |
+|------------|----------|
+| Small | m7i.2xlarge |
+| Medium | m7i.4xlarge |
+| Large | m7i.8xlarge |
+
+### Replication Strategy
+
+- **Development**: 1 replica
+- **Production**: 2 replicas
+
+Always scale vertically before adding more replicas for efficiency.
+
+### CPU & Memory Guidance
+
+Target 10–20% CPU utilization, with safe spikes up to 40–50%.
+
+Maintain at least a 4:1 memory-to-CPU ratio (extend to 8:1 for very large environments).
+
+| Deployment | CPU cores | Memory (GiB) |
+|------------|-----------|--------------|
+| Minimum | 2 | 8 |
+| Development | 4 | 16 |
+| Production (small) | 6 | 24 |
+| Production | 32 | 128 |
+
+### Disk Recommendations
+
+To ensure reliable performance under heavy load:
+
+| Volume | Value |
+|--------|-------|
+| Family | SSD |
+| Type | gp3 |
+| Size | 8–16 TiB (workload dependent) |
+| IOPS | 3000 |
+| Throughput | 250 MiB/s |
+
+Opik's ClickHouse layer is resilient even under sustained, large-scale ingestion, ensuring queries stay fast.
+
+## Ingestion Best Practices
+
+How you send data to Opik matters more than how much hardware you run. Optimizing your ingestion pattern is the single most impactful thing you can do for performance.
+
+### Use Batch Endpoints
+
+Opik provides batch ingestion endpoints that accept up to **1,000 items per request**:
+
+- `POST /v1/private/traces/batch`
+- `POST /v1/private/spans/batch`
+
+Instead of sending 1,000 individual HTTP requests (each triggering a separate database insert), a single batch request handles them all at once. This dramatically reduces connection overhead and ClickHouse insert pressure.
+
+<Tip>
+The **Opik Python SDK batches automatically** — no code changes needed. This guidance applies primarily to direct API integrations or custom SDK implementations.
+</Tip>
+
+### Enable Async Inserts
+
+For production deployments, enable async ClickHouse inserts. This allows Opik to buffer writes and flush them in larger, more efficient batches rather than committing each insert individually.
+
+### Set Query Limits
+
+Protect your ClickHouse cluster from runaway queries:
+
+| Setting | Recommended Value |
+|---------|-------------------|
+| Max execution time | 60 seconds |
+| Max memory per query | 10 GB |
+| Max concurrent queries per user | 2–4 |
+
+These limits prevent a single expensive query from impacting ingestion performance or other users.
+
+### Monitor What Matters
+
+Key metrics to watch for a healthy deployment:
+
+- **ClickHouse CPU utilization** — target 10–20% average, safe spikes up to 40–50%
+- **Insert rate** — rows inserted per minute, should be steady without drops
+- **Query duration** — p95 and p99 query times; investigate if consistently above 10 seconds
+- **Pod restarts** — frequent restarts may indicate health check timeouts under load
+
+## Managing System Tables
+
+System tables (e.g., `system.opentelemetry_span_log`) can grow quickly. To keep storage lean:
+
+- Configure TTL settings in ClickHouse, or
+- Perform periodic manual pruning
+
+## Why Opik Scales with Confidence
+
+- **Enterprise-ready** — built to support multi-terabyte data volumes
+- **Elastic & flexible** — easily adjust resources to match workload demands
+- **Robust & reliable** — designed for high availability and long-term stability
+- **Future-proof** — proven to support growing usage without redesign
+
+With Opik, you can start small and scale confidently, knowing your observability platform won't hold you back.
+
+## References
+
+- [ClickHouse sizing & hardware recommendations](https://clickhouse.com/docs/guides/sizing-and-hardware-recommendations)
