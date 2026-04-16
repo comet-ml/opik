@@ -51,7 +51,8 @@ const AgentConfigurationEmptyState: React.FC = () => {
             <div className="flex flex-col gap-1">
               <h4 className="comet-body-s-accented">Run your agent</h4>
               <p className="comet-body-xs text-muted-slate">
-                Your configuration will appear here automatically
+                Your configuration will appear here automatically after your
+                next trace is logged.
               </p>
             </div>
           </TimelineStep>
