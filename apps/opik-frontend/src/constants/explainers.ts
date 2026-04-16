@@ -10,6 +10,7 @@ export enum EXPLAINER_ID {
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_an_test_suite_now_what = "i_added_traces_to_an_test_suite_now_what",
+  i_added_items_to_a_dataset_now_what = "i_added_items_to_a_dataset_now_what",
   how_to_choose_annotation_queue_type = "how_to_choose_annotation_queue_type",
   why_would_i_want_to_add_traces_to_an_test_suite = "why_would_i_want_to_add_traces_to_an_test_suite",
   hows_the_cost_estimated = "hows_the_cost_estimated",
@@ -160,6 +161,14 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Traces added to test suite",
     description:
       "Your traces have been added to the test suite and can now be used in experiments to evaluate your agent.",
+    docLink: "/evaluation/overview",
+    docHash: "#running-an-evaluation",
+  },
+  [EXPLAINER_ID.i_added_items_to_a_dataset_now_what]: {
+    id: EXPLAINER_ID.i_added_items_to_a_dataset_now_what,
+    title: "Items added to dataset",
+    description:
+      "Your items have been added to the dataset and can now be used in experiments to evaluate your agent.",
     docLink: "/evaluation/overview",
     docHash: "#running-an-evaluation",
   },
