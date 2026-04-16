@@ -7,6 +7,7 @@ WORKDIR /build
 COPY requirements.txt .
 COPY scoring_runner.py .
 
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Completely remove pip and all package management tools
