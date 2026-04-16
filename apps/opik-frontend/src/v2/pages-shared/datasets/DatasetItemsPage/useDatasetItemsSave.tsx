@@ -9,12 +9,14 @@ import { useToast } from "@/ui/use-toast";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { useNavigateToExperiment } from "@/v2/pages-shared/experiments/useNavigateToExperiment";
 import { useTestSuiteSavePayload } from "@/hooks/useTestSuiteSavePayload";
+import { DATASET_TYPE } from "@/types/datasets";
 
 type SavePayload = ReturnType<typeof useTestSuiteSavePayload>;
 
 interface UseDatasetItemsSaveParams {
   datasetId: string;
   datasetName: string | undefined;
+  datasetType: DATASET_TYPE | undefined;
   buildPayload: SavePayload["buildPayload"];
   buildInitialVersionPayload: SavePayload["buildInitialVersionPayload"];
   hasNoVersion: boolean;
@@ -24,6 +26,7 @@ interface UseDatasetItemsSaveParams {
 const useDatasetItemsSave = ({
   datasetId,
   datasetName,
+  datasetType,
   buildPayload,
   buildInitialVersionPayload,
   hasNoVersion,
@@ -75,6 +78,7 @@ const useDatasetItemsSave = ({
               loadPlayground({
                 datasetId,
                 datasetVersionId: versionId,
+                datasetType,
               })
             }
           >
@@ -84,7 +88,14 @@ const useDatasetItemsSave = ({
         ],
       });
     },
-    [toast, navigateToExperiment, loadPlayground, datasetName, datasetId],
+    [
+      toast,
+      navigateToExperiment,
+      loadPlayground,
+      datasetName,
+      datasetId,
+      datasetType,
+    ],
   );
 
   const changesMutation = useDatasetItemChangesMutation({
