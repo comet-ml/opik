@@ -9,6 +9,10 @@ og:title: Develop AI Agents with Google ADK - Opik
 title: Observability for Google Agent Development Kit (Python) with Opik
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 [Agent Development Kit (ADK)](https://google.github.io/adk-docs/) is a flexible and modular framework for developing and deploying AI agents. ADK can be used with popular LLMs and open-source generative AI tools and is designed with a focus on tight integration with the Google ecosystem and Gemini models. ADK makes it easy to get started with simple agents powered by Gemini models and Google AI tools while providing the control and structure needed for more complex agent architectures and orchestration.
 
 In this guide, we will showcase how to integrate Opik with Google ADK so that all the ADK calls are logged as traces in Opik. We'll cover three key integration patterns:
@@ -46,7 +50,7 @@ pip install opik google-adk
 
 ### Configuring Opik
 
-Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/v1/tracing/sdk_configuration) for detailed instructions on:
 
 - **CLI configuration**: `opik configure`
 - **Code configuration**: `opik.configure()`
@@ -359,7 +363,7 @@ By calling `track_adk_agent_recursive` once on the top-level agent, all child ag
 Opik automatically tracks token usage and cost for all LLM calls during the agent execution, not only for the Gemini LLMs, but including the models accessed via `LiteLLM`.
 
 <Tip>
-  View the complete list of supported models and providers on the [Supported Models](/tracing/supported_models) page.
+  View the complete list of supported models and providers on the [Supported Models](/v1/tracing/supported_models) page.
 </Tip>
 
 ## Agent Graph Visualization
@@ -602,7 +606,7 @@ opik_tracer.flush()
 
 ## Prompts integration
 
-The `OpikTracer` can be used together with the [OPIK prompts library](/docs/opik/prompt_engineering/prompt_management)
+The `OpikTracer` can be used together with the [OPIK prompts library](/v1/prompt_engineering/prompt_management)
 to easily access your existing prompts or create new ones, and then associate them with traces or spans within an ADK agent flow.
 
 ```python
@@ -625,7 +629,8 @@ from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 # Create prompt
 system_prompt = opik.Prompt(
     name="system-prompt",
-    prompt="You are a helpful assistant that provides accurate and concise answers."
+    prompt="You are a helpful assistant that provides accurate and concise answers.",
+    project_name="my-project",
 )
 
 # Get prompt from the Prompt library

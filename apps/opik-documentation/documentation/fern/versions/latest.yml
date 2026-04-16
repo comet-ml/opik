@@ -1,0 +1,972 @@
+tabs:
+  documentation:
+    display-name: Documentation
+    icon: fa-regular fa-building
+    slug: /
+  integrations:
+    display-name: Integrations
+    icon: fa-regular fa-plug
+    slug: /integrations
+  self-host:
+    display-name: Self-hosting Opik
+    icon: fa-regular fa-server
+    slug: /self-host
+  self-improving-agents:
+    display-name: Building Self-Improving Agents
+    icon: fa-regular fa-arrows-rotate
+    slug: /self-improving-agents
+  reference:
+    display-name: SDK & API reference
+    icon: fa-regular fa-square-terminal
+    slug: /reference
+navigation:
+  - tab: documentation
+    layout:
+      - section: Getting Started
+        slug: /
+        contents:
+          - page: Home
+            path: ../docs-v2/home.mdx
+            slug: /
+            icon: fa-regular fa-house
+          - page: Quickstart
+            path: ../docs-v2/quickstart.mdx
+            slug: /quickstart
+            icon: fa-regular fa-bolt
+          - page: Ollie Agent
+            path: ../docs-v2/ollie.mdx
+            slug: ollie
+            icon: fa-regular fa-sparkles
+          - page: FAQ
+            path: ../docs-v2/faq.mdx
+            slug: faq
+            icon: fa-regular fa-question
+          - changelog: ../docs/changelog
+            title: Changelog
+            slug: changelog
+            icon: fa-regular fa-calendar
+      - section: Observability
+        slug: /tracing
+        contents:
+          - page: Overview
+            path: ../docs-v2/observability/overview.mdx
+            slug: overview
+          - page: Getting started
+            path: ../docs-v2/observability/getting-started.mdx
+            slug: getting-started
+          - page: Concepts
+            path: ../docs-v2/tracing/concepts.mdx
+            slug: concepts
+          - page: Debugging agents with Ollie
+            path: ../docs-v2/observability/debug_agents.mdx
+            slug: debug-agents
+          - section: Advanced
+            slug: /advanced
+            contents:
+              - page: Log traces
+                path: ../docs-v2/tracing/advanced/log_traces.mdx
+                slug: log_traces
+              - page: Log conversations
+                path: ../docs-v2/tracing/advanced/log_chat_conversations.mdx
+                slug: log_chat_conversations
+              - page: Log media & attachments
+                path: ../docs-v2/tracing/advanced/log_multimodal_traces.mdx
+                slug: log_multimodal_traces
+              - page: Log Agent Graphs
+                path: ../docs-v2/tracing/advanced/log_agent_graphs.mdx
+                slug: log_agent_graphs
+              - page: Log distributed traces
+                path: ../docs-v2/tracing/advanced/log_distributed_traces.mdx
+                slug: log_distributed_traces
+              - page: Log user feedback
+                path: ../docs-v2/tracing/advanced/annotate_traces.mdx
+                slug: annotate_traces
+              - page: Cost tracking
+                path: ../docs-v2/tracing/advanced/cost_tracking.mdx
+                slug: cost_tracking
+              - page: Export data
+                path: ../docs-v2/observability/export_data.mdx
+                slug: export-data
+              - page: SDK configuration
+                path: ../docs-v2/tracing/advanced/sdk_configuration.mdx
+                slug: sdk_configuration
+              - page: Offline fallback and message replay
+                path: ../docs-v2/tracing/advanced/offline_fallback.mdx
+                slug: offline_fallback
+          - section: Dashboards
+            slug: /dashboards
+            contents:
+              - page: Dashboards
+                path: ../docs-v2/tracing/dashboards/dashboards.mdx
+                slug: dashboards
+              - page: Production monitoring
+                path: ../docs-v2/tracing/dashboards/production_monitoring.mdx
+                slug: production_monitoring
+      - section: Development
+        slug: /development
+        contents:
+          - page: Overview
+            path: ../docs-v2/development/overview.mdx
+            slug: overview
+          - page: Agent sandbox
+            path: ../docs-v2/observability/agent_sandbox.mdx
+            slug: agent-sandbox
+          - page: Prompt playground
+            path: ../docs-v2/prompt_engineering/advanced/playground.mdx
+            slug: playground
+          - section: Agent configuration
+            slug: /agent-configuration
+            contents:
+              - page: Overview
+                path: ../docs-v2/prompt_engineering/overview.mdx
+                slug: overview
+              - page: Getting started
+                path: ../docs-v2/prompt_engineering/getting-started.mdx
+                slug: getting-started
+              - page: Concepts
+                path: ../docs-v2/prompt_engineering/concepts.mdx
+                slug: concepts
+              - page: Version control
+                path: ../docs-v2/prompt_engineering/advanced/version_control.mdx
+                slug: version-control
+              - page: Guaranteed availability
+                path: ../docs-v2/prompt_engineering/advanced/guaranted_availability.mdx
+                slug: guaranteed-availability
+          - section: Optimization runs
+            slug: /optimization-runs
+            contents:
+              - page: Opik Agent Optimizer
+                icon: fa-regular fa-house
+                path: ../docs-v2/development/optimization-runs/overview.mdx
+                slug: overview
+              - page: Optimization Studio
+                icon: fa-regular fa-window-maximize
+                path: ../docs-v2/development/optimization-runs/optimization_studio.mdx
+                slug: optimization_studio
+              - page: Quickstart
+                icon: fa-regular fa-bolt
+                path: ../docs-v2/development/optimization-runs/quickstart.mdx
+                slug: quickstart
+              - page: Quickstart notebook
+                icon: fa-regular fa-play
+                path: ../docs-v2/development/optimization-runs/quickstart_notebook.mdx
+                slug: quickstart_notebook
+              - page: FAQ
+                icon: fa-regular fa-question
+                path: ../docs-v2/development/optimization-runs/faq.mdx
+                slug: faq
+              - page: Changelog
+                icon: fa-regular fa-calendar
+                path: ../docs-v2/development/optimization-runs/changelog.mdx
+                slug: changelog
+              - page: Known Issues
+                icon: fa-regular fa-triangle-exclamation
+                path: ../docs-v2/development/optimization-runs/known_issues.mdx
+                slug: known_issues
+              - section: Optimization
+                slug: /optimization
+                contents:
+                  - page: Concepts
+                    icon: fa-regular fa-lightbulb
+                    path: ../docs-v2/development/optimization-runs/optimization/concepts.mdx
+                    slug: concepts
+                  - page: Configure LLM Providers
+                    icon: fa-regular fa-gear
+                    path: ../docs-v2/development/optimization-runs/optimization/configure_models.mdx
+                    slug: configure_models
+                  - page: Define datasets
+                    icon: fa-regular fa-database
+                    path: ../docs-v2/development/optimization-runs/optimization/define_datasets.mdx
+                    slug: define_datasets
+                  - page: Define metrics
+                    icon: fa-regular fa-chart-line
+                    path: ../docs-v2/development/optimization-runs/optimization/define_metrics.mdx
+                    slug: define_metrics
+                  - page: Optimize prompts
+                    icon: fa-regular fa-wand-magic-sparkles
+                    path: ../docs-v2/development/optimization-runs/optimization/optimize_prompts.mdx
+                    slug: optimize_prompts
+                  - page: Optimize tools (MCP)
+                    icon: fa-regular fa-wand-magic-sparkles
+                    path: ../docs-v2/development/optimization-runs/optimization/optimize_tools.mdx
+                    slug: optimize_tools
+                  - page: Optimize agents
+                    icon: fa-regular fa-diagram-project
+                    path: ../docs-v2/development/optimization-runs/optimization/optimize_agents.mdx
+                    slug: optimize_agents
+                  - page: Optimize multimodal
+                    icon: fa-regular fa-image
+                    path: ../docs-v2/development/optimization-runs/optimization/optimize_multimodal.mdx
+                    slug: optimize_multimodal
+                  - page: Dashboard results
+                    icon: fa-regular fa-chart-simple
+                    path: ../docs-v2/development/optimization-runs/optimization/dashboard_results.mdx
+                    slug: dashboard_results
+              - section: Optimization Algorithms
+                slug: /algorithms
+                contents:
+                  - page: Overview
+                    icon: fa-regular fa-list
+                    path: ../docs-v2/development/optimization-runs/algorithms/overview.mdx
+                    slug: overview
+                  - page: Benchmarks
+                    icon: fa-regular fa-chart-line
+                    path: ../docs-v2/development/optimization-runs/algorithms/benchmarks.mdx
+                    slug: benchmarks
+                  - page: MetaPrompt
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/metaprompt_optimizer.mdx
+                    slug: metaprompt_optimizer
+                  - page: HRPO
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer.mdx
+                    slug: hierarchical_adaptive_optimizer
+                  - page: Few-Shot Bayesian
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/fewshot_bayesian_optimizer.mdx
+                    slug: fewshot_bayesian_optimizer
+                  - page: Evolutionary
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/evolutionary_optimizer.mdx
+                    slug: evolutionary_optimizer
+                  - page: GEPA
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/gepa_optimizer.mdx
+                    slug: gepa_optimizer
+                  - page: Parameter
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/parameter_optimizer.mdx
+                    slug: parameter_optimizer
+                  - page: Tool Optimization
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/algorithms/tool_optimization.mdx
+                    slug: tool_optimization
+              - section: Cookbooks & Tutorials
+                slug: /cookbooks
+                contents:
+                  - page: Optimizer introduction
+                    icon: fa-regular fa-book
+                    path: ../docs-v2/development/optimization-runs/quickstart_notebook.mdx
+                    slug: optimizer_introduction_cookbook
+                  - page: Synthetic data optimizer
+                    icon: fa-regular fa-book
+                    path: ../docs-v2/development/optimization-runs/cookbooks/synthetic_data_optimizer_cookbook.mdx
+                    slug: synthetic_data_optimizer_cookbook
+                  - page: ARC-AGI tutorial
+                    icon: fa-regular fa-book
+                    path: ../docs-v2/development/optimization-runs/cookbooks/arc_agi_optimizer_cookbook.mdx
+                    slug: arc_agi_optimizer_cookbook
+                  - page: Multimodal agent tutorial
+                    icon: fa-regular fa-book
+                    path: ../docs-v2/development/optimization-runs/cookbooks/multimodal_agent_optimizer_cookbook.mdx
+                    slug: multimodal_agent_optimizer_cookbook
+              - section: Advanced Topics
+                slug: /advanced
+                contents:
+                  - page: Extending optimizers
+                    icon: fa-regular fa-puzzle-piece
+                    path: ../docs-v2/development/optimization-runs/advanced/extending_optimizers.mdx
+                    slug: extending_optimizers
+                  - page: Custom metrics
+                    icon: fa-regular fa-sliders
+                    path: ../docs-v2/development/optimization-runs/advanced/custom_metrics.mdx
+                    slug: custom_metrics
+                  - page: Custom optimizer prompts
+                    icon: fa-regular fa-pen-to-square
+                    path: ../docs-v2/development/optimization-runs/advanced/prompt_customization.mdx
+                    slug: prompt_customization
+                  - page: Sampling controls
+                    icon: fa-regular fa-scale-balanced
+                    path: ../docs-v2/development/optimization-runs/advanced/n_samples.mdx
+                    slug: n_samples
+                  - page: Multiple completions (n)
+                    icon: fa-regular fa-code-fork
+                    path: ../docs-v2/development/optimization-runs/advanced/multiple_completions.mdx
+                    slug: multiple_completions
+                  - page: Chaining optimizers
+                    icon: fa-regular fa-objects-align-bottom
+                    path: ../docs-v2/development/optimization-runs/advanced/chaining_optimizers.mdx
+                    slug: chaining_optimizers
+                  - page: API Reference
+                    icon: fa-regular fa-square-terminal
+                    path: ../docs-v2/development/optimization-runs/advanced/api_reference.mdx
+                    slug: api_reference
+      - section: Evaluation
+        slug: /evaluation
+        contents:
+          - page: Overview
+            path: ../docs-v2/evaluation/overview.mdx
+            slug: overview
+          - page: Getting started
+            path: ../docs-v2/evaluation/getting-started.mdx
+            slug: getting-started
+          - page: Concepts
+            path: ../docs-v2/evaluation/concepts.mdx
+            slug: concepts
+          - section: Advanced
+            slug: /advanced
+            contents:
+              - page: Building Test Suites
+                path: ../docs-v2/evaluation/building_evaluation_suites.mdx
+                slug: building-test-suites
+              - page: Datasets & Experiments
+                path: ../docs-v2/evaluation/advanced/evaluate_your_llm.mdx
+                slug: evaluate_your_llm
+              - page: Manage datasets
+                path: ../docs-v2/evaluation/advanced/manage_datasets.mdx
+                slug: manage_datasets
+              - page: Evaluate agent trajectories
+                path: ../docs-v2/evaluation/advanced/evaluate_agent_trajectory.mdx
+                slug: evaluate_agent_trajectory
+              - page: Evaluate multi-turn agents
+                path: ../docs-v2/evaluation/advanced/evaluate_multi_turn_agents.mdx
+                slug: evaluate_multi_turn_agents
+              - page: Annotation Queues
+                path: ../docs-v2/evaluation/advanced/annotation_queues.mdx
+                slug: annotation_queues
+              - page: Manually logging experiments
+                path: ../docs-v2/evaluation/advanced/log_experiments_with_rest_api.mdx
+                slug: log_experiments_with_rest_api
+          - section: Metrics
+            slug: /metrics
+            contents:
+              - page: Overview
+                path: ../docs-v2/evaluation/metrics/overview.mdx
+                slug: overview
+              - page: Heuristic metrics
+                path: ../docs-v2/evaluation/metrics/heuristic_metrics.mdx
+                slug: heuristic_metrics
+              - page: Hallucination
+                path: ../docs-v2/evaluation/metrics/hallucination.mdx
+                slug: hallucination
+              - page: LLM Juries
+                path: ../docs-v2/evaluation/metrics/llm_juries.mdx
+                slug: llm_juries
+              - page: G-Eval
+                path: ../docs-v2/evaluation/metrics/g_eval.mdx
+                slug: g_eval
+              - page: Compliance risk
+                path: ../docs-v2/evaluation/metrics/compliance_risk.mdx
+                slug: compliance_risk
+              - page: Prompt uncertainty
+                path: ../docs-v2/evaluation/metrics/prompt_diagnostics.mdx
+                slug: prompt_diagnostics
+              - page: Moderation
+                path: ../docs-v2/evaluation/metrics/moderation.mdx
+                slug: moderation
+              - page: Meaning Match
+                path: ../docs-v2/evaluation/metrics/meaning_match.mdx
+                slug: meaning_match
+              - page: Usefulness
+                path: ../docs-v2/evaluation/metrics/usefulness.mdx
+                slug: usefulness
+              - page: Summarization consistency
+                path: ../docs-v2/evaluation/metrics/summarization_consistency.mdx
+                slug: summarization_consistency
+              - page: Summarization coherence
+                path: ../docs-v2/evaluation/metrics/summarization_coherence.mdx
+                slug: summarization_coherence
+              - page: Dialogue helpfulness
+                path: ../docs-v2/evaluation/metrics/dialogue_helpfulness.mdx
+                slug: dialogue_helpfulness
+              - page: Answer relevance
+                path: ../docs-v2/evaluation/metrics/answer_relevance.mdx
+                slug: answer_relevance
+              - page: Context precision
+                path: ../docs-v2/evaluation/metrics/context_precision.mdx
+                slug: context_precision
+              - page: Context recall
+                path: ../docs-v2/evaluation/metrics/context_recall.mdx
+                slug: context_recall
+              - page: Trajectory accuracy
+                path: ../docs-v2/evaluation/metrics/trajectory_accuracy.mdx
+                slug: trajectory_accuracy
+              - page: Agent task completion
+                path: ../docs-v2/evaluation/metrics/agent_task_completion.mdx
+                slug: agent_task_completion
+              - page: Agent tool correctness
+                path: ../docs-v2/evaluation/metrics/agent_tool_correctness.mdx
+                slug: agent_tool_correctness
+              - page: Conversational metrics
+                path: ../docs-v2/evaluation/metrics/conversation_threads_metrics.mdx
+                slug: conversation_threads_metrics
+              - page: Custom model
+                path: ../docs-v2/evaluation/metrics/custom_model.mdx
+                slug: custom_model
+              - page: Advanced configuration
+                path: ../docs-v2/evaluation/metrics/advanced_configuration.mdx
+                slug: advanced_configuration
+              - page: Custom metric
+                path: ../docs-v2/evaluation/metrics/custom_metric.mdx
+                slug: custom_metric
+              - page: Custom conversation metric
+                path: ../docs-v2/evaluation/metrics/custom_conversation_metric.mdx
+                slug: custom_conversation_metric
+              - page: Task span metrics
+                path: ../docs-v2/evaluation/metrics/task_span_metrics.mdx
+                slug: task_span_metrics
+          - section: Tutorials
+            skip-slug: true
+            collapsed: true
+            contents:
+              - page: Best practices for evaluating agents
+                path: ../docs-v2/evaluation/evaluate_agents.mdx
+                slug: evaluate_agents
+              - page: Evaluate threads
+                path: ../docs-v2/evaluation/evaluate_threads.mdx
+                slug: evaluate_threads
+              - page: Cookbook - Evaluate hallucination metric
+                path: ../docs-v2/evaluation/evaluate_hallucination_metric.mdx
+                slug: evaluate_hallucination_metric
+              - page: Cookbook - Evaluate moderation metric
+                path: ../docs-v2/evaluation/evaluate_moderation_metric.mdx
+                slug: evaluate_moderation_metric
+      - section: Production
+        slug: /production
+        contents:
+          - section: Online evaluation
+            slug: /online-evaluation
+            contents:
+              - page: Online Evaluation rules
+                path: ../docs-v2/production/online-evaluation/rules.mdx
+                slug: rules
+          - section: Gateway & Guardrails
+            slug: /gateway-guardrails
+            contents:
+              - page: Gateway
+                path: ../docs-v2/production/gateway-guardrails/gateway.mdx
+                slug: gateway
+              - page: Guardrails
+                path: ../docs-v2/production/gateway-guardrails/guardrails.mdx
+                slug: guardrails
+              - page: Anonymizers
+                path: ../docs-v2/production/gateway-guardrails/anonymizers.mdx
+                slug: anonymizers
+          - section: Alerts
+            slug: /alerts
+            contents:
+              - page: Alerts
+                path: ../docs-v2/production/alerts/alerts.mdx
+                slug: alerts
+      - section: Administration
+        slug: /administration
+        contents:
+          - page: Overview
+            path: ../docs-v2/administration/overview.mdx
+            slug: overview
+          - page: Roles and Permissions
+            path: ../docs-v2/administration/roles_and_permissions.mdx
+            slug: roles_and_permissions
+          - section: Workspace Settings
+            slug: /workspace-settings
+            contents:
+              - page: Overview
+                path: ../docs-v2/administration/workspace-settings/overview.mdx
+                slug: overview
+              - page: Feedback Definitions
+                path: ../docs-v2/administration/workspace-settings/feedback_definitions.mdx
+                slug: feedback_definitions
+              - page: AI Providers
+                path: ../docs-v2/administration/workspace-settings/ai_providers.mdx
+                slug: ai_providers
+              - page: Workspace Preferences
+                path: ../docs-v2/administration/workspace-settings/workspace_preferences.mdx
+                slug: workspace_preferences
+              - page: Workspace Members
+                path: ../docs-v2/administration/workspace-settings/workspace_members.mdx
+                slug: workspace_members
+          - section: Admin Dashboard
+            slug: /admin-dashboard
+            contents:
+              - page: Overview
+                path: ../docs-v2/administration/admin-dashboard/overview.mdx
+                slug: overview
+              - page: Workspaces
+                path: ../docs-v2/administration/admin-dashboard/workspaces.mdx
+                slug: workspaces
+              - page: Users
+                path: ../docs-v2/administration/admin-dashboard/users.mdx
+                slug: users
+              - page: Organization Settings
+                path: ../docs-v2/administration/admin-dashboard/organization_settings.mdx
+                slug: organization_settings
+              - page: Service Accounts
+                path: ../docs-v2/administration/admin-dashboard/service_accounts.mdx
+                slug: service_accounts
+          - section: Authentication
+            slug: /authentication
+            contents:
+              - page: Overview
+                path: ../docs-v2/administration/authentication/overview.mdx
+                slug: overview
+              - page: SAML SSO
+                path: ../docs-v2/administration/authentication/saml.mdx
+                slug: saml
+              - page: OIDC SSO
+                path: ../docs-v2/administration/authentication/oidc.mdx
+                slug: oidc
+              - page: JWT Authentication
+                path: ../docs-v2/administration/authentication/jwt.mdx
+                slug: jwt
+      - section: Contributing
+        slug: /contributing
+        contents:
+          - page: Contribution Overview
+            path: ../docs-v2/contributing/overview.mdx
+            slug: overview
+            icon: fa-regular fa-compass
+          - section: Specific Contribution Guides
+            slug: /guides
+            contents:
+              - page: Documentation
+                path: ../docs-v2/contributing/guides/documentation.mdx
+                slug: documentation
+                icon: fa-regular fa-book
+              - page: Local Development Setup
+                path: ../docs-v2/contributing/guides/local-development.mdx
+                slug: local-development
+                icon: fa-regular fa-laptop-code
+              - page: Python SDK
+                path: ../docs-v2/contributing/guides/python-sdk.mdx
+                slug: python-sdk
+                icon: fa-brands fa-python
+              - page: TypeScript SDK
+                path: ../docs-v2/contributing/guides/typescript-sdk.mdx
+                slug: typescript-sdk
+                icon: fa-brands fa-js
+              - page: Opik Optimizer
+                path: ../docs-v2/contributing/guides/agent-optimizer-sdk.mdx
+                slug: agent-optimizer-sdk
+                icon: fa-regular fa-gauge-high
+              - page: Frontend
+                path: ../docs-v2/contributing/guides/frontend.mdx
+                slug: frontend
+                icon: fa-regular fa-window-maximize
+              - page: Backend
+                path: ../docs-v2/contributing/guides/backend.mdx
+                slug: backend
+                icon: fa-regular fa-server
+          - section: Developer Programs
+            slug: /developer-programs
+            contents:
+              - page: Bounty Program
+                path: ../docs-v2/contributing/developer-programs/bounties.mdx
+                slug: bounties
+                icon: fa-regular fa-gem
+  - tab: integrations
+    layout:
+      - page: Overview
+        path: ../docs-v2/integrations/overview.mdx
+        slug: overview
+      - section: TypeScript
+        skip-slug: true
+        icon: fa-brands fa-js
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: BeeAI
+                path: ../docs-v2/integrations/beeai-typescript.mdx
+                slug: beeai-typescript
+              - page: LangChain
+                path: ../docs-v2/integrations/langchainjs.mdx
+                slug: langchainjs
+              - page: Mastra
+                path: ../docs-v2/integrations/mastra.mdx
+                slug: mastra
+              - page: Vercel AI SDK
+                path: ../docs-v2/integrations/vercel-ai-sdk.mdx
+                slug: vercel-ai-sdk
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Cloudflare Workers AI
+                path: ../docs-v2/integrations/cloudflare-workers-ai.mdx
+                slug: cloudflare-workers-ai
+              - page: Gemini
+                path: ../docs-v2/integrations/gemini-typescript.mdx
+                slug: gemini-typescript
+              - page: OpenAI
+                path: ../docs-v2/integrations/openai-typescript.mdx
+                slug: openai-typescript
+          - page: Opik TypeScript SDK
+            path: ../docs-v2/integrations/typescript-sdk.mdx
+            slug: typescript-sdk
+      - section: Python
+        skip-slug: true
+        icon: fa-brands fa-python
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: AG2
+                path: ../docs-v2/integrations/ag2.mdx
+                slug: ag2
+              - page: Agent Spec
+                path: ../docs-v2/integrations/agentspec.mdx
+                slug: agentspec
+              - page: Agno
+                path: ../docs-v2/integrations/agno.mdx
+                slug: agno
+              - page: BeeAI
+                path: ../docs-v2/integrations/beeai.mdx
+                slug: beeai
+              - page: Claude Agent SDK
+                path: ../docs-v2/integrations/claude-agent-sdk.mdx
+                slug: claude-agent-sdk
+              - page: Autogen
+                path: ../docs-v2/integrations/autogen.mdx
+                slug: autogen
+              - page: CrewAI
+                path: ../docs-v2/integrations/crewai.mdx
+                slug: crewai
+              - page: DSPy
+                path: ../docs-v2/integrations/dspy.mdx
+                slug: dspy
+              - page: Google ADK
+                path: ../docs-v2/integrations/adk.mdx
+                slug: adk
+              - page: Haystack
+                path: ../docs-v2/integrations/haystack.mdx
+                slug: haystack
+              - page: Harbor
+                path: ../docs-v2/integrations/harbor.mdx
+                slug: harbor
+              - page: Instructor
+                path: ../docs-v2/integrations/instructor.mdx
+                slug: instructor
+              - page: LangChain
+                path: ../docs-v2/integrations/langchain.mdx
+                slug: langchain
+              - page: LangGraph
+                path: ../docs-v2/integrations/langgraph.mdx
+                slug: langgraph
+              - page: LangServe
+                path: ../docs-v2/integrations/langserve.mdx
+                slug: langserve
+              - page: LiveKit Agents
+                path: ../docs-v2/integrations/livekit.mdx
+                slug: livekit
+              - page: Llama Index
+                path: ../docs-v2/integrations/llama_index.mdx
+                slug: llama_index
+              - page: Microsoft Agent Framework
+                path: ../docs-v2/integrations/microsoft-agent-framework.mdx
+                slug: microsoft-agent-framework
+              - page: OpenAI Agents
+                path: ../docs-v2/integrations/openai_agents.mdx
+                slug: openai_agents
+              - page: Pipecat
+                path: ../docs-v2/integrations/pipecat.mdx
+                slug: pipecat
+              - page: Pydantic AI
+                path: ../docs-v2/integrations/pydantic-ai.mdx
+                slug: pydantic-ai
+              - page: Semantic Kernel
+                path: ../docs-v2/integrations/semantic-kernel.mdx
+                slug: semantic-kernel
+              - page: Smolagents
+                path: ../docs-v2/integrations/smolagents.mdx
+                slug: smolagents
+              - page: Strands Agents
+                path: ../docs-v2/integrations/strands-agents.mdx
+                slug: strands-agents
+              - page: Temporal
+                path: ../docs-v2/integrations/temporal.mdx
+                slug: temporal
+              - page: VoltAgent
+                path: ../docs-v2/integrations/voltagent.mdx
+                slug: voltagent
+          - section: Model Providers
+            skip-slug: true
+            contents:
+              - page: Anthropic
+                path: ../docs-v2/integrations/anthropic.mdx
+                slug: anthropic
+              - page: Bedrock
+                path: ../docs-v2/integrations/bedrock.mdx
+                slug: bedrock
+              - page: BytePlus
+                path: ../docs-v2/integrations/byteplus.mdx
+                slug: byteplus
+              - page: Cohere
+                path: ../docs-v2/integrations/cohere.mdx
+                slug: cohere
+              - page: DeepSeek
+                path: ../docs-v2/integrations/deepseek.mdx
+                slug: deepseek
+              - page: Fireworks AI
+                path: ../docs-v2/integrations/fireworks-ai.mdx
+                slug: fireworks-ai
+              - page: Gemini
+                path: ../docs-v2/integrations/gemini.mdx
+                slug: gemini
+              - page: Groq
+                path: ../docs-v2/integrations/groq.mdx
+                slug: groq
+              - page: Mistral AI
+                path: ../docs-v2/integrations/mistral.mdx
+                slug: mistral
+              - page: Novita AI
+                path: ../docs-v2/integrations/novita-ai.mdx
+                slug: novita-ai
+              - page: Ollama
+                path: ../docs-v2/integrations/ollama.mdx
+                slug: ollama
+              - page: OpenAI
+                path: ../docs-v2/integrations/openai.mdx
+                slug: openai
+              - page: Predibase
+                path: ../docs-v2/integrations/predibase.mdx
+                slug: predibase
+              - page: Together AI
+                path: ../docs-v2/integrations/together-ai.mdx
+                slug: together-ai
+              - page: WatsonX
+                path: ../docs-v2/integrations/watsonx.mdx
+                slug: watsonx
+              - page: xAI Grok
+                path: ../docs-v2/integrations/xai-grok.mdx
+                slug: xai-grok
+          - section: Dataset Management
+            skip-slug: true
+            contents:
+              - page: Gretel
+                path: ../docs-v2/integrations/gretel.mdx
+                slug: gretel
+              - page: Hugging Face Datasets
+                path: ../docs-v2/integrations/huggingface-datasets.mdx
+                slug: huggingface-datasets
+          - section: Evaluation
+            skip-slug: true
+            contents:
+              - page: Ragas
+                path: ../docs-v2/integrations/ragas.mdx
+                slug: ragas
+          - section: Gateways
+            skip-slug: true
+            contents:
+              - page: Opik LLM Gateway
+                path: ../docs-v2/integrations/opik-llm-gateway.mdx
+                slug: opik-llm-gateway
+              - page: Kong AI Gateway
+                path: ../docs-v2/integrations/kong-ai-gateway.mdx
+                slug: kong-ai-gateway
+              - page: AISuite
+                path: ../docs-v2/integrations/aisuite.mdx
+                slug: aisuite
+              - page: Anannas AI
+                path: ../docs-v2/integrations/anannas.mdx
+                slug: anannas
+              - page: Helicone
+                path: ../docs-v2/integrations/helicone.mdx
+                slug: helicone
+              - page: LiteLLM
+                path: ../docs-v2/integrations/litellm.mdx
+                slug: litellm
+              - page: OpenRouter
+                path: ../docs-v2/integrations/openrouter.mdx
+                slug: openrouter
+              - page: Portkey
+                path: ../docs-v2/integrations/portkey.mdx
+                slug: portkey
+              - page: TrueFoundry
+                path: ../docs-v2/integrations/truefoundry.mdx
+                slug: truefoundry
+              - page: Vercel AI Gateway
+                path: ../docs-v2/integrations/vercel-ai-gateway.mdx
+                slug: vercel-ai-gateway
+          - section: Other
+            skip-slug: true
+            contents:
+              - page: Guardrails AI
+                path: ../docs-v2/integrations/guardrails-ai.mdx
+                slug: guardrails-ai
+          - page: Opik Python SDK
+            path: ../docs-v2/integrations/python-sdk.mdx
+            slug: python-sdk
+          - page: OpenTelemetry Python SDK
+            path: ../docs-v2/integrations/opentelemetry-python-sdk.mdx
+            slug: opentelemetry-python-sdk
+      - section: Java
+        skip-slug: true
+        icon: fa-brands fa-java
+        contents:
+          - page: Spring AI
+            path: ../docs-v2/integrations/spring-ai.mdx
+            slug: spring-ai
+          - page: Quarkus LangChain4j
+            path: ../docs-v2/integrations/quarkus-langchain4j.mdx
+            slug: quarkus-langchain4j
+      - section: .NET
+        skip-slug: true
+        icon: fa-solid fa-code
+        contents:
+          - section: Frameworks
+            skip-slug: true
+            contents:
+              - page: Microsoft Agent Framework
+                path: ../docs-v2/integrations/microsoft-agent-framework-dotnet.mdx
+                slug: microsoft-agent-framework-dotnet
+      - section: Ruby
+        skip-slug: true
+        icon: fa-solid fa-gem
+        contents:
+          - page: OpenTelemetry Ruby SDK
+            path: ../docs-v2/integrations/opentelemetry-ruby-sdk.mdx
+            slug: opentelemetry-ruby-sdk
+      - section: No-Code
+        skip-slug: true
+        icon: fa-solid fa-wand-magic-sparkles
+        contents:
+          - page: Cursor
+            path: ../docs-v2/integrations/cursor.mdx
+            slug: cursor
+          - page: Dify
+            path: ../docs-v2/integrations/dify.mdx
+            slug: dify
+          - page: Flowise
+            path: ../docs-v2/integrations/flowise.mdx
+            slug: flowise
+          - page: Langflow
+            path: ../docs-v2/integrations/langflow.mdx
+            slug: langflow
+          - page: n8n
+            path: ../docs-v2/integrations/n8n.mdx
+            slug: n8n
+          - page: OpenClaw
+            path: ../docs-v2/integrations/openclaw.mdx
+            slug: openclaw
+          - page: OpenAI Codex
+            path: ../docs-v2/integrations/openai-codex.mdx
+            slug: openai-codex
+          - page: OpenWebUI
+            path: ../docs-v2/integrations/openwebui.mdx
+            slug: openwebui
+          - page: Prompt Flow
+            path: ../docs-v2/integrations/prompt-flow.mdx
+            slug: prompt-flow
+      - section: Multi-Language
+        skip-slug: true
+        icon: fa-solid fa-globe
+        contents:
+          - page: OpenTelemetry
+            path: ../docs-v2/integrations/opentelemetry.mdx
+            slug: opentelemetry
+  - tab: self-improving-agents
+    layout:
+      - page: Overview
+        path: ../docs-v2/self_improving_agents/overview.mdx
+        slug: overview
+      - page: Ollie and your codebase
+        path: ../docs-v2/self_improving_agents/ollie_and_your_codebase.mdx
+        slug: ollie-and-your-codebase
+  - tab: self-host
+    layout:
+      - page: Overview
+        path: ../docs-v2/self-host/overview.mdx
+        slug: overview
+      - page: Local deployment
+        path: ../docs-v2/self-host/local_deployment.mdx
+        slug: local_deployment
+      - page: Kubernetes deployment
+        path: ../docs-v2/self-host/kubernetes.mdx
+        slug: kubernetes
+      - page: Helm chart migration
+        path: ../docs-v2/self-host/helm.mdx
+        slug: helm
+      - page: Platform Architecture
+        path: ../docs-v2/self-host/architecture.mdx
+        slug: architecture
+      - page: Scaling Opik
+        path: ../docs-v2/self-host/scaling.mdx
+        slug: scaling
+      - page: Advanced clickhouse backup
+        path: ../docs-v2/self-host/backup.mdx
+        slug: backup
+      - page: Troubleshooting
+        path: ../docs-v2/self-host/troubleshooting.mdx
+        slug: troubleshooting
+      - section: Configuration
+        slug: /configure
+        contents:
+          - page: Anonymous usage statistics
+            path: ../docs-v2/self-host/configure/anonymous_usage_statistics.mdx
+            slug: anonymous_usage_statistics
+          - page: Large CSV uploads
+            path: ../docs-v2/self-host/configure/large_csv_uploads.mdx
+            slug: large_csv_uploads
+          - page: Dataset versioning migration
+            path: ../docs-v2/self-host/configure/dataset_versioning_migration.mdx
+            slug: dataset_versioning_migration
+  - tab: reference
+    layout:
+      - page: Overview
+        path: ../docs-v2/reference/overview.mdx
+        slug: overview
+      - section: Python SDK
+        slug: python-sdk
+        contents:
+          - link: Reference
+            href: https://www.comet.com/docs/opik/python-sdk-reference/
+          - page: REST API Client
+            path: ../docs-v2/reference/python-sdk/rest-api.mdx
+            slug: rest-api
+          - section: Troubleshooting
+            slug: troubleshooting
+            contents:
+              - page: Batching and updates
+                path: ../docs-v2/reference/python-sdk/troubleshooting/batching-and-updates.mdx
+                slug: batching-and-updates
+      - section: Typescript SDK
+        slug: typescript-sdk
+        contents:
+          - page: Overview
+            path: ../docs-v2/integrations/typescript-sdk.mdx
+            slug: overview
+          - page: Opik TS
+            path: ../docs-v2/reference/typescript-sdk/opik-ts.mdx
+            slug: opik-ts
+          - page: Prompts
+            path: ../docs-v2/reference/typescript-sdk/prompts.mdx
+            slug: prompts
+          - page: Opik Query Language (OQL)
+            path: ../docs-v2/reference/typescript-sdk/opik-query-language.mdx
+            slug: opik-query-language
+          - section: Evaluation
+            slug: evaluation
+            contents:
+              - page: Overview
+                path: ../docs-v2/reference/typescript-sdk/evaluation/overview.mdx
+                slug: overview
+              - page: Quick Start
+                path: ../docs-v2/reference/typescript-sdk/evaluation/quick-start.mdx
+                slug: quick-start
+              - page: Datasets
+                path: ../docs-v2/reference/typescript-sdk/evaluation/datasets.mdx
+                slug: datasets
+              - page: Evaluate Function
+                path: ../docs-v2/reference/typescript-sdk/evaluation/evaluate_function.mdx
+                slug: evaluate_function
+              - page: Evaluate Prompt Function
+                path: ../docs-v2/reference/typescript-sdk/evaluation/evaluate_prompt_function.mdx
+                slug: evaluate_prompt_function
+              - page: Models
+                path: ../docs-v2/reference/typescript-sdk/evaluation/models.mdx
+                slug: models
+              - page: Metrics
+                path: ../docs-v2/reference/typescript-sdk/evaluation/metrics.mdx
+                slug: metrics
+              - page: Experiments
+                path: ../docs-v2/reference/typescript-sdk/evaluation/experiments.mdx
+                slug: experiments
+
+      - section: Rest API
+        slug: rest-api
+        contents:
+          - page: Overview
+            path: ../docs-v2/reference/rest-api/overview.mdx
+            slug: overview
+          - api: API Reference
+            slug: /
+            display-errors: true

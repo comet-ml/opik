@@ -33,7 +33,7 @@ Opik currently provides official SDKs for:
 - TypeScript: Rich tracing capabilities
 
 These SDKs are actively maintained and regularly updated. For other languages, you can use our REST
-API directly - see our [API documentation](/docs/opik/reference/rest-api/overview) for details.
+API directly - see our [API documentation](/reference/rest-api/overview) for details.
 
 ### What format should I use for start_time?
 
@@ -75,7 +75,7 @@ This format is supported by:
 
 Yes, Opik has been designed from the ground up to be used to monitor production applications. If you
 are self-hosting the
-Opik platform, we recommend using the [Kubernetes deployment](/self-host/overview) option to ensure
+Opik platform, we recommend using the [Kubernetes deployment](/v1/self-host/overview) option to ensure
 that Opik can scale as needed.
 
 ### What is the difference between Opik Cloud and the Open-Source Opik platform ?
@@ -162,7 +162,7 @@ For questions about rate limits, reach out to us on [Slack](https://chat.comet.c
 ### What integrations does Opik support?
 
 Opik supports a comprehensive range of popular LLM frameworks, providers, and tools. You can find
-detailed integration guides in our [Integrations Overview](/integrations/overview).
+detailed integration guides in our [Integrations Overview](/v1/integrations/overview).
 
 **Model Providers:**
 Anthropic, AWS Bedrock, BytePlus, Cloudflare Workers AI, Cohere, DeepSeek, Fireworks AI, Google
@@ -195,7 +195,7 @@ If you don't see your preferred framework or tool listed in our integrations, we
 
 1. Open an [issue on GitHub](https://github.com/comet-ml/opik/issues) to request the integration
 2. In the meantime, you can manually log your LLM interactions using our SDK's core logging
-   functions - see our [tracing documentation](/docs/opik/tracing/log_traces) for examples
+   functions - see our [tracing documentation](/v1/tracing/log_traces) for examples
 
 We actively maintain and expand our integration support based on community feedback.
 
@@ -230,7 +230,7 @@ For Self-hosted Opik:
 You can find your current configuration in the Opik configuration file (`~/.opik.config`) or by
 checking your environment variables (`OPIK_API_KEY`, `OPIK_WORKSPACE`, `OPIK_URL_OVERRIDE`,
 `OPIK_PROJECT_NAME`). For more details on configuration, see our
-[SDK Configuration guide](/docs/opik/tracing/sdk_configuration).
+[SDK Configuration guide](/v1/tracing/sdk_configuration).
 
 ## How can I diagnose issues with Opik?
 

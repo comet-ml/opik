@@ -29,22 +29,22 @@ title: Agent Optimization
 ## Key capabilities
 
 <CardGroup cols={2}>
-  <Card title="Optimizer suite" href="/agent_optimization/algorithms/overview" icon="fa-solid fa-diagram-project" iconPosition="left">
+  <Card title="Optimizer suite" href="/v1/agent_optimization/algorithms/overview" icon="fa-solid fa-diagram-project" iconPosition="left">
     MetaPrompt, HRPO, Few-Shot Bayesian, Evolutionary, GEPA, Parameter tuning. Swap optimizers without changing your workflow.
   </Card>
-  <Card title="Multi-agent + multi-prompt" href="/agent_optimization/optimization/optimize_agents" icon="fa-solid fa-people-group" iconPosition="left">
+  <Card title="Multi-agent + multi-prompt" href="/v1/agent_optimization/optimization/optimize_agents" icon="fa-solid fa-people-group" iconPosition="left">
     Optimize full agent systems with multiple prompts, tools, and orchestration logic, not just a single system message.
   </Card>
-  <Card title="Tool & function calling" href="/agent_optimization/algorithms/tool_optimization" icon="fa-solid fa-screwdriver-wrench" iconPosition="left">
+  <Card title="Tool & function calling" href="/v1/agent_optimization/algorithms/tool_optimization" icon="fa-solid fa-screwdriver-wrench" iconPosition="left">
     Optimize tool schemas and function calling alongside prompt text with the same metrics and datasets.
   </Card>
-  <Card title="Dashboard analytics" href="/agent_optimization/optimization/dashboard_results" icon="fa-solid fa-chart-line" iconPosition="left">
+  <Card title="Dashboard analytics" href="/v1/agent_optimization/optimization/dashboard_results" icon="fa-solid fa-chart-line" iconPosition="left">
     Track trials, candidates, datasets, and trace-level evidence to explain and ship improvements confidently.
   </Card>
-  <Card title="Optimization Studio" href="/agent_optimization/optimization_studio" icon="fa-solid fa-wand-magic-sparkles" iconPosition="left">
+  <Card title="Optimization Studio" href="/v1/agent_optimization/optimization_studio" icon="fa-solid fa-wand-magic-sparkles" iconPosition="left">
     Run optimizer workflows directly from the UI with no-code configuration and result review.
   </Card>
-  <Card title="Secure & offline" href="/self-host/overview" icon="fa-solid fa-shield-halved" iconPosition="left">
+  <Card title="Secure & offline" href="/v1/self-host/overview" icon="fa-solid fa-shield-halved" iconPosition="left">
     Run the SDK locally or inside Opik Docker to keep data inside your network.
   </Card>
 </CardGroup>
@@ -53,10 +53,10 @@ title: Agent Optimization
 
 <Steps>
   <Step title="1. Prepare data & metrics">
-    Use Opik datasets (CSV upload, API, or trace exports) plus deterministic metrics/`ScoreResult` functions. See [Define datasets](/agent_optimization/optimization/define_datasets) and [Define metrics](/agent_optimization/optimization/define_metrics).
+    Use Opik datasets (CSV upload, API, or trace exports) plus deterministic metrics/`ScoreResult` functions. See [Define datasets](/v1/agent_optimization/optimization/define_datasets) and [Define metrics](/v1/agent_optimization/optimization/define_metrics).
   </Step>
   <Step title="2. Pick an optimizer">
-    Choose the best algorithm for your task (see [Optimization algorithms](/agent_optimization/algorithms/overview)). All optimizers expose the same API, so you can swap them easily or chain runs.
+    Choose the best algorithm for your task (see [Optimization algorithms](/v1/agent_optimization/algorithms/overview)). All optimizers expose the same API, so you can swap them easily or chain runs.
   </Step>
   <Step title="3. Inspect & ship">
     Results land in the Opik dashboard under **Evaluation → Optimization runs**, where you can compare prompts, failure modes, and dataset coverage before promoting the change.
@@ -65,10 +65,10 @@ title: Agent Optimization
 
 ## Start fast
 
-- Want a no-code workflow? Use [Optimization Studio](/agent_optimization/optimization_studio) to run optimizations from the Opik UI.
-- Follow the [Quickstart](/agent_optimization/quickstart) to run your first optimization locally.
-- Prefer notebooks? Launch the [Quickstart notebook](/agent_optimization/cookbooks/optimizer_introduction_cookbook).
-- Need scenario-specific guidance? Explore the [Cookbooks](/agent_optimization/cookbooks/optimizer_introduction_cookbook).
+- Want a no-code workflow? Use [Optimization Studio](/v1/agent_optimization/optimization_studio) to run optimizations from the Opik UI.
+- Follow the [Quickstart](/v1/agent_optimization/quickstart) to run your first optimization locally.
+- Prefer notebooks? Launch the [Quickstart notebook](/v1/agent_optimization/cookbooks/optimizer_introduction_cookbook).
+- Need scenario-specific guidance? Explore the [Cookbooks](/v1/agent_optimization/cookbooks/optimizer_introduction_cookbook).
 
 ## Optimization Algorithms
 
@@ -78,23 +78,23 @@ as a first step:
 
 | **Algorithm**                                                                               | **Description**                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/agent_optimization/algorithms/tool_optimization).** |
-| [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
-| [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
-| [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
-| [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |
-| [Parameter Optimization](/agent_optimization/algorithms/parameter_optimizer)                   | Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization. Uses Optuna for efficient parameter search with global and local search phases. Best for tuning model behavior without changing the prompt.                                         |
+| [MetaPrompt Optimization](/v1/agent_optimization/algorithms/metaprompt_optimizer)              | Uses an LLM ("reasoning model") to critique and iteratively refine an initial instruction prompt. Good for general prompt wording, clarity, and structural improvements. **Supports [MCP tool calling optimization](/v1/agent_optimization/algorithms/tool_optimization).** |
+| [HRPO (Hierarchical Reflective Prompt Optimizer)](/v1/agent_optimization/algorithms/hierarchical_adaptive_optimizer) | Uses hierarchical root cause analysis to systematically improve prompts by analyzing failures in batches, synthesizing findings, and addressing identified failure modes. Best for complex prompts requiring systematic refinement based on understanding why they fail. |
+| [Few-shot Bayesian Optimization](/v1/agent_optimization/algorithms/fewshot_bayesian_optimizer) | Specifically for chat models, this optimizer uses Bayesian optimization (Optuna) to find the optimal number and combination of few-shot examples (demonstrations) to accompany a system prompt.                      |
+| [Evolutionary Optimization](/v1/agent_optimization/algorithms/evolutionary_optimizer)          | Employs genetic algorithms to evolve a population of prompts. Can discover novel prompt structures and supports multi-objective optimization (e.g., score vs. length). Can use LLMs for advanced mutation/crossover. |
+| [GEPA Optimization](/v1/agent_optimization/algorithms/gepa_optimizer)                   | Wraps the external GEPA package to optimize a single system prompt for single-turn tasks using a reflection model. Requires `pip install gepa`.                                         |
+| [Parameter Optimization](/v1/agent_optimization/algorithms/parameter_optimizer)                   | Optimizes LLM call parameters (temperature, top_p, etc.) using Bayesian optimization. Uses Optuna for efficient parameter search with global and local search phases. Best for tuning model behavior without changing the prompt.                                         |
 
 <Tip>
-  Want to see numbers? Check the new [optimizer benchmarks](/agent_optimization/algorithms/benchmarks) page for the latest performance table and instructions for running the benchmark suite yourself.
+  Want to see numbers? Check the new [optimizer benchmarks](/v1/agent_optimization/algorithms/benchmarks) page for the latest performance table and instructions for running the benchmark suite yourself.
 </Tip>
 
 ## Next Steps
 
-1. Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
-2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-3. Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.
+1. Explore specific [Optimizers](/v1/agent_optimization/algorithms/overview) for algorithm details.
+2. Refer to the [FAQ](/v1/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/v1/agent_optimization/advanced/api_reference) for detailed configuration options.
 
 <Info>
-  🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects & Cookbooks](/agent_optimization/cookbooks/optimizer_introduction_cookbook) for runnable Colab notebooks covering real-world optimization workflows, including HotPotQA and synthetic data generation.
+  🚀 Want to see Opik Agent Optimizer in action? Check out our [Example Projects & Cookbooks](/v1/agent_optimization/cookbooks/optimizer_introduction_cookbook) for runnable Colab notebooks covering real-world optimization workflows, including HotPotQA and synthetic data generation.
 </Info>

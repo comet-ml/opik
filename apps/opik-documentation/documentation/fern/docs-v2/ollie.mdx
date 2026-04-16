@@ -1,0 +1,127 @@
+---
+headline: Ollie | Opik Documentation
+og:description: Meet Ollie — the AI assistant built into Opik that doesn't just
+  analyze your traces, it helps you improve your agent's code directly from the
+  Opik platform.
+og:site_name: Opik Documentation
+og:title: Ollie — Your AI co-pilot for shipping better agents
+title: Ollie
+---
+
+With **Ollie** and `opik connect`, Opik becomes the place you actually fix it. Opik is no longer just a place to watch what your agent did. Ask a question about any trace, let Ollie read your code, have it edit the file, rerun your agent, and verify the fix with a test suite — all without leaving the browser.
+
+<Frame>
+  <img src="/img/v2/ollie/hero.png" />
+</Frame>
+
+## Meet Ollie
+
+Ollie is a conversational AI assistant built into Opik. It lives next to every trace, dataset, experiment, and prompt you've logged — and when you pair your local project with `opik connect`, Ollie can also read your source files, run your agent, and propose code changes. One assistant, full context: your data on one side, your code on the other.
+
+## What Ollie can do
+
+<CardGroup cols={2}>
+  <Card title="Investigate any trace" icon="fa-regular fa-magnifying-glass-chart">
+    Ollie reads full span trees, identifies root causes, and compares failing
+    runs to successful ones. Ask *"why did the final answer ignore the context?"*
+    and get a grounded answer, not a guess.
+  </Card>
+  <Card title="Connect to your code" icon="fa-regular fa-link">
+    Pair your local project with `opik connect` and Ollie gains the ability to
+    read your source files, propose edits (with your approval), and rerun your
+    agent with the changes in place.
+  </Card>
+  <Card title="Close the loop" icon="fa-regular fa-arrows-rotate">
+    Every fix becomes a test. Ollie can add a failing trace to a test suite,
+    then trigger the suite against your updated agent to confirm the regression
+    is gone.
+  </Card>
+  <Card title="Works across your workspace" icon="fa-regular fa-layer-group">
+    Traces, threads, datasets, experiments, prompts — Ollie queries across all
+    of them in a single conversation. No tab-switching, no manual stitching.
+  </Card>
+</CardGroup>
+
+## From debugging to improvement
+
+The real workflow — and the reason Ollie exists — is the full loop from *"something looks wrong"* to *"it's fixed and it won't regress."* Here's what that looks like in Opik:
+
+<Steps>
+
+### Spot a failing trace
+
+Start where every debugging session starts: a trace that looks wrong. Filter by error status, low feedback score, or latency spike.
+
+### Ask Ollie what went wrong
+
+Open Ollie from the trace view. Describe what looks off — *"the model ignored the retrieved context"*, *"the tool call returned empty"* — and Ollie walks the span tree to find the cause.
+
+<Frame>
+  <img src="/img/v2/ollie/step-2-ask-ollie.png" />
+</Frame>
+
+### Let Ollie read your code
+
+Once Ollie identifies *where* the bug lives, it asks to read the relevant source file. With `opik connect` running on your machine, it has secure access to the files in your project — and shows you exactly what it's looking at.
+
+### Approve the fix
+
+Ollie proposes a change. You see the diff, approve it, and the file is updated on your machine. Nothing happens without your click.
+
+<Frame>
+  <img src="/img/v2/ollie/step-4-suggested-fix.png" />
+</Frame>
+
+### Rerun the agent from Opik
+
+With the fix applied locally, Ollie reruns your agent through `opik connect` using the same inputs from the original failing trace. The new trace streams back into Opik in real time.
+
+### Verify with a test suite
+
+Ask Ollie to add the original trace to a test suite as a regression case, then run the suite against the updated agent. You get a pass/fail summary — and a test that will catch the bug if it ever comes back.
+
+<Frame>
+  <img src="/img/v2/ollie/step-6-eval-verification.png" />
+</Frame>
+
+</Steps>
+
+## Get started with Ollie
+
+<Steps>
+
+### Run `opik connect` in your agent folder
+
+From the root of your agent project, run:
+
+```bash
+opik connect --project <project-name>
+```
+
+That's it. `opik connect` pairs your local project with Opik, and Ollie takes care of the rest — discovering your entrypoints, running your agent, and proposing code changes.
+
+### Chat with Ollie
+
+Open Ollie from anywhere in the Opik UI and start asking. Traces, code, reruns, evaluations — it's all one conversation from here.
+
+</Steps>
+
+<Tip>
+  `opik connect` is opt-in and scoped to the session it's launched in. Ollie
+  can only read and edit files in the project you connect, and every write
+  operation requires your explicit approval.
+</Tip>
+
+## Next steps
+
+<CardGroup cols={3}>
+  <Card title="Debugging agents with Ollie" href="/tracing/debug-agents" icon="fa-regular fa-bug">
+    The tactical guide to the debug-fix-verify loop, with example prompts.
+  </Card>
+  <Card title="Agent sandbox" href="/development/agent-sandbox" icon="fa-regular fa-flask">
+    Everything about `opik connect` — how it discovers and runs your agent.
+  </Card>
+  <Card title="Test suites" href="/evaluation/overview" icon="fa-regular fa-check-double">
+    Build the regression net Ollie will populate for you.
+  </Card>
+</CardGroup>

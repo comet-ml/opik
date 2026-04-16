@@ -1,0 +1,62 @@
+---
+description: Configure Quarkus LangChain4j OpenTelemetry export to send traces to Opik.
+headline: Quarkus LangChain4j | Opik Documentation
+og:description: Quarkus LangChain4j uses Quarkus OTEL properties; this guide maps required and optional settings for Opik.
+og:site_name: Opik Documentation
+og:title: Quarkus LangChain4j Integration - Opik
+title: Observability for Quarkus LangChain4j with Opik
+---
+
+[Quarkus LangChain4j](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html) uses Quarkus OpenTelemetry configuration in `application.properties`.
+
+## When this guide applies
+
+Use this if your app is Quarkus + LangChain4j and you want OTEL traces to land in Opik.
+
+## Opik OTLP endpoint modes
+
+For full endpoint/header details, see [Opik OpenTelemetry overview](/tracing/opentelemetry/overview).
+
+- Cloud endpoint: `https://www.comet.com/opik/api/v1/private/otel`
+- Enterprise endpoint: `https://<comet-deployment-url>/opik/api/v1/private/otel`
+- Self-hosted endpoint: `http://localhost:5173/api/v1/private/otel`
+
+## Example (`application.properties`)
+
+Intent:
+Configure Quarkus OTEL trace exporter to target Opik directly.
+
+Applies when:
+You are using Quarkus-native OTEL exporter settings.
+
+Required fields:
+- `quarkus.otel.enabled=true`
+- `quarkus.otel.traces.enabled=true`
+- `quarkus.otel.exporter.otlp.traces.endpoint`
+- `quarkus.otel.exporter.otlp.traces.protocol=http/protobuf`
+
+Optional fields:
+- `quarkus.otel.exporter.otlp.traces.headers` (`projectName` strongly recommended)
+- `quarkus.application.name` (for `service.name` attribution)
+
+Minimal valid setup:
+
+```properties
+quarkus.otel.enabled=true
+quarkus.otel.traces.enabled=true
+quarkus.otel.exporter.otlp.traces.endpoint=https://www.comet.com/opik/api/v1/private/otel
+quarkus.otel.exporter.otlp.traces.protocol=http/protobuf
+quarkus.otel.exporter.otlp.traces.headers=Authorization=<your-api-key>,Comet-Workspace=<your-workspace>,projectName=<your-project-name>
+```
+
+## Validation
+
+1. Start your Quarkus app with OTEL enabled.
+2. Trigger a LangChain4j-backed endpoint/action.
+3. Confirm spans with your configured `service.name` and project headers arrive in Opik.
+
+## Source references
+
+- [Quarkus OpenTelemetry guide](https://quarkus.io/guides/opentelemetry)
+- [Quarkus LangChain4j docs](https://docs.quarkiverse.io/quarkus-langchain4j/dev/index.html)
+- [Opik OpenTelemetry overview](/tracing/opentelemetry/overview)

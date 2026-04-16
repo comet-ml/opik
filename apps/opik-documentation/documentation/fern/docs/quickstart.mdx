@@ -19,7 +19,7 @@ this guide is to help you log your first LLM calls and chains to the Opik platfo
 Before you begin, you'll need to choose how you want to use Opik:
 
 - **Opik Cloud**: Create a free account at [comet.com/opik](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=quickstart&utm_campaign=opik)
-- **Self-hosting**: Follow the [self-hosting guide](/self-host/overview) to deploy Opik locally or on Kubernetes
+- **Self-hosting**: Follow the [self-hosting guide](/v1/self-host/overview) to deploy Opik locally or on Kubernetes
 
 ## Logging your first LLM calls
 
@@ -351,7 +351,7 @@ popular integrations:
           </Tab>
         </Tabs>
 
-        All Ollama calls will now be logged to Opik. See the [full Ollama guide](/integrations/ollama) for more advanced usage.
+        All Ollama calls will now be logged to Opik. See the [full Ollama guide](/v1/integrations/ollama) for more advanced usage.
       </Step>
     </Steps>
 
@@ -467,15 +467,15 @@ popular integrations:
     Opik has **30+ integrations** with popular frameworks and model providers:
 
     <CardGroup cols={3}>
-      <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
-      <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
-      <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
-      <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
-      <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
-      <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
+      <Card title="LangChain" href="/v1/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
+      <Card title="LlamaIndex" href="/v1/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
+      <Card title="Anthropic" href="/v1/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
+      <Card title="AWS Bedrock" href="/v1/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
+      <Card title="Google Gemini" href="/v1/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
+      <Card title="CrewAI" href="/v1/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
     </CardGroup>
 
-    **[View all 30+ integrations →](/integrations/overview)**
+    **[View all 30+ integrations →](/v1/integrations/overview)**
 
   </Tab>
 </Tabs>
@@ -501,10 +501,10 @@ If you don't see traces appearing, reach out to us on [Slack](https://chat.comet
 
 Now that you have logged your first LLM calls and chains to Opik, why not check out:
 
-1. [In depth guide on agent observability](/tracing/log_traces): Learn how to customize the data
+1. [In depth guide on agent observability](/v1/tracing/log_traces): Learn how to customize the data
    that is logged to Opik and how to log conversations.
-2. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of
+2. [Opik Experiments](/v1/evaluation/concepts): Opik allows you to automated the evaluation process of
    your LLM application so that you no longer need to manually review every LLM response.
-3. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
+3. [Opik's evaluation metrics](/v1/evaluation/metrics/overview): Opik provides a suite of evaluation
    metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your
    LLM responses.

@@ -7,7 +7,7 @@ og:site_name: Opik Documentation
 og:title: Optimization Studio - Opik
 ---
 
-Optimization Studio helps you improve prompts without writing code. You bring a prompt, define what “good” looks like, and Opik tests variations to find a better version you can ship with confidence. Teams like it because it shortens the loop from idea to evidence: you see scores and examples, not just a hunch. If you prefer a programmatic workflow, use the [Optimize prompts](/agent_optimization/optimization/optimize_prompts) guide.
+Optimization Studio helps you improve prompts without writing code. You bring a prompt, define what “good” looks like, and Opik tests variations to find a better version you can ship with confidence. Teams like it because it shortens the loop from idea to evidence: you see scores and examples, not just a hunch. If you prefer a programmatic workflow, use the [Optimize prompts](/v1/agent_optimization/optimization/optimize_prompts) guide.
 
 <video
   src="/img/agent_optimization/optimization_studio_walkthrough.mp4"
@@ -40,11 +40,11 @@ Choose the model that will generate responses, then set the message roles (Syste
 
 ### Pick an algorithm
 
-Choose how Opik should search for better prompts. GEPA works well for single-turn prompts and quick improvements, while HRPO is better when you need deeper analysis of why a prompt fails. If you are new, start with GEPA to get a quick baseline, then switch to HRPO if you need deeper insight. For technical details, see [Optimization algorithms](/agent_optimization/algorithms/overview).
+Choose how Opik should search for better prompts. GEPA works well for single-turn prompts and quick improvements, while HRPO is better when you need deeper analysis of why a prompt fails. If you are new, start with GEPA to get a quick baseline, then switch to HRPO if you need deeper insight. For technical details, see [Optimization algorithms](/v1/agent_optimization/algorithms/overview).
 
 ### Choose a dataset
 
-Pick an existing dataset to supply examples. Aim for diverse, real-world cases rather than edge cases only, and keep the first run small so you can iterate quickly. If you need to create or upload data first, see [Manage datasets](/docs/opik/evaluation/manage_datasets).
+Pick an existing dataset to supply examples. Aim for diverse, real-world cases rather than edge cases only, and keep the first run small so you can iterate quickly. If you need to create or upload data first, see [Manage datasets](/v1/evaluation/manage_datasets).
 ### Define a metric
 
 Pick how Opik should score each prompt. Use Equals if the output should match exactly, or G-Eval if you want a model to grade quality. When using G-Eval, make sure the grading prompt reflects what “good” means for your task.
@@ -74,8 +74,8 @@ You can rerun the same setup, cancel a run to change inputs, or select multiple 
 
 ## Reuse results outside the UI
 
-If you want to automate optimizations in code later, follow [Optimize prompts](/agent_optimization/optimization/optimize_prompts) and use the same dataset and metric from this run.
+If you want to automate optimizations in code later, follow [Optimize prompts](/v1/agent_optimization/optimization/optimize_prompts) and use the same dataset and metric from this run.
 
 ## Next steps
 
-For a deeper breakdown of trials and traces, visit [Dashboard results](/agent_optimization/optimization/dashboard_results). If you want to automate this workflow, use [Optimize prompts](/agent_optimization/optimization/optimize_prompts). To fine-tune your strategy, explore [Optimization algorithms](/agent_optimization/algorithms/overview).
+For a deeper breakdown of trials and traces, visit [Dashboard results](/v1/agent_optimization/optimization/dashboard_results). If you want to automate this workflow, use [Optimize prompts](/v1/agent_optimization/optimization/optimize_prompts). To fine-tune your strategy, explore [Optimization algorithms](/v1/agent_optimization/algorithms/overview).

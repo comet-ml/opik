@@ -9,7 +9,7 @@ og:title: Define Metrics for Optimization - Opik
 title: Define metrics
 ---
 
-Metrics drive optimizer decisions. This guide highlights the fastest way to pick proven presets from Opik’s evaluation catalog, then shows how to extend them when your use case demands it. If you need the full theory, see [Evaluation concepts](/evaluation/concepts) and the [metrics overview](/evaluation/metrics/overview).
+Metrics drive optimizer decisions. This guide highlights the fastest way to pick proven presets from Opik’s evaluation catalog, then shows how to extend them when your use case demands it. If you need the full theory, see [Evaluation concepts](/v1/evaluation/concepts) and the [metrics overview](/v1/evaluation/metrics/overview).
 
 ## Metric anatomy
 
@@ -103,7 +103,7 @@ For a working end-to-end example in the repository, see:
 | Factual QA | `LevenshteinRatio` or `ExactMatch` | Works with text-only datasets; deterministic and low cost. |
 | Retrieval / grounding | `AnswerRelevance` | Pass reference context via `context=[item["answer"]]` or retrieved docs. |
 | Safety | `Moderation` or custom LLM-as-a-judge | Combine with `MultiMetricObjective` to gate unsafe answers. |
-| Multi-turn trajectories | [Agent trajectory evaluator](/evaluation/evaluate_agent_trajectory) | Scores complete conversations, not just final outputs. |
+| Multi-turn trajectories | [Agent trajectory evaluator](/v1/evaluation/evaluate_agent_trajectory) | Scores complete conversations, not just final outputs. |
 
 Reuse these heuristics before writing custom metrics—most are already imported in `opik.evaluation.metrics`.
 
@@ -141,7 +141,7 @@ objective = MultiMetricObjective(
 - **Bound runtime** – use cached references or lightweight models where possible; heavy metrics slow down trials.
 - **Log metadata** – include `details` in the `ScoreResult` if you want to visualize per-sample attributes later.
 
-When you outgrow presets, move to [Custom metrics](/agent_optimization/advanced/custom_metrics) for LLM-as-a-judge flows or domain-specific scoring.
+When you outgrow presets, move to [Custom metrics](/v1/agent_optimization/advanced/custom_metrics) for LLM-as-a-judge flows or domain-specific scoring.
 
 ## Testing metrics
 
@@ -151,6 +151,6 @@ When you outgrow presets, move to [Custom metrics](/agent_optimization/advanced/
 
 ## Related resources
 
-- Deep dive: [Multi-metric optimization guide](/agent_optimization/best_practices/multi_metric_optimization)
+- Deep dive: [Multi-metric optimization guide](/v1/agent_optimization/best_practices/multi_metric_optimization)
 - API reference: [`ScoreResult`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/ScoreResult.html)
-- Advanced topic: [Custom metrics](/agent_optimization/advanced/custom_metrics)
+- Advanced topic: [Custom metrics](/v1/agent_optimization/advanced/custom_metrics)

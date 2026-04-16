@@ -9,6 +9,10 @@ og:title: Integrate Hugging Face Datasets with Opik
 title: Observability for Hugging Face Datasets with Opik
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 [Hugging Face Datasets](https://huggingface.co/docs/datasets/) is a library that provides easy access to thousands of datasets for machine learning and natural language processing tasks.
 
 This guide explains how to integrate Opik with Hugging Face Datasets to convert and import datasets into Opik for model evaluation and optimization.
@@ -31,7 +35,7 @@ pip install opik datasets transformers pandas tqdm huggingface_hub
 
 ### Configuring Opik
 
-Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/v1/tracing/sdk_configuration) for detailed instructions on:
 
 - **CLI configuration**: `opik configure`
 - **Code configuration**: `opik.configure()`
@@ -353,6 +357,7 @@ evaluation_results = evaluate(
     dataset=squad_opik,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
+    project_name="my-project",
 )
 ```
 
@@ -389,7 +394,7 @@ export OPIK_WORKSPACE="your-workspace-name"
 
 Once you have Hugging Face Datasets integrated with Opik, you can:
 
-- [Evaluate your LLM applications](/evaluation/overview) using Opik's evaluation framework
-- [Create datasets](/evaluation/manage_datasets) to test and improve your models
-- [Set up feedback collection](/tracing/annotate_traces) to gather human evaluations
-- [Monitor performance](/tracing/concepts) across different models and configurations
+- [Evaluate your LLM applications](/v1/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/v1/evaluation/manage_datasets) to test and improve your models
+- [Set up feedback collection](/v1/tracing/annotate_traces) to gather human evaluations
+- [Monitor performance](/v1/tracing/concepts) across different models and configurations
