@@ -32,7 +32,7 @@ mdurl==0.1.2
 multidict==6.7.1
 mypy-boto3-bedrock-runtime==1.42.42
 openai==2.30.0
-opik==1.10.56
+opik==1.11.10
 packaging==26.0
 pluggy==1.6.0
 propcache==0.4.1
