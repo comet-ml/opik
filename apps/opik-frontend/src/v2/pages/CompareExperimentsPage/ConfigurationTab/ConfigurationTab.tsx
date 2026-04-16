@@ -6,6 +6,7 @@ import isObject from "lodash/isObject";
 import uniq from "lodash/uniq";
 import toLower from "lodash/toLower";
 import find from "lodash/find";
+import omit from "lodash/omit";
 import { flattie } from "flattie";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
@@ -16,6 +17,7 @@ import CompareExperimentsActionsPanel from "@/v2/pages/CompareExperimentsPage/Co
 import CompareExperimentsConfigCell, {
   CompareConfig,
   CompareFiledValue,
+  AgentConfigLinkData,
 } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -28,6 +30,8 @@ import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
+import { isAgentConfigurationMetadata } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
@@ -71,6 +75,21 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     defaultValue: {},
   });
 
+  const agentConfigLinkData = useMemo(() => {
+    const result: Record<string, AgentConfigLinkData> = {};
+    for (const exp of experiments) {
+      const meta = exp.metadata as Record<string, unknown> | undefined;
+      const config = meta?.[AGENT_CONFIGURATION_METADATA_KEY];
+      if (isAgentConfigurationMetadata(config) && exp.project_id) {
+        result[exp.id] = {
+          projectId: exp.project_id,
+          blueprintId: config._blueprint_id,
+        };
+      }
+    }
+    return result;
+  }, [experiments]);
+
   const columns = useMemo(() => {
     const retVal = convertColumnDataToColumn<CompareConfig, CompareConfig>(
       DEFAULT_COLUMNS,
@@ -86,6 +105,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
           custom: {
             onlyDiff,
             experiment: find(experiments, (e) => e.id === id),
+            agentConfigLinkData,
           },
         },
         size: 400,
@@ -94,15 +114,29 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     });
 
     return retVal;
-  }, [experimentsIds, onlyDiff, experiments]);
+  }, [experimentsIds, onlyDiff, experiments, agentConfigLinkData]);
 
   const flattenExperimentMetadataMap = useMemo(() => {
     return experiments.reduce<
       Record<string, Record<string, CompareFiledValue>>
     >((acc, experiment) => {
-      acc[experiment.id] = isObject(experiment.metadata)
-        ? flattie(experiment.metadata, ".", true)
+      const rawMetadata = experiment.metadata as
+        | Record<string, unknown>
+        | undefined;
+
+      const agentConfig = rawMetadata?.[AGENT_CONFIGURATION_METADATA_KEY];
+      const metadata = isObject(rawMetadata)
+        ? omit(rawMetadata, AGENT_CONFIGURATION_METADATA_KEY)
         : {};
+
+      acc[experiment.id] = isObject(metadata)
+        ? flattie(metadata, ".", true)
+        : {};
+
+      if (isAgentConfigurationMetadata(agentConfig)) {
+        acc[experiment.id]["agent_configuration"] =
+          agentConfig.blueprint_version ?? agentConfig._blueprint_id;
+      }
 
       return acc;
     }, {});

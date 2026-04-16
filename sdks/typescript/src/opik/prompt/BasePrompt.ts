@@ -19,6 +19,7 @@ export interface BasePromptData {
   tags?: string[];
   templateStructure?: PromptTemplateStructure;
   synced?: boolean;
+  projectName?: string;
 }
 
 /**
@@ -32,6 +33,7 @@ export abstract class BasePrompt {
   public readonly type: PromptType;
   public readonly changeDescription: string | undefined;
   public readonly templateStructure: PromptTemplateStructure;
+  public readonly projectName: string | undefined;
 
   /** Whether the prompt has been successfully synced with the backend. */
   public readonly synced: boolean;
@@ -57,6 +59,7 @@ export abstract class BasePrompt {
     this._tags = data.tags ? [...data.tags] : [];
     this._metadata = data.metadata;
     this.opik = opik;
+    this.projectName = data.projectName;
   }
 
   // Public getters for mutable fields

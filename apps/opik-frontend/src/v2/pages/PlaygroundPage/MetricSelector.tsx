@@ -27,7 +27,6 @@ interface MetricSelectorProps {
   rules: EvaluatorsRule[];
   selectedRuleIds: string[] | null;
   onSelectionChange: (ruleIds: string[] | null) => void;
-  datasetId: string | null;
   onCreateRuleClick: () => void;
   workspaceName: string;
   projectId?: string;
@@ -38,7 +37,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   rules,
   selectedRuleIds,
   onSelectionChange,
-  datasetId,
   onCreateRuleClick,
   workspaceName,
   projectId,
@@ -120,18 +118,14 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [onSelectionChange, selectedRuleIds, rules.length],
   );
 
-  const openChangeHandler = useCallback(
-    (newOpen: boolean) => {
-      if (newOpen && !datasetId) return;
-      if (deletingRef.current) {
-        deletingRef.current = false;
-        return;
-      }
-      setOpen(newOpen);
-      if (!newOpen) setSearch("");
-    },
-    [datasetId],
-  );
+  const openChangeHandler = useCallback((newOpen: boolean) => {
+    if (deletingRef.current) {
+      deletingRef.current = false;
+      return;
+    }
+    setOpen(newOpen);
+    if (!newOpen) setSearch("");
+  }, []);
 
   const isSelected = useCallback(
     (ruleId: string) => {
@@ -142,14 +136,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
   );
 
   const hasNoRules = rules.length === 0;
-  const isDisabled = !datasetId;
-
-  useEffect(() => {
-    if (!datasetId && open) {
-      setOpen(false);
-      setSearch("");
-    }
-  }, [datasetId, open]);
 
   useEffect(() => {
     if (open && tagsRef.current) {
@@ -169,7 +155,7 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     : Math.max(0, selectedRules.length - MAX_VISIBLE_TAGS);
 
   const renderTriggerContent = () => {
-    if (!datasetId || rules.length === 0 || selectedRules.length === 0) {
+    if (rules.length === 0 || selectedRules.length === 0) {
       return <span className="truncate text-muted-slate">Select metrics</span>;
     }
 
@@ -209,31 +195,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
       tabIndex={0}
       className={cn(
         "flex h-8 w-full cursor-pointer items-center gap-1 rounded-md border border-input bg-background px-2 text-sm hover:shadow-sm focus:border-primary focus:outline-none",
-        isDisabled && "cursor-not-allowed opacity-50",
         open && "border-primary",
       )}
     >
       {renderTriggerContent()}
-      <ChevronDown
-        className={cn(
-          "ml-auto size-4 shrink-0",
-          isDisabled ? "text-muted-gray" : "text-light-slate",
-        )}
-      />
+      <ChevronDown className="ml-auto size-4 shrink-0 text-light-slate" />
     </div>
   );
 
   return (
-    <Popover onOpenChange={openChangeHandler} open={open && !isDisabled} modal>
-      <PopoverTrigger asChild={!isDisabled} disabled={isDisabled}>
-        {isDisabled ? (
-          <TooltipWrapper content="Select a test suite first to choose metrics">
-            <span className="block">{triggerElement}</span>
-          </TooltipWrapper>
-        ) : (
-          triggerElement
-        )}
-      </PopoverTrigger>
+    <Popover onOpenChange={openChangeHandler} open={open} modal>
+      <PopoverTrigger asChild>{triggerElement}</PopoverTrigger>
       <PopoverContent
         align="start"
         className="relative w-[--radix-popover-trigger-width] p-1 pt-12"

@@ -161,6 +161,7 @@ function TestSuiteItemsPage(): React.ReactElement {
               loadPlayground({
                 datasetId: suiteId,
                 datasetVersionId: versionId,
+                datasetType: DATASET_TYPE.TEST_SUITE,
               })
             }
           >

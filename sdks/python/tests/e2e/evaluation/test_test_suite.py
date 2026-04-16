@@ -1407,3 +1407,33 @@ def test_test_suite__create_without_metadata_then_update__metadata_persisted(
         "runs_per_item": 2,
         "pass_threshold": 1,
     }
+
+
+# =============================================================================
+# ITEMS COUNT: items_count property (OPIK-5983)
+# =============================================================================
+
+
+def test_test_suite__items_count__returns_correct_count_after_insert(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """
+    OPIK-5983: items_count should return the actual count after insert,
+    not None.
+    """
+    from opik import synchronization
+
+    suite = opik_client.create_test_suite(name=dataset_name)
+
+    suite.insert(
+        [
+            {"data": {"input": {"question": "What is 2+2?"}}},
+            {"data": {"input": {"question": "What is 3+3?"}}},
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: suite.items_count == 2,
+        max_try_seconds=30,
+    )
+    assert success, f"Expected items_count=2, got {suite.items_count}"

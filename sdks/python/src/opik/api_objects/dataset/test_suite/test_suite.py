@@ -623,6 +623,7 @@ class TestSuite:
         client: Optional["opik_client_module.Opik"] = None,
         generate_report: bool = True,
         report_output_path: Optional[str] = None,
+        blueprint_id: Optional[str] = None,
     ) -> suite_types.TestSuiteResult:
         """
         Internal entry point used by the optimizer framework.
@@ -648,4 +649,5 @@ class TestSuite:
             experiment_type=experiment_type,
             generate_report=generate_report,
             report_output_path=report_output_path,
+            blueprint_id=blueprint_id,
         )

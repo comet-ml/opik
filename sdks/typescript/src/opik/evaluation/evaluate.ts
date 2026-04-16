@@ -55,6 +55,9 @@ export interface EvaluateOptions<T = Record<string, unknown>> {
 
   /** Optional list of tags to associate with the experiment */
   tags?: string[];
+
+  /** Optional agent configuration blueprint ID to link with the experiment */
+  blueprintId?: string;
 }
 
 export async function evaluate<T = Record<string, unknown>>(
@@ -72,6 +75,19 @@ export async function evaluate<T = Record<string, unknown>>(
   // Get Opik client
   const client = options.client ?? OpikSingleton.getInstance();
 
+  // Resolve agent config blueprint if provided
+  let experimentConfig = options.experimentConfig;
+  if (options.blueprintId) {
+    const agentConfig: Record<string, string> = { _blueprint_id: options.blueprintId };
+    try {
+      const blueprint = await client.api.agentConfigs.getBlueprintById(options.blueprintId);
+      if (blueprint.name) agentConfig.blueprint_version = blueprint.name;
+    } catch (error) {
+      logger.debug(`Failed to fetch blueprint ${options.blueprintId}: ${error}`);
+    }
+    experimentConfig = { ...experimentConfig, agent_configuration: agentConfig };
+  }
+
   // Get version info for experiment linking
   const versionInfo = await options.dataset.getVersionInfo();
 
@@ -79,7 +95,7 @@ export async function evaluate<T = Record<string, unknown>>(
   const experiment = await client.createExperiment({
     name: options.experimentName,
     datasetName: options.dataset.name,
-    experimentConfig: options.experimentConfig,
+    experimentConfig,
     prompts: options.prompts,
     datasetVersionId: versionInfo?.id,
     tags: options.tags,

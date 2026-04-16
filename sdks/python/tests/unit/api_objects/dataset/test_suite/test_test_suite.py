@@ -782,6 +782,32 @@ class TestInternalRunOptimizationSuite:
         assert result is fake_result
         mock_run.assert_called_once()
 
+    def test_run_tests_uses_test_suite_project_name(self):
+        from opik.evaluation.evaluator import run_tests
+
+        mock_dataset = _create_mock_dataset()
+        mock_dataset.project_name = "my-agent-project"
+        suite = test_suite.TestSuite(
+            name="test_suite",
+            dataset_=mock_dataset,
+        )
+
+        fake_result = mock.MagicMock(spec=suite_types.TestSuiteResult)
+
+        with mock.patch(
+            "opik.evaluation.evaluator.__internal_api__run_test_suite__",
+            return_value=fake_result,
+        ) as mock_run:
+            run_tests(
+                test_suite=suite,
+                task=lambda data: {"input": data, "output": "resp"},
+                experiment_name="proj-test",
+                verbose=0,
+            )
+
+        call_kwargs = mock_run.call_args[1]
+        assert call_kwargs["project_name"] == "my-agent-project"
+
 
 class TestTestSuiteResultPassRate:
     """Unit tests for TestSuiteResult.pass_rate property."""

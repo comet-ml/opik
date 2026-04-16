@@ -1,6 +1,6 @@
 import React from "react";
 import { Button } from "@/ui/button";
-import { Dialog, DialogContent } from "@/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/ui/dialog";
 import Loader from "@/shared/Loader/Loader";
 
 type CsvUploadDialogProps = {
@@ -17,6 +17,9 @@ const CsvUploadDialog: React.FC<CsvUploadDialogProps> = ({
   return (
     <Dialog open={open}>
       <DialogContent className="max-w-sm [&>button.absolute]:hidden">
+        <DialogTitle className="sr-only">
+          {isCsvMode ? "Upload in progress" : "Processing CSV"}
+        </DialogTitle>
         <Loader
           className="min-h-40"
           message={

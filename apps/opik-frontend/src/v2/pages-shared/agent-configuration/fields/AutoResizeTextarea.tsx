@@ -20,13 +20,29 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   const resize = useCallback(() => {
     const el = textareaRef.current;
     if (el) {
-      el.style.height = "auto";
-      el.style.height = el.scrollHeight + "px";
+      el.style.height = "0";
+      const border = el.offsetHeight - el.clientHeight;
+      el.style.height = el.scrollHeight + border + "px";
     }
   }, []);
 
   useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+
     resize();
+
+    // Re-resize when the element becomes visible (e.g. hidden tab with forceMount)
+    let lastWidth = el.offsetWidth;
+    const observer = new ResizeObserver(() => {
+      const currentWidth = el.offsetWidth;
+      if (currentWidth !== lastWidth) {
+        lastWidth = currentWidth;
+        resize();
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
   }, [value, resize]);
 
   const handleChange = useCallback(
@@ -39,6 +55,7 @@ const AutoResizeTextarea: React.FC<AutoResizeTextareaProps> = ({
   return (
     <textarea
       ref={textareaRef}
+      rows={1}
       className={cn(
         "comet-body-s w-full resize-none overflow-hidden bg-transparent text-foreground outline-none",
         className,
