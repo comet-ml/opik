@@ -23,8 +23,6 @@ import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
-import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -48,9 +46,12 @@ import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
+import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
+import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/DatasetDetailPage";
 import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
-import TestSuitePage from "@/v2/pages/TestSuitePage/TestSuitePage";
 import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
+import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
+
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
@@ -99,7 +100,22 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 });
 
 // ----------- pairing (root-level, no layout)
+// TanStack strips the router basepath before matching, so the canonical
+// route is basepath-relative: "/pair/v1" covers cloud (basepath "/opik"
+// → URL "/opik/pair/v1" strips to "/pair/v1").
+//
+// The legacy "/opik/pair/v1" alias below is an OSS-only fallback: the
+// Python SDK hardcodes "{origin}/opik/pair/v1" regardless of deployment
+// (see sdks/python/src/opik/cli/pairing.py), so on OSS (basepath "/") the
+// "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
+// TODO: make the Python SDK build basepath-aware pairing URLs and drop
+// this alias once shipped CLI versions roll over.
 const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair/v1",
+  component: PairingPage,
+});
+const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
   component: PairingPage,
@@ -240,6 +256,37 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
+// ----------- datasets (project-scoped)
+const datasetsRoute = createRoute({
+  path: "/datasets",
+  getParentRoute: () => projectScopedRoute,
+  component: DatasetsPageGuard,
+  staticData: {
+    title: "Datasets",
+  },
+});
+
+const datasetsListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => datasetsRoute,
+  component: DatasetsPage,
+});
+
+const datasetDetailRoute = createRoute({
+  path: "/$datasetId",
+  getParentRoute: () => datasetsRoute,
+  component: DatasetDetailPage,
+  staticData: {
+    param: "datasetId",
+  },
+});
+
+const datasetItemsRoute = createRoute({
+  path: "/items",
+  getParentRoute: () => datasetDetailRoute,
+  component: DatasetItemsPage,
+});
+
 // ----------- test suites (project-scoped)
 const testSuitesRoute = createRoute({
   path: "/test-suites",
@@ -259,7 +306,7 @@ const testSuitesListRoute = createRoute({
 const testSuiteRoute = createRoute({
   path: "/$suiteId",
   getParentRoute: () => testSuitesRoute,
-  component: TestSuitePage,
+  component: DatasetDetailPage,
   staticData: {
     param: "suiteId",
   },
@@ -269,30 +316,6 @@ const testSuiteItemsRoute = createRoute({
   path: "/items",
   getParentRoute: () => testSuiteRoute,
   component: TestSuiteItemsPage,
-});
-
-// ----------- prompts (project-scoped)
-const promptsRoute = createRoute({
-  path: "/prompts",
-  getParentRoute: () => projectScopedRoute,
-  staticData: {
-    title: "Prompt library",
-  },
-});
-
-const promptsListRoute = createRoute({
-  path: "/",
-  getParentRoute: () => promptsRoute,
-  component: PromptsPage,
-});
-
-const promptRoute = createRoute({
-  path: "/$promptId",
-  getParentRoute: () => promptsRoute,
-  component: PromptPage,
-  staticData: {
-    param: "promptId",
-  },
 });
 
 // ----------- playground (project-scoped)
@@ -540,6 +563,7 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 
 const routeTree = rootRoute.addChildren([
   pairingRoute,
+  pairingRouteOssAlias,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -562,11 +586,14 @@ const routeTree = rootRoute.addChildren([
             experimentsListRoute,
             compareExperimentsRoute,
           ]),
+          datasetsRoute.addChildren([
+            datasetsListRoute,
+            datasetDetailRoute.addChildren([datasetItemsRoute]),
+          ]),
           testSuitesRoute.addChildren([
             testSuitesListRoute,
             testSuiteRoute.addChildren([testSuiteItemsRoute]),
           ]),
-          promptsRoute.addChildren([promptsListRoute, promptRoute]),
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,

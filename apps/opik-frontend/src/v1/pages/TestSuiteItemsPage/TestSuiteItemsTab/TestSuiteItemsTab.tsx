@@ -296,11 +296,11 @@ function TestSuiteItemsTab({
   const itemLabel = isTestSuite ? "suite items" : "dataset items";
 
   const noDataText = useMemo(() => {
-    if (isDraftMode && deletedIds.size > 0 && totalCount !== deletedIds.size) {
+    if (isDraftMode && deletedIds.size > 0) {
       return `All ${itemLabel} on this page have been deleted`;
     }
     return `There are no ${itemLabel} yet`;
-  }, [isDraftMode, deletedIds.size, totalCount, itemLabel]);
+  }, [isDraftMode, deletedIds.size, itemLabel]);
 
   const handleSearchChange = useCallback(
     (newSearch: string | null) => {

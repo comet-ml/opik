@@ -4,16 +4,15 @@ import get from "lodash/get";
 import slugify from "slugify";
 
 import { Button } from "@/ui/button";
-import { DatasetItem, DATASET_TYPE } from "@/types/datasets";
+import { DatasetItem } from "@/types/datasets";
 import useDatasetItemBatchDeleteMutation from "@/api/datasets/useDatasetItemBatchDeleteMutation";
 import ExportToButton from "@/shared/ExportToButton/ExportToButton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import DatasetExpansionDialog from "./DatasetExpansionDialog";
 import GeneratedSamplesDialog from "./GeneratedSamplesDialog";
 import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
-import { stripColumnPrefix, generateBatchGroupId } from "@/lib/utils";
 import { extractAssertions } from "@/lib/assertion-converters";
+import { stripColumnPrefix, generateBatchGroupId } from "@/lib/utils";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
@@ -26,6 +25,12 @@ import { useToast } from "@/ui/use-toast";
 import { buildDraftItemFromSample } from "@/lib/dataset-item-utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
+export type ExpansionDialogRenderProps = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+  onSamplesGenerated: (samples: DatasetItem[]) => void;
+};
+
 type DatasetItemsActionsPanelProps = {
   getDataForExport: () => Promise<DatasetItem[]>;
   selectedDatasetItems: DatasetItem[];
@@ -37,8 +42,8 @@ type DatasetItemsActionsPanelProps = {
   search?: string;
   totalCount?: number;
   isDraftMode?: boolean;
-  datasetType?: DATASET_TYPE;
-  suiteAssertions?: string[];
+  entityName?: string;
+  renderExpansionDialog: (props: ExpansionDialogRenderProps) => React.ReactNode;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -54,8 +59,8 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   search = "",
   totalCount = 0,
   isDraftMode = false,
-  datasetType,
-  suiteAssertions,
+  entityName = "dataset",
+  renderExpansionDialog,
 }) => {
   const resetKeyRef = useRef(0);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -144,9 +149,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
           key = columnName;
           value = get(item.data, columnName, "");
         } else if (column === "assertions") {
-          const itemAssertions = extractAssertions(item.evaluators ?? []);
-          value =
-            itemAssertions.length > 0 ? itemAssertions : suiteAssertions ?? [];
+          value = extractAssertions(item.evaluators ?? []);
         } else {
           value = get(item, column, "");
         }
@@ -155,28 +158,24 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
         return acc;
       }, {});
     });
-  }, [getDataForExport, columnsToExport, dynamicColumns, suiteAssertions]);
+  }, [getDataForExport, columnsToExport, dynamicColumns]);
 
   const generateFileName = useCallback(
     (extension = "csv") => {
       return `${slugify(datasetName, {
         lower: true,
-      })}-test-suite-items.${extension}`;
+      })}-${slugify(entityName, { lower: true })}-items.${extension}`;
     },
-    [datasetName],
+    [datasetName, entityName],
   );
 
   return (
     <div className="flex items-center gap-2">
-      <DatasetExpansionDialog
-        key={`dataset-expansion-${resetKeyRef.current}`}
-        datasetId={datasetId}
-        open={expansionDialogOpen}
-        setOpen={setExpansionDialogOpen}
-        onSamplesGenerated={handleSamplesGenerated}
-        datasetType={datasetType}
-        suiteAssertions={suiteAssertions}
-      />
+      {renderExpansionDialog({
+        open: expansionDialogOpen,
+        setOpen: setExpansionDialogOpen,
+        onSamplesGenerated: handleSamplesGenerated,
+      })}
 
       <GeneratedSamplesDialog
         key={`generate-samples-${resetKeyRef.current}`}

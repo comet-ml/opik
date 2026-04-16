@@ -266,6 +266,7 @@ export enum PROVIDER_MODEL_TYPE {
   META_LLAMA_LLAMA_GUARD_2_8B = "meta-llama/llama-guard-2-8b",
   META_LLAMA_LLAMA_GUARD_3_8B = "meta-llama/llama-guard-3-8b",
   META_LLAMA_LLAMA_GUARD_4_12B = "meta-llama/llama-guard-4-12b",
+  META_LLAMA_LLAMA_GUARD_4_12B_FREE = "meta-llama/llama-guard-4-12b:free",
   MICROSOFT_MAI_DS_R1 = "microsoft/mai-ds-r1",
   MICROSOFT_MAI_DS_R1_FREE = "microsoft/mai-ds-r1:free",
   MICROSOFT_PHI_3_MEDIUM_128K_INSTRUCT = "microsoft/phi-3-medium-128k-instruct",
@@ -426,6 +427,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENGVLAB_INTERNVL3_78B = "opengvlab/internvl3-78b",
   OPENROUTER_AUTO = "openrouter/auto",
   OPENROUTER_BODYBUILDER = "openrouter/bodybuilder",
+  OPENROUTER_ELEPHANT_ALPHA = "openrouter/elephant-alpha",
   OPENROUTER_FREE = "openrouter/free",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
@@ -578,6 +580,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

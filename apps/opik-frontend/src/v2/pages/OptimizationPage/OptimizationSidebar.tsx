@@ -1,6 +1,6 @@
 import React from "react";
 import { Experiment } from "@/types/datasets";
-import { Optimization, OPTIMIZATION_STATUS } from "@/types/optimizations";
+import { Optimization } from "@/types/optimizations";
 import { BestPrompt } from "@/v2/pages-shared/experiments/BestPromptCard";
 import BestPromptPlaceholder from "./BestPromptPlaceholder";
 
@@ -14,7 +14,6 @@ type OptimizationSidebarProps = {
   bestExperiment: Experiment | undefined;
   baselineExperiment: Experiment | undefined;
   scoreMap: Record<string, ScoreData>;
-  status?: OPTIMIZATION_STATUS;
 };
 
 const OptimizationSidebar: React.FC<OptimizationSidebarProps> = ({
@@ -22,7 +21,6 @@ const OptimizationSidebar: React.FC<OptimizationSidebarProps> = ({
   bestExperiment,
   baselineExperiment,
   scoreMap,
-  status,
 }) => {
   return (
     <div className="w-2/5 shrink-0 overflow-auto">
@@ -32,7 +30,6 @@ const OptimizationSidebar: React.FC<OptimizationSidebarProps> = ({
           optimization={optimization}
           scoreMap={scoreMap}
           baselineExperiment={baselineExperiment}
-          status={status}
         />
       ) : (
         optimization?.studio_config && (

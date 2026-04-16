@@ -6,6 +6,7 @@ import { Label } from "@/ui/label";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -34,6 +35,10 @@ const AgentNameStep: React.FC = () => {
 
     try {
       await createProject({ project: { name: trimmedName } });
+
+      trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
+        agent_name: trimmedName,
+      });
 
       goToStep(AGENT_ONBOARDING_STEPS.CONNECT_AGENT, {
         agentName: trimmedName,

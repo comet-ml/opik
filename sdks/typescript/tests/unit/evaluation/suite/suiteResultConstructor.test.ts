@@ -389,4 +389,102 @@ describe("buildSuiteResult", () => {
       expect(result.itemsPassed).toBe(0);
     });
   });
+
+  describe("hasAssertions flag", () => {
+    it("should set hasAssertions=false for items with no score results", () => {
+      const testResults = [
+        makeTestResult("item-1", [], undefined, "trace-1", DEFAULT_POLICY),
+      ];
+      const result = buildSuiteResult(makeEvalResult(testResults));
+
+      expect(result.itemResults.get("item-1")!.hasAssertions).toBe(false);
+    });
+
+    it("should set hasAssertions=true for items with at least one score result", () => {
+      const testResults = [
+        makeTestResult(
+          "item-1",
+          [makeScoreResult("metric-a", 1)],
+          undefined,
+          "trace-1",
+          DEFAULT_POLICY
+        ),
+      ];
+      const result = buildSuiteResult(makeEvalResult(testResults));
+
+      expect(result.itemResults.get("item-1")!.hasAssertions).toBe(true);
+    });
+  });
+
+  describe("passRate uses only items with assertions; itemsTotal counts all", () => {
+    it("should return passRate=undefined when all items have no assertions, but itemsTotal counts them", () => {
+      const testResults = [
+        makeTestResult("item-1", [], undefined, "trace-1", DEFAULT_POLICY),
+        makeTestResult("item-2", [], undefined, "trace-2", DEFAULT_POLICY),
+      ];
+      const result = buildSuiteResult(makeEvalResult(testResults));
+
+      // itemsTotal and allItemsPassed count ALL items
+      expect(result.itemsTotal).toBe(2);
+      expect(result.itemsPassed).toBe(2); // vacuously pass
+      expect(result.allItemsPassed).toBe(true);
+      // passRate is undefined because no item had assertions
+      expect(result.passRate).toBeUndefined();
+    });
+
+    it("should compute passRate only over items with assertions in a mixed suite", () => {
+      const testResults = [
+        // item with assertions — passes
+        makeTestResult(
+          "item-with-pass",
+          [makeScoreResult("metric-a", 1)],
+          undefined,
+          "trace-1",
+          DEFAULT_POLICY
+        ),
+        // item with assertions — fails
+        makeTestResult(
+          "item-with-fail",
+          [makeScoreResult("metric-a", 0)],
+          undefined,
+          "trace-2",
+          DEFAULT_POLICY
+        ),
+        // item without assertions — excluded from passRate, but counted in itemsTotal
+        makeTestResult("item-no-assertions", [], undefined, "trace-3", DEFAULT_POLICY),
+      ];
+      const result = buildSuiteResult(makeEvalResult(testResults));
+
+      // itemsTotal counts all 3
+      expect(result.itemsTotal).toBe(3);
+      // itemsPassed: item-with-pass passes, item-no-assertions pass vacuously, item-with-fail fails
+      expect(result.itemsPassed).toBe(2);
+      expect(result.allItemsPassed).toBe(false);
+      // passRate only over the 2 items with assertions: 1/2
+      expect(result.passRate).toBeCloseTo(0.5, 5);
+    });
+
+    it("should compute passRate over all items when all have assertions (global assertions case)", () => {
+      const testResults = [
+        makeTestResult(
+          "item-1",
+          [makeScoreResult("global", 1)],
+          undefined,
+          "trace-1",
+          DEFAULT_POLICY
+        ),
+        makeTestResult(
+          "item-2",
+          [makeScoreResult("global", 0)],
+          undefined,
+          "trace-2",
+          DEFAULT_POLICY
+        ),
+      ];
+      const result = buildSuiteResult(makeEvalResult(testResults));
+
+      expect(result.itemsTotal).toBe(2);
+      expect(result.passRate).toBeCloseTo(0.5, 5);
+    });
+  });
 });

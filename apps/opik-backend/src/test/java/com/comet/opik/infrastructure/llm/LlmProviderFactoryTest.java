@@ -5,6 +5,8 @@ import com.comet.opik.api.ProviderApiKey;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FreeModelConfig;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
@@ -33,9 +35,10 @@ import io.dropwizard.jackson.Jackson;
 import io.dropwizard.jersey.validation.Validators;
 import jakarta.validation.Validator;
 import jakarta.ws.rs.BadRequestException;
-import lombok.SneakyThrows;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -57,7 +60,6 @@ import static org.mockito.Mockito.when;
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class LlmProviderFactoryTest {
     private LlmProviderClientConfig llmProviderClientConfig;
-    private OpikConfiguration opikConfiguration;
     private LlmModelRegistryService registryService;
 
     private static final ObjectMapper objectMapper = Jackson.newObjectMapper();
@@ -71,12 +73,14 @@ class LlmProviderFactoryTest {
                 "src/test/resources/config-test.yml");
         EncryptionUtils.setConfig(config);
         llmProviderClientConfig = config.getLlmProviderClient();
-        opikConfiguration = config;
-        registryService = new LlmModelRegistryService(config.getLlmModelRegistry());
+        // Use a curated test registry so tests are not coupled to the
+        // auto-synced llm-models-default.yaml (whose entries can flip over time).
+        var registryConfig = config.getLlmModelRegistry();
+        registryConfig.setDefaultResource("llm-models-test.yaml");
+        registryService = new LlmModelRegistryService(registryConfig);
     }
 
-    private OpikConfiguration createMockConfigWithFreeModel(boolean enabled, String actualModel,
-            String spanProvider) {
+    private OpikConfiguration createMockConfigWithFreeModel(boolean enabled, String actualModel, String spanProvider) {
         OpikConfiguration mockConfig = mock(OpikConfiguration.class);
         FreeModelConfig freeModelConfig = new FreeModelConfig();
         freeModelConfig.setEnabled(enabled);
@@ -88,10 +92,9 @@ class LlmProviderFactoryTest {
         return mockConfig;
     }
 
-    @SneakyThrows
     @ParameterizedTest
     @MethodSource
-    void testGetService(String model, LlmProvider llmProvider, String providerClass) {
+    void testGetService(String model, LlmProvider llmProvider, String providerClass) throws IOException {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         String workspaceId = UUID.randomUUID().toString();
@@ -158,7 +161,6 @@ class LlmProviderFactoryTest {
      * Comprehensive test for custom LLM provider model matching.
      * Tests both the legacy format (provider_name = null) and new format (provider_name set).
      */
-    @SneakyThrows
     @ParameterizedTest(name = "{0}")
     @MethodSource
     void testCustomLlmProviderMatching_shouldMatch(
@@ -199,7 +201,6 @@ class LlmProviderFactoryTest {
         assertThat(actual).isNotNull();
     }
 
-    @SneakyThrows
     @ParameterizedTest(name = "{0}")
     @MethodSource
     void testCustomLlmProviderMatching_shouldNotMatch(
@@ -334,9 +335,8 @@ class LlmProviderFactoryTest {
 
     // ========== OPIK_DEFAULT Provider Tests ==========
 
-    @SneakyThrows
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getLlmProvider returns OPIK_FREE when model matches and provider is enabled")
+    @Test
+    @DisplayName("getLlmProvider returns OPIK_FREE when model matches and provider is enabled")
     void testGetLlmProvider_returnsOpikFree_whenModelMatchesAndEnabled() {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
@@ -352,9 +352,8 @@ class LlmProviderFactoryTest {
         assertThat(result).isEqualTo(LlmProvider.OPIK_FREE);
     }
 
-    @SneakyThrows
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getLlmProvider throws exception when model matches but provider is disabled")
+    @Test
+    @DisplayName("getLlmProvider throws exception when model matches but provider is disabled")
     void testGetLlmProvider_throwsException_whenModelMatchesButDisabled() {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
@@ -369,9 +368,8 @@ class LlmProviderFactoryTest {
                 .hasMessageContaining("not supported");
     }
 
-    @SneakyThrows
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getResolvedModelInfo returns actual model and provider for OPIK_FREE")
+    @Test
+    @DisplayName("getResolvedModelInfo returns actual model and provider for OPIK_FREE")
     void testGetResolvedModelInfo_returnsActualModelAndProvider_forOpikFree() {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
@@ -391,9 +389,8 @@ class LlmProviderFactoryTest {
         assertThat(result.provider()).isEqualTo(spanProvider);
     }
 
-    @SneakyThrows
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getResolvedModelInfo returns original model and provider for non-OPIK_FREE")
+    @Test
+    @DisplayName("getResolvedModelInfo returns original model and provider for non-OPIK_FREE")
     void testGetResolvedModelInfo_returnsOriginalModelAndProvider_forOtherProviders() {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
@@ -411,9 +408,8 @@ class LlmProviderFactoryTest {
         assertThat(result.provider()).isEqualTo(LlmProvider.OPEN_AI.getValue());
     }
 
-    @SneakyThrows
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getLlmProvider returns OPEN_ROUTER for openrouter route slugs")
+    @Test
+    @DisplayName("getLlmProvider returns OPEN_ROUTER for openrouter route slugs")
     void testGetLlmProvider_returnsOpenRouter_forOpenRouterRouteSlug() {
         // setup
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
@@ -429,8 +425,8 @@ class LlmProviderFactoryTest {
 
     // ========== Structured Output Strategy Tests ==========
 
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getStructuredOutputStrategy returns ToolCallingStrategy for registry model with structuredOutput=true")
+    @Test
+    @DisplayName("getStructuredOutputStrategy returns ToolCallingStrategy for registry model with structuredOutput=true")
     void testGetStructuredOutputStrategy_returnsToolCalling_whenRegistryModelSupportsIt() {
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
@@ -439,21 +435,19 @@ class LlmProviderFactoryTest {
         // gpt-4o has structuredOutput: true in the default YAML
         var strategy = llmProviderFactory.getStructuredOutputStrategy("gpt-4o");
 
-        assertThat(strategy).isInstanceOf(
-                com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy.class);
+        assertThat(strategy).isInstanceOf(ToolCallingStrategy.class);
     }
 
-    @org.junit.jupiter.api.Test
-    @org.junit.jupiter.api.DisplayName("getStructuredOutputStrategy returns InstructionStrategy for registry model with structuredOutput=false")
+    @Test
+    @DisplayName("getStructuredOutputStrategy returns InstructionStrategy for registry model with structuredOutput=false")
     void testGetStructuredOutputStrategy_returnsInstruction_whenRegistryModelDoesNotSupportIt() {
         LlmProviderApiKeyService llmProviderApiKeyService = mock(LlmProviderApiKeyService.class);
         var mockConfig = createMockConfigWithFreeModel(false, "gpt-4o-mini", "openai");
         var llmProviderFactory = new LlmProviderFactoryImpl(llmProviderApiKeyService, mockConfig, registryService);
 
-        // claude-sonnet-4-6 has no structuredOutput (defaults to false) in the default YAML
+        // Model from test file with no structuredOutput (defaults to false)
         var strategy = llmProviderFactory.getStructuredOutputStrategy("claude-sonnet-4-6");
 
-        assertThat(strategy).isInstanceOf(
-                com.comet.opik.domain.llm.structuredoutput.InstructionStrategy.class);
+        assertThat(strategy).isInstanceOf(InstructionStrategy.class);
     }
 }

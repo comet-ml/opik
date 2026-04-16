@@ -11,6 +11,7 @@ import AddExperimentDialog from "@/v1/pages-shared/experiments/AddExperimentDial
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useLoadPlayground from "@/hooks/useLoadPlayground";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { DATASET_TYPE } from "@/types/datasets";
 
 export interface UseTestSuiteDropdownProps {
   datasetName?: string;
@@ -45,8 +46,9 @@ function UseTestSuiteDropdown({
     loadPlayground({
       datasetId,
       datasetVersionId,
+      datasetType: isTestSuite ? DATASET_TYPE.TEST_SUITE : DATASET_TYPE.DATASET,
     });
-  }, [loadPlayground, datasetId, datasetVersionId]);
+  }, [loadPlayground, datasetId, datasetVersionId, isTestSuite]);
 
   const handleOpenPlaygroundClick = () => {
     if (isPlaygroundEmpty) {

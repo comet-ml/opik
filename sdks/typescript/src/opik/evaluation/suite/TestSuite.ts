@@ -1,12 +1,13 @@
 import { Dataset } from "@/dataset/Dataset";
 import { DatasetItemData, DatasetNotFoundError } from "@/dataset";
-import { OpikClient } from "@/client/Client";
+import type { OpikClient } from "@/client/Client";
 import {
   resolveEvaluators,
   validateExecutionPolicy,
-} from "../suite_evaluators/validators";
+} from "@/evaluation";
 import type {
   TestSuiteItem,
+  UpdateTestSuiteItem,
   ExecutionPolicy,
 } from "./types";
 import {
@@ -14,10 +15,13 @@ import {
   deserializeEvaluators,
   resolveExecutionPolicy,
   resolveItemExecutionPolicy,
+} from "@/evaluation";
+import {
   evaluatorsEqual,
   executionPolicyEqual,
 } from "./suiteHelpers";
 import type { EvaluatorItemLike } from "./suiteHelpers";
+import type { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { DatasetWriteType } from "@/rest_api/api/resources/datasets/types/DatasetWriteType";
 import type { DatasetItemUpdate } from "@/rest_api/api/types/DatasetItemUpdate";
 import { generateId } from "@/utils/generateId";
@@ -102,6 +106,9 @@ export class TestSuite {
     return this.dataset.id;
   }
 
+  /**
+   * The name of the project containing this test suite.
+   */
   get projectName(): string | undefined {
     return this.dataset.projectName;
   }
@@ -109,6 +116,21 @@ export class TestSuite {
   // ---------------------------------------------------------------------------
   // Static factory methods (replace Client.ts methods — no circular dep)
   // ---------------------------------------------------------------------------
+
+  /**
+   * Deletes a test suite by name and project name.
+   *
+   * @param client - The Opik client instance.
+   * @param name - The name of the test suite to delete.
+   * @param projectName - The name of the project containing the test suite.
+   */
+  static async delete(client: OpikClient, name: string, projectName?: string): Promise<void> {
+    validateSuiteName(name);
+    await client.api.datasets.deleteDatasetByName({
+      datasetName: name,
+      projectName: projectName,
+    });
+  }
 
   static async create(
     client: OpikClient,
@@ -139,31 +161,22 @@ export class TestSuite {
       projectName: resolvedProjectName,
     });
 
-    const dataset = new Dataset(
-      { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
+    const suite = new TestSuite(
+      new Dataset(
+        { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
+        client
+      ),
       client
     );
 
     if (resolvedEvaluators || options.globalExecutionPolicy) {
-      const evaluators = resolvedEvaluators
-        ? serializeEvaluators(resolvedEvaluators)
-        : undefined;
-
-      await client.api.datasets.applyDatasetItemChanges(datasetId, {
-        override: true,
-        body: {
-          ...(evaluators && { evaluators }),
-          ...(options.globalExecutionPolicy && {
-            execution_policy: {
-              runs_per_item: options.globalExecutionPolicy.runsPerItem,
-              pass_threshold: options.globalExecutionPolicy.passThreshold,
-            },
-          }),
-        },
-      });
+      await suite.createInitialTestSuiteVersion(
+        resolvedEvaluators ?? [],
+        resolveExecutionPolicy(options.globalExecutionPolicy)
+      );
     }
 
-    return new TestSuite(dataset, client);
+    return suite;
   }
 
   static async get(
@@ -202,6 +215,36 @@ export class TestSuite {
     );
 
     await this.dataset.insert(datasetItems);
+  }
+
+  /**
+   * Updates existing items in the test suite. Each item must have an `id` field.
+   *
+   * @param items - Array of items to update. Each item must have an `id` to identify
+   *                the existing item.
+   * @throws Error if any item is missing an `id`
+   */
+  async update(items: UpdateTestSuiteItem[]): Promise<void> {
+    if (!items || items.length === 0) {
+      return;
+    }
+
+    for (const item of items) {
+      if (!item.id || item.id.trim() === "") {
+        throw new Error(
+          `Missing id for test suite item to update: ${JSON.stringify(item)}`
+        );
+      }
+    }
+
+    await this.insert(
+      items.map((item) => ({
+        data: { ...item.data, id: item.id },
+        assertions: item.assertions,
+        description: item.description,
+        executionPolicy: item.executionPolicy,
+      }))
+    );
   }
 
   async getItems(): Promise<
@@ -249,9 +292,38 @@ export class TestSuite {
     return resolveExecutionPolicy(versionInfo?.executionPolicy);
   }
 
-  async update(options: UpdateTestSuiteOptions): Promise<void> {
+  /**
+   * Get the current (latest) version name.
+   *
+   * @returns The version name (e.g., "v1") or undefined if no versions exist
+   */
+  async getCurrentVersionName(): Promise<string | undefined> {
+    return this.dataset.getCurrentVersionName();
+  }
+
+  /**
+   * Get the current (latest) version info.
+   *
+   * @returns The DatasetVersionPublic object or undefined if no versions exist
+   */
+  async getVersionInfo(): Promise<Awaited<ReturnType<typeof this.dataset.getVersionInfo>>> {
+    return this.dataset.getVersionInfo();
+  }
+
+  /**
+   * Get a read-only view of a specific version.
+   *
+   * @param versionName The version name to retrieve (e.g., "v1", "v2")
+   * @returns A DatasetVersion object for the specified version
+   * @throws DatasetVersionNotFoundError if the version doesn't exist
+   */
+  async getVersionView(versionName: string): Promise<ReturnType<typeof this.dataset.getVersionView>> {
+    return this.dataset.getVersionView(versionName);
+  }
+
+  async updateTestSettings(options: UpdateTestSuiteOptions): Promise<void> {
     if (options.globalExecutionPolicy) {
-      validateExecutionPolicy(options.globalExecutionPolicy, "suite update");
+      validateExecutionPolicy(options.globalExecutionPolicy, "suite test settings update");
     }
 
     const resolvedEvaluators = resolveEvaluators(
@@ -279,11 +351,14 @@ export class TestSuite {
     const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy !== undefined;
     if (hasVersionUpdates) {
       const versionInfo = await this.dataset.getVersionInfo();
+
       if (!versionInfo) {
-        throw new Error(
-          `Cannot update test suite '${this.name}': ` +
-            "no version info found. Add at least one item first."
-        );
+        // No version exists yet — create the initial one using the provided values,
+        // falling back to defaults for anything not specified.
+        const evaluators = resolvedEvaluators ?? [];
+        const executionPolicy = resolveExecutionPolicy(options.globalExecutionPolicy);
+        await this.createInitialTestSuiteVersion(evaluators, executionPolicy);
+        return;
       }
 
       // Resolve current values once — used both for fallback and change detection
@@ -323,8 +398,35 @@ export class TestSuite {
     }
   }
 
+  /**
+   * Creates the first version for a test suite that has no versions yet.
+   * Uses override=true since there is no base version to build on.
+   */
+  private async createInitialTestSuiteVersion(
+    evaluators: LLMJudge[],
+    executionPolicy: Required<ExecutionPolicy>
+  ): Promise<void> {
+    await this.client.api.datasets.applyDatasetItemChanges(this.dataset.id, {
+      override: true,
+      body: {
+        ...(evaluators.length > 0 && { evaluators: serializeEvaluators(evaluators) }),
+        execution_policy: {
+          runs_per_item: executionPolicy.runsPerItem,
+          pass_threshold: executionPolicy.passThreshold,
+        },
+      },
+    });
+  }
+
   async delete(itemIds: string[]): Promise<void> {
     await this.dataset.delete(itemIds);
+  }
+
+  /**
+   * Deletes all items from the test suite.
+   */
+  async clear(): Promise<void> {
+    await this.dataset.clear();
   }
 
   async updateItemAssertions(

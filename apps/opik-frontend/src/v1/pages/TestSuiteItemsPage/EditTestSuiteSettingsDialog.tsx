@@ -35,6 +35,10 @@ import {
   DEFAULT_EXECUTION_POLICY,
   MAX_RUNS_PER_ITEM,
 } from "@/types/test-suites";
+import {
+  PASS_CRITERIA_TITLE,
+  PASS_CRITERIA_DESCRIPTION,
+} from "@/constants/test-suites";
 import { extractAssertions } from "@/lib/assertion-converters";
 
 const settingsSchema = z.object({
@@ -143,9 +147,9 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
             <Separator className="mb-4" />
 
             <div className="mb-4">
-              <h3 className="comet-body-s-accented">Evaluation criteria</h3>
+              <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
               <p className="comet-body-xs text-light-slate">
-                Define the conditions required for the evaluation to pass
+                {PASS_CRITERIA_DESCRIPTION}
               </p>
             </div>
 
@@ -204,8 +208,8 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
                   Global assertions
                 </Label>
                 <p className="comet-body-xs text-light-slate">
-                  Define the global conditions all items in this evaluation
-                  suite must pass.
+                  Define the global conditions all items in this test suite must
+                  pass.
                 </p>
               </div>
               <div className="pt-1.5">
