@@ -56,10 +56,10 @@ def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes
 def resolve_project_id(api: "OpikApi", project_name: str) -> str:
     try:
         return resolve_project_id_by_name(api, project_name)
-    except ApiError:
+    except ApiError as e:
         raise click.ClickException(
             f"Project '{project_name}' not found. Check the project name and try again."
-        )
+        ) from e
 
 
 _RUNNER_TYPE_BYTE = {

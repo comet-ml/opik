@@ -23,9 +23,16 @@ def _capture_cli_error(
     exception: Exception, error_type: str, **details: object
 ) -> None:
     sentry_sdk.set_tag("error_type", error_type)
-    sentry_sdk.set_context(
-        "cli_error", {k: v for k, v in details.items() if v is not None}
-    )
+    context = {k: v for k, v in details.items() if v is not None}
+    cause = exception.__cause__
+    if cause is not None:
+        context["caused_by"] = type(cause).__name__
+        context["caused_by_message"] = str(cause)
+        if hasattr(cause, "status_code"):
+            context["caused_by_status_code"] = cause.status_code
+        if hasattr(cause, "body"):
+            context["caused_by_body"] = str(cause.body)
+    sentry_sdk.set_context("cli_error", context)
     sentry_sdk.capture_exception(exception)
 
 
