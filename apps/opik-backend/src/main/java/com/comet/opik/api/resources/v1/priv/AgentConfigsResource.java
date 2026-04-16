@@ -10,6 +10,7 @@ import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfig;
 import com.comet.opik.domain.AgentConfigService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -43,7 +44,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Path("/v1/private/agent-configs")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -56,6 +59,7 @@ public class AgentConfigsResource {
 
     private final @NonNull AgentConfigService agentConfigService;
     private final @NonNull Provider<RequestContext> requestContext;
+    private final @NonNull AnalyticsService analyticsService;
 
     @POST
     @Path("/blueprints")
@@ -76,6 +80,8 @@ public class AgentConfigsResource {
         AgentBlueprint createdBlueprint = agentConfigService.createConfig(request).block();
 
         log.info("Created config with blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
+
+        trackAgentConfigSaved(createdBlueprint);
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(createdBlueprint.id().toString())
@@ -169,6 +175,8 @@ public class AgentConfigsResource {
         AgentBlueprint blueprint = agentConfigService.updateConfig(request).block();
 
         log.info("Added blueprint '{}' to config for project '{}'", blueprint.id(), request.projectName());
+
+        trackAgentConfigSaved(blueprint);
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(blueprint.id().toString())
@@ -287,6 +295,8 @@ public class AgentConfigsResource {
 
         agentConfigService.createOrUpdateEnvs(request).block();
 
+        trackAgentConfigDeployed(request);
+
         return Response.noContent().build();
     }
 
@@ -306,6 +316,8 @@ public class AgentConfigsResource {
                 envName, request.blueprintName(), projectId);
 
         agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName()).block();
+
+        trackAgentConfigDeployedByName(projectId, envName, request.blueprintName());
 
         return Response.noContent().build();
     }
@@ -345,5 +357,54 @@ public class AgentConfigsResource {
         AgentBlueprint.BlueprintPage historyPage = agentConfigService.getHistory(projectId, page, size);
 
         return Response.ok(historyPage).build();
+    }
+
+    private void trackAgentConfigSaved(AgentBlueprint blueprint) {
+        try {
+            analyticsService.trackEvent("agent_config_saved", Map.of(
+                    "project_id", String.valueOf(blueprint.projectId()),
+                    "blueprint_id", blueprint.id().toString(),
+                    "blueprint_name", String.valueOf(blueprint.name())));
+        } catch (Exception e) {
+            log.warn("Failed to track agent_config_saved analytics event for blueprint '{}'",
+                    blueprint.id(), e);
+        }
+    }
+
+    private void trackAgentConfigDeployed(AgentConfigEnvUpdate request) {
+        try {
+            var envNames = request.envs().stream()
+                    .map(env -> env.envName())
+                    .collect(Collectors.joining(","));
+            var blueprintId = request.envs().stream()
+                    .findFirst()
+                    .map(env -> env.blueprintId().toString())
+                    .orElse("");
+            var deployedToProd = request.envs().stream()
+                    .anyMatch(env -> "prod".equalsIgnoreCase(env.envName()));
+
+            analyticsService.trackEvent("agent_config_deployed", Map.of(
+                    "project_id", request.projectId().toString(),
+                    "blueprint_id", blueprintId,
+                    "environments", envNames,
+                    "deployed_to_prod", String.valueOf(deployedToProd)));
+        } catch (Exception e) {
+            log.warn("Failed to track agent_config_deployed analytics event for project '{}'",
+                    request.projectId(), e);
+        }
+    }
+
+    private void trackAgentConfigDeployedByName(UUID projectId, String envName, String blueprintName) {
+        try {
+            var deployedToProd = "prod".equalsIgnoreCase(envName);
+            analyticsService.trackEvent("agent_config_deployed", Map.of(
+                    "project_id", projectId.toString(),
+                    "blueprint_name", blueprintName,
+                    "environments", envName,
+                    "deployed_to_prod", String.valueOf(deployedToProd)));
+        } catch (Exception e) {
+            log.warn("Failed to track agent_config_deployed analytics event for project '{}'",
+                    projectId, e);
+        }
     }
 }
