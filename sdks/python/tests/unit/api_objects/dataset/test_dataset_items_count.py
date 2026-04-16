@@ -1,4 +1,4 @@
-from unittest.mock import Mock, PropertyMock
+from unittest.mock import Mock
 from opik.api_objects.dataset.dataset import Dataset
 from opik.rest_api.types.dataset_public import DatasetPublic
 
@@ -39,9 +39,7 @@ def test_dataset_items_count__no_cached_value__fetches_from_backend():
     count = dataset.dataset_items_count
 
     assert count == 10
-    mock_rest_client.datasets.get_dataset_by_id.assert_called_once_with(
-        id=dataset.id
-    )
+    mock_rest_client.datasets.get_dataset_by_id.assert_called_once_with(id=dataset.id)
 
 
 def test_dataset_items_count__fetched_once__cached_for_subsequent_calls():

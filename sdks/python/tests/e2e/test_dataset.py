@@ -377,6 +377,4 @@ def test_dataset_items_count__returns_correct_count_after_insert(
         lambda: dataset.dataset_items_count == 3,
         max_try_seconds=30,
     )
-    assert success, (
-        f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"
-    )
+    assert success, f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"
