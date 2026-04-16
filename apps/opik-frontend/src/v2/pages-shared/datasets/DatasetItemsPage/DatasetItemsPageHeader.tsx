@@ -98,6 +98,7 @@ const DatasetItemsPageHeader: React.FunctionComponent<
             entityName={entityName}
             projectId={activeProjectId}
             isEmpty={dataset?.dataset_items_count === 0}
+            isTestSuite={isTestSuite}
           />
           {isTestSuite && (
             <Button

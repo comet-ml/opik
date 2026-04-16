@@ -44,6 +44,7 @@ type DatasetItemsActionsPanelProps = {
   isDraftMode?: boolean;
   entityName?: string;
   renderExpansionDialog: (props: ExpansionDialogRenderProps) => React.ReactNode;
+  compact?: boolean;
 };
 
 const DatasetItemsActionsPanel: React.FunctionComponent<
@@ -61,6 +62,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
   isDraftMode = false,
   entityName = "dataset",
   renderExpansionDialog,
+  compact = false,
 }) => {
   const resetKeyRef = useRef(0);
   const [expansionDialogOpen, setExpansionDialogOpen] =
@@ -198,17 +200,25 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
       />
       {canEditDatasets && (
         <>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setExpansionDialogOpen(true);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
-            <Sparkles className="mr-2 size-4" />
-            Expand with AI
-          </Button>
+          <TooltipWrapper content={compact ? "Expand with AI" : undefined}>
+            <Button
+              variant="secondary"
+              size={compact ? "icon-sm" : "sm"}
+              onClick={() => {
+                setExpansionDialogOpen(true);
+                resetKeyRef.current = resetKeyRef.current + 1;
+              }}
+            >
+              {compact ? (
+                <Sparkles className="size-4" />
+              ) : (
+                <>
+                  <Sparkles className="mr-2 size-4" />
+                  Expand with AI
+                </>
+              )}
+            </Button>
+          </TooltipWrapper>
           <TooltipWrapper content="Manage tags">
             <Button
               variant="outline"

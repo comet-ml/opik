@@ -85,6 +85,7 @@ export class Prompt extends BasePrompt {
     promptData: OpikApi.PromptPublic,
     apiResponse: OpikApi.PromptVersionDetail,
     opik: OpikClient,
+    projectName?: string,
   ): Prompt {
     // Validate required fields
     if (!apiResponse.template) {
@@ -134,6 +135,7 @@ export class Prompt extends BasePrompt {
         description: promptData.description,
         tags: promptData.tags,
         synced: true,
+        projectName,
       },
       opik,
     );

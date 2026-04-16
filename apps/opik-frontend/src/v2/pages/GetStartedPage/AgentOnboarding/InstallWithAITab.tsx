@@ -7,8 +7,7 @@ import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
 import cursorLogo from "/images/integrations/cursor.svg";
-
-const INSTALL_COMMAND = "npx skills add comet-ml/opik-skills -g --all";
+import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
 
 interface InstallWithAITabProps {
   traceReceived: boolean;
@@ -58,7 +57,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
               Install the Opik skill so it&apos;s available in Claude Code,
               Codex, Cursor, Windsurf, and other AI editors.
             </p>
-            <CodeSnippet title="Terminal" code={INSTALL_COMMAND} />
+            <CodeSnippet title="Terminal" code={INSTALL_OPIK_SKILLS_COMMAND} />
           </div>
         </TimelineStep>
 

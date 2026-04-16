@@ -283,7 +283,7 @@ public class DatasetsResource {
 
         log.info("Finding dataset by name '{}', projectName '{}' on workspace_id '{}'", identifier.datasetName(),
                 identifier.projectName(), workspaceId);
-        Dataset dataset = service.findByName(identifier, visibility);
+        Dataset dataset = service.findByNameDetailed(identifier, visibility);
         log.info("Found dataset by name '{}', id '{}' on workspace_id '{}'", identifier.datasetName(), dataset.id(),
                 workspaceId);
 

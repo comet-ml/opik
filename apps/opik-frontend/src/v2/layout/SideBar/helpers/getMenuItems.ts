@@ -182,20 +182,14 @@ const getMenuItems = ({
   ];
 };
 
-export const getWorkspaceMenuItems = ({
-  canViewDashboards,
-}: {
-  canViewDashboards: boolean;
-}): MenuItemGroup[] => {
+export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
   return [
     {
       id: "workspace-nav",
       items: [
         {
           id: "workspace",
-          path: canViewDashboards
-            ? "/$workspaceName/dashboards"
-            : "/$workspaceName/projects",
+          path: "/$workspaceName/projects",
           type: MENU_ITEM_TYPE.router,
           icon: LayoutDashboard,
           label: "Workspace",
@@ -224,13 +218,6 @@ export const getWorkspaceSidebarMenuItems = ({
       id: "workspace-sidebar",
       items: [
         {
-          id: "configuration",
-          path: "/$workspaceName/configuration",
-          type: MENU_ITEM_TYPE.router,
-          icon: Settings2,
-          label: "Configuration",
-        },
-        {
           id: "projects",
           path: "/$workspaceName/projects",
           type: MENU_ITEM_TYPE.router,
@@ -248,6 +235,13 @@ export const getWorkspaceSidebarMenuItems = ({
               },
             ]
           : []),
+        {
+          id: "configuration",
+          path: "/$workspaceName/configuration",
+          type: MENU_ITEM_TYPE.router,
+          icon: Settings2,
+          label: "Configuration",
+        },
       ],
     },
   ];

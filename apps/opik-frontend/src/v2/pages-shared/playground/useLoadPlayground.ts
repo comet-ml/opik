@@ -3,8 +3,13 @@ import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
-import { usePromptMap, useSetPromptMap } from "@/store/PlaygroundStore";
+import {
+  usePromptMap,
+  useSetPromptMap,
+  useSetDatasetType,
+} from "@/store/PlaygroundStore";
 import { generateDefaultPrompt } from "@/lib/playground";
+import { DATASET_TYPE } from "@/types/datasets";
 import {
   generateDefaultLLMPromptMessage,
   getTextFromMessageContent,
@@ -35,6 +40,7 @@ interface LoadPlaygroundOptions {
   autoImprove?: boolean;
   datasetId?: string;
   datasetVersionId?: string;
+  datasetType?: DATASET_TYPE | null;
   templateStructure?: PROMPT_TEMPLATE_STRUCTURE;
   namedPrompts?: NamedPromptContent[];
 }
@@ -46,6 +52,7 @@ function useLoadPlayground() {
 
   const promptMap = usePromptMap();
   const setPromptMap = useSetPromptMap();
+  const setDatasetType = useSetDatasetType();
 
   const [lastPickedModel] = useLastPickedModel({
     key: PLAYGROUND_LAST_PICKED_MODEL,
@@ -179,6 +186,7 @@ function useLoadPlayground() {
         autoImprove = false,
         datasetId,
         datasetVersionId,
+        datasetType,
         templateStructure,
         namedPrompts,
       } = options;
@@ -218,6 +226,8 @@ function useLoadPlayground() {
         );
       }
 
+      setDatasetType(datasetType ?? null);
+
       navigate({
         to: "/$workspaceName/projects/$projectId/playground",
         params: {
@@ -231,6 +241,7 @@ function useLoadPlayground() {
       navigate,
       setPromptMap,
       setDatasetVersionKey,
+      setDatasetType,
       workspaceName,
       activeProjectId,
     ],

@@ -80,7 +80,7 @@ public interface DatasetService {
 
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
-    Dataset findByName(DatasetIdentifier identifier, Visibility visibility);
+    Dataset findByNameDetailed(DatasetIdentifier identifier, Visibility visibility);
 
     Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
 
@@ -271,8 +271,7 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
 
-        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId, visibility)))
-                .get(0);
+        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId, visibility))).getFirst();
     }
 
     @Override
@@ -366,8 +365,7 @@ class DatasetServiceImpl implements DatasetService {
         return verifyVisibility(dataset, visibility);
     }
 
-    @Override
-    public Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+    private Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
         var workspaceId = requestContext.get().getWorkspaceId();
         UUID projectId = null;
 
@@ -383,6 +381,11 @@ class DatasetServiceImpl implements DatasetService {
         }
 
         return verifyVisibility(dataset, visibility);
+    }
+
+    @Override
+    public Dataset findByNameDetailed(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+        return enrichDatasetWithAdditionalInformation(List.of(findByName(identifier, visibility))).getFirst();
     }
 
     @Override

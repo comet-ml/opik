@@ -793,6 +793,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "meta-llama/llama-guard-4-12b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B_FREE,
+      label: "meta-llama/llama-guard-4-12b:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
       label: "microsoft/mai-ds-r1",
     },
@@ -1958,6 +1962,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
+      label: "Gemini 3.1 Flash TTS Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,

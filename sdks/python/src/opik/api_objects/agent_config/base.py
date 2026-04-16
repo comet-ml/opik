@@ -109,6 +109,30 @@ def _init_fallback_cache_entry(
     )
 
 
+def _validate_prompt_project_names(
+    config: "Config",
+    project_name: str,
+) -> None:
+    """Raise ConfigMismatch if any Prompt/ChatPrompt field belongs to a different project."""
+    from opik.api_objects.prompt.base_prompt import BasePrompt  # avoid circular import
+
+    mismatched = []
+    for name in type(config).__field_names__:
+        value = object.__getattribute__(config, name)
+        if isinstance(value, BasePrompt):
+            prompt_project = value.project_name
+            if prompt_project is not None and prompt_project != project_name:
+                mismatched.append((name, prompt_project))
+
+    if mismatched:
+        details = ", ".join(f"{name!r} (project={proj!r})" for name, proj in mismatched)
+        raise ConfigMismatch(
+            f"Config project is {project_name!r}, but the following prompt field(s) "
+            f"belong to a different project: {details}. "
+            f"All prompts referenced in a config must belong to the same project as the config."
+        )
+
+
 def _validate_blueprint_schema(cls: typing.Type["Config"], bp: typing.Any) -> None:
     """Raise ConfigMismatch if ``bp`` is missing any field declared on ``cls``."""
     missing_keys = [name for name in cls.__field_names__ if name not in bp.keys()]
@@ -392,6 +416,7 @@ class Config:
         mask_id: typing.Optional[str],
         field_types: typing.Dict[str, typing.Any],
     ) -> T:
+        _validate_prompt_project_names(fallback, project_name)
         fields_with_values = fallback._extract_fields_with_values()
         try:
             bp = manager.create_blueprint(
@@ -424,6 +449,7 @@ class Config:
         manager: typing.Any,
         description: typing.Optional[str] = None,
     ) -> str:
+        _validate_prompt_project_names(self, manager.project_name)
         fields_with_values = self._extract_fields_with_values()
         field_types = self._infer_field_types()
 
