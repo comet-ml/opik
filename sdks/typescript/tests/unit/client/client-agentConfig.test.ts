@@ -6,6 +6,8 @@ import * as OpikApi from "@/rest_api/api";
 import { trackStorage } from "@/decorators/track";
 import { Prompt } from "@/prompt/Prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
+import { ConfigMismatchError } from "@/errors/agent-config/errors";
+import { PromptType } from "@/prompt/types";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
@@ -419,6 +421,301 @@ describe("Blueprint prompt class hints", () => {
       opik
     );
     expect(bp.values["p"]).toBeInstanceOf(Prompt);
+  });
+});
+
+describe("createConfig prompt project validation", () => {
+  let client: Opik;
+
+  /** Build a minimal Prompt with a given projectName (no backend needed). */
+  function makePrompt(projectName?: string): Prompt {
+    return new Prompt(
+      {
+        name: "test-prompt",
+        prompt: "Hello {{name}}",
+        type: PromptType.MUSTACHE,
+        synced: false,
+        projectName,
+      },
+      client,
+    );
+  }
+
+  /** Build a minimal ChatPrompt with a given projectName (no backend needed). */
+  function makeChatPrompt(projectName?: string): ChatPrompt {
+    return new ChatPrompt(
+      {
+        name: "test-chat-prompt",
+        messages: [{ role: "user", content: "Hi" }],
+        type: PromptType.MUSTACHE,
+        synced: false,
+        projectName,
+      },
+      client,
+    );
+  }
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+  });
+
+  it("should throw ConfigMismatchError when a Prompt field belongs to a different project", async () => {
+    const prompt = makePrompt("other-project");
+
+    await expect(
+      client.createConfig(
+        { systemPrompt: prompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError when a ChatPrompt field belongs to a different project", async () => {
+    const chatPrompt = makeChatPrompt("other-project");
+
+    await expect(
+      client.createConfig(
+        { systemPrompt: chatPrompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should include the field name in the error message", async () => {
+    const prompt = makePrompt("wrong-project");
+
+    await expect(
+      client.createConfig(
+        { myField: prompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toThrow("myField");
+  });
+
+  it("should not throw ConfigMismatchError when a Prompt field has projectName matching the config project", async () => {
+    const prompt = makePrompt("test-project");
+
+    try {
+      await client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should not throw ConfigMismatchError when a Prompt field has no projectName set", async () => {
+    const prompt = makePrompt(undefined);
+
+    try {
+      await client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should not throw ConfigMismatchError for plain scalar values (no prompt instances)", async () => {
+    const getLatestSpy = vi
+      .spyOn(client.api.agentConfigs, "getLatestBlueprint")
+      .mockImplementation(() =>
+        (() => { throw new OpikApiError({ message: "Not found", statusCode: 404 }); })()
+      );
+    const createSpy = vi
+      .spyOn(client.api.agentConfigs, "createAgentConfig")
+      .mockImplementation(mockAPIFunction);
+    const getBySpy = vi
+      .spyOn(client.api.agentConfigs, "getBlueprintById")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "bp-1",
+          type: "blueprint" as OpikApi.AgentBlueprintPublicType,
+          values: [],
+        } as OpikApi.AgentBlueprintPublic)
+      );
+    const retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({ id: "proj-1", name: "test-project" })
+      );
+
+    await expect(
+      client.createConfig(
+        { temperature: 0.7, model: "gpt-4" },
+        { projectName: "test-project" },
+      ),
+    ).resolves.toBeDefined();
+
+    getLatestSpy.mockRestore();
+    createSpy.mockRestore();
+    getBySpy.mockRestore();
+    retrieveProjectSpy.mockRestore();
+  });
+
+  it("should validate against the resolved project when no explicit projectName option is given", async () => {
+    // client was created with projectName: "test-project", so that's what gets used
+    const prompt = makePrompt("different-project");
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }), // no options.projectName
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError for a prompt with a different projectName (e.g. from getPrompt)", async () => {
+    // Simulates a prompt returned by getPrompt({ projectName: "other-project" })
+    const prompt = new Prompt(
+      {
+        name: "fetched-prompt",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      client,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError for a searchPrompts result from a different project", async () => {
+    // searchPrompts uses this.resolveProjectName() → "other-project" if client configured that way
+    const otherClient = new Opik({ projectName: "other-project" });
+    const prompt = new Prompt(
+      {
+        name: "search-result",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      otherClient,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+});
+
+describe("getOrCreateConfig prompt project validation", () => {
+  let client: Opik;
+  let retrieveProjectSpy: MockInstance<typeof client.api.projects.retrieveProject>;
+  let getBlueprintByEnvSpy: MockInstance<typeof client.api.agentConfigs.getBlueprintByEnv>;
+  let getLatestBlueprintSpy: MockInstance<typeof client.api.agentConfigs.getLatestBlueprint>;
+
+  /** Wrap a getOrCreateConfig call inside the track context required by the implementation. */
+  function callInsideTrack<T extends Record<string, unknown>>(
+    fallback: T,
+    opts?: { projectName?: string },
+  ) {
+    return trackStorage.run(
+      { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<
+        typeof trackStorage.run
+      >[0],
+      () => client.getOrCreateConfig({ fallback, ...opts }),
+    );
+  }
+
+  function makePrompt(projectName?: string): Prompt {
+    return new Prompt(
+      { name: "p", prompt: "Hi", type: PromptType.MUSTACHE, synced: false, projectName },
+      client,
+    );
+  }
+
+  function makeChatPrompt(projectName?: string): ChatPrompt {
+    return new ChatPrompt(
+      { name: "p", messages: [{ role: "user", content: "Hi" }], type: PromptType.MUSTACHE, synced: false, projectName },
+      client,
+    );
+  }
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+
+    retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({ id: "proj-1", name: "test-project" })
+      );
+
+    // Simulate empty project: both env-tagged and project-wide lookups return 404
+    getBlueprintByEnvSpy = vi
+      .spyOn(client.api.agentConfigs, "getBlueprintByEnv")
+      .mockImplementation(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+    getLatestBlueprintSpy = vi
+      .spyOn(client.api.agentConfigs, "getLatestBlueprint")
+      .mockImplementation(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+  });
+
+  afterEach(() => {
+    retrieveProjectSpy.mockRestore();
+    getBlueprintByEnvSpy.mockRestore();
+    getLatestBlueprintSpy.mockRestore();
+  });
+
+  it("should throw ConfigMismatchError when fallback has a Prompt from a different project", async () => {
+    const prompt = makePrompt("other-project");
+
+    await expect(callInsideTrack({ systemPrompt: prompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
+  });
+
+  it("should throw ConfigMismatchError when fallback has a ChatPrompt from a different project", async () => {
+    const chatPrompt = makeChatPrompt("other-project");
+
+    await expect(callInsideTrack({ systemPrompt: chatPrompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
+  });
+
+  it("should include the field name in the error message", async () => {
+    const prompt = makePrompt("wrong-project");
+
+    await expect(callInsideTrack({ myField: prompt })).rejects.toThrow("myField");
+  });
+
+  it("should not throw ConfigMismatchError when fallback prompt belongs to the same project", async () => {
+    const prompt = makePrompt("test-project");
+
+    try {
+      await callInsideTrack({ systemPrompt: prompt });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+      // Other errors (serialization, blueprint field validation, etc.) are acceptable
+    }
+  });
+
+  it("should not throw ConfigMismatchError when fallback prompt has no projectName", async () => {
+    const prompt = makePrompt(undefined);
+
+    try {
+      await callInsideTrack({ systemPrompt: prompt });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should validate against the resolved project when no explicit projectName option is given", async () => {
+    // client was created with projectName: "test-project"
+    const prompt = makePrompt("different-project");
+
+    await expect(callInsideTrack({ systemPrompt: prompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
   });
 });
 
