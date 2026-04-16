@@ -57,6 +57,7 @@ export async function runTests(
     return validateTaskResult(result);
   };
 
+  const startTime = performance.now();
   const evalResult = await evaluateTestSuite({
     dataset: testSuite.dataset,
     task: validatedTask,
@@ -65,6 +66,10 @@ export async function runTests(
     tags: experimentTags,
     ...rest,
   });
+  const totalTime = (performance.now() - startTime) / 1000;
 
-  return buildSuiteResult(evalResult);
+  return buildSuiteResult(evalResult, {
+    suiteName: testSuite.name,
+    totalTime: totalTime,
+  });
 }
