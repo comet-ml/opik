@@ -64,6 +64,17 @@ public class BiEventListener {
         trackFirstTraceViaAnalytics(event.workspaceId(), event);
     }
 
+    private Set<UUID> getNonDemoProjectIds(String workspaceId, TracesCreated event) {
+        Set<UUID> demoProjectIds = projectService.findByNames(workspaceId, DemoData.PROJECTS)
+                .stream()
+                .map(Project::id)
+                .collect(Collectors.toSet());
+
+        Set<UUID> projectIds = new HashSet<>(event.projectIds());
+        projectIds.removeAll(demoProjectIds);
+        return projectIds;
+    }
+
     private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event) {
         if (usageReportService.isFirstTraceReport()) {
             return;
@@ -74,13 +85,7 @@ public class BiEventListener {
             return;
         }
 
-        Set<UUID> demoProjectIds = projectService.findByNames(workspaceId, DemoData.PROJECTS)
-                .stream()
-                .map(Project::id)
-                .collect(Collectors.toSet());
-
-        Set<UUID> projectIds = new HashSet<>(event.projectIds());
-        projectIds.removeAll(demoProjectIds);
+        Set<UUID> projectIds = getNonDemoProjectIds(workspaceId, event);
 
         if (projectIds.isEmpty()) {
             log.info("No project ids found for event");
@@ -126,6 +131,14 @@ public class BiEventListener {
 
     private void trackFirstTraceViaAnalytics(String workspaceId, TracesCreated event) {
         if (event.traces().isEmpty()) {
+            return;
+        }
+
+        if (analyticsReportedWorkspaces.contains(workspaceId)) {
+            return;
+        }
+
+        if (getNonDemoProjectIds(workspaceId, event).isEmpty()) {
             return;
         }
 
