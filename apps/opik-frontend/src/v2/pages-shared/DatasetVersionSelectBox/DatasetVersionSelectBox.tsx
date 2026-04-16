@@ -14,6 +14,7 @@ import {
   Database,
   GitCommitVertical,
   Info,
+  ListChecks,
   Plus,
   Search,
   X,
@@ -30,8 +31,9 @@ import useDatasetVersionSelect, {
 } from "./useDatasetVersionSelect";
 import VersionOption from "./VersionOption";
 import { useFetchDataset } from "@/api/datasets/useDatasetById";
-import { Dataset } from "@/types/datasets";
+import { Dataset, DATASET_TYPE } from "@/types/datasets";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
 import {
   parseDatasetVersionKey,
   formatDatasetVersionKey,
@@ -50,16 +52,17 @@ interface DatasetVersionSelectBoxProps {
   disabled?: boolean;
   showClearButton?: boolean;
   buttonClassName?: string;
+  datasetType?: DATASET_TYPE;
 }
 
-function DatasetEmptyState() {
+function DatasetEmptyState({ typeLabel }: { typeLabel: string }) {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
       <div className="comet-body-s-accented pb-1 text-foreground">
-        No test suites available
+        No {typeLabel}s available
       </div>
       <div className="comet-body-s text-muted-slate">
-        Create a test suite with examples to evaluate your prompt on.
+        Create a {typeLabel} with examples to evaluate your prompt on.
       </div>
     </div>
   );
@@ -73,6 +76,7 @@ function DatasetVersionSelectBox({
   disabled = false,
   showClearButton = true,
   buttonClassName,
+  datasetType,
 }: DatasetVersionSelectBoxProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const resetDialogKeyRef = useRef(0);
@@ -92,6 +96,10 @@ function DatasetVersionSelectBox({
   const datasetId = parsed?.datasetId ?? null;
   const selectedVersionId = parsed?.versionId ?? null;
 
+  const isDatasetMode = datasetType === DATASET_TYPE.DATASET;
+  const typeLabel = isDatasetMode ? "dataset" : "test suite";
+  const TypeIcon = isDatasetMode ? Database : ListChecks;
+
   const {
     datasets,
     isLoadingDatasets,
@@ -104,6 +112,7 @@ function DatasetVersionSelectBox({
     projectId,
     search,
     openDatasetId,
+    datasetType,
   });
 
   const selectedDataset = useMemo(
@@ -184,7 +193,7 @@ function DatasetVersionSelectBox({
 
           {isEmpty ? (
             <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
-              <TooltipWrapper content="This test suite is empty">
+              <TooltipWrapper content={`This ${typeLabel} is empty`}>
                 <Info className="size-3.5 text-light-slate" />
               </TooltipWrapper>
             </div>
@@ -254,7 +263,7 @@ function DatasetVersionSelectBox({
           </div>
         );
       }
-      return <DatasetEmptyState />;
+      return <DatasetEmptyState typeLabel={typeLabel} />;
     }
 
     return (
@@ -305,7 +314,7 @@ function DatasetVersionSelectBox({
           open={isSelectOpen}
           disabled={disabled}
         >
-          <TooltipWrapper content={displayValue ?? "Select a test suite"}>
+          <TooltipWrapper content={displayValue ?? `Select a ${typeLabel}`}>
             <SelectTrigger
               className={cn(
                 "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0 [&>span]:min-w-0 [&>span]:flex-1",
@@ -318,16 +327,16 @@ function DatasetVersionSelectBox({
               <SelectValue
                 placeholder={
                   <div className="flex w-full items-center text-light-slate">
-                    <Database className="mr-2 size-4 text-library-loaded" />
+                    <TypeIcon className="mr-2 size-4 text-library-loaded" />
                     <span className="truncate font-normal">
-                      Select a test suite
+                      Select a {typeLabel}
                     </span>
                   </div>
                 }
               >
                 <div className="flex w-full items-center justify-between gap-2 text-foreground">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Database className="size-4 shrink-0 text-library-loaded" />
+                    <TypeIcon className="size-4 shrink-0 text-library-loaded" />
                     <span className="min-w-0 truncate">
                       {selectedDataset?.name}
                     </span>
@@ -351,7 +360,7 @@ function DatasetVersionSelectBox({
                 <Input
                   ref={inputRef}
                   className="outline-0"
-                  placeholder="Search test suites"
+                  placeholder={`Search ${typeLabel}s`}
                   value={search}
                   variant="ghost"
                   onChange={(e) => setSearch(e.target.value)}
@@ -389,12 +398,21 @@ function DatasetVersionSelectBox({
           </Button>
         )}
       </div>
-      <AddEditTestSuiteDialog
-        key={resetDialogKeyRef.current}
-        open={isDialogOpen}
-        setOpen={setIsDialogOpen}
-        onDatasetCreated={handleDatasetCreated}
-      />
+      {isDatasetMode ? (
+        <AddEditDatasetDialog
+          key={resetDialogKeyRef.current}
+          open={isDialogOpen}
+          setOpen={setIsDialogOpen}
+          onDatasetCreated={handleDatasetCreated}
+        />
+      ) : (
+        <AddEditTestSuiteDialog
+          key={resetDialogKeyRef.current}
+          open={isDialogOpen}
+          setOpen={setIsDialogOpen}
+          onDatasetCreated={handleDatasetCreated}
+        />
+      )}
     </>
   );
 }
