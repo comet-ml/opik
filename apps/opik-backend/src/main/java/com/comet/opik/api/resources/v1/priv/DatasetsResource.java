@@ -16,6 +16,7 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
@@ -43,6 +44,7 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.FileNameUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -90,6 +92,7 @@ import reactor.core.publisher.Flux;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -120,6 +123,7 @@ public class DatasetsResource {
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull CsvDatasetExportService csvExportService;
+    private final @NonNull AnalyticsService analyticsService;
 
     @GET
     @Path("/{id}")
@@ -196,6 +200,13 @@ public class DatasetsResource {
         Dataset savedDataset = service.save(dataset);
         log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
                 savedDataset.id(), workspaceId);
+
+        if (savedDataset.type() == DatasetType.TEST_SUITE) {
+            analyticsService.trackEvent("opik_eval_suite_created", Map.of(
+                    "eval_suite_id", savedDataset.id().toString(),
+                    "eval_suite_name", savedDataset.name(),
+                    "project_id", String.valueOf(savedDataset.projectId())));
+        }
 
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
         return Response.created(uri).build();

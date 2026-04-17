@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
@@ -32,6 +33,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPubli
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -91,6 +93,7 @@ public class ExperimentService {
     private final @NonNull ExperimentGroupEnricher experimentGroupEnricher;
     private final @NonNull ExperimentAggregatesService experimentAggregatesService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
+    private final @NonNull AnalyticsService analyticsService;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -690,6 +693,24 @@ public class ExperimentService {
                 Optional.ofNullable(partialExperiment.type()).orElse(ExperimentType.REGULAR)));
         log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
                 partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+
+        trackEvalSuiteRunIfApplicable(partialExperiment, workspaceId, userName);
+    }
+
+    private void trackEvalSuiteRunIfApplicable(Experiment experiment, String workspaceId, String userName) {
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                datasetService.getById(experiment.datasetId(), workspaceId)
+                        .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
+                        .ifPresent(dataset -> analyticsService.trackEvent(userName, "opik_eval_suite_run", Map.of(
+                                "eval_suite_id", dataset.id().toString(),
+                                "experiment_id", experiment.id().toString(),
+                                "project_id", String.valueOf(experiment.projectId()))));
+            } catch (Exception e) {
+                log.warn("Failed to track eval_suite_run analytics event for experiment '{}'",
+                        experiment.id(), e);
+            }
+        });
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
