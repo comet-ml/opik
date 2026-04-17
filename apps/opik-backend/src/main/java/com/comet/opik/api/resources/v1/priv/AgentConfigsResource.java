@@ -9,8 +9,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfig;
 import com.comet.opik.domain.AgentConfigService;
-import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -20,7 +18,6 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -44,7 +41,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
-import java.util.Map;
 import java.util.UUID;
 
 @Path("/v1/private/agent-configs")
@@ -57,8 +53,6 @@ import java.util.UUID;
 public class AgentConfigsResource {
 
     private final @NonNull AgentConfigService agentConfigService;
-    private final @NonNull Provider<RequestContext> requestContext;
-    private final @NonNull AnalyticsService analyticsService;
 
     @POST
     @Path("/blueprints")
@@ -79,10 +73,6 @@ public class AgentConfigsResource {
         AgentBlueprint createdBlueprint = agentConfigService.createConfig(request).block();
 
         log.info("Created config with blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
-
-        trackAgentConfigSaved(createdBlueprint);
-        trackAgentConfigDeployedEvent(createdBlueprint.projectId(), "prod",
-                createdBlueprint.id().toString(), true);
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(createdBlueprint.id().toString())
@@ -176,8 +166,6 @@ public class AgentConfigsResource {
         AgentBlueprint blueprint = agentConfigService.updateConfig(request).block();
 
         log.info("Added blueprint '{}' to config for project '{}'", blueprint.id(), request.projectName());
-
-        trackAgentConfigSaved(blueprint);
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(blueprint.id().toString())
@@ -296,8 +284,6 @@ public class AgentConfigsResource {
 
         agentConfigService.createOrUpdateEnvs(request).block();
 
-        trackAgentConfigDeployed(request);
-
         return Response.noContent().build();
     }
 
@@ -317,8 +303,6 @@ public class AgentConfigsResource {
                 envName, request.blueprintName(), projectId);
 
         agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName()).block();
-
-        trackAgentConfigDeployedByName(projectId, envName, request.blueprintName());
 
         return Response.noContent().build();
     }
@@ -358,42 +342,5 @@ public class AgentConfigsResource {
         AgentBlueprint.BlueprintPage historyPage = agentConfigService.getHistory(projectId, page, size);
 
         return Response.ok(historyPage).build();
-    }
-
-    private void trackAgentConfigSaved(AgentBlueprint blueprint) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        analyticsService.trackEvent("opik_agent_config_saved", Map.of(
-                "workspace_id", workspaceId,
-                "project_id", String.valueOf(blueprint.projectId()),
-                "blueprint_id", blueprint.id().toString(),
-                "blueprint_name", String.valueOf(blueprint.name())));
-    }
-
-    private void trackAgentConfigDeployed(AgentConfigEnvUpdate request) {
-        for (var env : request.envs()) {
-            trackAgentConfigDeployedEvent(request.projectId(), env.envName(),
-                    env.blueprintId().toString(), "prod".equalsIgnoreCase(env.envName()));
-        }
-    }
-
-    private void trackAgentConfigDeployedByName(UUID projectId, String envName, String blueprintName) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
-                "workspace_id", workspaceId,
-                "project_id", projectId.toString(),
-                "blueprint_name", blueprintName,
-                "environment", envName,
-                "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))));
-    }
-
-    private void trackAgentConfigDeployedEvent(UUID projectId, String envName,
-            String blueprintId, boolean deployedToProd) {
-        String workspaceId = requestContext.get().getWorkspaceId();
-        analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
-                "workspace_id", workspaceId,
-                "project_id", projectId.toString(),
-                "blueprint_id", blueprintId,
-                "environment", envName,
-                "deployed_to_prod", String.valueOf(deployedToProd)));
     }
 }
