@@ -129,12 +129,12 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             return blueprint;
                         })).subscribeOn(Schedulers.boundedElastic()),
-                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()))
-                .doOnNext(blueprint -> {
-                    trackAgentConfigSaved(workspaceId, blueprint);
-                    trackAgentConfigDeployed(workspaceId, blueprint.projectId(),
-                            blueprint.id(), String.valueOf(blueprint.name()), "prod");
-                });
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
+                        .doOnNext(blueprint -> {
+                            trackAgentConfigSaved(workspaceId, projectId, blueprint);
+                            trackAgentConfigDeployed(workspaceId, projectId,
+                                    blueprint.id(), String.valueOf(blueprint.name()), "prod");
+                        }));
     }
 
     @Override
@@ -162,8 +162,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                             return createBlueprint(dao, request, existingConfig.id(), projectId, workspaceId,
                                     userName);
                         })).subscribeOn(Schedulers.boundedElastic()),
-                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()))
-                .doOnNext(blueprint -> trackAgentConfigSaved(workspaceId, blueprint));
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
+                        .doOnNext(blueprint -> trackAgentConfigSaved(workspaceId, projectId, blueprint)));
     }
 
     @Override
@@ -694,10 +694,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return updateConfig(request);
     }
 
-    private void trackAgentConfigSaved(String workspaceId, AgentBlueprint blueprint) {
+    private void trackAgentConfigSaved(String workspaceId, UUID projectId, AgentBlueprint blueprint) {
         analyticsService.trackEvent("opik_agent_config_saved", Map.of(
                 "workspace_id", workspaceId,
-                "project_id", String.valueOf(blueprint.projectId()),
+                "project_id", projectId.toString(),
                 "blueprint_id", blueprint.id().toString(),
                 "blueprint_name", String.valueOf(blueprint.name())));
     }
