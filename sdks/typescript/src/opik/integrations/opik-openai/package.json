@@ -1,7 +1,7 @@
 {
   "name": "opik-openai",
   "description": "Opik TypeScript and JavaScript SDK integration with OpenAI",
-  "version": "1.11.14",
+  "version": "2.0.0",
   "engines": {
     "node": ">=18"
   },
