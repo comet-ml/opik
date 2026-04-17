@@ -4,7 +4,7 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { ExperimentsCompare } from "@/types/datasets";
-import { extractAssertions } from "@/lib/assertion-converters";
+import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -15,24 +15,17 @@ type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
 
-const hasNoAssertions = (row: ExperimentsCompare): boolean => {
-  const evaluators = row.evaluators;
-  if (!evaluators) return false;
-  return extractAssertions(evaluators).length === 0;
-};
-
 const areAllExperimentItemsScored = (
   matchingRow: ExperimentsCompare,
   datasetItemId: string,
 ): boolean => {
-  if (hasNoAssertions(matchingRow)) return true;
-
   const relatedItems =
     matchingRow.experiment_items?.filter(
       (ei) => ei.dataset_item_id === datasetItemId,
     ) ?? [];
   return (
-    relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null)
+    relatedItems.length > 0 &&
+    relatedItems.every((ei) => isItemScored(ei, matchingRow.evaluators))
   );
 };
 

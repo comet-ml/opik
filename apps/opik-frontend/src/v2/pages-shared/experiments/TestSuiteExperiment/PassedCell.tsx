@@ -133,7 +133,9 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   if (evaluating) {
     return (
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-slate">
-        <Loader2 className="size-3 animate-spin" />
+        <span className="inline-flex animate-spin">
+          <Loader2 className="size-3" />
+        </span>
         Evaluating assertions
       </span>
     );

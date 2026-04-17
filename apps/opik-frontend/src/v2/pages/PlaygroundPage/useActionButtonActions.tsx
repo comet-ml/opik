@@ -17,7 +17,7 @@ import {
   EXPERIMENT_STATUS,
   ExperimentsCompare,
 } from "@/types/datasets";
-import { extractAssertions } from "@/lib/assertion-converters";
+import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
 import usePlaygroundStore, {
@@ -345,17 +345,10 @@ const useActionButtonActions = ({
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
-            const evaluators = row.evaluators;
-            const hasNoEvaluators =
-              evaluators != null && evaluators.length === 0;
-            const expectedCount = extractAssertions(evaluators ?? []).length;
 
             for (const ei of experimentItems) {
               totalExperimentItems++;
-
-              if (hasNoEvaluators || expectedCount === 0) {
-                scoredItems++;
-              } else if ((ei.assertion_results?.length ?? 0) >= expectedCount) {
+              if (isItemScored(ei, row.evaluators)) {
                 scoredItems++;
               }
             }

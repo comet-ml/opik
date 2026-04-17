@@ -4,12 +4,13 @@ import HeaderWrapper from "@/shared/DataTableHeaders/HeaderWrapper";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import {
   useFirstOutputUsageByPromptId,
-  useIsPromptOutputStale,
   useDatasetType,
 } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
-import useTestSuitePromptResults from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
+import usePromptResultStatus, {
+  PromptResultStatus,
+} from "@/v2/pages/PlaygroundPage/usePromptResultStatus";
 
 interface ColumnHeaderLayoutProps {
   header: string | undefined;
@@ -55,39 +56,38 @@ interface TestSuiteColumnHeaderProps {
   promptId: string;
 }
 
+const DOT_COLOR: Record<PromptResultStatus, string> = {
+  default: "var(--click-blue)",
+  winner: "var(--chart-green)",
+  loser: "var(--chart-red)",
+};
+
+const PASS_RATE_TEXT_COLOR: Record<PromptResultStatus, string> = {
+  default: "",
+  winner: "var(--tag-green-text)",
+  loser: "var(--tag-red-text)",
+};
+
 const TestSuiteColumnHeader: React.FC<TestSuiteColumnHeaderProps> = ({
   header,
   promptId,
 }) => {
-  const stale = useIsPromptOutputStale(promptId);
-  const testSuiteResults = useTestSuitePromptResults();
-  const promptResult = testSuiteResults?.[promptId];
-
-  const DEFAULT_COLOR = "var(--click-blue)";
-
-  if (promptResult?.passRate == null || stale) {
-    return (
-      <ColumnHeaderLayout
-        header={header}
-        dotColor={DEFAULT_COLOR}
-        promptId={promptId}
-      />
-    );
-  }
-
-  const dotColor = promptResult.isWinner
-    ? "var(--chart-green)"
-    : "var(--chart-red)";
-
-  const passRateColor = promptResult.isWinner
-    ? "var(--tag-green-text)"
-    : "var(--tag-red-text)";
+  const { status, promptResult } = usePromptResultStatus(promptId);
 
   return (
-    <ColumnHeaderLayout header={header} dotColor={dotColor} promptId={promptId}>
-      <span className="shrink-0 text-xs" style={{ color: passRateColor }}>
-        {Math.round(promptResult.passRate * 100)}% pass rate
-      </span>
+    <ColumnHeaderLayout
+      header={header}
+      dotColor={DOT_COLOR[status]}
+      promptId={promptId}
+    >
+      {status !== "default" && promptResult?.passRate != null && (
+        <span
+          className="shrink-0 text-xs"
+          style={{ color: PASS_RATE_TEXT_COLOR[status] }}
+        >
+          {Math.round(promptResult.passRate * 100)}% pass rate
+        </span>
+      )}
     </ColumnHeaderLayout>
   );
 };
