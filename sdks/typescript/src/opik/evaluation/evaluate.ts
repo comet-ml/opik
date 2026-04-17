@@ -56,6 +56,9 @@ export interface EvaluateOptions<T = Record<string, unknown>> {
   /** Optional list of tags to associate with the experiment */
   tags?: string[];
 
+  /** Number of concurrent task executions (default: 16, matching Python SDK) */
+  taskThreads?: number;
+
   /** Optional agent configuration blueprint ID to link with the experiment */
   blueprintId?: string;
 }

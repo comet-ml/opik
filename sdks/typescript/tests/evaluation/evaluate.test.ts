@@ -168,6 +168,7 @@ describe("evaluate function", () => {
     expect(result).toEqual({
       experimentId: expect.any(String),
       experimentName: "test-experiment",
+      resultUrl: expect.any(String),
       errors: [],
       testResults: [
         expect.objectContaining({

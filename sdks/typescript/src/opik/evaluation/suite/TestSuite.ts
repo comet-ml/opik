@@ -39,7 +39,6 @@ export interface CreateTestSuiteOptions {
 export interface UpdateTestSuiteOptions {
   globalAssertions?: string[];
   globalExecutionPolicy?: ExecutionPolicy;
-  tags?: string[];
 }
 
 function validateSuiteName(name: string): void {
@@ -247,7 +246,7 @@ export class TestSuite {
     );
   }
 
-  async getItems(): Promise<
+  async getItems(nbSamples?: number): Promise<
     Array<{
       id: string;
       data: Record<string, unknown>;
@@ -256,7 +255,7 @@ export class TestSuite {
       executionPolicy: Required<ExecutionPolicy>;
     }>
   > {
-    const rawItems = await this.dataset.getRawItems();
+    const rawItems = await this.dataset.getRawItems(nbSamples);
     const suitePolicy = await this.getGlobalExecutionPolicy();
 
     return rawItems.map((item) => {
@@ -334,18 +333,10 @@ export class TestSuite {
 
     const assertionsProvided = options.globalAssertions !== undefined;
 
-    if (!resolvedEvaluators && !assertionsProvided && !options.globalExecutionPolicy && !options.tags) {
+    if (!resolvedEvaluators && !assertionsProvided && !options.globalExecutionPolicy) {
       throw new Error(
-        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions' or 'globalExecutionPolicy' must be provided."
       );
-    }
-
-    // Tags are dataset-level, updated separately
-    if (options.tags) {
-      await this.client.api.datasets.updateDataset(this.dataset.id, {
-        name: this.name,
-        tags: options.tags,
-      });
     }
 
     const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy !== undefined;
