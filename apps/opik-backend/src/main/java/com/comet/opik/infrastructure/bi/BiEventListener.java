@@ -39,7 +39,22 @@ public class BiEventListener {
     private final BiEventService biEventService;
     private final AnalyticsService analyticsService;
 
-    private final Set<String> analyticsReportedWorkspaces = ConcurrentHashMap.newKeySet();
+    /**
+     * Best-effort, in-memory dedup for per-workspace first_trace_created analytics events.
+     *
+     * <p>Known limitations:
+     * <ul>
+     *   <li>Grows monotonically — entries are never evicted, leading to unbounded memory usage.
+     *       Each entry is ~116 bytes (36-char UUID string + ConcurrentHashMap.Node overhead),
+     *       so 1M workspaces ≈ 116 MB.</li>
+     *   <li>Lost on JVM restarts — workspaces will be re-reported after a redeployment.</li>
+     *   <li>Not shared across replicas — each instance tracks independently, so multi-replica
+     *       deployments will emit duplicates.</li>
+     * </ul>
+     *
+     * TODO: replace with a bounded or persistent dedup mechanism in a follow-up PR.
+     */
+    private static final Set<String> ANALYTICS_REPORTED_WORKSPACES = ConcurrentHashMap.newKeySet();
 
     @Inject
     public BiEventListener(@NonNull ProjectService projectService,
@@ -57,9 +72,22 @@ public class BiEventListener {
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-        if (config.getUsageReport().isEnabled()) {
-            checkIfItIsFirstTraceAndReport(event.workspaceId(), event);
+        if (!config.getUsageReport().isEnabled()) {
+            return;
         }
+
+        if (event.traces().isEmpty()) {
+            log.warn("No trace ids found for event '{}'", event);
+            return;
+        }
+
+        var projectIds = getNonDemoProjectIds(event.workspaceId(), event);
+        if (projectIds.isEmpty()) {
+            log.info("No project ids found for event");
+            return;
+        }
+
+        checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
 
         trackFirstTraceViaAnalytics(event.workspaceId(), event);
     }
@@ -75,20 +103,8 @@ public class BiEventListener {
         return projectIds;
     }
 
-    private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event) {
+    private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event, Set<UUID> projectIds) {
         if (usageReportService.isFirstTraceReport()) {
-            return;
-        }
-
-        if (event.traces().isEmpty()) {
-            log.warn("No trace ids found for event '{}'", event);
-            return;
-        }
-
-        Set<UUID> projectIds = getNonDemoProjectIds(workspaceId, event);
-
-        if (projectIds.isEmpty()) {
-            log.info("No project ids found for event");
             return;
         }
 
@@ -130,26 +146,17 @@ public class BiEventListener {
     }
 
     private void trackFirstTraceViaAnalytics(String workspaceId, TracesCreated event) {
-        if (event.traces().isEmpty()) {
+        if (!config.getAnalytics().isEnabled()) {
             return;
         }
 
-        if (analyticsReportedWorkspaces.contains(workspaceId)) {
+        if (!ANALYTICS_REPORTED_WORKSPACES.add(workspaceId)) {
             return;
         }
 
-        if (getNonDemoProjectIds(workspaceId, event).isEmpty()) {
-            return;
-        }
-
-        if (!analyticsReportedWorkspaces.add(workspaceId)) {
-            return;
-        }
-
-        analyticsService.trackEvent(event.userName(), "first_trace_created", Map.of(
+        analyticsService.trackEvent("first_trace_created", Map.of(
                 "workspace_id", workspaceId,
                 "user_name", event.userName(),
-                "date", Instant.now().toString()));
+                "date", Instant.now().toString()), event.userName());
     }
-
 }
