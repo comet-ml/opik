@@ -7,6 +7,7 @@ import com.comet.opik.api.Project;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.validation.HasProjectIdentifier;
 import com.comet.opik.infrastructure.AgentConfigConfiguration;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.WorkspaceUtils;
@@ -82,6 +83,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
     private final @NonNull ProjectService projectService;
     private final @NonNull LockService lockService;
     private final @NonNull AgentConfigConfiguration agentConfigConfiguration;
+    private final @NonNull AnalyticsService analyticsService;
 
     @Override
     public Mono<AgentBlueprint> createConfig(@NonNull AgentConfigCreate request) {
@@ -127,7 +129,12 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                             return blueprint;
                         })).subscribeOn(Schedulers.boundedElastic()),
-                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
+                        .doOnNext(blueprint -> {
+                            trackAgentConfigSaved(workspaceId, projectId, blueprint);
+                            trackAgentConfigDeployed(workspaceId, projectId,
+                                    blueprint.id(), String.valueOf(blueprint.name()), "prod");
+                        }));
     }
 
     @Override
@@ -155,7 +162,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                             return createBlueprint(dao, request, existingConfig.id(), projectId, workspaceId,
                                     userName);
                         })).subscribeOn(Schedulers.boundedElastic()),
-                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration()));
+                        agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
+                        .doOnNext(blueprint -> trackAgentConfigSaved(workspaceId, projectId, blueprint)));
     }
 
     @Override
@@ -494,7 +502,13 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     upsertEnvs(dao, workspaceId, projectId, userName, request.envs());
 
                     return null;
-                })).subscribeOn(Schedulers.boundedElastic()));
+                })).subscribeOn(Schedulers.boundedElastic()))
+                .doOnSuccess(v -> {
+                    for (var env : request.envs()) {
+                        trackAgentConfigDeployed(workspaceId, projectId,
+                                env.blueprintId(), "", env.envName());
+                    }
+                });
     }
 
     @Override
@@ -506,9 +520,9 @@ class AgentConfigServiceImpl implements AgentConfigService {
         log.info("Setting environment '{}' to blueprint '{}' for project '{}' in workspace '{}'",
                 envName, blueprintName, projectId, workspaceId);
 
-        return lockService.<Void>executeWithLock(
+        return lockService.<UUID>executeWithLock(
                 new LockService.Lock(ENV_LOCK_FORMAT.formatted(workspaceId, projectId)),
-                Mono.<Void>fromRunnable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
+                Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
                     AgentConfigDAO dao = handle.attach(AgentConfigDAO.class);
 
                     AgentBlueprint blueprint = requireBlueprintByName(dao, workspaceId, projectId, blueprintName);
@@ -519,8 +533,11 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                     .blueprintId(blueprint.id())
                                     .build()));
 
-                    return null;
-                })).subscribeOn(Schedulers.boundedElastic()));
+                    return blueprint.id();
+                })).subscribeOn(Schedulers.boundedElastic()))
+                .doOnNext(blueprintId -> trackAgentConfigDeployed(workspaceId, projectId,
+                        blueprintId, blueprintName, envName))
+                .then();
     }
 
     private void upsertEnvs(AgentConfigDAO dao, String workspaceId, UUID projectId, String userName,
@@ -675,5 +692,24 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 .build();
 
         return updateConfig(request);
+    }
+
+    private void trackAgentConfigSaved(String workspaceId, UUID projectId, AgentBlueprint blueprint) {
+        analyticsService.trackEvent("opik_agent_config_saved", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", projectId.toString(),
+                "blueprint_id", blueprint.id().toString(),
+                "blueprint_name", String.valueOf(blueprint.name())));
+    }
+
+    private void trackAgentConfigDeployed(String workspaceId, UUID projectId,
+            UUID blueprintId, String blueprintName, String envName) {
+        analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", projectId.toString(),
+                "blueprint_id", blueprintId.toString(),
+                "blueprint_name", blueprintName,
+                "environment", envName,
+                "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))));
     }
 }

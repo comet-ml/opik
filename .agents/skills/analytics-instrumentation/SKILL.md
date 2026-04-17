@@ -59,7 +59,7 @@ private final @NonNull AnalyticsService analyticsService;
 
 2. Call `trackEvent`:
 ```java
-analyticsService.trackEvent("onboarding_first_trace",
+analyticsService.trackEvent("opik_onboarding_first_trace",
     Map.of("trace_id", traceId, "project_id", projectId));
 ```
 
@@ -88,6 +88,12 @@ Frontend custom events:  Browser → Segment → PostHog
 Backend events:          Java → comet-stats → Segment → PostHog
 PostHog native:          Browser → posthog-js → PostHog (pageviews, feature flags, identification)
 ```
+
+## Event Property Conventions
+
+- **Consistent typing per property**: A given property key should always carry the same kind of value. Don't pass a UUID in one code path and a human-readable name in another for the same key.
+- **Separate ID and name properties**: When both a UUID and a display name exist, use distinct keys (e.g. `blueprint_id` for the UUID, `blueprint_name` for the display name). If one is unavailable in a code path, omit the key or send an empty string — don't repurpose the other key.
+- **Include `workspace_id`**: All backend analytics events should include the workspace ID for segmentation.
 
 ## Deciding Frontend vs Backend
 

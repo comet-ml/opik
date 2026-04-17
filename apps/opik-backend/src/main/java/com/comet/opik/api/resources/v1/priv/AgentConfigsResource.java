@@ -9,7 +9,6 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfig;
 import com.comet.opik.domain.AgentConfigService;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -19,7 +18,6 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -55,7 +53,6 @@ import java.util.UUID;
 public class AgentConfigsResource {
 
     private final @NonNull AgentConfigService agentConfigService;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
     @Path("/blueprints")
