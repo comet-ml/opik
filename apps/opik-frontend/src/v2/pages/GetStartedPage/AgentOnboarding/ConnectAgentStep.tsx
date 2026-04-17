@@ -200,7 +200,7 @@ const ConnectAgentStep: React.FC = () => {
             <Button
               variant="link"
               onClick={handleSkip}
-              className="comet-body-s px-0 text-muted-slate"
+              className="comet-body-s ml-auto px-0 text-muted-slate"
               id="onboarding-step2-skip"
               data-fs-element="onboarding-step2-skip"
             >

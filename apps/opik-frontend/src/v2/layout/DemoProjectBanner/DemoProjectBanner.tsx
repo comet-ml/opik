@@ -57,10 +57,7 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   }
 
   return (
-    <div
-      ref={ref}
-      className="z-10 flex h-8 items-center gap-1.5 bg-slate-100 px-4"
-    >
+    <div ref={ref} className="z-10 flex h-8 items-center gap-1.5 bg-muted px-4">
       <span className="comet-body-xs text-foreground">
         Connect your repo so Opik can help set up tracing, or instrument your
         code manually.
