@@ -21,7 +21,6 @@ import com.comet.opik.domain.EndpointJobService;
 import com.comet.opik.domain.RunnerService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
@@ -79,7 +78,6 @@ public class LocalRunnersResource {
     private final @NonNull EndpointJobService endpointJobService;
     private final @NonNull ConnectBridgeService connectBridgeService;
     private final @NonNull LocalRunnerConfig runnerConfig;
-    private final @NonNull AnalyticsService analyticsService;
 
     @GET
     @Operation(operationId = "listRunners", summary = "List local runners", description = "List local runners owned by the current user in the workspace", responses = {
@@ -183,12 +181,6 @@ public class LocalRunnersResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID jobId = endpointJobService.createJob(workspaceId, userName, request);
-
-        analyticsService.trackEvent("opik_sandbox_job_created", Map.of(
-                "workspace_id", workspaceId,
-                "project_id", request.projectId().toString(),
-                "job_id", jobId.toString(),
-                "agent_name", request.agentName()));
 
         var uri = uriInfo.getAbsolutePathBuilder().path("/{jobId}").build(jobId);
         return Response.created(uri).build();
