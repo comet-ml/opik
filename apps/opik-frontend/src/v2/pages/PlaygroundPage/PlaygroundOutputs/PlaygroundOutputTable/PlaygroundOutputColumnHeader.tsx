@@ -1,8 +1,96 @@
+import React from "react";
 import { HeaderContext } from "@tanstack/react-table";
 import HeaderWrapper from "@/shared/DataTableHeaders/HeaderWrapper";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
-import { useFirstOutputUsageByPromptId } from "@/store/PlaygroundStore";
+import {
+  useFirstOutputUsageByPromptId,
+  useIsPromptOutputStale,
+  useDatasetType,
+} from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
+import useTestSuitePromptResults from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
+
+interface ColumnHeaderLayoutProps {
+  header: string | undefined;
+  dotColor: string;
+  children?: React.ReactNode;
+  promptId: string;
+}
+
+const ColumnHeaderLayout: React.FC<ColumnHeaderLayoutProps> = ({
+  header,
+  dotColor,
+  children,
+  promptId,
+}) => {
+  const usage = useFirstOutputUsageByPromptId(promptId);
+  const { ProviderIcon, modelLabel } = usePromptModelDisplay(
+    usage?.provider,
+    usage?.model,
+  );
+
+  return (
+    <HeaderWrapper>
+      <div className="flex items-center gap-1.5">
+        <span
+          className="inline-block size-3 shrink-0 rounded-sm"
+          style={{ backgroundColor: dotColor }}
+        />
+        <span className="shrink-0">{header}</span>
+        {children}
+        {modelLabel && ProviderIcon && (
+          <span className="flex min-w-0 items-center gap-1 text-muted-gray">
+            <ProviderIcon className="size-3.5 shrink-0" />
+            <span className="comet-body-xs truncate">{modelLabel}</span>
+          </span>
+        )}
+      </div>
+    </HeaderWrapper>
+  );
+};
+
+interface TestSuiteColumnHeaderProps {
+  header: string | undefined;
+  promptId: string;
+}
+
+const TestSuiteColumnHeader: React.FC<TestSuiteColumnHeaderProps> = ({
+  header,
+  promptId,
+}) => {
+  const stale = useIsPromptOutputStale(promptId);
+  const testSuiteResults = useTestSuitePromptResults();
+  const promptResult = testSuiteResults?.[promptId];
+
+  const DEFAULT_COLOR = "var(--click-blue)";
+
+  if (promptResult?.passRate == null || stale) {
+    return (
+      <ColumnHeaderLayout
+        header={header}
+        dotColor={DEFAULT_COLOR}
+        promptId={promptId}
+      />
+    );
+  }
+
+  const dotColor = promptResult.isWinner
+    ? "var(--chart-green)"
+    : "var(--chart-red)";
+
+  const passRateColor = promptResult.isWinner
+    ? "var(--tag-green-text)"
+    : "var(--tag-red-text)";
+
+  return (
+    <ColumnHeaderLayout header={header} dotColor={dotColor} promptId={promptId}>
+      <span className="shrink-0 text-xs" style={{ color: passRateColor }}>
+        {Math.round(promptResult.passRate * 100)}% pass rate
+      </span>
+    </ColumnHeaderLayout>
+  );
+};
 
 const PlaygroundOutputColumnHeader = <TData,>(
   context: HeaderContext<TData, unknown>,
@@ -14,32 +102,24 @@ const PlaygroundOutputColumnHeader = <TData,>(
       promptId?: string;
       promptIndex?: number;
     }) ?? {};
+
+  const datasetType = useDatasetType();
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+
+  if (isTestSuite) {
+    return <TestSuiteColumnHeader header={header} promptId={promptId ?? ""} />;
+  }
+
   const colorIndex = promptIndex ?? 0;
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[colorIndex % PLAYGROUND_PROMPT_COLORS.length];
 
-  const usage = useFirstOutputUsageByPromptId(promptId ?? "");
-  const { ProviderIcon, modelLabel } = usePromptModelDisplay(
-    usage?.provider,
-    usage?.model,
-  );
-
   return (
-    <HeaderWrapper>
-      <div className="flex items-center gap-1.5">
-        <span
-          className="inline-block size-3 shrink-0 rounded-sm"
-          style={{ backgroundColor: promptColor.bg }}
-        />
-        <span className="shrink-0">{header}</span>
-        {modelLabel && ProviderIcon && (
-          <span className="flex min-w-0 items-center gap-1 text-muted-gray">
-            <ProviderIcon className="size-3.5 shrink-0" />
-            <span className="comet-body-xs truncate">{modelLabel}</span>
-          </span>
-        )}
-      </div>
-    </HeaderWrapper>
+    <ColumnHeaderLayout
+      header={header}
+      dotColor={promptColor.bg}
+      promptId={promptId ?? ""}
+    />
   );
 };
 

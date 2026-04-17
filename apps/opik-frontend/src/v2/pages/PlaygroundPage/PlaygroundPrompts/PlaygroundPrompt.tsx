@@ -23,6 +23,7 @@ import {
   PLAYGROUND_LAST_PICKED_MODEL,
   PLAYGROUND_PROMPT_COLORS,
 } from "@/constants/llm";
+import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/usePromptBadgeColor";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -353,6 +354,8 @@ const PlaygroundPrompt = ({
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[index % PLAYGROUND_PROMPT_COLORS.length];
 
+  const badgeColor = usePromptBadgeColor(promptId, promptColor);
+
   return (
     <div className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r">
       <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
@@ -362,8 +365,8 @@ const PlaygroundPrompt = ({
             <span
               className="comet-body-xs flex size-5 items-center justify-center rounded-md"
               style={{
-                backgroundColor: promptColor.bg,
-                color: promptColor.text,
+                backgroundColor: badgeColor.bg,
+                color: badgeColor.text,
               }}
             >
               {getAlphabetLetter(index)}

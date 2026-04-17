@@ -204,6 +204,7 @@ export interface ExperimentItem {
   last_updated_at: string;
   status?: ExperimentItemStatus;
   assertion_results?: AssertionResult[];
+  execution_policy?: ExecutionPolicy;
 }
 
 export interface AssertionResult {
