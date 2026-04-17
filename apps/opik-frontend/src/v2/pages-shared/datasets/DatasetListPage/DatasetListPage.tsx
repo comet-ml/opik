@@ -59,7 +59,7 @@ type DatasetListPageProps = {
 const TYPE_CONFIG = {
   dataset: {
     title: "Datasets",
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "datasets",
     createButtonText: "Create dataset",
     noDataText: "There are no datasets yet",
@@ -86,7 +86,7 @@ const TYPE_CONFIG = {
   test_suite: {
     title: "Test suites",
     // TODO: replace with test suites documentation URL once it exists
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "test suites",
     createButtonText: "Create test suite",
     noDataText: "There are no test suites yet",

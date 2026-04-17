@@ -44,7 +44,7 @@ Before you begin, you must understand and strictly adhere to these core principl
 
 3. Documentation & Resources:
 
-   - Reference official Opik documentation at https://www.comet.com/docs/opik/quickstart.md
+   - Reference official Opik documentation at https://www.comet.com/docs/opik/v1/quickstart.md
    - Follow Opik best practices and recommended patterns
    - Maintain detailed integration notes and configuration details
 
@@ -86,7 +86,7 @@ After verifying language compatibility, perform a full codebase scan with the fo
 
 ### Step 3: Discover Available Integrations
 
-After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/integrations/overview.md
+After I confirm the LLM Touchpoints and entry point, find the list of supported integrations at https://www.comet.com/docs/opik/v1/integrations/overview.md
 
 ### Step 4: Deep Analysis Confirmed files for LLM Frameworks & SDKs
 
@@ -123,12 +123,12 @@ Notify me that all integration steps are complete.
 If issues are reported:
 
 1. Parse the error or unexpected behavior from feedback.
-2. Re-query the Opik docs using https://www.comet.com/docs/opik/quickstart.md if needed.
+2. Re-query the Opik docs using https://www.comet.com/docs/opik/v1/quickstart.md if needed.
 3. Propose a minimal fix and await approval.
 4. Apply and revalidate.
 `;
 
-const QUICKSTART_DOCS_LINK = "https://www.comet.com/docs/opik/quickstart";
+const QUICKSTART_DOCS_LINK = "https://www.comet.com/docs/opik/v1/quickstart";
 const CURSOR_PROMPT_URL = `https://cursor.com/link/prompt?text=${encodeURIComponent(
   AI_ASSISTANT_PROMPT,
 )}`;

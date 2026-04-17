@@ -23,7 +23,7 @@ const FeedbackScoreTableNoData: React.FC<FeedbackScoreTableNoDataProps> = ({
     permissions: { canUpdateOnlineEvaluationRules, canAnnotateTraceSpanThread },
   } = usePermissions();
 
-  const evaluationDocsLink = buildDocsUrl("/production/rules");
+  const evaluationDocsLink = buildDocsUrl("/v1/production/rules");
 
   const getDescription = () => {
     if (canUpdateOnlineEvaluationRules && canAnnotateTraceSpanThread) {

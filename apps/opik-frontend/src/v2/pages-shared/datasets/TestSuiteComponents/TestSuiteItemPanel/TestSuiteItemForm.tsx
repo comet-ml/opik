@@ -10,7 +10,7 @@ import { TEXT_AREA_CLASSES } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { Description } from "@/ui/description";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { ExecutionPolicy } from "@/types/test-suites";
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
 import { TestSuiteItemFormValues } from "./testSuiteItemFormSchema";

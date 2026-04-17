@@ -37,7 +37,7 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/production/rules")}
+              href={buildDocsUrl("/production/online-evaluation/rules")}
               target="_blank"
               rel="noreferrer"
             >

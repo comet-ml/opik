@@ -36,7 +36,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
           <div className="comet-body-s mb-3 pb-2 text-muted-slate">
             Need help getting started? Find useful resources here, or{" "}
             <a
-              href="https://www.comet.com/docs/opik/quickstart"
+              href="https://www.comet.com/docs/opik/v1/quickstart"
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -93,7 +93,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 
               <div className="space-y-2">
                 <a
-                  href={buildDocsUrl("/opik-university")}
+                  href={buildDocsUrl("/v1/opik-university")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -102,7 +102,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/quickstart")}
+                  href={buildDocsUrl("/v1/quickstart")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -111,7 +111,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/cookbook/overview")}
+                  href={buildDocsUrl("/v1/cookbook/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -120,7 +120,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/tracing/integrations/overview")}
+                  href={buildDocsUrl("/v1/tracing/integrations/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -129,7 +129,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/tracing/log_agents")}
+                  href={buildDocsUrl("/v1/tracing/log_agents")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -138,7 +138,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/faq")}
+                  href={buildDocsUrl("/v1/faq")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"

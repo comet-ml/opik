@@ -66,7 +66,7 @@ import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v2/pages-shared/experiments/useExperimentItemsState";

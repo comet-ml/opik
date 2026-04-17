@@ -42,7 +42,7 @@ const NoAnnotationQueuesPage: React.FC<NoAnnotationQueuesPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/evaluation/annotation_queues")}
+              href={buildDocsUrl("/v1/evaluation/annotation_queues")}
               target="_blank"
               rel="noreferrer"
             >

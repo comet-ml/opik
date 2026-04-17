@@ -365,7 +365,7 @@ const PromptsPage: React.FunctionComponent = () => {
           }
           primaryActionLabel="Create your first prompt"
           onPrimaryAction={handleNewPromptClick}
-          docsUrl={buildDocsUrl("/prompt_engineering/prompt_management")}
+          docsUrl={buildDocsUrl("/development/agent-configuration/overview")}
         />
       ) : (
         <>

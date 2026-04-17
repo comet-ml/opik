@@ -7,7 +7,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ComparePromptVersionDialog from "@/v2/pages/PromptPage/CommitsTab/ComparePromptVersionDialog";
 import AddTagDialog from "@/v2/pages/PromptPage/CommitsTab/AddTagDialog";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 type CommitsActionsPanelsProps = {
   versions: PromptVersion[];

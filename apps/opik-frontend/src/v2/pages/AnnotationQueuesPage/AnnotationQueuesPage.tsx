@@ -411,7 +411,7 @@ export const AnnotationQueuesPage: React.FC = () => {
           }
           primaryActionLabel="Create your first queue"
           onPrimaryAction={handleNewQueue}
-          docsUrl={buildDocsUrl("/evaluation/annotation_queues")}
+          docsUrl={buildDocsUrl("/evaluation/advanced/annotation_queues")}
         />
       ) : (
         <>

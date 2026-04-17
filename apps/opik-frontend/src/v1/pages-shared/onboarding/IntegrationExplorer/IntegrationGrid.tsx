@@ -127,8 +127,7 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
         })}
 
         <a
-          href={buildDocsUrl(
-            "/integrations/overview",
+          href={buildDocsUrl("/v1/integrations/overview",
             "&utm_source=opik_frontend&utm_medium=integration_grid&utm_campaign=integrations_docs&utm_content=integration_card",
           )}
           target="_blank"

@@ -93,7 +93,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
 
               <div className="space-y-2">
                 <a
-                  href={buildDocsUrl("/opik-university")}
+                  href="https://www.comet.com/docs/opik/v1/opik-university/overview"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -111,7 +111,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/cookbook/overview")}
+                  href={buildDocsUrl("/integrations/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -120,7 +120,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/tracing/integrations/overview")}
+                  href={buildDocsUrl("/integrations/overview")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -129,7 +129,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
                   <ExternalLink className="size-4" />
                 </a>
                 <a
-                  href={buildDocsUrl("/tracing/log_agents")}
+                  href={buildDocsUrl("/tracing/advanced/log_agent_graphs")}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"

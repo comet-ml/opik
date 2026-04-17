@@ -453,7 +453,7 @@ eval_results = evaluate(
     <div className="mt-4">
       <Button variant="secondary" asChild>
         <a
-          href={buildDocsUrl("/evaluation/metrics/custom_metric")}
+          href={buildDocsUrl("/v1/evaluation/metrics/custom_metric")}
           target="_blank"
           rel="noreferrer"
           className="flex items-center"

@@ -29,8 +29,7 @@ const UsingPlaygroundTab = () => {
             asChild
           >
             <a
-              href={buildDocsUrl(
-                "/prompt_engineering/playground#running-experiments-in-the-playground",
+              href={buildDocsUrl("/development/playground#running-experiments-in-the-playground",
               )}
               target="_blank"
               rel="noreferrer"

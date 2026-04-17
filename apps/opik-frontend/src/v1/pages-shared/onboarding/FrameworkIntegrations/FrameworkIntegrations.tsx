@@ -96,7 +96,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
       </IntegrationTabs>
       <Button className="w-fit pl-2" variant="ghost" asChild>
         <a
-          href={buildDocsUrl("/tracing/integrations/overview")}
+          href={buildDocsUrl("/v1/tracing/integrations/overview")}
           target="_blank"
           rel="noreferrer"
         >

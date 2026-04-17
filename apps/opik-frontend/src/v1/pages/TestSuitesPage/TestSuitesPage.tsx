@@ -359,7 +359,7 @@ const TestSuitesPage: React.FunctionComponent = () => {
         A dataset is a collection of inputs and expected outputs used to
         evaluate your LLM application.{" "}
         <a
-          href={buildDocsUrl("/evaluation/manage_datasets")}
+          href={buildDocsUrl("/v1/evaluation/manage_datasets")}
           target="_blank"
           rel="noreferrer"
           className="text-primary"

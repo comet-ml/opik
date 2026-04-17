@@ -251,7 +251,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
           )}
           <Button variant="link" size="sm" className="h-5 px-1" asChild>
             <a
-              href={buildDocsUrl("/evaluation/manage_datasets")}
+              href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
               target="_blank"
               rel="noopener noreferrer"
             >

@@ -16,7 +16,7 @@ import { Textarea } from "@/ui/textarea";
 import useProjectUpdateMutation from "@/api/projects/useProjectUpdateMutation";
 import { useNavigate } from "@tanstack/react-router";
 import useAppStore from "@/store/AppStore";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useToast } from "@/ui/use-toast";
 import { ToastAction } from "@/ui/toast";

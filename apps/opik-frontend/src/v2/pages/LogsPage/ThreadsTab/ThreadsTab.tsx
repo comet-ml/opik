@@ -72,7 +72,7 @@ import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPa
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
@@ -794,7 +794,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
                 Quickstart guide
               </button>
               <a
-                href={buildDocsUrl("/tracing/log_chat_conversations")}
+                href={buildDocsUrl("/tracing/advanced/log_chat_conversations")}
                 target="_blank"
                 rel="noreferrer"
                 className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"

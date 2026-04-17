@@ -440,7 +440,7 @@ const AddEditTestSuiteDialog = ({
                 )}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
-                    href={buildDocsUrl("/evaluation/manage_datasets")}
+                    href={buildDocsUrl("/v1/evaluation/manage_datasets")}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

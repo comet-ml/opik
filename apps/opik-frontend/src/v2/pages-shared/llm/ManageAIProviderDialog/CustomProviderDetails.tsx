@@ -117,7 +117,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                   className="inline px-0"
                 >
                   <a
-                    href={buildDocsUrl("/playground")}
+                    href={buildDocsUrl("/development/playground")}
                     target="_blank"
                     rel="noreferrer"
                   >

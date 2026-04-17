@@ -11,7 +11,7 @@ import { useGuardrailConfigState } from "./useGuardrailConfigState";
 import { GuardrailTypes } from "@/types/guardrails";
 
 const GUARDRAIL_DOCS_LINK =
-  "https://www.comet.com/docs/opik/production/guardrails";
+  "https://www.comet.com/docs/opik/production/gateway-guardrails/guardrails";
 
 type SetGuardrailDialogProps = {
   open: boolean;

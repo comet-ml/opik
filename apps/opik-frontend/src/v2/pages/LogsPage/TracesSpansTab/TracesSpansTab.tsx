@@ -104,7 +104,7 @@ import { isAgentConfigurationMetadata } from "@/v2/pages-shared/traces/TraceDeta
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   DetailsActionSection,
   DetailsActionSectionParam,
@@ -1384,7 +1384,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 Quickstart guide
               </button>
               <a
-                href={buildDocsUrl("/tracing/log_traces")}
+                href={buildDocsUrl("/tracing/advanced/log_traces")}
                 target="_blank"
                 rel="noreferrer"
                 className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"

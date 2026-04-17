@@ -78,7 +78,7 @@ const VertexAIProviderDetails: React.FC<VertexAIProviderDetailsProps> = ({
       <span className="comet-body-s mt-1 text-light-slate">
         <Button variant="link" size="sm" asChild className="px-0">
           <a
-            href={buildDocsUrl("/configuration/ai_providers", "#vertex-ai")}
+            href={buildDocsUrl("/v1/configuration/ai_providers", "#vertex-ai")}
             target="_blank"
             rel="noreferrer"
           >

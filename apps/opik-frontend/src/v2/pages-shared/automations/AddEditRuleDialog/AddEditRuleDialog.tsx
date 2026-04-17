@@ -70,7 +70,7 @@ import {
 } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Description } from "@/ui/description";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";

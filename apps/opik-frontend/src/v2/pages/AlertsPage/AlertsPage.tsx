@@ -46,7 +46,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { Separator } from "@/ui/separator";
 import AlertsActionsPanel from "@/v2/pages/AlertsPage/AlertsActionsPanel";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -356,7 +356,7 @@ const AlertsPage: React.FunctionComponent = () => {
           }
           primaryActionLabel="Create your first alert"
           onPrimaryAction={handleNewAlertClick}
-          docsUrl={buildDocsUrl("/production/alerts")}
+          docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
       ) : (
         <>

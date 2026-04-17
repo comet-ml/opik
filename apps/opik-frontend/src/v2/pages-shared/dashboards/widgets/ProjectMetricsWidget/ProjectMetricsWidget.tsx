@@ -340,7 +340,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           action={
             <DashboardWidget.EmptyState.DocsLink
               label="Learn how to add scores"
-              href={buildDocsUrl("/tracing/annotate_traces")}
+              href={buildDocsUrl("/tracing/advanced/annotate_traces")}
             />
           }
         />
@@ -354,7 +354,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           action={
             <DashboardWidget.EmptyState.DocsLink
               label="Learn how to add scores"
-              href={buildDocsUrl("/tracing/annotate_traces")}
+              href={buildDocsUrl("/tracing/advanced/annotate_traces")}
             />
           }
         />
@@ -371,7 +371,7 @@ const ProjectMetricsWidget: React.FunctionComponent<
           action={
             <DashboardWidget.EmptyState.DocsLink
               label="Learn how to track threads"
-              href={buildDocsUrl("/tracing/log_chat_conversations")}
+              href={buildDocsUrl("/tracing/advanced/log_chat_conversations")}
             />
           }
         />

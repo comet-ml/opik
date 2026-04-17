@@ -52,7 +52,7 @@ import {
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
 import { LOGS_SOURCE } from "@/types/traces";

@@ -386,7 +386,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           }
           primaryActionLabel="Create your first rule"
           onPrimaryAction={handleNewRuleClick}
-          docsUrl={buildDocsUrl("/production/rules")}
+          docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
       ) : (
         <>

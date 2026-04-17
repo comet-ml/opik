@@ -194,7 +194,7 @@ const TestWebhookSection: React.FunctionComponent<TestWebhookSectionProps> = ({
           </Button>
           <Button variant="ghost" asChild>
             <a
-              href={buildDocsUrl("/production/alerts")}
+              href={buildDocsUrl("/production/alerts/alerts")}
               target="_blank"
               rel="noreferrer"
             >

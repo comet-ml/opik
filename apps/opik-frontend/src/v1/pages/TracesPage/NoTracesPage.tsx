@@ -39,7 +39,7 @@ const NoTracesPage: React.FC<NoTracesPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/tracing/log_traces")}
+              href={buildDocsUrl("/v1/tracing/log_traces")}
               target="_blank"
               rel="noreferrer"
             >
