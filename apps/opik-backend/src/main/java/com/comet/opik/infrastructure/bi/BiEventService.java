@@ -7,10 +7,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 
 @ImplementedBy(BiEventServiceImpl.class)
-interface BiEventService {
-    void reportEvent(String anonymousId, String eventType, String biEventType, Map<String, String> eventProperties);
+public interface BiEventService {
+    CompletableFuture<Boolean> reportEvent(String anonymousId, String eventType, String biEventType,
+            Map<String, String> eventProperties);
 }
 
 @RequiredArgsConstructor(onConstructor_ = @Inject)
@@ -20,8 +22,8 @@ class BiEventServiceImpl implements BiEventService {
     private final @NonNull UsageReportService usageReport;
     private final @NonNull StatsClient statsClient;
 
-    public void reportEvent(@NonNull String anonymousId, @NonNull String eventType, @NonNull String biEventType,
-            @NonNull Map<String, String> eventProperties) {
+    public CompletableFuture<Boolean> reportEvent(@NonNull String anonymousId, @NonNull String eventType,
+            @NonNull String biEventType, @NonNull Map<String, String> eventProperties) {
 
         var event = BiEvent.builder()
                 .anonymousId(anonymousId)
@@ -29,8 +31,12 @@ class BiEventServiceImpl implements BiEventService {
                 .eventProperties(eventProperties)
                 .build();
 
-        if (statsClient.sendEvent(event)) {
-            usageReport.markEventAsReported(eventType);
-        }
+        return statsClient.sendEvent(event)
+                .thenApply(success -> {
+                    if (success) {
+                        usageReport.markEventAsReported(eventType);
+                    }
+                    return success;
+                });
     }
 }
