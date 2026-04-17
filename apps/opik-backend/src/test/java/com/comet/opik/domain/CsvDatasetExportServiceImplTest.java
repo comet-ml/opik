@@ -17,9 +17,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
 import org.redisson.api.stream.StreamAddArgs;
 import org.redisson.api.stream.StreamAddParams;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 

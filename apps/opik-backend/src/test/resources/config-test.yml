@@ -116,6 +116,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: 1s
 
 openTelemetry:
   # Default: 3h
