@@ -684,7 +684,19 @@ def export_traces(
             counter_lock = threading.Lock()
 
             def _process_trace(trace_id: str, trace: Any) -> tuple[bool, bool]:
-                """Fetch attachments, write file. Returns (ok, had_error)."""
+                """Fetch attachments and write the trace file for one trace.
+
+                Returns ``(ok, had_error)`` where:
+                - ``ok`` is True when the trace file was written successfully;
+                  the caller increments ``exported_count`` only in this case.
+                - ``had_error`` is True when any attachment download failed or
+                  the file write raised; the caller sets the shared
+                  ``had_errors`` flag.
+
+                Side-effects on success: acquires ``manifest_lock``, adds
+                ``trace_id`` to ``already_downloaded``, and calls
+                ``manifest.mark_trace_downloaded`` if a manifest is active.
+                """
                 spans = spans_by_trace_id.get(trace_id, [])
 
                 attachment_metadata: list = []
