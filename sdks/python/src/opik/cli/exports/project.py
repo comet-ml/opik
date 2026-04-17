@@ -2,7 +2,9 @@
 
 import logging
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -39,8 +41,11 @@ from .utils import (
 
 LOGGER = logging.getLogger(__name__)
 
-# Delay (seconds) between fetching successive pages of traces/spans.
+# Delay (seconds) between page fetches *only* after a transient failure.
 _PAGE_FETCH_DELAY_SECONDS = 1.0
+
+# Maximum parallel workers for writing trace files (Phase 3).
+_PHASE3_MAX_WORKERS = 20
 
 # If this many consecutive page fetches fail (after all per-request retries),
 # abort the loop rather than endlessly skipping pages — something systemic is wrong.
@@ -590,9 +595,6 @@ def export_traces(
             if len(traces) < current_page_size:
                 break
 
-            # Throttle page fetches to avoid triggering server-side rate limits.
-            time.sleep(_PAGE_FETCH_DELAY_SECONDS)
-
         # ── Phase 2: fetch all spans for the project in bulk ───────────────────
         # Instead of one POST /spans/search per trace (rate-limited to 30 req/min),
         # paginate GET /spans once across the whole project.  Each span carries its
@@ -667,9 +669,8 @@ def export_traces(
                     break
 
                 span_page += 1
-                time.sleep(_PAGE_FETCH_DELAY_SECONDS)
 
-        # ── Phase 3: write trace files ─────────────────────────────────────────
+        # ── Phase 3: write trace files (parallel) ─────────────────────────────
         exported_count = 0
 
         if traces_to_fetch:
@@ -679,10 +680,13 @@ def export_traces(
                     description=f"Writing {len(traces_to_fetch)} trace files...",
                 )
 
-            for trace_id, trace in traces_to_fetch.items():
+            manifest_lock = threading.Lock()
+            counter_lock = threading.Lock()
+
+            def _process_trace(trace_id: str, trace: Any) -> tuple[bool, bool]:
+                """Fetch attachments, write file. Returns (ok, had_error)."""
                 spans = spans_by_trace_id.get(trace_id, [])
 
-                # Fetch and download attachments when requested
                 attachment_metadata: list = []
                 attachment_download_ok = True
                 if att_client is not None:
@@ -701,7 +705,6 @@ def export_traces(
                             attachment_download_ok = False
 
                 if not attachment_download_ok:
-                    had_errors = True
                     LOGGER.warning(
                         "Trace %s: one or more attachment downloads failed; "
                         "writing trace with partial attachments",
@@ -725,19 +728,39 @@ def export_traces(
                         write_json_data(trace_data, file_path)
                         if debug:
                             debug_print(f"Wrote JSON file: {file_path}", debug)
-                    exported_count += 1
-                    already_downloaded.add(trace_id)
-                    if manifest is not None:
-                        manifest.mark_trace_downloaded(trace_id)
+                    with manifest_lock:
+                        already_downloaded.add(trace_id)
+                        if manifest is not None:
+                            manifest.mark_trace_downloaded(trace_id)
+                    return True, not attachment_download_ok
                 except Exception as write_error:
                     console.print(
                         f"[red]Error writing trace {trace_id} to file: {write_error}[/red]"
                     )
-                    had_errors = True
                     if debug:
                         import traceback
 
                         debug_print(f"Traceback: {traceback.format_exc()}", debug)
+                    return False, True
+
+            with ThreadPoolExecutor(max_workers=_PHASE3_MAX_WORKERS) as executor:
+                futures = {
+                    executor.submit(_process_trace, tid, trace): tid
+                    for tid, trace in traces_to_fetch.items()
+                }
+                for future in as_completed(futures):
+                    try:
+                        ok, trace_had_error = future.result()
+                    except Exception as e:
+                        ok, trace_had_error = False, True
+                        console.print(
+                            f"[red]Unexpected error processing trace {futures[future]}: {e}[/red]"
+                        )
+                    with counter_lock:
+                        if ok:
+                            exported_count += 1
+                        if trace_had_error:
+                            had_errors = True
 
         # Final progress update
         if exported_count == 0 and skipped_count == 0:
