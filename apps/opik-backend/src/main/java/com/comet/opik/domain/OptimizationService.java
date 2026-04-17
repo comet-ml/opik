@@ -229,8 +229,10 @@ class OptimizationServiceImpl implements OptimizationService {
                                         .doOnSuccess(__ -> {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId,
                                                     userName);
-                                            trackOptimizationCreated(newOptimization, workspaceId,
-                                                    userName);
+                                            if (existingOpt.isEmpty()) {
+                                                trackOptimizationCreated(newOptimization, workspaceId,
+                                                        userName);
+                                            }
 
                                             // Only enqueue job for NEW Studio optimizations
                                             if (shouldEnqueueJob) {
@@ -385,7 +387,7 @@ class OptimizationServiceImpl implements OptimizationService {
     }
 
     private void trackOptimizationCreated(Optimization optimization, String workspaceId, String userName) {
-        analyticsService.trackEvent(userName, "optimization_created", Map.of(
+        analyticsService.trackEvent(userName, "opik_optimization_created", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "dataset_name", String.valueOf(optimization.datasetName()),
                 "objective_name", String.valueOf(optimization.objectiveName()),
@@ -395,7 +397,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private void trackOptimizationCompleted(Optimization optimization, OptimizationStatus status,
             String workspaceId) {
-        analyticsService.trackEvent("optimization_completed", Map.of(
+        analyticsService.trackEvent("opik_optimization_completed", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "status", status.getValue(),
                 "workspace_id", workspaceId,
