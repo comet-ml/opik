@@ -51,7 +51,8 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/evaluation/advanced/annotation_queues",
+              href={buildDocsUrl(
+                "/evaluation/advanced/annotation_queues",
                 "#adding-content-to-your-queue",
               )}
               target="_blank"

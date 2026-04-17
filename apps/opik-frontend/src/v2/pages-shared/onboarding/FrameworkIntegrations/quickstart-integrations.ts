@@ -48,7 +48,8 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: pythonLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb",
-    documentation: buildDocsUrl("/tracing/advanced/log_traces",
+    documentation: buildDocsUrl(
+      "/tracing/advanced/log_traces",
       "#using-function-decorators",
     ),
     code: functionDecoratorsCode,

@@ -339,7 +339,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
           }
           primaryActionLabel="Create optimization run"
           onPrimaryAction={handleNewOptimizationClick}
-          docsUrl={buildDocsUrl("/development/optimization-runs/optimization_studio")}
+          docsUrl={buildDocsUrl(
+            "/development/optimization-runs/optimization_studio",
+          )}
         />
       ) : (
         <>

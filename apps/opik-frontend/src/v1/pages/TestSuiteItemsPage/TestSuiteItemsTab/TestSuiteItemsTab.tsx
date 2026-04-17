@@ -658,7 +658,8 @@ function TestSuiteItemsTab({
           <DataTableNoData title={noDataText}>
             <Button variant="link">
               <a
-                href={buildDocsUrl("/v1/evaluation/manage_datasets",
+                href={buildDocsUrl(
+                  "/v1/evaluation/manage_datasets",
                   "#insert-items",
                 )}
                 target="_blank"
