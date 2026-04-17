@@ -7739,7 +7739,7 @@ class DatasetsResourceTest {
                     .spanId(null)
                     .source(null)
                     .description(null)
-                    .evaluators(null)
+                    .evaluators(List.of())
                     .executionPolicy(null)
                     .data(Map.of())
                     .createdAt(null)
