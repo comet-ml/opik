@@ -46,7 +46,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.net.URI;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Path("/v1/private/agent-configs")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -82,6 +81,8 @@ public class AgentConfigsResource {
         log.info("Created config with blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
         trackAgentConfigSaved(createdBlueprint);
+        trackAgentConfigDeployedEvent(createdBlueprint.projectId(), "prod",
+                createdBlueprint.id().toString(), true);
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(createdBlueprint.id().toString())
@@ -360,49 +361,39 @@ public class AgentConfigsResource {
     }
 
     private void trackAgentConfigSaved(AgentBlueprint blueprint) {
-        try {
-            analyticsService.trackEvent("opik_agent_config_saved", Map.of(
-                    "project_id", String.valueOf(blueprint.projectId()),
-                    "blueprint_id", blueprint.id().toString(),
-                    "blueprint_name", String.valueOf(blueprint.name())));
-        } catch (Exception e) {
-            log.warn("Failed to track opik_agent_config_saved analytics event for blueprint '{}'",
-                    blueprint.id(), e);
-        }
+        String workspaceId = requestContext.get().getWorkspaceId();
+        analyticsService.trackEvent("opik_agent_config_saved", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", String.valueOf(blueprint.projectId()),
+                "blueprint_id", blueprint.id().toString(),
+                "blueprint_name", String.valueOf(blueprint.name())));
     }
 
     private void trackAgentConfigDeployed(AgentConfigEnvUpdate request) {
-        var envNames = request.envs().stream()
-                .map(env -> env.envName())
-                .collect(Collectors.joining(","));
-        var blueprintIds = request.envs().stream()
-                .map(env -> env.blueprintId().toString())
-                .distinct()
-                .collect(Collectors.joining(","));
-        var deployedToProd = request.envs().stream()
-                .anyMatch(env -> "prod".equalsIgnoreCase(env.envName()));
-
-        trackAgentConfigDeployedEvent(request.projectId(), envNames, blueprintIds, "",
-                deployedToProd);
+        for (var env : request.envs()) {
+            trackAgentConfigDeployedEvent(request.projectId(), env.envName(),
+                    env.blueprintId().toString(), "prod".equalsIgnoreCase(env.envName()));
+        }
     }
 
     private void trackAgentConfigDeployedByName(UUID projectId, String envName, String blueprintName) {
-        trackAgentConfigDeployedEvent(projectId, envName, "", blueprintName,
-                "prod".equalsIgnoreCase(envName));
+        String workspaceId = requestContext.get().getWorkspaceId();
+        analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", projectId.toString(),
+                "blueprint_name", blueprintName,
+                "environment", envName,
+                "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))));
     }
 
-    private void trackAgentConfigDeployedEvent(UUID projectId, String environments,
-            String blueprintIds, String blueprintName, boolean deployedToProd) {
-        try {
-            analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
-                    "project_id", projectId.toString(),
-                    "blueprint_id", blueprintIds,
-                    "blueprint_name", blueprintName,
-                    "environments", environments,
-                    "deployed_to_prod", String.valueOf(deployedToProd)));
-        } catch (Exception e) {
-            log.warn("Failed to track opik_agent_config_deployed analytics event for project '{}'",
-                    projectId, e);
-        }
+    private void trackAgentConfigDeployedEvent(UUID projectId, String envName,
+            String blueprintId, boolean deployedToProd) {
+        String workspaceId = requestContext.get().getWorkspaceId();
+        analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", projectId.toString(),
+                "blueprint_id", blueprintId,
+                "environment", envName,
+                "deployed_to_prod", String.valueOf(deployedToProd)));
     }
 }

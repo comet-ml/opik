@@ -91,9 +91,9 @@ PostHog native:          Browser → posthog-js → PostHog (pageviews, feature 
 
 ## Event Property Conventions
 
-- **`_id` suffix → UUIDs only**: Properties ending in `_id` (e.g. `project_id`, `blueprint_id`) must contain UUID strings. Never pass a human-readable name into an `_id` field.
-- **`_name` suffix → human-readable text**: Properties ending in `_name` (e.g. `agent_name`, `blueprint_name`) hold display names.
-- **Don't mix identifiers**: If a code path has a name but not a UUID (or vice versa), use separate properties with the correct suffix and leave the unavailable one as an empty string. Don't reuse a single property for both.
+- **Consistent typing per property**: A given property key should always carry the same kind of value. Don't pass a UUID in one code path and a human-readable name in another for the same key.
+- **Separate ID and name properties**: When both a UUID and a display name exist, use distinct keys (e.g. `blueprint_id` for the UUID, `blueprint_name` for the display name). If one is unavailable in a code path, omit the key or send an empty string — don't repurpose the other key.
+- **Include `workspace_id`**: All backend analytics events should include the workspace ID for segmentation.
 
 ## Deciding Frontend vs Backend
 
