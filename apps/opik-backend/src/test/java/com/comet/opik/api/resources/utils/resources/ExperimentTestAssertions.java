@@ -15,7 +15,7 @@ public class ExperimentTestAssertions {
 
     public static final String[] EXPERIMENT_ITEMS_IGNORED_FIELDS = {"createdAt", "lastUpdatedAt",
             "feedbackScores.createdAt", "feedbackScores.lastUpdatedAt", "comments.createdAt", "comments.lastUpdatedAt",
-            "feedbackScores.valueByAuthor", "projectName"
+            "feedbackScores.valueByAuthor", "projectName", "executionPolicy"
     };
 
     public static void assertExperimentResultsIgnoringFields(List<ExperimentItem> actual, List<ExperimentItem> expected,
