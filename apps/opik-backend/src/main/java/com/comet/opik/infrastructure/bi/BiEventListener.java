@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @EagerSingleton
@@ -36,28 +37,42 @@ public class BiEventListener {
     private final LockService lockService;
     private final OpikConfiguration config;
     private final BiEventService biEventService;
+    private final AnalyticsService analyticsService;
+
+    private final Set<String> analyticsReportedWorkspaces = ConcurrentHashMap.newKeySet();
 
     @Inject
     public BiEventListener(@NonNull ProjectService projectService,
             @NonNull UsageReportService usageReportService, @NonNull TraceService traceService,
             @NonNull OpikConfiguration config, @NonNull LockService lockService,
-            @NonNull BiEventService biEventService) {
+            @NonNull BiEventService biEventService, @NonNull AnalyticsService analyticsService) {
         this.projectService = projectService;
         this.traceService = traceService;
         this.config = config;
         this.usageReportService = usageReportService;
         this.lockService = lockService;
         this.biEventService = biEventService;
+        this.analyticsService = analyticsService;
     }
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-
-        if (!config.getUsageReport().isEnabled()) {
-            return;
+        if (config.getUsageReport().isEnabled()) {
+            checkIfItIsFirstTraceAndReport(event.workspaceId(), event);
         }
 
-        checkIfItIsFirstTraceAndReport(event.workspaceId(), event);
+        trackFirstTraceViaAnalytics(event.workspaceId(), event);
+    }
+
+    private Set<UUID> getNonDemoProjectIds(String workspaceId, TracesCreated event) {
+        Set<UUID> demoProjectIds = projectService.findByNames(workspaceId, DemoData.PROJECTS)
+                .stream()
+                .map(Project::id)
+                .collect(Collectors.toSet());
+
+        Set<UUID> projectIds = new HashSet<>(event.projectIds());
+        projectIds.removeAll(demoProjectIds);
+        return projectIds;
     }
 
     private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event) {
@@ -70,13 +85,7 @@ public class BiEventListener {
             return;
         }
 
-        Set<UUID> demoProjectIds = projectService.findByNames(workspaceId, DemoData.PROJECTS)
-                .stream()
-                .map(Project::id)
-                .collect(Collectors.toSet());
-
-        Set<UUID> projectIds = new HashSet<>(event.projectIds());
-        projectIds.removeAll(demoProjectIds);
+        Set<UUID> projectIds = getNonDemoProjectIds(workspaceId, event);
 
         if (projectIds.isEmpty()) {
             log.info("No project ids found for event");
@@ -118,6 +127,29 @@ public class BiEventListener {
                         "opik_app_version", config.getMetadata().getVersion(),
                         "traces_count", String.valueOf(traces),
                         "date", Instant.now().toString()));
+    }
+
+    private void trackFirstTraceViaAnalytics(String workspaceId, TracesCreated event) {
+        if (event.traces().isEmpty()) {
+            return;
+        }
+
+        if (analyticsReportedWorkspaces.contains(workspaceId)) {
+            return;
+        }
+
+        if (getNonDemoProjectIds(workspaceId, event).isEmpty()) {
+            return;
+        }
+
+        if (!analyticsReportedWorkspaces.add(workspaceId)) {
+            return;
+        }
+
+        analyticsService.trackEvent(event.userName(), "first_trace_created", Map.of(
+                "workspace_id", workspaceId,
+                "user_name", event.userName(),
+                "date", Instant.now().toString()));
     }
 
 }

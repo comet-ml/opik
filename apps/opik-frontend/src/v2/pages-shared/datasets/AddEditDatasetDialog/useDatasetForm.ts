@@ -16,6 +16,7 @@ import { MAX_RUNS_PER_ITEM } from "@/types/test-suites";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 const JSON_MODE_FILE_SIZE_LIMIT_IN_MB = 20;
 const JSON_MODE_MAX_ITEMS = 1000;
@@ -245,6 +246,16 @@ const useDatasetForm = ({
 
   const onCreateSuccessHandler = useCallback(
     (newDataset: Dataset) => {
+      if (datasetType === DATASET_TYPE.TEST_SUITE) {
+        trackEvent(OpikEvent.EVAL_SUITE_UI_CONFIGURED, {
+          eval_suite_id: newDataset.id,
+          eval_suite_name: newDataset.name,
+          has_csv_upload: hasValidCsvFile,
+          num_assertions: assertions.filter((a) => a.trim()).length,
+          runs_per_item: runsPerItem,
+        });
+      }
+
       const navigateToDataset = () => {
         setOpen(false);
         onDatasetCreated?.(newDataset);
@@ -254,7 +265,7 @@ const useDatasetForm = ({
         ? () => onCreateSuccess(newDataset, navigateToDataset)
         : navigateToDataset;
 
-      if (hasValidCsvFile) {
+      if (hasValidCsvFile && !isCsvUploadEnabled) {
         setIsOverlayShown(true);
       }
 
@@ -271,9 +282,13 @@ const useDatasetForm = ({
       applyEvaluationCriteria,
       uploadItems,
       hasValidCsvFile,
+      isCsvUploadEnabled,
       onDatasetCreated,
       onCreateSuccess,
       setOpen,
+      datasetType,
+      assertions,
+      runsPerItem,
     ],
   );
 

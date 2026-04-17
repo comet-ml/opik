@@ -15,7 +15,10 @@ import {
   AccordionItem,
   CustomAccordionTrigger,
 } from "@/ui/accordion";
-import CopyButton from "@/shared/CopyButton/CopyButton";
+import CodeHighlighter, {
+  SUPPORTED_LANGUAGE,
+} from "@/shared/CodeHighlighter/CodeHighlighter";
+
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
@@ -146,9 +149,6 @@ const CreateDatasetSidebar: React.FunctionComponent<
       ? `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst suite = await client.getOrCreateTestSuite({ name: "${jsEscapedName}", projectName: "${jsProjectName}" });`
       : `import { Opik } from 'opik';\n\nconst client = new Opik();\nconst dataset = await client.getOrCreateDataset("${jsEscapedName}", undefined, "${jsProjectName}");`;
 
-  const activeSnippet =
-    sdkLanguage === "python" ? pythonSnippet : typescriptSnippet;
-
   useEffect(() => {
     if (!open) {
       const timeout = setTimeout(() => {
@@ -271,13 +271,8 @@ const CreateDatasetSidebar: React.FunctionComponent<
         />
       </div>
       <div className="mb-4">
-        <div className="mb-2 flex items-center justify-between">
+        <div className="mb-2">
           <Label>Use SDK</Label>
-          <CopyButton
-            text={activeSnippet}
-            tooltipText="Copy code"
-            message="Code copied to clipboard"
-          />
         </div>
         <Tabs
           value={sdkLanguage}
@@ -292,14 +287,20 @@ const CreateDatasetSidebar: React.FunctionComponent<
             </TabsTrigger>
           </TabsList>
           <TabsContent value="python" className="mt-0">
-            <pre className="overflow-x-auto rounded-b-md border border-t-0 border-border bg-primary-foreground p-3 font-mono text-[13px] leading-relaxed">
-              {pythonSnippet}
-            </pre>
+            <div className="overflow-hidden rounded-b-md border border-t-0 border-border">
+              <CodeHighlighter
+                data={pythonSnippet}
+                language={SUPPORTED_LANGUAGE.python}
+              />
+            </div>
           </TabsContent>
           <TabsContent value="typescript" className="mt-0">
-            <pre className="overflow-x-auto rounded-b-md border border-t-0 border-border bg-primary-foreground p-3 font-mono text-[13px] leading-relaxed">
-              {typescriptSnippet}
-            </pre>
+            <div className="overflow-hidden rounded-b-md border border-t-0 border-border">
+              <CodeHighlighter
+                data={typescriptSnippet}
+                language={SUPPORTED_LANGUAGE.python}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

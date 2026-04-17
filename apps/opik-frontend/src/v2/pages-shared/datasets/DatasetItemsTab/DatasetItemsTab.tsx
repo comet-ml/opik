@@ -9,6 +9,7 @@ import {
 } from "use-query-params";
 import useLocalStorageState from "use-local-storage-state";
 import { keepPreviousData } from "@tanstack/react-query";
+import { Check, Loader2, Plus } from "lucide-react";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -43,7 +44,8 @@ import SelectAllBanner from "@/shared/SelectAllBanner/SelectAllBanner";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Check, Loader2 } from "lucide-react";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import {
   convertColumnDataToColumn,
   injectColumnCallback,
@@ -130,6 +132,7 @@ interface DatasetItemsTabProps {
 }
 
 const POLLING_INTERVAL_MS = 3000;
+const COMPACT_TOOLBAR_BREAKPOINT = 850;
 
 const DRAFT_STATUS_BORDER_CLASSES: Record<string, string> = {
   [DATASET_ITEM_DRAFT_STATUS.added]: "border-l-2 border-l-green-500",
@@ -204,6 +207,15 @@ function DatasetItemsTab({
   const [openCreatePanel, setOpenCreatePanel] = useState<boolean>(false);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const resetDialogKeyRef = useRef(0);
+
+  const [isCompactToolbar, setIsCompactToolbar] = useState(false);
+  const [isSearchExpanded, setIsSearchExpanded] = useState(Boolean(search));
+  const isCollapsingRef = useRef(false);
+  const handleToolbarResize = useCallback((node: HTMLDivElement) => {
+    setIsCompactToolbar(node.clientWidth < COMPACT_TOOLBAR_BREAKPOINT);
+  }, []);
+  const { ref: toolbarRef } =
+    useObserveResizeNode<HTMLDivElement>(handleToolbarResize);
 
   const transformedFilters = useMemo(
     () => (filters ? transformDataColumnFilters(filters) : filters),
@@ -334,6 +346,26 @@ function DatasetItemsTab({
     },
     [setSearch, setPage, page],
   );
+
+  // ExpandableSearchInput calls onExpandedChange(false) before onChange("") on collapse.
+  // We use this ref to skip the clearing onChange so the search filter stays active.
+  const handleCompactSearchChange = useCallback(
+    (value: string) => {
+      if (isCollapsingRef.current && value === "") {
+        isCollapsingRef.current = false;
+        return;
+      }
+      handleSearchChange(value || null);
+    },
+    [handleSearchChange],
+  );
+
+  const handleSearchExpandedChange = useCallback((expanded: boolean) => {
+    setIsSearchExpanded(expanded);
+    if (!expanded) {
+      isCollapsingRef.current = true;
+    }
+  }, []);
 
   const selectedRows: DatasetItem[] = useMemo(
     () => rows.filter((row) => rowSelection[row.id]),
@@ -511,22 +543,42 @@ function DatasetItemsTab({
 
   return (
     <>
-      <div className="mb-4 flex items-center justify-between gap-8">
+      <div
+        ref={toolbarRef}
+        className="relative mb-4 flex items-center justify-between gap-8"
+      >
         <div className="flex items-center gap-2">
-          <TooltipWrapper
-            content={isDraftMode ? "Save changes to search" : undefined}
-          >
-            <div>
-              <SearchInput
-                searchText={search ?? ""}
-                setSearchText={handleSearchChange}
-                placeholder="Search"
-                className="w-[320px]"
-                dimension="sm"
-                disabled={isDraftMode}
-              />
-            </div>
-          </TooltipWrapper>
+          {isCompactToolbar ? (
+            <ExpandableSearchInput
+              value={search ?? ""}
+              placeholder="Search"
+              onChange={handleCompactSearchChange}
+              disabled={isDraftMode}
+              buttonVariant="outline"
+              tooltip={isDraftMode ? "Save changes to search" : "Search items"}
+              onExpandedChange={handleSearchExpandedChange}
+              className={
+                isSearchExpanded
+                  ? "absolute inset-x-0 top-0 z-10 bg-soft-background"
+                  : ""
+              }
+            />
+          ) : (
+            <TooltipWrapper
+              content={isDraftMode ? "Save changes to search" : undefined}
+            >
+              <div>
+                <SearchInput
+                  searchText={search ?? ""}
+                  setSearchText={handleSearchChange}
+                  placeholder="Search"
+                  className="w-[320px]"
+                  dimension="sm"
+                  disabled={isDraftMode}
+                />
+              </div>
+            </TooltipWrapper>
+          )}
           <TooltipWrapper
             content={isDraftMode ? "Save changes to filter" : undefined}
           >
@@ -555,6 +607,7 @@ function DatasetItemsTab({
             isDraftMode={isDraftMode}
             entityName={entityName}
             renderExpansionDialog={renderExpansionDialog}
+            compact={isCompactToolbar}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
           <DataTableRowHeightSelector
@@ -569,13 +622,15 @@ function DatasetItemsTab({
             onOrderChange={setColumnsOrder}
           />
           {canEditDatasets && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleNewDatasetItemClick}
-            >
-              Add item
-            </Button>
+            <TooltipWrapper content={isCompactToolbar ? "Add item" : undefined}>
+              <Button
+                variant="default"
+                size={isCompactToolbar ? "icon-sm" : "sm"}
+                onClick={handleNewDatasetItemClick}
+              >
+                {isCompactToolbar ? <Plus /> : "Add item"}
+              </Button>
+            </TooltipWrapper>
           )}
         </div>
       </div>

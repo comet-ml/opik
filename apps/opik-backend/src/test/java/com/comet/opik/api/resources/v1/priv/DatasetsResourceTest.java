@@ -1634,6 +1634,56 @@ class DatasetsResourceTest {
         }
 
         @Test
+        @DisplayName("when retrieving dataset by name with items, experiments and optimizations, then return enriched dataset")
+        void getDatasetByIdentifier__whenDatasetHasItemsExperimentsAndOptimizations__thenReturnEnrichedDataset() {
+            var dataset = buildDataset();
+            createAndAssert(dataset);
+
+            // Create dataset items
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
+            var batch = DatasetItemBatch.builder().datasetName(dataset.name()).items(datasetItems).build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create experiment and its items
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+
+            Instant beforeCreateExperimentItems = Instant.now();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            // Create optimizations
+            Instant beforeCreateOptimizations = Instant.now();
+            int optimizationCount = 3;
+            for (int i = 0; i < optimizationCount; i++) {
+                var optimization = optimizationResourceClient.createPartialOptimization()
+                        .datasetName(dataset.name())
+                        .build();
+                optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            }
+
+            var identifier = DatasetIdentifier.builder().datasetName(dataset.name()).build();
+            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualEntity.datasetItemsCount()).isEqualTo(datasetItems.size());
+            assertThat(actualEntity.experimentCount()).isEqualTo(1);
+            assertThat(actualEntity.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
+            assertThat(actualEntity.optimizationCount()).isEqualTo(optimizationCount);
+            assertThat(actualEntity.mostRecentOptimizationAt()).isAfter(beforeCreateOptimizations);
+        }
+
+        @Test
         @DisplayName("when dataset not found by dataset name, then return 404")
         void getDatasetByIdentifier__whenDatasetItemNotFound__thenReturn404() {
             var name = UUID.randomUUID().toString();

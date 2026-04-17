@@ -124,6 +124,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-sonnet-4-6"
     structuredOutput: true
+  - id: "claude-opus-4-7"
 gemini:
   - id: "aqa"
   - id: "gemini-1.0-pro"
@@ -153,6 +154,7 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-3.1-pro-preview"
     structuredOutput: true
   - id: "gemini-pro-vision"
@@ -232,6 +234,7 @@ openrouter:
   - id: "anthropic/claude-opus-4.5"
   - id: "anthropic/claude-opus-4.6"
   - id: "anthropic/claude-opus-4.6-fast"
+  - id: "anthropic/claude-opus-4.7"
   - id: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
@@ -396,6 +399,7 @@ openrouter:
   - id: "meta-llama/llama-guard-2-8b"
   - id: "meta-llama/llama-guard-3-8b"
   - id: "meta-llama/llama-guard-4-12b"
+  - id: "meta-llama/llama-guard-4-12b:free"
   - id: "microsoft/mai-ds-r1"
   - id: "microsoft/mai-ds-r1:free"
   - id: "microsoft/phi-3-medium-128k-instruct"

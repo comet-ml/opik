@@ -457,7 +457,10 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
   // Guard the cleanup: when another AssistantSidebar instance mounts (e.g.
   // switching between sidebar and page surface), it overwrites these globals
   // with its own bridge/meta. A later unmount of the previous instance must
-  // NOT clobber the new values — only clear if the global still matches ours.
+  // NOT clobber the new values — only clean up when our bridge is still the
+  // active one. Meta cleanup is tied to bridge ownership because both serve
+  // the same iframe and meta is a shared React Query cache reference that
+  // cannot be compared with === across instances.
   useEffect(() => {
     const bridge = bridgeRef.current;
     window.opikBridge = bridge;
@@ -467,8 +470,6 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     return () => {
       if (window.opikBridge === bridge) {
         delete window.opikBridge;
-      }
-      if (meta && window.__opikAssistantMeta__ === meta) {
         delete window.__opikAssistantMeta__;
       }
     };

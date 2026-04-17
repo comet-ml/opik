@@ -1628,3 +1628,161 @@ class TestTypeInference:
             "declared_as_float": bool,
             "declared_as_any": str,
         }
+
+
+# ---------------------------------------------------------------------------
+# Prompt project-name validation tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_prompt(project_name=None):
+    """Return a mock BasePrompt with the given project_name."""
+    from opik.api_objects.prompt.base_prompt import BasePrompt
+
+    p = mock.Mock(spec=BasePrompt)
+    p.project_name = project_name
+    return p
+
+
+class TestCreateConfigPromptProjectValidation:
+    """Tests for _validate_prompt_project_names called from create_config."""
+
+    def test_create_config__prompt_same_project__succeeds(self, mock_opik_client):
+        prompt = _make_mock_prompt(project_name="test-project")
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        cfg = MyConfig(system_prompt=prompt)
+
+        # Validation passes when project_name matches. Any subsequent error
+        # (e.g. type serialization) is irrelevant to the validation under test.
+        try:
+            mock_opik_client.create_config(cfg, project_name="test-project")
+        except ConfigMismatch:
+            pytest.fail("ConfigMismatch should not be raised when project_name matches")
+        except Exception:
+            pass  # Backend/serialisation errors are acceptable in this unit test
+
+    def test_create_config__prompt_different_project__raises_config_mismatch(
+        self, mock_opik_client
+    ):
+        prompt = _make_mock_prompt(project_name="other-project")
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        cfg = MyConfig(system_prompt=prompt)
+
+        with pytest.raises(ConfigMismatch, match="system_prompt"):
+            mock_opik_client.create_config(cfg, project_name="test-project")
+
+    def test_create_config__prompt_no_project_name__succeeds(self, mock_opik_client):
+        """A prompt with project_name=None skips the project check."""
+        prompt = _make_mock_prompt(project_name=None)
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        cfg = MyConfig(system_prompt=prompt)
+
+        try:
+            mock_opik_client.create_config(cfg, project_name="test-project")
+        except ConfigMismatch:
+            pytest.fail("ConfigMismatch should not be raised when project_name is None")
+        except Exception:
+            pass
+
+    def test_create_config__multiple_prompts_one_wrong__error_names_bad_field(
+        self, mock_opik_client
+    ):
+        good_prompt = _make_mock_prompt(project_name="test-project")
+        bad_prompt = _make_mock_prompt(project_name="wrong-project")
+
+        class MyConfig(Config):
+            good: object
+            bad: object
+
+        cfg = MyConfig(good=good_prompt, bad=bad_prompt)
+
+        with pytest.raises(ConfigMismatch, match="bad"):
+            mock_opik_client.create_config(cfg, project_name="test-project")
+
+    def test_create_config__multiple_prompts_both_wrong__error_names_all_bad_fields(
+        self, mock_opik_client
+    ):
+        prompt_a = _make_mock_prompt(project_name="proj-a")
+        prompt_b = _make_mock_prompt(project_name="proj-b")
+
+        class MyConfig(Config):
+            field_a: object
+            field_b: object
+
+        cfg = MyConfig(field_a=prompt_a, field_b=prompt_b)
+
+        with pytest.raises(ConfigMismatch) as exc_info:
+            mock_opik_client.create_config(cfg, project_name="test-project")
+
+        msg = str(exc_info.value)
+        assert "field_a" in msg
+        assert "field_b" in msg
+
+    def test_create_config__non_prompt_fields__not_checked(
+        self, mock_rest_client, mock_opik_client
+    ):
+        """Plain scalar values are not prompt-checked, only BasePrompt instances are."""
+
+        class MyConfig(Config):
+            temperature: float
+            model: str
+
+        cfg = MyConfig(temperature=0.7, model="gpt-4")
+
+        created_raw = AgentBlueprintPublic(
+            id="bp-1",
+            name="v1",
+            type="blueprint",
+            values=[],
+        )
+        mock_rest_client.agent_configs.get_blueprint_by_id.return_value = created_raw
+        mock_rest_client.agent_configs.get_latest_blueprint.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="not found")
+        )
+
+        mock_opik_client.create_config(cfg, project_name="test-project")
+
+
+class TestGetOrCreateConfigPromptProjectValidation:
+    """Tests for _validate_prompt_project_names called from _create_from_fallback."""
+
+    def test_get_or_create_config__fallback_prompt_same_project__succeeds(
+        self, mock_opik_client
+    ):
+        prompt = _make_mock_prompt(project_name="test-project")
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        fallback = MyConfig(system_prompt=prompt)
+
+        # Default conftest: get_latest_blueprint raises 404, so the auto-create path
+        # is taken. Validation should pass; any subsequent error is not under test.
+        try:
+            mock_opik_client.get_or_create_config(fallback=fallback)
+        except ConfigMismatch:
+            pytest.fail("ConfigMismatch should not be raised when project_name matches")
+        except Exception:
+            pass
+
+    def test_get_or_create_config__fallback_prompt_different_project__raises_config_mismatch(
+        self, mock_opik_client
+    ):
+        prompt = _make_mock_prompt(project_name="other-project")
+
+        class MyConfig(Config):
+            system_prompt: object
+
+        fallback = MyConfig(system_prompt=prompt)
+
+        with pytest.raises(ConfigMismatch, match="system_prompt"):
+            mock_opik_client.get_or_create_config(fallback=fallback)

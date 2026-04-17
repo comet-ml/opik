@@ -407,10 +407,9 @@ class Dataset(DatasetExportOperations):
         If the count is not cached locally, it will be fetched from the backend.
         """
         if self._dataset_items_count is None:
-            dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=self._name, project_name=self._project_name
-            )
+            dataset_info = self._rest_client.datasets.get_dataset_by_id(id=self.id)
             self._dataset_items_count = dataset_info.dataset_items_count
+
         return self._dataset_items_count
 
     def get_current_version_name(self) -> Optional[str]:

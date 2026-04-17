@@ -1,0 +1,188 @@
+---
+description: Start here to integrate Opik into your Langflow applications for end-to-end
+  LLM observability.
+headline: Langflow | Opik Documentation
+og:description: Monitor and trace your AI workflows with Opik's seamless integration
+  in Langflow, enhancing LLM application development and deployment.
+og:site_name: Opik Documentation
+og:title: Build AI Apps with Langflow - Opik Integration
+title: Observability for Langflow with Opik
+---
+
+[Langflow](https://www.langflow.org/) is an open-source, low-code platform for building AI applications using a visual flow-based interface. It enables developers and non-developers alike to create complex LLM applications through drag-and-drop components, making it easier to prototype, test, and deploy AI workflows.
+
+Opik integrates seamlessly with Langflow to provide comprehensive tracing and monitoring of your flow executions. The integration automatically captures all LLM calls, component interactions, and data flows within your Langflow applications.
+
+## Results viewing
+
+Once you've configured the integration, you can view your Langflow traces in the Opik dashboard. Each flow execution creates a detailed trace showing the complete execution path through your flow components.
+
+<img src="/img/tracing/langflow_integration.png" alt="Langflow Opik Integration" />
+
+## Getting started
+
+### Prerequisites
+
+Before integrating Opik with Langflow, ensure you have:
+
+- A running Langflow server
+- An Opik Cloud account or self-hosted Opik instance
+- Access to the terminal/environment where Langflow runs
+
+### Installation
+
+Install both Langflow and Opik in the same environment:
+
+```bash
+pip install langflow opik
+```
+
+For more Langflow installation options and details, see the [Langflow documentation](https://docs.langflow.org/).
+
+## Configuring Opik
+
+Configure Opik to connect to your Opik instance. Run the following command in the same terminal/environment where you'll run Langflow:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```bash
+        opik configure
+        ```
+        
+        You'll be prompted to enter your Opik API key. You can create an API key in your [Opik account settings](https://www.comet.com/settings/api-keys?utm_source=opik&utm_medium=docs&utm_campaign=opik_integration).
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        Set the following environment variables before running `opik configure`:
+        
+        ```bash
+        export OPIK_URL_OVERRIDE="https://<comet-deployment-url>/opik/api"
+        opik configure
+        ```
+        
+        You'll be prompted to enter your Opik API key. Replace `<comet-deployment-url>` with your enterprise deployment URL.
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```bash
+        opik configure --use_local
+        ```
+        
+        This will configure Opik to use your local instance at `http://localhost:5173`.
+    </Tab>
+</Tabs>
+
+The configuration will be saved to `~/.opik.config` and used automatically by Langflow's Opik integration.
+
+## Using Opik with Langflow
+
+Once Opik is configured, start Langflow in the same terminal or environment:
+
+```bash
+langflow run
+```
+
+Langflow will automatically detect the Opik configuration and start sending traces to your Opik instance.
+
+### Running a flow
+
+1. Open Langflow in your browser (typically at `http://localhost:7860`)
+2. Create or open a flow
+3. Run your flow by clicking the "Run" button or triggering it via the API
+4. Navigate to your Opik dashboard to view the collected traces
+
+### Understanding Langflow traces
+
+When you run a flow in Langflow, Opik automatically captures:
+
+- **Flow execution**: The overall flow execution as a trace
+- **Component execution**: Each component in your flow as individual spans
+- **LLM calls**: All LLM API calls with input/output data
+- **Data transformations**: Data passing between components
+- **Metadata**: Flow configuration and execution context
+
+Each trace includes:
+- Flow name and ID
+- Execution duration
+- Input and output data
+- Component-level timing
+- Any errors or exceptions
+
+## Advanced usage
+
+### Custom project names
+
+By default, Langflow traces are logged to the "Default Project" in Opik. You can specify a custom project name by setting the `OPIK_PROJECT_NAME` environment variable before starting Langflow:
+
+```bash
+export OPIK_PROJECT_NAME="my-langflow-project"
+langflow run
+```
+
+### Session tracking
+
+Langflow automatically tracks sessions using thread IDs. Each conversation or flow execution thread is tracked as a separate session in Opik, making it easy to analyze multi-turn conversations and related executions.
+
+### Disabling the integration
+
+To disable the Opik integration, you can:
+
+1. Remove the `~/.opik.config` file
+2. Or unset the Opik environment variables:
+   ```bash
+   unset OPIK_API_KEY
+   unset OPIK_URL_OVERRIDE
+   unset OPIK_WORKSPACE
+   ```
+
+Then restart Langflow.
+
+## Troubleshooting
+
+### Traces not appearing in Opik
+
+If your traces aren't appearing in Opik:
+
+1. **Verify Opik configuration**:
+   ```bash
+   cat ~/.opik.config
+   ```
+   Ensure the API key and URL are correct.
+
+2. **Check Langflow logs**: Look for any Opik-related errors in the Langflow console output.
+
+3. **Test Opik connection**: Run a simple Python script to verify your Opik configuration:
+   ```python
+   import opik
+   client = opik.Opik()
+   client.auth_check()
+   print("Opik connection successful!")
+   ```
+
+4. **Verify Opik SDK installation**: Ensure the Opik SDK is installed in the same environment as Langflow:
+   ```bash
+   pip list | grep opik
+   ```
+
+### Configuration not detected
+
+If Langflow isn't detecting your Opik configuration:
+
+1. Ensure you ran `opik configure` in the same terminal/environment where you start Langflow
+2. Check that the `~/.opik.config` file exists and contains valid configuration
+3. Try setting environment variables explicitly:
+   ```bash
+   export OPIK_API_KEY="your-api-key"
+   export OPIK_WORKSPACE="default"
+   langflow run
+   ```
+
+### Authentication errors
+
+If you're seeing authentication errors:
+
+1. Verify your API key is valid in your [Opik account settings](https://www.comet.com/settings/api-keys?utm_source=opik&utm_medium=docs&utm_campaign=opik_integration)
+2. For self-hosted instances, ensure the URL is correct and the instance is running
+3. Check that you have access to the specified workspace
+
+## Further improvements
+
+If you encounter any issues or have suggestions for improving the Langflow integration, please let us know by creating an issue in the [Opik GitHub repository](https://github.com/comet-ml/opik/issues).

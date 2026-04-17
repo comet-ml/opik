@@ -12,6 +12,7 @@ import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useLoadPlayground from "@/v2/pages-shared/playground/useLoadPlayground";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { DATASET_TYPE } from "@/types/datasets";
 
 export interface UseDatasetDropdownProps {
   datasetName?: string;
@@ -21,6 +22,7 @@ export interface UseDatasetDropdownProps {
   entityName?: string;
   projectId?: string | null;
   isEmpty?: boolean;
+  isTestSuite: boolean;
 }
 
 function UseDatasetDropdown({
@@ -31,6 +33,7 @@ function UseDatasetDropdown({
   entityName = "dataset",
   projectId,
   isEmpty = false,
+  isTestSuite,
 }: UseDatasetDropdownProps) {
   const resetKeyRef = useRef(0);
   const resetDialogKeyRef = useRef(0);
@@ -50,8 +53,9 @@ function UseDatasetDropdown({
     loadPlayground({
       datasetId,
       datasetVersionId,
+      datasetType: isTestSuite ? DATASET_TYPE.TEST_SUITE : DATASET_TYPE.DATASET,
     });
-  }, [loadPlayground, datasetId, datasetVersionId]);
+  }, [loadPlayground, datasetId, datasetVersionId, isTestSuite]);
 
   const handleOpenPlaygroundClick = () => {
     if (isPlaygroundEmpty) {

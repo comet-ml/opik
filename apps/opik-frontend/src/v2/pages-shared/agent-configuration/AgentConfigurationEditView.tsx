@@ -21,6 +21,7 @@ import { Switch } from "@/ui/switch";
 import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
+import AutoResizeTextarea from "./fields/AutoResizeTextarea";
 import BlueprintValuePromptCompact from "./fields/BlueprintValuePromptCompact";
 import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import FieldSection from "./fields/FieldSection";
@@ -436,19 +437,31 @@ const AgentConfigurationEditView = React.forwardRef<
                         </span>
                       ) : null;
 
+                      const isNumeric =
+                        v.type === BlueprintValueType.INT ||
+                        v.type === BlueprintValueType.FLOAT;
+
                       return (
                         <div className="flex flex-col gap-1">
-                          <div className="rounded-md border bg-background px-3 py-2">
-                            <Input
-                              variant="ghost"
-                              className="h-auto p-0"
-                              inputMode={inputMode}
+                          {isNumeric ? (
+                            <div className="rounded-md border bg-background px-3 py-2">
+                              <Input
+                                variant="ghost"
+                                className="h-auto p-0"
+                                inputMode={inputMode}
+                                value={currentValue}
+                                onChange={(e) =>
+                                  handleFieldChange(v.key, e.target.value)
+                                }
+                              />
+                            </div>
+                          ) : (
+                            <AutoResizeTextarea
+                              className="rounded-md border bg-background px-3 py-2"
                               value={currentValue}
-                              onChange={(e) =>
-                                handleFieldChange(v.key, e.target.value)
-                              }
+                              onChange={(val) => handleFieldChange(v.key, val)}
                             />
-                          </div>
+                          )}
                           {errorLine}
                         </div>
                       );

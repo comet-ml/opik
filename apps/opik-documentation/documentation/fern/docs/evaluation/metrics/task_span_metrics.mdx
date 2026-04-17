@@ -12,6 +12,10 @@ toc_max_heading_level: 4
 
 # Task Span Metrics
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 Task span metrics are a powerful type of evaluation metric in Opik that can analyze the detailed execution information of your LLM tasks. Unlike traditional metrics that only evaluate input-output pairs, task span metrics have access to the complete execution context, including intermediate steps, metadata, timing information, and hierarchical structure.
 
 **Important:** only spans created with `@track` decorators and native OPIK integrations are available for task span metrics.
@@ -333,7 +337,8 @@ evaluation = evaluate(
         quality_metric,     # Task span metric (execution analysis)
         performance_metric, # Task span metric (performance analysis)
     ],
-    experiment_name="Comprehensive Task Analysis"
+    experiment_name="Comprehensive Task Analysis",
+    project_name="my-project"
 )
 ```
 
@@ -693,10 +698,10 @@ class AgentTrajectoryMetric(BaseMetric):
 
 ## Integration with LLM Evaluation
 
-For a complete guide on using task span metrics in LLM evaluation workflows, see the [Using task span evaluation metrics](/evaluation/evaluate_your_llm#using-task-span-evaluation-metrics) section in the LLM evaluation guide.
+For a complete guide on using task span metrics in LLM evaluation workflows, see the [Using task span evaluation metrics](/v1/evaluation/evaluate_your_llm#using-task-span-evaluation-metrics) section in the LLM evaluation guide.
 
 ## Related Documentation
 
-- [Custom Metrics](/evaluation/metrics/custom_metric) - Creating traditional input/output evaluation metrics
+- [Custom Metrics](/v1/evaluation/metrics/custom_metric) - Creating traditional input/output evaluation metrics
 - [SpanModel API Reference](https://www.comet.com/docs/opik/python-sdk-reference/message_processing_emulation/SpanModel.html) - Complete SpanModel documentation
-- [Evaluation Overview](/evaluation/metrics/overview) - Understanding Opik's evaluation system
+- [Evaluation Overview](/v1/evaluation/metrics/overview) - Understanding Opik's evaluation system

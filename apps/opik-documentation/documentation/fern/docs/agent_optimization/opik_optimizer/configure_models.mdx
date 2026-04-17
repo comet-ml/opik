@@ -10,6 +10,10 @@ subtitle: Use any LLM provider with the Opik Optimizer
 title: Configuring LLM Providers
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 The Opik Agent Optimizer uses [LiteLLM](https://docs.litellm.ai/) under the hood, giving you access to 100+ LLM providers with a unified interface. This guide shows you how to configure different providers for both your **ChatPrompt** (the model that runs your prompt) and the **Optimizer** (the model that improves your prompt).
 
 ## Understanding the Two Model Types
@@ -163,7 +167,7 @@ model="openrouter/google/gemini-2.0-flash"     # OpenRouter
 
     # Initialize Opik client and create dataset
     client = opik.Opik()
-    dataset = client.get_or_create_dataset(name="gemini-optimization-demo")
+    dataset = client.get_or_create_dataset(name="gemini-optimization-demo", project_name="my-project")
     dataset.insert([
         {"question": "What is machine learning?", "answer": "Machine learning is a subset of AI that enables systems to learn from data."},
         {"question": "What is Python?", "answer": "Python is a high-level programming language known for its readability."},
@@ -410,9 +414,9 @@ optimizer = MetaPromptOptimizer(
 
 ## Next Steps
 
-- Learn about [Optimization Concepts](/agent_optimization/optimization/concepts)
-- Explore different [Optimization Algorithms](/agent_optimization/algorithms/overview)
-- Check out the [API Reference](/agent_optimization/advanced/api_reference)
+- Learn about [Optimization Concepts](/v1/agent_optimization/optimization/concepts)
+- Explore different [Optimization Algorithms](/v1/agent_optimization/algorithms/overview)
+- Check out the [API Reference](/v1/agent_optimization/advanced/api_reference)
 
 <Info>
   For a complete list of supported providers and models, see the [LiteLLM documentation](https://docs.litellm.ai/docs/providers).

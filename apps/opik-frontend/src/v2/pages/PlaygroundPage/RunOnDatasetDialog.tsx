@@ -55,24 +55,44 @@ interface RunOnDatasetDialogProps {
   initialDatasetId?: string | null;
   initialSelectedRuleIds?: string[] | null;
   initialFilters?: Filters;
+  datasetType?: DATASET_TYPE;
 }
+
+const TYPE_CONFIG = {
+  [DATASET_TYPE.DATASET]: {
+    title: "Test on dataset",
+    description:
+      "Run your prompt suite against a dataset and score results with selected metrics.",
+    selectLabel: "Dataset",
+    submitLabel: "Use dataset",
+    emptyTooltip: "Selected dataset is empty",
+    showMetrics: true,
+  },
+  [DATASET_TYPE.TEST_SUITE]: {
+    title: "Test on test suite",
+    description:
+      "Run your prompt suite against a test suite. Results will be scored using the assertions defined on the suite.",
+    selectLabel: "Test suite",
+    submitLabel: "Use test suite",
+    emptyTooltip: "Selected test suite is empty",
+    showMetrics: false,
+  },
+} as const;
 
 const getRunDisabledTooltip = ({
   isRunning,
   isDatasetEmpty,
   hasFilters,
-  isTestSuite,
+  emptyTooltip,
 }: {
   isRunning: boolean;
   isDatasetEmpty: boolean;
   hasFilters: boolean;
-  isTestSuite: boolean;
+  emptyTooltip: string;
 }): string | undefined => {
   if (isRunning) return "An experiment is already running";
   if (isDatasetEmpty && hasFilters) return "No items match the current filters";
-  if (isDatasetEmpty) {
-    return `Selected ${isTestSuite ? "test suite" : "dataset"} is empty`;
-  }
+  if (isDatasetEmpty) return emptyTooltip;
   return undefined;
 };
 
@@ -84,7 +104,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   initialDatasetId = null,
   initialSelectedRuleIds = null,
   initialFilters = [],
+  datasetType,
 }) => {
+  const config = TYPE_CONFIG[datasetType ?? DATASET_TYPE.DATASET];
   const [datasetId, setDatasetId] = useState<string | null>(initialDatasetId);
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[] | null>(
     initialSelectedRuleIds,
@@ -124,7 +146,6 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   const selectedDataset = datasets.find((ds) => ds.id === plainDatasetId);
   const datasetName = selectedDataset?.name || null;
   const selectedDatasetType = selectedDataset?.type ?? null;
-  const isTestSuite = selectedDatasetType === DATASET_TYPE.TEST_SUITE;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -199,7 +220,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
       versionId: parsedDatasetId?.versionId,
       datasetName,
       datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
-      selectedRuleIds: isTestSuite ? [] : selectedRuleIds,
+      selectedRuleIds: config.showMetrics ? selectedRuleIds : [],
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -209,7 +230,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     datasetName,
     parsedDatasetId?.versionId,
     selectedDatasetType,
-    isTestSuite,
+    config,
     selectedRuleIds,
     experimentPrefix,
     filters,
@@ -232,16 +253,13 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader className="pb-0">
-            <DialogTitle>Test on dataset</DialogTitle>
-            <DialogDescription>
-              Run your prompt suite against a dataset or test suite and score
-              results with selected metrics.
-            </DialogDescription>
+            <DialogTitle>{config.title}</DialogTitle>
+            <DialogDescription>{config.description}</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Dataset / Test suite</Label>
+              <Label>{config.selectLabel}</Label>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <DatasetVersionSelectBox
@@ -250,6 +268,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                     onChange={handleDatasetChange}
                     projectId={activeProjectId ?? undefined}
                     buttonClassName="w-full"
+                    datasetType={datasetType}
                   />
                 </div>
                 {datasetId && (
@@ -264,14 +283,13 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               </div>
             </div>
 
-            {plainDatasetId && selectedDataset && !isTestSuite && (
+            {config.showMetrics && (
               <div className="flex flex-col gap-1.5">
                 <Label>Metrics</Label>
                 <MetricSelector
                   rules={rules}
                   selectedRuleIds={selectedRuleIds}
                   onSelectionChange={setSelectedRuleIds}
-                  datasetId={datasetId}
                   onCreateRuleClick={() => setIsRuleDialogOpen(true)}
                   workspaceName={workspaceName}
                   projectId={activeProjectId ?? undefined}
@@ -290,7 +308,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 isRunning,
                 isDatasetEmpty,
                 hasFilters: filters.length > 0,
-                isTestSuite,
+                emptyTooltip: config.emptyTooltip,
               })}
             >
               <Button
@@ -298,7 +316,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                {isTestSuite ? "Use test suite" : "Use dataset"}
+                {config.submitLabel}
               </Button>
             </TooltipWrapper>
           </DialogFooter>

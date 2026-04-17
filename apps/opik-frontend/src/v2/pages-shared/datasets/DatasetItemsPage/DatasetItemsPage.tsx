@@ -125,6 +125,7 @@ function DatasetItemsPage(): React.ReactElement {
   } = useDatasetItemsSave({
     datasetId,
     datasetName: dataset?.name,
+    datasetType,
     buildPayload,
     buildInitialVersionPayload,
     hasNoVersion,
