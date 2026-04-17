@@ -145,7 +145,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
-        <h1 className="comet-title-xs">Agent sandbox</h1>
+        <h1 className="comet-title-xs">Agent playground</h1>
 
         {isConnected ? (
           <TooltipWrapper content="Your agent is connected to Opik">
