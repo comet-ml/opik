@@ -102,6 +102,7 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
+  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -138,6 +139,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_5 = "anthropic/claude-opus-4.5",
   ANTHROPIC_CLAUDE_OPUS_4_6 = "anthropic/claude-opus-4.6",
   ANTHROPIC_CLAUDE_OPUS_4_6_FAST = "anthropic/claude-opus-4.6-fast",
+  ANTHROPIC_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
@@ -574,13 +576,13 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_PRO = "gemini-3-pro-preview",
   GEMINI_3_1_FLASH_IMAGE_PREVIEW = "gemini-3.1-flash-image-preview",
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
+  GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
   GEMINI_PRO_VISION = "gemini-pro-vision",
   LYRIA_3_CLIP_PREVIEW = "lyria-3-clip-preview",
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
-  GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",

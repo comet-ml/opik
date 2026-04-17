@@ -109,6 +109,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      label: "Claude Opus 4.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
       label: "Claude Opus 4.6",
     },
@@ -278,6 +282,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST,
       label: "anthropic/claude-opus-4.6-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7,
+      label: "anthropic/claude-opus-4.7",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,

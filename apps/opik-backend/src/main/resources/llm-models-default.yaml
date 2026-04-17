@@ -124,6 +124,7 @@ anthropic:
     structuredOutput: true
   - id: "claude-sonnet-4-6"
     structuredOutput: true
+  - id: "claude-opus-4-7"
 gemini:
   - id: "aqa"
   - id: "gemini-1.0-pro"
@@ -153,6 +154,7 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-lite-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-3.1-pro-preview"
     structuredOutput: true
   - id: "gemini-pro-vision"
@@ -160,7 +162,6 @@ gemini:
   - id: "lyria-3-pro-preview"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
-  - id: "gemini-3.1-flash-tts-preview"
 vertex-ai:
   - id: "gemini-2.0-flash-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-001"
@@ -233,6 +234,7 @@ openrouter:
   - id: "anthropic/claude-opus-4.5"
   - id: "anthropic/claude-opus-4.6"
   - id: "anthropic/claude-opus-4.6-fast"
+  - id: "anthropic/claude-opus-4.7"
   - id: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
