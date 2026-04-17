@@ -205,7 +205,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     },
     { enabled: !!activeProjectId && open },
   );
-  const rules = rulesData?.content || [];
+  const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
   const handleDatasetChange = useCallback((value: string | null) => {
     setDatasetId(value);
@@ -215,12 +215,19 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
 
   const handleRun = useCallback(() => {
     if (!datasetId || !datasetName) return;
+
+    const resolvedRuleIds = config.showMetrics
+      ? selectedRuleIds === null && rules.length > 0
+        ? rules.map((r) => r.id)
+        : selectedRuleIds
+      : [];
+
     onRun({
       datasetId,
       versionId: parsedDatasetId?.versionId,
       datasetName,
       datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
-      selectedRuleIds: config.showMetrics ? selectedRuleIds : [],
+      selectedRuleIds: resolvedRuleIds,
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -232,6 +239,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     selectedDatasetType,
     config,
     selectedRuleIds,
+    rules,
     experimentPrefix,
     filters,
     onRun,

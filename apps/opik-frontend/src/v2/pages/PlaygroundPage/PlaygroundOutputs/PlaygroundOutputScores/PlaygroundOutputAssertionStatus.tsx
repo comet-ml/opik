@@ -4,6 +4,7 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { ExperimentsCompare } from "@/types/datasets";
+import { extractAssertions } from "@/lib/assertion-converters";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -14,10 +15,18 @@ type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
 
+const hasNoAssertions = (row: ExperimentsCompare): boolean => {
+  const evaluators = row.evaluators;
+  if (!evaluators) return false;
+  return extractAssertions(evaluators).length === 0;
+};
+
 const areAllExperimentItemsScored = (
   matchingRow: ExperimentsCompare,
   datasetItemId: string,
 ): boolean => {
+  if (hasNoAssertions(matchingRow)) return true;
+
   const relatedItems =
     matchingRow.experiment_items?.filter(
       (ei) => ei.dataset_item_id === datasetItemId,
@@ -31,12 +40,11 @@ interface PlaygroundOutputAssertionStatusProps {
   experimentId: string | undefined;
   datasetItemId: string;
   datasetId: string;
-  stale?: boolean;
 }
 
 const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   PlaygroundOutputAssertionStatusProps
-> = ({ experimentId, datasetItemId, datasetId, stale = false }) => {
+> = ({ experimentId, datasetItemId, datasetId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
   const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
@@ -94,10 +102,7 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
         ),
     );
 
-    if (
-      !matchingRow ||
-      !areAllExperimentItemsScored(matchingRow, datasetItemId)
-    ) {
+    if (!matchingRow) {
       return lastStatusRef.current;
     }
 
@@ -110,13 +115,11 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     return null;
   }
 
-  if (!statusInfo?.status) {
-    return <span className="text-muted-slate">{"\u2014"}</span>;
+  if (!statusInfo?.status && !statusInfo?.evaluating) {
+    return null;
   }
 
-  return (
-    <StatusTag {...statusInfo} className={stale ? "opacity-50" : undefined} />
-  );
+  return <StatusTag {...statusInfo} />;
 };
 
 export default PlaygroundOutputAssertionStatus;
