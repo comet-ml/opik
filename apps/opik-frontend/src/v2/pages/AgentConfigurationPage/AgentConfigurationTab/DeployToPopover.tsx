@@ -98,7 +98,7 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
       project_id: projectId,
       blueprint_id: item.id,
       environments: selectedStages,
-      deployed_to_prod: prodSelected,
+      deployed_to_prod: String(prodSelected),
       is_new_prod: isNewProd,
     });
 
