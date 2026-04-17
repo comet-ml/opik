@@ -1,11 +1,19 @@
 import React, { useEffect, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import {
+  ArrowRight,
+  ChevronsRight,
+  ExternalLink,
+  MonitorPlay,
+  Undo2,
+} from "lucide-react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
+import { Link } from "@tanstack/react-router";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
-import { useUserApiKey } from "@/store/AppStore";
+import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
+import useDemoProject from "@/api/projects/useDemoProject";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
@@ -34,6 +42,8 @@ const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
+  const workspaceName = useActiveWorkspaceName();
+  const { data: demoProject } = useDemoProject({ workspaceName });
   const showOllieTab = !!apiKey;
   const [activeTab, setActiveTab] = useState(
     showOllieTab ? "connect-to-ollie" : "install-with-ai",
@@ -194,16 +204,40 @@ const ConnectAgentStep: React.FC = () => {
             <ArrowRight className="size-3.5" />
           </Button>
         ) : (
-          <Button
-            variant="link"
-            onClick={handleSkip}
-            className="comet-body-s px-0 text-muted-slate"
-            id="onboarding-step2-skip"
-            data-fs-element="onboarding-step2-skip"
-          >
-            Skip for now
-            <ChevronsRight className="size-3.5" />
-          </Button>
+          <div className="flex w-full items-center justify-between">
+            {demoProject ? (
+              <Button
+                variant="link"
+                className="comet-body-s px-0 text-foreground"
+                asChild
+                id="onboarding-step2-view-demo"
+                data-fs-element="onboarding-step2-view-demo"
+              >
+                <Link
+                  to="/$workspaceName/projects/$projectId/logs"
+                  params={{
+                    workspaceName,
+                    projectId: demoProject.id,
+                  }}
+                >
+                  View Demo project
+                  <ExternalLink className="ml-1 size-3.5" />
+                </Link>
+              </Button>
+            ) : (
+              <div />
+            )}
+            <Button
+              variant="link"
+              onClick={handleSkip}
+              className="comet-body-s px-0 text-muted-slate"
+              id="onboarding-step2-skip"
+              data-fs-element="onboarding-step2-skip"
+            >
+              Skip for now
+              <ChevronsRight className="size-3.5" />
+            </Button>
+          </div>
         )
       }
     >
