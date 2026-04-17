@@ -13,6 +13,7 @@ import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.google.common.base.Preconditions;
@@ -39,6 +40,7 @@ import java.time.Instant;
 import java.util.AbstractMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -86,6 +88,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull OpikConfiguration config;
     private final @NonNull OptimizationLogSyncService logSyncService;
     private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull AnalyticsService analyticsService;
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
@@ -226,6 +229,8 @@ class OptimizationServiceImpl implements OptimizationService {
                                         .doOnSuccess(__ -> {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId,
                                                     userName);
+                                            trackOptimizationCreated(newOptimization, workspaceId,
+                                                    userName);
 
                                             // Only enqueue job for NEW Studio optimizations
                                             if (shouldEnqueueJob) {
@@ -316,6 +321,7 @@ class OptimizationServiceImpl implements OptimizationService {
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
+                                    trackOptimizationCompleted(optimization, update.status(), workspaceId);
                                 }
                             });
                 }));
@@ -376,6 +382,26 @@ class OptimizationServiceImpl implements OptimizationService {
         }
         log.error("Unexpected exception creating optimization with id '{}'", id);
         return Mono.error(throwable);
+    }
+
+    private void trackOptimizationCreated(Optimization optimization, String workspaceId, String userName) {
+        analyticsService.trackEvent(userName, "optimization_created", Map.of(
+                "optimization_id", optimization.id().toString(),
+                "dataset_name", String.valueOf(optimization.datasetName()),
+                "objective_name", String.valueOf(optimization.objectiveName()),
+                "project_id", String.valueOf(optimization.projectId()),
+                "workspace_id", workspaceId));
+    }
+
+    private void trackOptimizationCompleted(Optimization optimization, OptimizationStatus status,
+            String workspaceId) {
+        analyticsService.trackEvent("optimization_completed", Map.of(
+                "optimization_id", optimization.id().toString(),
+                "status", status.getValue(),
+                "workspace_id", workspaceId,
+                "num_trials", String.valueOf(optimization.numTrials()),
+                "baseline_objective_score", String.valueOf(optimization.baselineObjectiveScore()),
+                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())));
     }
 
     private void postOptimizationCreatedEvent(Optimization newOptimization, String workspaceId, String userName) {
