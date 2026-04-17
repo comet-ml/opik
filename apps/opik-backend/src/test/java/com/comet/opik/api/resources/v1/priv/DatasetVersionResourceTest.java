@@ -4556,8 +4556,8 @@ class DatasetVersionResourceTest {
         }
 
         @Test
-        @DisplayName("Success: empty evaluators list on item clears evaluators")
-        void applyChanges__whenEmptyEvaluatorsOnItem__thenEvaluatorsIsNull() {
+        @DisplayName("Success: empty evaluators list on item returns empty list")
+        void applyChanges__whenEmptyEvaluatorsOnItem__thenEvaluatorsIsEmptyList() {
             var datasetId = createDataset(UUID.randomUUID().toString());
 
             var originalEvaluators = List.of(
@@ -4607,7 +4607,7 @@ class DatasetVersionResourceTest {
             var v2Items = datasetResourceClient.getDatasetItems(
                     datasetId, 1, 10, "v2", API_KEY, TEST_WORKSPACE).content();
             assertThat(v2Items).hasSize(1);
-            assertThat(v2Items.getFirst().evaluators()).isNull();
+            assertThat(v2Items.getFirst().evaluators()).isEmpty();
         }
 
         @Test
@@ -4738,6 +4738,7 @@ class DatasetVersionResourceTest {
             var returnedItem = returnedItems.getFirst();
             var expectedItem = items.getFirst().toBuilder()
                     .id(returnedItem.id())
+                    .evaluators(List.of())
                     .build();
             assertThat(returnedItem)
                     .usingRecursiveComparison()

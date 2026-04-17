@@ -15,21 +15,24 @@ import { extractAssertions } from "@/lib/assertion-converters";
 
 const REFETCH_INTERVAL = 5000;
 
-export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
-  const evaluators = row.evaluators;
+export const isItemScored = (
+  ei: { assertion_results?: unknown[]; status?: string | null },
+  evaluators: ExperimentsCompare["evaluators"],
+): boolean => {
   const expectedCount = extractAssertions(evaluators ?? []).length;
-  const items = row.experiment_items ?? [];
-
-  if (items.length === 0) return false;
 
   if (expectedCount === 0) {
     if (evaluators && evaluators.length === 0) return true;
-    return items.every((ei) => ei.status != null);
+    return ei.status != null;
   }
 
-  return items.every(
-    (ei) => (ei.assertion_results?.length ?? 0) >= expectedCount,
-  );
+  return (ei.assertion_results?.length ?? 0) >= expectedCount;
+};
+
+export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
+  const items = row.experiment_items ?? [];
+  if (items.length === 0) return false;
+  return items.every((ei) => isItemScored(ei, row.evaluators));
 };
 
 export type PromptResult = {

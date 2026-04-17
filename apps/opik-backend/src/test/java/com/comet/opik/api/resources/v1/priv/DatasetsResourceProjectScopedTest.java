@@ -230,6 +230,7 @@ class DatasetsResourceProjectScopedTest {
         var item = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .id(null)
                 .tags(Set.of())
+                .evaluators(List.of())
                 .build();
 
         var batch = DatasetItemBatch.builder()
