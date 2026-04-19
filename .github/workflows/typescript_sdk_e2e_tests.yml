@@ -40,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node_version: [18, 20, 22]
+        node_version: ${{ fromJSON(vars.NODE_VERSIONS) }}
 
     steps:
       - name: Checkout
