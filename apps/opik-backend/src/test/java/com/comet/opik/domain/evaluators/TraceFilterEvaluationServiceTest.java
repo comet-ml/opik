@@ -1,10 +1,17 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.ErrorInfo;
+import com.comet.opik.api.ExperimentItemReference;
 import com.comet.opik.api.FeedbackScore;
+import com.comet.opik.api.GuardrailType;
+import com.comet.opik.api.GuardrailsValidation;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -26,6 +33,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -819,6 +827,595 @@ class TraceFilterEvaluationServiceTest {
 
             // Then
             assertThat(result).isFalse(); // Should handle gracefully and return false
+        }
+    }
+
+    @Nested
+    @DisplayName("Error Info Field Filtering")
+    class ErrorInfoFieldFiltering {
+
+        @Test
+        void matchesFilterWhenErrorInfoIsEmptyAndTraceHasNoError() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenErrorInfoIsNotEmptyAndTraceHasError() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid input")
+                    .traceback("Traceback (most recent call last):\n  File \"test.py\", line 1")
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void doesNotMatchFilterWhenErrorInfoIsNotEmptyButFilterExpectsEmpty() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("RuntimeError")
+                    .message("Something went wrong")
+                    .traceback("Traceback...")
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_INFO)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Error Type Field Filtering")
+    class ErrorTypeFieldFiltering {
+
+        @Test
+        void matchesFilterWhenErrorTypeEquals() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid input")
+                    .traceback("Traceback...")
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_TYPE)
+                    .operator(Operator.EQUAL)
+                    .value("ValueError")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenErrorTypeContains() {
+            // Given
+            var errorInfo = ErrorInfo.builder()
+                    .exceptionType("ValueError")
+                    .message("Invalid input")
+                    .traceback("Traceback...")
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(errorInfo)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_TYPE)
+                    .operator(Operator.CONTAINS)
+                    .value("Error")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenErrorTypeIsEmptyAndNoError() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .errorInfo(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.ERROR_TYPE)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("LLM Span Count Field Filtering")
+    class LlmSpanCountFieldFiltering {
+
+        @Test
+        void matchesFilterWhenLlmSpanCountGreaterThan() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .llmSpanCount(5)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.LLM_SPAN_COUNT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("3")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenLlmSpanCountEqual() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .llmSpanCount(3)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.LLM_SPAN_COUNT)
+                    .operator(Operator.EQUAL)
+                    .value("3")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void doesNotMatchFilterWhenLlmSpanCountLessThanExpected() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .llmSpanCount(1)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.LLM_SPAN_COUNT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("5")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Span Feedback Scores Field Filtering")
+    class SpanFeedbackScoresFieldFiltering {
+
+        @Test
+        void matchesFilterWithSpanFeedbackScoreByKey() {
+            // Given
+            var spanFeedbackScore = FeedbackScore.builder()
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(0.92))
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .spanFeedbackScores(List.of(spanFeedbackScore))
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.SPAN_FEEDBACK_SCORES)
+                    .key("accuracy")
+                    .operator(Operator.GREATER_THAN)
+                    .value("0.9")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenSpanFeedbackScoreKeyNotFound() {
+            // Given
+            var spanFeedbackScore = FeedbackScore.builder()
+                    .name("accuracy")
+                    .value(BigDecimal.valueOf(0.92))
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .spanFeedbackScores(List.of(spanFeedbackScore))
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.SPAN_FEEDBACK_SCORES)
+                    .key("relevance") // Different key
+                    .operator(Operator.GREATER_THAN)
+                    .value("0.9")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+    }
+
+    @Nested
+    @DisplayName("Guardrails Field Filtering")
+    class GuardrailsFieldFiltering {
+
+        @Test
+        void matchesFilterWhenGuardrailsIsEmpty() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .guardrailsValidations(List.of())
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.GUARDRAILS)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenGuardrailsIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .guardrailsValidations(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.GUARDRAILS)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenGuardrailsIsNotEmpty() {
+            // Given
+            var check = new GuardrailsValidation.Check(GuardrailType.PII, GuardrailResult.FAILED);
+            var guardrail = GuardrailsValidation.builder()
+                    .spanId(UUID.randomUUID())
+                    .checks(List.of(check))
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .guardrailsValidations(List.of(guardrail))
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.GUARDRAILS)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Visibility Mode Field Filtering")
+    class VisibilityModeFieldFiltering {
+
+        @Test
+        void matchesFilterWhenVisibilityModeEquals() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .visibilityMode(VisibilityMode.HIDDEN)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.EQUAL)
+                    .value("hidden")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void doesNotMatchFilterWhenVisibilityModeDiffers() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .visibilityMode(VisibilityMode.DEFAULT)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.EQUAL)
+                    .value("hidden")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWhenVisibilityModeIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .visibilityMode(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.VISIBILITY_MODE)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Source Field Filtering")
+    class SourceFieldFiltering {
+
+        @Test
+        void matchesFilterWhenSourceEquals() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .source(Source.SDK)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value("sdk")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void doesNotMatchFilterWhenSourceDiffers() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .source(Source.EXPERIMENT)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value("sdk")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWhenSourceIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .source(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.SOURCE)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Experiment ID Field Filtering")
+    class ExperimentIdFieldFiltering {
+
+        @Test
+        void matchesFilterWhenExperimentIdEquals() {
+            // Given
+            var experimentId = UUID.randomUUID();
+            var experiment = ExperimentItemReference.builder()
+                    .id(experimentId)
+                    .name("test-experiment")
+                    .datasetId(UUID.randomUUID())
+                    .datasetItemId(UUID.randomUUID())
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .experiment(experiment)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.EXPERIMENT_ID)
+                    .operator(Operator.EQUAL)
+                    .value(experimentId.toString())
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void doesNotMatchFilterWhenExperimentIdDiffers() {
+            // Given
+            var experiment = ExperimentItemReference.builder()
+                    .id(UUID.randomUUID())
+                    .name("test-experiment")
+                    .datasetId(UUID.randomUUID())
+                    .datasetItemId(UUID.randomUUID())
+                    .build();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .experiment(experiment)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.EXPERIMENT_ID)
+                    .operator(Operator.EQUAL)
+                    .value(UUID.randomUUID().toString()) // Different ID
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isFalse();
+        }
+
+        @Test
+        void matchesFilterWhenExperimentIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .experiment(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.EXPERIMENT_ID)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+    }
+
+    @Nested
+    @DisplayName("Timestamp Field Filtering")
+    class TimestampFieldFiltering {
+
+        @Test
+        void matchesFilterWhenCreatedAtAfter() {
+            // Given
+            var createdAt = Instant.parse("2024-01-15T10:00:00Z");
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .createdAt(createdAt)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CREATED_AT)
+                    .operator(Operator.GREATER_THAN)
+                    .value("2024-01-01T00:00:00Z")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenLastUpdatedAtBefore() {
+            // Given
+            var lastUpdatedAt = Instant.parse("2024-06-01T12:00:00Z");
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .lastUpdatedAt(lastUpdatedAt)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.LAST_UPDATED_AT)
+                    .operator(Operator.LESS_THAN)
+                    .value("2024-12-31T23:59:59Z")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
+        }
+
+        @Test
+        void matchesFilterWhenCreatedAtIsNull() {
+            // Given
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .createdAt(null)
+                    .build();
+            var filter = TraceFilter.builder()
+                    .field(TraceField.CREATED_AT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build();
+
+            // When
+            var result = traceFilterEvaluationService.matchesFilter(filter, trace);
+
+            // Then
+            assertThat(result).isTrue();
         }
     }
 

@@ -60,6 +60,8 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case NAME -> trace.name();
             case START_TIME -> trace.startTime();
             case END_TIME -> trace.endTime();
+            case CREATED_AT -> trace.createdAt();
+            case LAST_UPDATED_AT -> trace.lastUpdatedAt();
             case INPUT -> extractStringFromJson(trace.input());
             case OUTPUT -> extractStringFromJson(trace.output());
             case INPUT_JSON -> key != null ? extractNestedValue(trace.input(), key) : trace.input();
@@ -67,14 +69,23 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case METADATA -> key != null ? extractNestedValue(trace.metadata(), key) : trace.metadata();
             case TAGS -> trace.tags();
             case TOTAL_ESTIMATED_COST -> trace.totalEstimatedCost();
+            case LLM_SPAN_COUNT -> trace.llmSpanCount();
             case USAGE_COMPLETION_TOKENS -> extractUsageValue(trace.usage(), "completion_tokens");
             case USAGE_PROMPT_TOKENS -> extractUsageValue(trace.usage(), "prompt_tokens");
             case USAGE_TOTAL_TOKENS -> extractUsageValue(trace.usage(), "total_tokens");
             case FEEDBACK_SCORES ->
                 key != null ? extractFeedbackScore(trace.feedbackScores(), key) : trace.feedbackScores();
+            case SPAN_FEEDBACK_SCORES ->
+                key != null ? extractFeedbackScore(trace.spanFeedbackScores(), key) : trace.spanFeedbackScores();
             case DURATION -> calculateDuration(trace.startTime(), trace.endTime());
             case TTFT -> trace.ttft();
             case THREAD_ID -> trace.threadId();
+            case ERROR_INFO -> trace.errorInfo();
+            case ERROR_TYPE -> trace.errorInfo() != null ? trace.errorInfo().exceptionType() : null;
+            case GUARDRAILS -> trace.guardrailsValidations();
+            case VISIBILITY_MODE -> trace.visibilityMode() != null ? trace.visibilityMode().getValue() : null;
+            case SOURCE -> trace.source() != null ? trace.source().getValue() : null;
+            case EXPERIMENT_ID -> trace.experiment() != null ? trace.experiment().id() : null;
             case CUSTOM -> extractCustomFieldValue(key, trace);
             default -> {
                 log.warn("Unsupported trace field for filter evaluation: {}", traceField);
