@@ -1,9 +1,11 @@
 package com.comet.opik.domain.evaluators;
 
+import com.comet.opik.api.GuardrailsValidation;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.filter.Field;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.domain.GuardrailResult;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -82,7 +84,7 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
             case THREAD_ID -> trace.threadId();
             case ERROR_INFO -> trace.errorInfo();
             case ERROR_TYPE -> trace.errorInfo() != null ? trace.errorInfo().exceptionType() : null;
-            case GUARDRAILS -> trace.guardrailsValidations();
+            case GUARDRAILS -> normalizeGuardrailsResult(trace.guardrailsValidations());
             case VISIBILITY_MODE -> trace.visibilityMode() != null ? trace.visibilityMode().getValue() : null;
             case SOURCE -> trace.source() != null ? trace.source().getValue() : null;
             case EXPERIMENT_ID -> trace.experiment() != null ? trace.experiment().id() : null;
@@ -92,6 +94,33 @@ public class TraceFilterEvaluationService extends FilterEvaluationServiceBase<Tr
                 yield null;
             }
         };
+    }
+
+    /**
+     * Normalizes a list of guardrails validations to the scalar string the analytics SQL produces.
+     *
+     * <p>The ClickHouse query aggregates per-trace guardrails with
+     * {@code if(has(groupArray(result), 'failed'), 'failed', 'passed')} and exposes the result as a
+     * single string that filters compare against (e.g. {@code GUARDRAILS = failed}). Returning the
+     * raw {@code List<GuardrailsValidation>} here would force {@code FilterEvaluationServiceBase}
+     * to compare via {@code toString()} on the list, which would never match the analytics-side
+     * scalar values. Mirror the SQL semantics so online scoring agrees with analytics.</p>
+     *
+     * @return {@code "failed"} if any check failed, {@code "passed"} if at least one check exists
+     *         and none failed, or {@code null} when no validations are present (so
+     *         {@code IS_EMPTY}/{@code IS_NOT_EMPTY} continue to behave correctly).
+     */
+    private String normalizeGuardrailsResult(List<GuardrailsValidation> validations) {
+        if (validations == null || validations.isEmpty()) {
+            return null;
+        }
+
+        boolean anyFailed = validations.stream()
+                .filter(validation -> validation.checks() != null)
+                .flatMap(validation -> validation.checks().stream())
+                .anyMatch(check -> check.result() == GuardrailResult.FAILED);
+
+        return anyFailed ? GuardrailResult.FAILED.getResult() : GuardrailResult.PASSED.getResult();
     }
 
     /**
