@@ -213,8 +213,10 @@ public class DatasetItemResultMapper {
         if (!rowMetadata.contains("evaluators")) {
             return null;
         }
+        // Intentionally parse "[]" into an empty list (not null) so FE can distinguish
+        // "no evaluators defined" from "evaluators not yet loaded"
         return Optional.ofNullable(row.get("evaluators", String.class))
-                .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
+                .filter(s -> !s.isBlank())
                 .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
                 .orElse(null);
     }

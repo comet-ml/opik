@@ -4,6 +4,7 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { ExperimentsCompare } from "@/types/datasets";
+import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -23,7 +24,8 @@ const areAllExperimentItemsScored = (
       (ei) => ei.dataset_item_id === datasetItemId,
     ) ?? [];
   return (
-    relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null)
+    relatedItems.length > 0 &&
+    relatedItems.every((ei) => isItemScored(ei, matchingRow.evaluators))
   );
 };
 
@@ -31,12 +33,11 @@ interface PlaygroundOutputAssertionStatusProps {
   experimentId: string | undefined;
   datasetItemId: string;
   datasetId: string;
-  stale?: boolean;
 }
 
 const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   PlaygroundOutputAssertionStatusProps
-> = ({ experimentId, datasetItemId, datasetId, stale = false }) => {
+> = ({ experimentId, datasetItemId, datasetId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
   const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
@@ -94,10 +95,7 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
         ),
     );
 
-    if (
-      !matchingRow ||
-      !areAllExperimentItemsScored(matchingRow, datasetItemId)
-    ) {
+    if (!matchingRow) {
       return lastStatusRef.current;
     }
 
@@ -110,13 +108,11 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     return null;
   }
 
-  if (!statusInfo?.status) {
-    return <span className="text-muted-slate">{"\u2014"}</span>;
+  if (!statusInfo?.status && !statusInfo?.evaluating) {
+    return null;
   }
 
-  return (
-    <StatusTag {...statusInfo} className={stale ? "opacity-50" : undefined} />
-  );
+  return <StatusTag {...statusInfo} />;
 };
 
 export default PlaygroundOutputAssertionStatus;

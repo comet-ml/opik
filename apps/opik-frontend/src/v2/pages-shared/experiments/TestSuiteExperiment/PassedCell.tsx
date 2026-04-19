@@ -1,5 +1,5 @@
 import React from "react";
-import { CircleCheck, CircleX } from "lucide-react";
+import { CircleCheck, CircleX, Loader2 } from "lucide-react";
 import { CellContext } from "@tanstack/react-table";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import VerticallySplitCellWrapper, {
@@ -23,33 +23,32 @@ import { isAggregatedItem } from "@/lib/trials";
 
 type StatusInfo = {
   status: ExperimentItemStatus | undefined;
+  evaluating: boolean;
   assertionsByRun: AssertionResult[][];
-  passedCount: number;
-  totalCount: number;
-  skippedReason?: string;
+  skippedReason: string | undefined;
+  passThreshold: number | undefined;
+  runsPerItem: number | undefined;
 };
 
 const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
 const NO_ASSERTIONS_REASON = "No assertions defined";
 
+const SKIPPED_RESULT = (reason: string): StatusInfo => ({
+  status: ExperimentItemStatus.SKIPPED,
+  evaluating: false,
+  assertionsByRun: [],
+  skippedReason: reason,
+  passThreshold: undefined,
+  runsPerItem: undefined,
+});
+
 export function getStatusFromExperimentItems(
   row: ExperimentsCompare,
 ): StatusInfo {
   const items = row.experiment_items;
-  if (!items?.length) {
-    return {
-      status: ExperimentItemStatus.SKIPPED,
-      assertionsByRun: [],
-      passedCount: 0,
-      totalCount: 0,
-      skippedReason: NO_EXPERIMENT_ITEM_REASON,
-    };
-  }
+  if (!items?.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
 
-  const assertionsByRun = items.map((item) => item.assertion_results ?? []);
-  const passedCount = items.filter(
-    (item) => item.status === ExperimentItemStatus.PASSED,
-  ).length;
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
 
   const summaryValues = Object.values(row.run_summaries_by_experiment ?? {});
   let status: ExperimentItemStatus | undefined;
@@ -65,14 +64,23 @@ export function getStatusFromExperimentItems(
     status = items[0].status;
   }
 
-  const isSkipped = !status;
+  if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+
+  // Item-level execution_policy overrides the dataset-level one
+  const passThreshold =
+    items[0]?.execution_policy?.pass_threshold ??
+    row.execution_policy?.pass_threshold;
+  const runsPerItem =
+    items[0]?.execution_policy?.runs_per_item ??
+    row.execution_policy?.runs_per_item;
 
   return {
-    status: status ?? ExperimentItemStatus.SKIPPED,
-    assertionsByRun,
-    passedCount,
-    totalCount: row.execution_policy?.runs_per_item ?? items.length,
-    skippedReason: isSkipped ? NO_ASSERTIONS_REASON : undefined,
+    status,
+    evaluating: !status && hasEvaluators,
+    assertionsByRun: items.map((item) => item.assertion_results ?? []),
+    skippedReason: undefined,
+    passThreshold,
+    runsPerItem,
   };
 }
 
@@ -87,50 +95,52 @@ export function getStatusInfoForExperiment(
       : [item]
     : [];
 
-  if (!expItems.length) {
-    return {
-      status: ExperimentItemStatus.SKIPPED,
-      assertionsByRun: [],
-      passedCount: 0,
-      totalCount: 0,
-      skippedReason: NO_EXPERIMENT_ITEM_REASON,
-    };
-  }
+  if (!expItems.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
 
-  const assertionsByRun = expItems.map((item) => item.assertion_results ?? []);
-  const passedCount = expItems.filter(
-    (item) => item.status === ExperimentItemStatus.PASSED,
-  ).length;
-
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
   const summary = row.run_summaries_by_experiment?.[experimentId];
-  let status: ExperimentItemStatus | undefined;
+  const status = summary ? summary.status : expItems[0].status;
 
-  if (summary) {
-    status = summary.status;
-  } else {
-    status = expItems[0].status;
-  }
+  if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
 
-  const isSkipped = !status;
+  // Item-level execution_policy overrides the dataset-level one
+  const passThreshold =
+    expItems[0]?.execution_policy?.pass_threshold ??
+    row.execution_policy?.pass_threshold;
+  const runsPerItem =
+    expItems[0]?.execution_policy?.runs_per_item ??
+    row.execution_policy?.runs_per_item;
 
   return {
-    status: status ?? ExperimentItemStatus.SKIPPED,
-    assertionsByRun,
-    passedCount: summary?.passed_runs ?? passedCount,
-    // Fall back to 0 when no summary and no policy — status will be SKIPPED so count isn't rendered
-    totalCount: summary?.total_runs ?? row.execution_policy?.runs_per_item ?? 0,
-    skippedReason: isSkipped ? NO_ASSERTIONS_REASON : undefined,
+    status,
+    evaluating: !status && hasEvaluators,
+    assertionsByRun: expItems.map((item) => item.assertion_results ?? []),
+    skippedReason: undefined,
+    passThreshold,
+    runsPerItem,
   };
 }
 
 export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   status,
+  evaluating,
   assertionsByRun,
-  passedCount,
-  totalCount,
   skippedReason,
+  passThreshold,
+  runsPerItem,
   className,
 }) => {
+  if (evaluating) {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-slate">
+        <span className="inline-flex animate-spin">
+          <Loader2 className="size-3" />
+        </span>
+        Evaluating assertions
+      </span>
+    );
+  }
+
   if (!status) {
     return null;
   }
@@ -142,7 +152,7 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   const tag = (
     <span
       className={cn(
-        "inline-flex h-5 items-center gap-1 rounded-md border border-transparent px-2 font-mono text-xs font-semibold transition-colors",
+        "inline-flex items-center gap-1 rounded-md border border-transparent px-1.5 py-0.5 text-sm font-medium transition-colors",
         isPassed
           ? "bg-[var(--tag-green-bg)] text-[var(--tag-green-text)]"
           : isSkipped
@@ -157,7 +167,7 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
       ) : (
         <>
           <Icon className="size-3 shrink-0" />
-          {passedCount}/{totalCount}
+          {isPassed ? "Passed" : "Failed"}
         </>
       )}
     </span>
@@ -179,7 +189,11 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   }
 
   return (
-    <AssertionsBreakdownTooltip assertionsByRun={assertionsByRun}>
+    <AssertionsBreakdownTooltip
+      assertionsByRun={assertionsByRun}
+      passThreshold={passThreshold}
+      runsPerItem={runsPerItem}
+    >
       {tag}
     </AssertionsBreakdownTooltip>
   );
@@ -197,7 +211,11 @@ const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
       experimentId: string,
     ) => {
       const statusInfo = getStatusInfoForExperiment(row, experimentId, item);
-      return <StatusTag {...statusInfo} />;
+      return (
+        <div className="flex h-full items-center">
+          <StatusTag {...statusInfo} />
+        </div>
+      );
     };
 
     return (
