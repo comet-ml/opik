@@ -1,12 +1,12 @@
-import abc
 from typing import Any, List, Optional, Union
 
 import opik
 import opik.config as opik_config
+import _opik._base_metric as _opik_base_metric
 from ..metrics import score_result
 
 
-class BaseMetric(abc.ABC):
+class BaseMetric(_opik_base_metric.BaseMetric):
     """
     Abstract base class for all metrics. When creating a new metric, you should inherit
     from this class and implement the abstract methods.
@@ -40,8 +40,7 @@ class BaseMetric(abc.ABC):
         track: bool = True,
         project_name: Optional[str] = None,
     ) -> None:
-        self.name = name if name is not None else self.__class__.__name__
-        self.track = track
+        super().__init__(name=name, track=track, project_name=project_name)
 
         config = opik_config.OpikConfig()
 
@@ -53,7 +52,6 @@ class BaseMetric(abc.ABC):
             self.score = track_decorator(self.score)  # type: ignore
             self.ascore = track_decorator(self.ascore)  # type: ignore
 
-    @abc.abstractmethod
     def score(
         self, *args: Any, **kwargs: Any
     ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:

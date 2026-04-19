@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @EagerSingleton
@@ -36,32 +37,42 @@ public class BiEventListener {
     private final LockService lockService;
     private final OpikConfiguration config;
     private final BiEventService biEventService;
+    private final AnalyticsService analyticsService;
+
+    /**
+     * Best-effort, in-memory dedup for per-workspace first_trace_created analytics events.
+     *
+     * <p>Known limitations:
+     * <ul>
+     *   <li>Grows monotonically — entries are never evicted, leading to unbounded memory usage.
+     *       Each entry is ~116 bytes (36-char UUID string + ConcurrentHashMap.Node overhead),
+     *       so 1M workspaces ≈ 116 MB.</li>
+     *   <li>Lost on JVM restarts — workspaces will be re-reported after a redeployment.</li>
+     *   <li>Not shared across replicas — each instance tracks independently, so multi-replica
+     *       deployments will emit duplicates.</li>
+     * </ul>
+     *
+     * TODO: replace with a bounded or persistent dedup mechanism in a follow-up PR.
+     */
+    private static final Set<String> ANALYTICS_REPORTED_WORKSPACES = ConcurrentHashMap.newKeySet();
 
     @Inject
     public BiEventListener(@NonNull ProjectService projectService,
             @NonNull UsageReportService usageReportService, @NonNull TraceService traceService,
             @NonNull OpikConfiguration config, @NonNull LockService lockService,
-            @NonNull BiEventService biEventService) {
+            @NonNull BiEventService biEventService, @NonNull AnalyticsService analyticsService) {
         this.projectService = projectService;
         this.traceService = traceService;
         this.config = config;
         this.usageReportService = usageReportService;
         this.lockService = lockService;
         this.biEventService = biEventService;
+        this.analyticsService = analyticsService;
     }
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-
         if (!config.getUsageReport().isEnabled()) {
-            return;
-        }
-
-        checkIfItIsFirstTraceAndReport(event.workspaceId(), event);
-    }
-
-    private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event) {
-        if (usageReportService.isFirstTraceReport()) {
             return;
         }
 
@@ -70,6 +81,18 @@ public class BiEventListener {
             return;
         }
 
+        var projectIds = getNonDemoProjectIds(event.workspaceId(), event);
+        if (projectIds.isEmpty()) {
+            log.info("No project ids found for event");
+            return;
+        }
+
+        checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
+
+        trackFirstTraceViaAnalytics(event.workspaceId(), event);
+    }
+
+    private Set<UUID> getNonDemoProjectIds(String workspaceId, TracesCreated event) {
         Set<UUID> demoProjectIds = projectService.findByNames(workspaceId, DemoData.PROJECTS)
                 .stream()
                 .map(Project::id)
@@ -77,9 +100,11 @@ public class BiEventListener {
 
         Set<UUID> projectIds = new HashSet<>(event.projectIds());
         projectIds.removeAll(demoProjectIds);
+        return projectIds;
+    }
 
-        if (projectIds.isEmpty()) {
-            log.info("No project ids found for event");
+    private void checkIfItIsFirstTraceAndReport(String workspaceId, TracesCreated event, Set<UUID> projectIds) {
+        if (usageReportService.isFirstTraceReport()) {
             return;
         }
 
@@ -120,4 +145,18 @@ public class BiEventListener {
                         "date", Instant.now().toString()));
     }
 
+    private void trackFirstTraceViaAnalytics(String workspaceId, TracesCreated event) {
+        if (!config.getAnalytics().isEnabled()) {
+            return;
+        }
+
+        if (!ANALYTICS_REPORTED_WORKSPACES.add(workspaceId)) {
+            return;
+        }
+
+        analyticsService.trackEvent("first_trace_created", Map.of(
+                "workspace_id", workspaceId,
+                "user_name", event.userName(),
+                "date", Instant.now().toString()), event.userName());
+    }
 }

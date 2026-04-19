@@ -1,0 +1,102 @@
+---
+headline: Guaranteed Availability | Opik Documentation
+og:description: Learn how Opik's caching and fallback system ensures your agent always
+  has a configuration to work with, even when the platform is unreachable
+og:site_name: Opik Documentation
+og:title: Guaranteed Availability for Agent Configuration
+title: Guaranteed availability
+---
+
+Your agent shouldn't break because of a single failed network call. The SDK has two layers of protection built in — an in-memory cache and a hardcoded fallback — so your agent always has a configuration to work with.
+
+## Caching layer
+
+The SDK caches the last successfully fetched configuration in memory with a default TTL of **300 seconds (5 minutes)**. A background thread refreshes stale entries before they expire, so your agent never blocks on a network call during normal operation.
+
+If Opik is unreachable during a refresh, the SDK keeps serving the cached value — your agent keeps running.
+
+You can tune the cache TTL by setting the `OPIK_CONFIG_TTL_SECONDS` environment variable:
+
+```bash
+OPIK_CONFIG_TTL_SECONDS=60  # refresh every minute
+```
+
+## Fallback configuration
+
+On the very first call (cold start), or if the cache is empty and Opik is unreachable, you can provide a hardcoded fallback. The SDK returns it instead of raising an error, so your agent can start serving requests right away — even before it has contacted the backend.
+
+<CodeBlocks>
+  ```python title="Python"
+  import opik
+
+  client = opik.Opik()
+
+  class MyConfig(opik.Config):
+      model: str = "gpt-4o-mini"
+      temperature: float = 0.7
+      system_prompt: opik.Prompt = None
+
+  FALLBACK = MyConfig(
+      model="gpt-4o-mini",
+      temperature=0.7,
+      system_prompt=opik.Prompt(
+          name="system_prompt",
+          prompt="You are an AI assistant.",
+      ),
+  )
+
+  @opik.track(project_name="my-agent")
+  def run_agent(user_input: str):
+      cfg = client.get_or_create_config(fallback=FALLBACK)
+
+      if cfg.is_fallback:
+          print("Warning: running on fallback configuration")
+
+      response = call_llm(
+          model=cfg.model,
+          temperature=cfg.temperature,
+          system_prompt=str(cfg.system_prompt),
+      )
+      return response
+  ```
+
+  ```ts title="TypeScript"
+  import { Opik, track } from "opik";
+
+  const client = new Opik();
+
+  const FALLBACK = {
+    model: "gpt-4o-mini",
+    temperature: 0.7,
+    system_prompt: "You are an AI assistant.",
+  };
+
+  const runAgent = track(
+    { name: "run_agent", projectName: "my-agent" },
+    async (userInput: string) => {
+      const cfg = await client.getOrCreateConfig({ fallback: FALLBACK });
+
+      if (cfg.isFallback) {
+        console.warn("Warning: running on fallback configuration");
+      }
+
+      const response = await callLlm({
+        model: cfg.model as string,
+        temperature: cfg.temperature as number,
+        systemPrompt: String(cfg.system_prompt),
+      });
+      return response;
+    },
+  );
+  ```
+</CodeBlocks>
+
+<Tip>
+  Define your fallback as a top-level constant so it stays consistent across calls and is easy to spot in code review.
+</Tip>
+
+## Detecting fallback usage
+
+The returned config has an `is_fallback` (Python) / `isFallback` (TypeScript) property. It's `true` when the SDK used your local fallback instead of a backend-fetched configuration. Useful for logging or alerting.
+
+In practice you'll rarely hit the fallback. Once the first successful fetch populates the cache, the SDK keeps it fresh in the background. The fallback only kicks in during a cold start when the backend isn't reachable.

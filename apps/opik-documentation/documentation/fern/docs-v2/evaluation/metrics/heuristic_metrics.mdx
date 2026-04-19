@@ -1,0 +1,546 @@
+---
+description: Describes all the built-in heuristic metrics provided by Opik
+headline: Heuristic metrics | Opik Documentation
+og:description: Evaluate language model outputs with heuristic metrics to ensure quality
+  and consistency in text generation using predefined criteria.
+og:site_name: Opik Documentation
+og:title: Heuristic Metrics for Language Models - Opik
+title: Heuristic metrics
+---
+
+Heuristic metrics are rule-based evaluation methods that allow you to check specific aspects of language model outputs. These metrics use predefined criteria or patterns to assess the quality, consistency, or characteristics of generated text. They come in two flavours:
+
+- **Token or string heuristics** – operate on a single turn and compare the candidate output to a reference or handcrafted rule.
+- **Conversation heuristics** – analyse whole transcripts to spot issues like degeneration or forgotten facts across assistant turns.
+
+### String and token heuristics
+
+| Metric | Description |
+| --- | --- |
+| BERTScore | Contextual embedding similarity; robust alternative to Levenshtein. |
+| ChrF | Character n-gram F-score (supports chrF and chrF++). |
+| Contains | Checks if the output contains a specific substring (case-sensitive or insensitive). |
+| CorpusBLEU | Calculates a corpus-level BLEU score across many candidates. |
+| Equals | Checks if the output exactly matches an expected string. |
+| GLEU | Estimates fluency and grammatical correctness on a 0–1 scale. |
+| IsJson | Ensures the output can be parsed as JSON. |
+| JSDivergence | Jensen–Shannon similarity between token distributions. |
+| JSDistance | Raw Jensen–Shannon divergence between token distributions. |
+| KLDivergence | Kullback–Leibler divergence between token distributions. |
+| LanguageAdherenceMetric | Checks whether text adheres to an expected language code. |
+| LevenshteinRatio | Computes the normalised Levenshtein similarity between output and reference. |
+| Readability | Reports Flesch Reading Ease and Flesch–Kincaid grade levels. |
+| RegexMatch | Validates the output against a regular expression pattern. |
+| ROUGE | Calculates ROUGE variants (rouge1, rouge2, rougeL, rougeLsum). |
+| SentenceBLEU | Calculates a single-sentence BLEU score against one or more references. |
+| Sentiment | Scores sentiment using NLTK's VADER lexicon (compound, pos/neu/neg). |
+| SpearmanRanking | Spearman's rank correlation for two equal-length rankings. |
+| Tone | Flags tone issues such as negativity, shouting, or forbidden phrases. |
+
+### Conversation heuristics
+
+| Metric | Description |
+| --- | --- |
+| Conversation Degeneration | Detects repetition and low-entropy responses over a conversation (implemented by `ConversationDegenerationMetric`). |
+| Knowledge Retention | Checks whether the last assistant reply preserves user-provided facts from earlier turns. |
+
+> [!TIP]
+> These metrics operate on a single transcript without requiring a gold reference. If you
+> need BLEU/ROUGE/METEOR-style comparisons, compose a custom `ConversationThreadMetric`
+> that wraps the single-turn heuristics (`SentenceBLEU`, `ROUGE`, `METEOR`).
+
+## Score an LLM response
+
+You can score an LLM response by first initializing the metrics and then calling the `score` method:
+
+```python
+from opik.evaluation.metrics import Contains
+
+metric = Contains(name="contains_hello", case_sensitive=True)
+
+score = metric.score(output="Hello world !", reference="Hello")
+
+print(score)
+```
+
+## Metrics
+
+### Equals
+
+The `Equals` metric can be used to check if the output of an LLM exactly matches a specific string. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import Equals
+
+metric = Equals()
+
+score = metric.score(output="Hello world !", reference="Hello, world !")
+print(score)
+```
+
+### Contains
+
+The `Contains` metric can be used to check if the output of an LLM contains a specific substring. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import Contains
+
+metric = Contains(case_sensitive=False)
+
+score = metric.score(output="Hello world !", reference="Hello")
+print(score)
+```
+
+### RegexMatch
+
+The `RegexMatch` metric can be used to check if the output of an LLM matches a specified regular expression pattern. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import RegexMatch
+
+metric = RegexMatch(regex="^[a-zA-Z0-9]+$")
+
+score = metric.score("Hello world !")
+print(score)
+```
+
+### IsJson
+
+The `IsJson` metric can be used to check if the output of an LLM is valid. It can be used in the following way:
+
+```python
+from opik.evaluation.metrics import IsJson
+
+metric = IsJson(name="is_json_metric")
+
+score = metric.score(output='{"key": "some_valid_sql"}')
+print(score)
+```
+
+### LevenshteinRatio
+
+The `LevenshteinRatio` metric measures how similar the output is to a reference string on a 0–1 scale (1.0 means identical). It is useful when exact matches are too strict but you still want to penalise large deviations.
+
+```python
+from opik.evaluation.metrics import LevenshteinRatio
+
+metric = LevenshteinRatio()
+
+score = metric.score(output="Hello world !", reference="hello")
+print(score)
+```
+
+### BLEU
+
+The BLEU (Bilingual Evaluation Understudy) metrics estimate how close the LLM outputs are to one or more reference translations. Opik provides two separate classes:
+
+- `SentenceBLEU` – Single-sentence BLEU
+- `CorpusBLEU` – Corpus-level BLEU
+  Both rely on the underlying NLTK BLEU implementation with optional smoothing methods, weights, and variable n-gram orders.
+
+You will need nltk library:
+
+```bash
+pip install nltk
+```
+
+Use `SentenceBLEU` to compute single-sentence BLEU between a single candidate and one (or more) references:
+
+```python
+from opik.evaluation.metrics import SentenceBLEU
+
+metric = SentenceBLEU(n_grams=4, smoothing_method="method1")
+
+# Single reference
+score = metric.score(
+    output="Hello world!",
+    reference="Hello world"
+)
+print(score.value, score.reason)
+
+# Multiple references
+score = metric.score(
+    output="Hello world!",
+    reference=["Hello planet", "Hello world"]
+)
+print(score.value, score.reason)
+
+```
+
+Use `CorpusBLEU` to compute corpus-level BLEU for multiple candidates vs. multiple references. Each candidate and its references align by index in the list:
+
+```python
+from opik.evaluation.metrics import CorpusBLEU
+
+metric = CorpusBLEU()
+
+outputs = ["Hello there", "This is a test."]
+references = [
+    # For the first candidate, two references
+    ["Hello world", "Hello there"],
+    # For the second candidate, one reference
+    "This is a test."
+]
+
+score = metric.score(output=outputs, reference=references)
+print(score.value, score.reason)
+```
+
+You can also customize n-grams, smoothing methods, or weights:
+
+```python
+from opik.evaluation.metrics import SentenceBLEU
+
+metric = SentenceBLEU(
+    n_grams=4,
+    smoothing_method="method2",
+    weights=[0.25, 0.25, 0.25, 0.25]
+)
+
+score = metric.score(
+    output="The cat sat on the mat",
+    reference=["The cat is on the mat", "A cat sat here on the mat"]
+)
+print(score.value, score.reason)
+```
+
+**Note:** If any candidate or reference is empty, SentenceBLEU or CorpusBLEU will raise a MetricComputationError. Handle or validate inputs accordingly.
+
+### ROUGE
+
+`ROUGE` supports multiple variants out of the box: `rouge1`, `rouge2`, `rougeL`, and `rougeLsum`. You can switch variants via the `rouge_type` argument and optionally enable stemming or sentence splitting.
+
+```python
+from opik.evaluation.metrics import ROUGE
+
+metric = ROUGE(rouge_type="rougeLsum", use_stemmer=True)
+score = metric.score(
+    output="The quick brown fox jumps over the lazy dog.",
+    reference="A quick brown fox leapt over a very lazy dog."
+)
+print(score.value, score.reason)
+```
+
+Install `rouge-score` when using this metric:
+
+```bash
+pip install rouge-score
+```
+
+### GLEU
+
+`GLEU` estimates grammatical fluency using n-gram overlap. It is useful when you care about fluency rather than exact lexical matches.
+
+```python
+from opik.evaluation.metrics import GLEU
+
+metric = GLEU(min_len=1, max_len=4)
+score = metric.score(
+    output="I has a pen",
+    reference=["I have a pen"]
+)
+print(score.value, score.reason)
+```
+
+Requires `nltk`:
+
+```bash
+pip install nltk
+```
+
+### BERTScore
+
+`BERTScore` compares texts using contextual embeddings, offering a robust alternative to token-level similarity metrics. It produces precision, recall, and F1 scores (Opik reports the F1 by default).
+
+```python
+from opik.evaluation.metrics import BERTScore
+
+metric = BERTScore(model_type="microsoft/deberta-xlarge-mnli")
+score = metric.score(
+    output="The cat sits on the mat.",
+    reference="A cat is sitting on a mat."
+)
+print(score.value, score.reason)
+```
+
+Install the optional dependency before use:
+
+```bash
+pip install bert-score
+```
+
+### ChrF
+
+`ChrF` computes the character n-gram F-score (`chrF` / `chrF++`). Adjust `beta`, `char_order`, and `word_order` to switch between the two variants.
+
+```python
+from opik.evaluation.metrics import ChrF
+
+metric = ChrF(beta=2.0, char_order=6, word_order=2)
+score = metric.score(
+    output="The cat sat on the mat",
+    reference="A cat sits upon the mat"
+)
+print(score.value, score.reason)
+```
+
+This metric relies on NLTK:
+
+```bash
+pip install nltk
+```
+
+### Distribution metrics
+
+Histogram-based metrics compare token distributions between candidate and reference texts. They are helpful when you want to match style, vocabulary, or topical coverage.
+
+#### JSDivergence
+
+Returns `1 - Jensen–Shannon divergence`, giving a similarity score between 0.0 and 1.0.
+
+```python
+from opik.evaluation.metrics import JSDivergence
+
+metric = JSDivergence()
+score = metric.score(
+    output="Dogs chase balls",
+    reference="Cats chase toys"
+)
+print(score.value, score.reason)
+```
+
+#### JSDistance
+
+Wraps the same computation but returns the raw divergence (0.0 means identical distributions).
+
+```python
+from opik.evaluation.metrics import JSDistance
+
+metric = JSDistance()
+score = metric.score(output="hello world", reference="hello there")
+print(score.value, score.reason)
+```
+
+#### KLDivergence
+
+Computes the KL divergence with optional smoothing and direction control.
+
+```python
+from opik.evaluation.metrics import KLDivergence
+
+metric = KLDivergence(direction="avg")
+score = metric.score(output="a b b", reference="a a b")
+print(score.value, score.reason)
+```
+
+### Language Adherence
+
+`LanguageAdherenceMetric` checks whether text matches an expected ISO language code. It can use a fastText language identification model or a custom detector callable.
+
+```python
+from opik.evaluation.metrics import LanguageAdherenceMetric
+
+metric = LanguageAdherenceMetric(
+    expected_language="en",
+    model_path="/path/to/lid.176.ftz",
+)
+score = metric.score(output="Hello, how are you?")
+print(score.value, score.reason, score.metadata)
+```
+
+Install `fasttext` and download a language ID model when using the default detector:
+
+```bash
+pip install fasttext
+```
+
+### Readability
+
+`Readability` computes Flesch Reading Ease (0–100) and the Flesch–Kincaid grade using the `textstat` package. The metric returns the reading-ease score normalised to `[0, 1]`.
+
+```python
+from opik.evaluation.metrics import Readability
+
+metric = Readability()
+score = metric.score(output="This is a simple explanation of the payment process.")
+print(score.value, score.reason)
+print(score.metadata["flesch_kincaid_grade"])
+```
+
+Install the optional dependency when using this metric:
+
+```bash
+pip install textstat
+```
+
+Pass `enforce_bounds=True` alongside `min_grade` and/or `max_grade` to turn the metric into a strict guardrail that only reports 1.0 when the text meets your grade limits.
+
+### Spearman Ranking
+
+`SpearmanRanking` measures how well two rankings agree. It returns a normalised correlation score in `[0, 1]`.
+
+```python
+from opik.evaluation.metrics import SpearmanRanking
+
+metric = SpearmanRanking()
+score = metric.score(
+    output=["doc3", "doc1", "doc2"],
+    reference=["doc1", "doc2", "doc3"],
+)
+print(score.value, score.metadata["rho"])
+```
+
+### Tone
+
+`Tone` flags outputs that sound aggressive, negative, or violate a list of forbidden phrases. You can tweak sentiment thresholds, uppercase ratios, and exclamation limits.
+
+```python
+from opik.evaluation.metrics import Tone
+
+metric = Tone(max_exclamations=1)
+score = metric.score(output="THIS IS TERRIBLE!!!")
+print(score.value, score.reason)
+print(score.metadata)
+```
+
+### Sentiment
+
+The Sentiment metric analyzes the sentiment of text using NLTK's VADER (Valence Aware Dictionary and sEntiment Reasoner) sentiment analyzer. It returns scores for positive, neutral, negative, and compound sentiment.
+
+You will need the nltk library and the vader_lexicon:
+
+```bash
+pip install nltk
+python -m nltk.downloader vader_lexicon
+```
+
+Use `Sentiment` to analyze the sentiment of text:
+
+```python
+from opik.evaluation.metrics import Sentiment
+
+metric = Sentiment()
+
+# Analyze sentiment
+score = metric.score(output="I love this product! It's amazing.")
+print(score.value)  # Compound score (e.g., 0.8802)
+print(score.metadata)  # All sentiment scores (pos, neu, neg, compound)
+print(score.reason)  # Explanation of the sentiment
+
+# Negative sentiment example
+score = metric.score(output="This is terrible, I hate it.")
+print(score.value)  # Negative compound score (e.g., -0.7650)
+```
+
+The metric returns:
+- `value`: The compound sentiment score (-1.0 to 1.0)
+- `metadata`: Dictionary containing all sentiment scores:
+  - `pos`: Positive sentiment (0.0-1.0)
+  - `neu`: Neutral sentiment (0.0-1.0)
+  - `neg`: Negative sentiment (0.0-1.0)
+  - `compound`: Normalized compound score (-1.0 to 1.0)
+
+The compound score is a normalized score between -1.0 (extremely negative) and 1.0 (extremely positive), with scores:
+- ≥ 0.05: Positive sentiment
+- > -0.05 and < 0.05: Neutral sentiment
+- ≤ -0.05: Negative sentiment
+
+### ROUGE
+
+The [ROUGE (Recall-Oriented Understudy for Gisting Evaluation)](<https://en.wikipedia.org/wiki/ROUGE_(metric)>) metrics estimate how close the LLM outputs are to one or more reference summaries, commonly used for evaluating summarization and text generation tasks. It measures the overlap between an output string and a reference string, with support for multiple ROUGE types. This metrics is a wrapper around the Google Research reimplementation of ROUGE, which is based on the `rouge-score` library. You will need rouge-score library:
+
+```bash
+pip install rouge-score
+```
+
+It can be used in a following way:
+
+```python
+from opik.evaluation.metrics import ROUGE
+
+metric = ROUGE()
+
+# Single reference
+score = metric.score(
+    output="Hello world!",
+    reference="Hello world"
+)
+print(score.value, score.reason)
+
+# Multiple references
+score = metric.score(
+    output="Hello world!",
+    reference=["Hello planet", "Hello world"]
+)
+print(score.value, score.reason)
+```
+
+You can customize the ROUGE metric using the following parameters:
+
+- **`rouge_type` (str)**: Type of ROUGE score to compute. Must be one of:
+
+  - `rouge1`: Unigram-based scoring
+  - `rouge2`: Bigram-based scoring
+  - `rougeL`: Longest common subsequence-based scoring
+  - `rougeLsum`: ROUGE-L score based on sentence splitting
+
+  _Default_: `rouge1`
+
+- **`use_stemmer` (bool)**: Whether to use stemming in ROUGE computation.  
+  _Default_: `False`
+
+- **`split_summaries` (bool)**: Whether to split summaries into sentences.  
+  _Default_: `False`
+
+- **`tokenizer` (Any | None)**: Custom tokenizer for sentence splitting.  
+  _Default_: `None`
+
+```python
+from opik.evaluation.metrics import ROUGE
+
+metric = ROUGE(
+    rouge_type="rouge2",
+    use_stemmer=True
+)
+
+score = metric.score(
+    output="The cats sat on the mats",
+    reference=["The cat is on the mat", "A cat sat here on the mat"]
+)
+print(score.value, score.reason)
+```
+
+### AggregatedMetric
+
+You can use the AggregatedMetric function to compute averages across multiple metrics for
+each item in your experiment.
+
+You can define the metric as:
+
+```python
+from opik.evaluation.metrics import AggregatedMetric, Hallucination, GEval
+
+metric = AggregatedMetric(
+  name="average_score",
+  metrics=[
+    Hallucination(),
+    GEval(
+      task_introduction="Identify factual inaccuracies",
+      evaluation_criteria="Return a score of 1 if there are inaccuracies, 0 otherwise"
+    )
+  ],
+  aggregator=lambda metric_results: sum([score_result.value for score_result in metric_results]) / len(metric_results)
+)
+```
+
+#### References
+
+- [Understanding ROUGE Metrics](https://www.linkedin.com/pulse/mastering-rouge-matrix-your-guide-large-language-model-mamdouh/)
+- [Google Research ROUGE Implementation](https://github.com/google-research/google-research/tree/master/rouge)
+- [Hugging Face ROUGE Metric](https://huggingface.co/spaces/evaluate-metric/rouge)
+
+#### Notes
+
+- The metric is case-insensitive.
+- ROUGE scores are useful for comparing text summarization models or evaluating text similarity.
+- Consider using stemming for improved evaluation in certain cases.

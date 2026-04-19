@@ -59,6 +59,7 @@ class RunnerTUI:
         self._pairing_active = False
         self._pairing_deadline: Optional[float] = None
         self._pairing_url: Optional[str] = None
+        self._project_url: Optional[str] = None
 
     def start(self) -> None:
         if self._is_tty:
@@ -102,14 +103,15 @@ class RunnerTUI:
             self._pairing_url = url
 
         if not self._is_tty:
-            self._console.print(f"Open this link to pair:\n{url}")
+            self._console.print(f"Open this link to pair:\n{url}", soft_wrap=True)
 
-    def pairing_completed(self) -> None:
+    def pairing_completed(self, project_url: Optional[str] = None) -> None:
         with self._lock:
             was_active = self._pairing_active
             self._pairing_active = False
             self._pairing_deadline = None
             self._pairing_url = None
+            self._project_url = project_url
         if not was_active:
             return
 
@@ -118,6 +120,23 @@ class RunnerTUI:
         text.append("Status".ljust(self._LABEL_WIDTH), style="dim")
         text.append("Paired ", style="green")
         text.append("\u2714", style="green")
+        if project_url:
+            text.append(f"\n\n{self._PADDING}")
+            msg = "Continue developing in Opik:  "
+            r_s, g_s, b_s = 91, 74, 228
+            r_e, g_e, b_e = 170, 140, 255
+            for i, ch in enumerate(msg):
+                t = i / max(len(msg) - 1, 1)
+                r = int(r_s + (r_e - r_s) * t)
+                g = int(g_s + (g_e - g_s) * t)
+                b = int(b_s + (b_e - b_s) * t)
+                text.append(ch, style=f"rgb({r},{g},{b})")
+            text.append("\u2197\ufe0f ", style=f"rgb({r_e},{g_e},{b_e})")
+            text.append(
+                "Link", style=Style(link=project_url, bold=True, underline=True)
+            )
+            text.append(f"\n{self._PADDING}")
+            text.append(project_url, style="dim")
         self._print(text)
         self._update_live()
 
@@ -232,9 +251,14 @@ class RunnerTUI:
             lines.append(dot_char, style="yellow")
             lines.append(f" (timeout in {mins}m {secs:02d}s)", style="dim")
             lines.append(f"\n\n{padding}")
-            lines.append("Open this link to pair:")
+            lines.append("Open this link to pair:  \U0001f517 ")
+            lines.append(
+                "Link", style=Style(link=pairing_url, bold=True, underline=True)
+            )
             lines.append(f"\n{padding}")
-            lines.append(pairing_url, style=Style(link=pairing_url, bold=True))
+            lines.append("Or copy this URL into your browser:")
+            lines.append(f"\n{padding}")
+            lines.append(pairing_url, style="dim")
             lines.append("\n")
 
         if has_ops:

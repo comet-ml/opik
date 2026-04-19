@@ -258,7 +258,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Update skips when values unchanged", () => {
+  describe("updateTestSettings skips when values unchanged", () => {
     it(
       "should not create a new version when update is called with identical values",
       async () => {
@@ -281,7 +281,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const versionIdBefore = versionBefore!.id;
 
         // Call update with the exact same values
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is helpful"],
           globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
         });
@@ -320,7 +320,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         const versionIdBefore = versionBefore!.id;
 
         // Update with different assertions
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is concise", "Response is accurate"],
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });
@@ -343,7 +343,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Partial update preserves unchanged fields", () => {
+  describe("updateTestSettings: partial update preserves unchanged fields", () => {
     it(
       "should retain existing assertions when only executionPolicy is updated",
       async () => {
@@ -360,7 +360,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForSuiteItems(suite, 1);
 
         // Update only executionPolicy, omit assertions
-        await suite.update({
+        await suite.updateTestSettings({
           globalExecutionPolicy: { runsPerItem: 5, passThreshold: 3 },
         });
 
@@ -392,7 +392,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
         await waitForSuiteItems(suite, 1);
 
         // Update only assertions, omit executionPolicy
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is accurate"],
         });
 
@@ -494,7 +494,97 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
     );
   });
 
-  describe("Suite Update", () => {
+  describe("updateTestSettings on suite with no initial version", () => {
+    async function waitForDataset(name: string) {
+      await searchAndWaitForDone(
+        async () => {
+          const datasets = await client.getDatasets();
+          return datasets.filter((d) => d.name === name);
+        },
+        1,
+        WAIT_OPTIONS.timeout,
+        WAIT_OPTIONS.interval
+      );
+    }
+
+    it(
+      "should create the initial version when update is called on a freshly created dataset",
+      async () => {
+        const suiteName = `test-suite-update-no-version-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        // Create only the backing dataset — no TestSuite.create, so no version exists yet.
+        const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
+
+        // Confirm precondition: no version on the server.
+        expect(await dataset.getVersionInfo()).toBeUndefined();
+
+        // update() should create the initial version via override:true.
+        await suite.updateTestSettings({
+          globalAssertions: ["Response is helpful"],
+          globalExecutionPolicy: { runsPerItem: 2, passThreshold: 1 },
+        });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is helpful");
+
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 2, passThreshold: 1 });
+      },
+      60000
+    );
+
+    it(
+      "should create the initial version with default policy when only assertions are provided",
+      async () => {
+        const suiteName = `test-suite-update-no-version-defaults-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
+
+        await suite.updateTestSettings({ globalAssertions: ["Response is concise"] });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(1);
+        expect(assertions[0]).toBe("Response is concise");
+
+        // Policy should have fallen back to defaults (runsPerItem:1, passThreshold:1).
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 1, passThreshold: 1 });
+      },
+      60000
+    );
+
+    it(
+      "should create the initial version with no evaluators when only executionPolicy is provided",
+      async () => {
+        const suiteName = `test-suite-update-no-version-policy-only-${Date.now()}`;
+        createdDatasetNames.push(suiteName);
+
+        const dataset = await client.createDataset(suiteName);
+        await waitForDataset(suiteName);
+        const suite = new TestSuite(dataset, client);
+
+        await suite.updateTestSettings({
+          globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
+        });
+
+        const assertions = await suite.getGlobalAssertions();
+        expect(assertions).toHaveLength(0);
+
+        const policy = await suite.getGlobalExecutionPolicy();
+        expect(policy).toEqual({ runsPerItem: 3, passThreshold: 2 });
+      },
+      60000
+    );
+  });
+
+  describe("Suite updateTestSettings", () => {
     it(
       "should update suite evaluators and execution policy",
       async () => {
@@ -507,7 +597,7 @@ describe.skipIf(!shouldRunApiTests)("TestSuite Integration", () => {
           globalExecutionPolicy: { runsPerItem: 1, passThreshold: 1 },
         });
 
-        await suite.update({
+        await suite.updateTestSettings({
           globalAssertions: ["Response is concise"],
           globalExecutionPolicy: { runsPerItem: 3, passThreshold: 2 },
         });

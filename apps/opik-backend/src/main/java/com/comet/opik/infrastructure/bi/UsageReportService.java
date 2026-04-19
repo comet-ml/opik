@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(UsageReportServiceImpl.class)
-interface UsageReportService {
+public interface UsageReportService {
 
     record UserCount(long allTimes, long daily) {
     }

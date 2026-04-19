@@ -133,9 +133,6 @@ const useLoadChatPrompt = ({
       }
 
       try {
-        // Mark this chat prompt as loaded to prevent race conditions
-        loadedChatPromptRef.current = chatPromptKey;
-
         const parsedMessages = JSON.parse(chatPromptVersionData.template);
 
         const newMessages: LLMMessage[] = parsedMessages.map(
@@ -147,6 +144,7 @@ const useLoadChatPrompt = ({
         );
 
         onMessagesLoaded(newMessages, chatPromptData.name);
+        loadedChatPromptRef.current = chatPromptKey;
       } catch (error) {
         console.error("Failed to parse chat prompt:", error);
       }

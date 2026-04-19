@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Eye, EyeOff, ScanText } from "lucide-react";
+import { Eye, EyeOff, MoreVertical } from "lucide-react";
 
 import { DropdownOption, OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
@@ -21,16 +21,16 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
   { label: "Duration", value: TREE_DATABLOCK_TYPE.DURATION },
+  { label: "Cost", value: TREE_DATABLOCK_TYPE.ESTIMATED_COST },
+  { label: "Model", value: TREE_DATABLOCK_TYPE.MODEL },
   { label: "Number of tokens", value: TREE_DATABLOCK_TYPE.NUMBERS_OF_TOKENS },
   { label: "Tokens breakdown", value: TREE_DATABLOCK_TYPE.TOKENS_BREAKDOWN },
-  { label: "Estimated cost", value: TREE_DATABLOCK_TYPE.ESTIMATED_COST },
   { label: "Number of scores", value: TREE_DATABLOCK_TYPE.NUMBER_OF_SCORES },
   {
     label: "Number of comments",
     value: TREE_DATABLOCK_TYPE.NUMBER_OF_COMMENTS,
   },
   { label: "Number of tags", value: TREE_DATABLOCK_TYPE.NUMBER_OF_TAGS },
-  { label: "Model", value: TREE_DATABLOCK_TYPE.MODEL },
 ];
 
 type SpanDetailsButtonProps = {
@@ -70,10 +70,10 @@ const SpanDetailsButton: React.FC<SpanDetailsButtonProps> = ({
 
   return (
     <DropdownMenu>
-      <TooltipWrapper content="Span details">
+      <TooltipWrapper content="More options">
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-2xs">
-            <ScanText />
+          <Button variant="ghost" size="icon-2xs">
+            <MoreVertical className="size-3" />
           </Button>
         </DropdownMenuTrigger>
       </TooltipWrapper>
@@ -106,7 +106,7 @@ const SpanDetailsButton: React.FC<SpanDetailsButtonProps> = ({
               }))
             }
           >
-            Duration timeline
+            Timeline
           </DropdownMenuCustomCheckboxItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => toggleColumns(true)}>

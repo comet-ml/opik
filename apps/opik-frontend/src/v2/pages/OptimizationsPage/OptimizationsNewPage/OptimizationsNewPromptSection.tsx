@@ -1,10 +1,10 @@
 import React, { useCallback, useState } from "react";
 import { UseFormReturn } from "react-hook-form";
 import { Save } from "lucide-react";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Button } from "@/ui/button";
-import { Separator } from "@/ui/separator";
 import {
   FormControl,
   FormField,
@@ -20,78 +20,100 @@ import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPrompt
 import OptimizationModelSelect from "@/v2/pages-shared/optimizations/OptimizationModelSelect/OptimizationModelSelect";
 import OptimizationTemperatureConfig from "@/v2/pages-shared/optimizations/OptimizationConfigForm/OptimizationTemperatureConfig";
 import { OPTIMIZATION_MESSAGE_TYPE_OPTIONS } from "@/constants/optimizations";
-import { useActiveProjectId } from "@/store/AppStore";
-import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
+import BlueprintPromptsSelectBox from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/BlueprintPromptsSelectBox";
+import SaveExistingPromptDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveExistingPromptDialog";
+import SaveAsNewBlueprintFieldDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveAsNewBlueprintFieldDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
-import { usePermissions } from "@/contexts/PermissionsContext";
-import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import { BlueprintPromptRef } from "@/types/playground";
 
 type OptimizationsNewPromptSectionProps = {
   form: UseFormReturn<OptimizationConfigFormType>;
+  projectId: string;
   model: PROVIDER_MODEL_TYPE | "";
   config: OptimizationConfigFormType["modelConfig"];
   datasetVariables: string[];
   onNameChange: (value: string) => void;
   onModelChange: (model: PROVIDER_MODEL_TYPE) => void;
   onModelConfigChange: (configs: Partial<LLMPromptConfigsType>) => void;
+  blueprintRef?: BlueprintPromptRef;
+  blueprintPromptName?: string;
+  blueprintFieldNames: string[];
+  isSavingBlueprint: boolean;
+  hasUnsavedBlueprintChanges: boolean;
+  onBlueprintRefChange: (ref: BlueprintPromptRef) => void;
+  onBlueprintRefClear: () => void;
+  onSaveBlueprintExisting: (changeDescription: string) => Promise<unknown>;
+  onSaveBlueprintNewField: (
+    fieldName: string,
+    changeDescription: string,
+  ) => Promise<unknown>;
 };
 
 const OptimizationsNewPromptSection: React.FC<
   OptimizationsNewPromptSectionProps
 > = ({
   form,
+  projectId,
   model,
   config,
   datasetVariables,
   onNameChange,
   onModelChange,
   onModelConfigChange,
+  blueprintRef,
+  blueprintPromptName,
+  blueprintFieldNames,
+  isSavingBlueprint,
+  hasUnsavedBlueprintChanges,
+  onBlueprintRefChange,
+  onBlueprintRefClear,
+  onSaveBlueprintExisting,
+  onSaveBlueprintNewField,
 }) => {
-  const activeProjectId = useActiveProjectId();
-
   const {
     permissions: { canCreatePrompts },
   } = usePermissions();
 
-  const [selectedChatPromptId, setSelectedChatPromptId] = useState<
-    string | undefined
-  >(undefined);
-  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
-    useState(false);
-  const [lastImportedPromptName, setLastImportedPromptName] =
-    useState<string>("");
+  const [showSaveExisting, setShowSaveExisting] = useState(false);
+  const [showSaveNew, setShowSaveNew] = useState(false);
 
-  const messages = form.watch("messages");
+  const hasMessages = form
+    .watch("messages")
+    .some((msg) =>
+      typeof msg.content === "string"
+        ? msg.content.trim()
+        : Array.isArray(msg.content) && msg.content.length > 0,
+    );
 
-  const handleMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
-      setLastImportedPromptName(promptName);
-      form.setValue("messages", newMessages, { shouldValidate: true });
+  const handleClickSave = useCallback(() => {
+    if (blueprintRef) {
+      setShowSaveExisting(true);
+    } else {
+      setShowSaveNew(true);
+    }
+  }, [blueprintRef]);
 
-      // hack: needed to be able to save the prompt with the same name
-      if (promptName) {
-        onNameChange(promptName);
-      }
+  const handleSaveExisting = useCallback(
+    async (changeDescription: string) => {
+      const result = await onSaveBlueprintExisting(changeDescription);
+      if (!result) return;
+      setShowSaveExisting(false);
     },
-    [form, onNameChange],
+    [onSaveBlueprintExisting],
   );
 
-  const { chatPromptData, chatPromptTemplate, hasUnsavedChatPromptChanges } =
-    useLoadChatPrompt({
-      selectedChatPromptId,
-      messages,
-      onMessagesLoaded: handleMessagesLoaded,
-    });
-
-  const handleImportChatPrompt = useCallback((loadedPromptId: string) => {
-    setSelectedChatPromptId(loadedPromptId);
-  }, []);
-
-  const handleSaveChatPrompt = useCallback(() => {
-    setShowSaveChatPromptDialog(true);
-  }, []);
+  const handleSaveNew = useCallback(
+    async (fieldName: string, changeDescription: string) => {
+      const result = await onSaveBlueprintNewField(
+        fieldName,
+        changeDescription,
+      );
+      if (!result) return;
+      setShowSaveNew(false);
+    },
+    [onSaveBlueprintNewField],
+  );
 
   return (
     <div className="flex-1 space-y-6">
@@ -116,42 +138,36 @@ const OptimizationsNewPromptSection: React.FC<
 
       <div>
         <div className="mb-2 flex h-8 items-center justify-between">
-          <Label className="comet-body-s-accented">Prompt</Label>
-          <div className="flex h-full items-center gap-1">
-            <TooltipWrapper
-              content={chatPromptData?.name || "Load chat prompt"}
-            >
-              <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-                <PromptsSelectBox
-                  projectId={activeProjectId!}
-                  value={selectedChatPromptId}
-                  onValueChange={(value) =>
-                    value && handleImportChatPrompt(value)
-                  }
-                  clearable={false}
-                  filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-                />
-              </div>
-            </TooltipWrapper>
-            <TooltipWrapper
-              content={
-                hasUnsavedChatPromptChanges
-                  ? "This prompt version hasn't been saved"
-                  : "Save as chat prompt"
-              }
-            >
-              <Button
-                variant="outline"
-                size="icon-sm"
-                onClick={handleSaveChatPrompt}
-                disabled={!canCreatePrompts && !selectedChatPromptId}
-                badge={hasUnsavedChatPromptChanges}
-                type="button"
+          <div className="flex items-center gap-0.5">
+            <Label className="comet-body-s-accented">Prompt</Label>
+            <BlueprintPromptsSelectBox
+              projectId={projectId}
+              value={blueprintRef}
+              onValueChange={onBlueprintRefChange}
+              onClear={onBlueprintRefClear}
+              hasUnsavedChanges={hasUnsavedBlueprintChanges}
+              filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+            />
+            {hasMessages && (
+              <TooltipWrapper
+                content={
+                  blueprintRef
+                    ? "Update prompt in agent configuration"
+                    : "Save as new field in agent configuration"
+                }
               >
-                <Save />
-              </Button>
-            </TooltipWrapper>
-            <Separator orientation="vertical" className="h-6" />
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleClickSave}
+                  disabled={!canCreatePrompts || isSavingBlueprint}
+                >
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
+          </div>
+          <div className="flex h-full items-center gap-1">
             <FormField
               control={form.control}
               name="modelName"
@@ -210,23 +226,26 @@ const OptimizationsNewPromptSection: React.FC<
         />
       </div>
 
-      {/* Save Chat Prompt Dialog */}
-      <AddNewPromptVersionDialog
-        open={showSaveChatPromptDialog}
-        setOpen={setShowSaveChatPromptDialog}
-        prompt={chatPromptData}
-        template={chatPromptTemplate}
-        templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-        defaultName={lastImportedPromptName}
-        onSave={(version, _promptName, savedPromptId) => {
-          setShowSaveChatPromptDialog(false);
+      {blueprintRef && (
+        <SaveExistingPromptDialog
+          open={showSaveExisting}
+          onOpenChange={setShowSaveExisting}
+          promptName={blueprintPromptName ?? blueprintRef.key}
+          fieldName={blueprintRef.key}
+          isSaving={isSavingBlueprint}
+          onSave={handleSaveExisting}
+        />
+      )}
 
-          // Update the loaded chat prompt ID to the saved prompt
-          if (savedPromptId) {
-            setSelectedChatPromptId(savedPromptId);
-          }
-        }}
-      />
+      {showSaveNew && (
+        <SaveAsNewBlueprintFieldDialog
+          open={showSaveNew}
+          onOpenChange={setShowSaveNew}
+          existingFieldNames={blueprintFieldNames}
+          isSaving={isSavingBlueprint}
+          onSave={handleSaveNew}
+        />
+      )}
     </div>
   );
 };

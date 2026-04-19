@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo } from "react";
+import { useMutation } from "@tanstack/react-query";
 import api from "@/api/api";
-
-// ---------------------------------------------------------------------------
-// Binary helpers
-// ---------------------------------------------------------------------------
+import PairingStatusScreen, {
+  PairingErrorKind,
+  PairingStatusScreenProps,
+  RunnerVariant,
+} from "@/shared/PairingStatusScreen/PairingStatusScreen";
 
 function uuidFromBytes(bytes: Uint8Array): string {
   const h = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -20,18 +22,12 @@ function uuidToBytes(uuid: string): Uint8Array {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Fragment parsing
-// ---------------------------------------------------------------------------
-
-type RunnerType = "connect" | "endpoint";
-
 interface PairingPayload {
   sessionId: string;
   activationKey: Uint8Array;
   projectId: string;
   runnerName: string;
-  runnerType: RunnerType;
+  runnerType: RunnerVariant;
 }
 
 function parsePairingPayload(fragment: string): PairingPayload {
@@ -45,7 +41,7 @@ function parsePairingPayload(fragment: string): PairingPayload {
   if (bytes.length < 65 + nameLen) throw new Error("bad link");
 
   const typeOffset = 65 + nameLen;
-  const runnerType: RunnerType =
+  const runnerType: RunnerVariant =
     bytes.length > typeOffset && bytes[typeOffset] === 0x01
       ? "endpoint"
       : "connect";
@@ -58,10 +54,6 @@ function parsePairingPayload(fragment: string): PairingPayload {
     runnerType,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Crypto (SubtleCrypto)
-// ---------------------------------------------------------------------------
 
 async function computeActivationHmac(
   activationKey: Uint8Array,
@@ -119,27 +111,20 @@ async function deriveBridgeKey(
   return new Uint8Array(await crypto.subtle.sign("HMAC", expandKey, expandMsg));
 }
 
-// ---------------------------------------------------------------------------
-// Activate + derive + store — runs once on mount
-// ---------------------------------------------------------------------------
-
-async function activate(payload: PairingPayload): Promise<void> {
-  const workspace = new URLSearchParams(window.location.search).get(
-    "workspace",
-  );
-  if (workspace) {
-    api.defaults.headers.common["Comet-Workspace"] = workspace;
-  }
-
+async function activate(
+  payload: PairingPayload,
+  workspace: string | null,
+): Promise<void> {
   const hmac = await computeActivationHmac(
     payload.activationKey,
     payload.sessionId,
     payload.runnerName,
   );
-  await api.post(`/v1/private/pairing/sessions/${payload.sessionId}/activate`, {
-    runner_name: payload.runnerName,
-    hmac,
-  });
+  await api.post(
+    `/v1/private/pairing/sessions/${payload.sessionId}/activate`,
+    { runner_name: payload.runnerName, hmac },
+    workspace ? { headers: { "Comet-Workspace": workspace } } : undefined,
+  );
 
   // Only CONNECT runners use bridge keys for HMAC-signed file commands.
   // ENDPOINT runners don't need one — storing it would overwrite the
@@ -156,9 +141,22 @@ async function activate(payload: PairingPayload): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Page component
-// ---------------------------------------------------------------------------
+function httpStatus(err: unknown): number | undefined {
+  if (err && typeof err === "object" && "response" in err) {
+    return (err as { response?: { status?: number } }).response?.status;
+  }
+  return undefined;
+}
+
+function mapActivationError(err: unknown): PairingErrorKind {
+  if (err instanceof Error && err.message === "SECURE_CONTEXT_REQUIRED") {
+    return "insecure_context";
+  }
+  const status = httpStatus(err);
+  if (status === 403) return "tampered_link";
+  if (status === 404) return "expired_link";
+  return "unreachable";
+}
 
 const PairingPage: React.FC = () => {
   const fragment = window.location.hash.slice(1);
@@ -174,53 +172,49 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const [status, setStatus] = useState<"busy" | "done" | "error">(
-    parseError ? "error" : "busy",
+  const workspaceName = new URLSearchParams(window.location.search).get(
+    "workspace",
   );
-  const [error, setError] = useState(parseError ?? "");
 
-  // Auto-activate on mount
+  const {
+    mutate: runActivation,
+    isIdle: activationIdle,
+    isError: activationIsError,
+    isSuccess: activationIsSuccess,
+    error: activationError,
+  } = useMutation({
+    mutationFn: async (p: PairingPayload) => {
+      if (!crypto?.subtle) throw new Error("SECURE_CONTEXT_REQUIRED");
+      try {
+        await activate(p, workspaceName);
+      } catch (err) {
+        // 409 = session already activated; treat as success so repeat opens
+        // still land on the success screen rather than an error.
+        if (httpStatus(err) !== 409) throw err;
+      }
+    },
+  });
+
   useEffect(() => {
-    if (!payload) return;
-    if (!crypto?.subtle) {
-      setStatus("error");
-      setError("Pairing requires a secure connection (HTTPS).");
-      return;
-    }
-    activate(payload)
-      .then(() => setStatus("done"))
-      .catch((err: unknown) => {
-        setStatus("error");
-        const s =
-          err && typeof err === "object" && "response" in err
-            ? (err as { response?: { status?: number } }).response?.status
-            : undefined;
-        if (s === 403)
-          setError("This pairing link is invalid or has been tampered with.");
-        else if (s === 404)
-          setError("This pairing link has expired. Run the CLI command again.");
-        else if (s === 409)
-          setError("This runner is already connected. You can close this tab.");
-        else setError("Could not reach Opik. Check your connection.");
-      });
-  }, [payload]);
+    if (!payload || !workspaceName || !activationIdle) return;
+    runActivation(payload);
+  }, [payload, workspaceName, activationIdle, runActivation]);
 
-  // Auto-close on success
-  useEffect(() => {
-    if (status !== "done") return;
-    const t = setTimeout(() => window.close(), 1500);
-    return () => clearTimeout(t);
-  }, [status]);
+  let screenProps: PairingStatusScreenProps;
+  if (parseError || !workspaceName) {
+    screenProps = { status: "error", errorKind: "invalid_link" };
+  } else if (activationIsError) {
+    screenProps = {
+      status: "error",
+      errorKind: mapActivationError(activationError),
+    };
+  } else if (activationIsSuccess) {
+    screenProps = { status: "success", runnerVariant: payload?.runnerType };
+  } else {
+    screenProps = { status: "loading", runnerVariant: payload?.runnerType };
+  }
 
-  return (
-    <p>
-      {status === "done"
-        ? "Connected ✔"
-        : status === "error"
-          ? error
-          : "Connecting…"}
-    </p>
-  );
+  return <PairingStatusScreen {...screenProps} />;
 };
 
 export default PairingPage;

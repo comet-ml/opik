@@ -71,13 +71,11 @@ class InstallationReportServiceImpl implements InstallationReportService {
                 return null;
             }
 
-            biEventService.reportEvent(anonymousId,
+            return biEventService.reportEvent(anonymousId,
                     eventType,
                     NOTIFICATION_EVENT_TYPE,
                     Map.of("opik_app_version", config.getMetadata().getVersion()));
-
-            return null;
-        });
+        }).flatMap(future -> future != null ? Mono.fromFuture(future).then() : Mono.empty());
     }
 
     private String getAnonymousId() {

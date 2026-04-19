@@ -9,6 +9,8 @@ import com.comet.opik.infrastructure.lock.LockService;
 import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.comet.opik.infrastructure.ratelimit.RateLimitService;
 import com.google.inject.Provides;
+import io.dropwizard.util.Duration;
+import jakarta.inject.Named;
 import jakarta.inject.Singleton;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
@@ -33,6 +35,13 @@ public class RedisModule extends DropwizardAwareModule<OpikConfiguration> {
     @Singleton
     public RedissonClient redisNonReactiveClient(@Config("redis") RedisConfig config) {
         return Redisson.create(config.build());
+    }
+
+    @Provides
+    @Singleton
+    @Named("redis_health_check_timeout")
+    public Duration getHealthCheckTimeout(@Config("redis") RedisConfig config) {
+        return config.getHealthCheckTimeout();
     }
 
     @Provides

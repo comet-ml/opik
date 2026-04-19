@@ -94,12 +94,6 @@ interface LLMPromptMessageProps {
   errorText?: string;
   possibleTypes?: DropdownOption<LLM_MESSAGE_ROLE>[];
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
-  onReplaceWithChatPrompt?: (
-    messages: LLMMessage[],
-    promptId: string,
-    promptVersionId: string,
-  ) => void;
-  onClearOtherPromptLinks?: () => void;
   onFocus?: () => void;
   disableMedia?: boolean;
   promptVariables?: string[];
@@ -123,8 +117,6 @@ const LLMPromptMessage = forwardRef<
       errorText,
       possibleTypes = MESSAGE_TYPE_OPTIONS,
       onChangeMessage,
-      onReplaceWithChatPrompt,
-      onClearOtherPromptLinks,
       onFocus,
       onDuplicateMessage,
       onRemoveMessage,
@@ -310,8 +302,6 @@ const LLMPromptMessage = forwardRef<
                   <LLMPromptMessageActions
                     message={message}
                     onChangeMessage={onChangeMessage}
-                    onReplaceWithChatPrompt={onReplaceWithChatPrompt}
-                    onClearOtherPromptLinks={onClearOtherPromptLinks}
                     setIsLoading={setIsLoading}
                     setIsHoldActionsVisible={setIsHoldActionsVisible}
                     improvePromptConfig={improvePromptConfig}

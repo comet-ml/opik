@@ -34,6 +34,7 @@ type ResizableSidePanelProps = {
   ignoreHotkeys?: boolean;
   closeOnClickOutside?: boolean;
   closeButtonPosition?: "left" | "right";
+  hideDefaultControls?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
   container?: HTMLElement | null;
@@ -69,6 +70,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   ignoreHotkeys = false,
   closeOnClickOutside = true,
   closeButtonPosition = "left",
+  hideDefaultControls = false,
   horizontalNavigation,
   verticalNavigation,
   container,
@@ -307,31 +309,38 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               onMouseDown={startResizing as never}
             ></div>
             <div className="relative flex size-full">
-              <div className="absolute inset-x-0 top-0 flex h-[47px] items-center pl-6 pr-5">
-                <div
-                  className={cn(
-                    "flex items-center gap-2",
-                    closeButtonPosition === "right" && "ml-auto",
-                  )}
-                  style={{
-                    order: closeButtonPosition === "right" ? 2 : 0,
-                  }}
-                >
-                  <TooltipWrapper
-                    content={`Close ${entity}`}
-                    hotkeys={ESC_HOTKEYS}
+              <div
+                className={cn(
+                  "absolute inset-x-0 top-0 flex h-[47px] items-center pr-5",
+                  hideDefaultControls ? "pl-2" : "pl-6",
+                )}
+              >
+                {!hideDefaultControls && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-2",
+                      closeButtonPosition === "right" && "ml-auto",
+                    )}
+                    style={{
+                      order: closeButtonPosition === "right" ? 2 : 0,
+                    }}
                   >
-                    <Button
-                      data-testid="side-panel-close"
-                      variant="outline"
-                      size="icon-sm"
-                      onClick={onClose}
+                    <TooltipWrapper
+                      content={`Close ${entity}`}
+                      hotkeys={ESC_HOTKEYS}
                     >
-                      <X />
-                    </Button>
-                  </TooltipWrapper>
-                  {renderNavigation()}
-                </div>
+                      <Button
+                        data-testid="side-panel-close"
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={onClose}
+                      >
+                        <X />
+                      </Button>
+                    </TooltipWrapper>
+                    {renderNavigation()}
+                  </div>
+                )}
                 {headerContent && headerContent}
               </div>
               <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">

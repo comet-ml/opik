@@ -3538,3 +3538,44 @@ def test_evaluate__verbose_zero__progress_bar_disabled(fake_backend):
         desc=mock.ANY,
         total=mock.ANY,
     )
+
+
+class TestMergeBlueprintIntoConfig:
+    @staticmethod
+    def _make_blueprint(id, name):
+        bp = mock.MagicMock()
+        bp.id = id
+        bp.name = name
+        return bp
+
+    def test_blueprint_fetched_and_version_stored(self):
+        mock_client = mock.Mock()
+        mock_client._rest_client.agent_configs.get_blueprint_by_id.return_value = (
+            self._make_blueprint("bp-123", "v9")
+        )
+
+        result = evaluator_module._merge_blueprint_into_config(
+            mock_client,
+            "bp-123",
+            {"model": "gpt-4o"},
+        )
+
+        assert result["model"] == "gpt-4o"
+        assert result["agent_configuration"] == {
+            "_blueprint_id": "bp-123",
+            "blueprint_version": "v9",
+        }
+
+    def test_blueprint_fetch_fails_still_stores_id(self):
+        mock_client = mock.Mock()
+        mock_client._rest_client.agent_configs.get_blueprint_by_id.side_effect = (
+            Exception("not found")
+        )
+
+        result = evaluator_module._merge_blueprint_into_config(
+            mock_client,
+            "bp-456",
+            None,
+        )
+
+        assert result["agent_configuration"] == {"_blueprint_id": "bp-456"}

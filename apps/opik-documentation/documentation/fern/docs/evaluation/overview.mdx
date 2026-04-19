@@ -9,6 +9,10 @@ subtitle: A high-level overview on how to use Opik's evaluation features includi
 title: Overview
 ---
 
+<Note>
+  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments.
+</Note>
+
 Evaluation in Opik helps you assess and measure the quality of your LLM outputs across different dimensions.
 It provides a framework to systematically test your prompts and models against datasets, using various metrics
 to measure performance.
@@ -18,11 +22,11 @@ to measure performance.
 Opik also provides a set of pre-built metrics for common evaluation tasks. These metrics are designed to help you
 quickly and effectively gauge the performance of your LLM outputs and include metrics such as Hallucination,
 Answer Relevance, Context Precision/Recall and more. You can learn more about the available metrics in the
-[Metrics Overview](/evaluation/metrics/overview) section.
+[Metrics Overview](/v1/evaluation/metrics/overview) section.
 
 <Tip>
   If you are interested in evaluating your LLM application in production, please
-  refer to the [Online evaluation guide](/production/rules). Online evaluation
+  refer to the [Online evaluation guide](/v1/production/rules). Online evaluation
   rules allow you to define LLM as a Judge metrics that will automatically score
   all, or a subset, of your production traces.
 </Tip>
@@ -32,7 +36,7 @@ Answer Relevance, Context Precision/Recall and more. You can learn more about th
   evaluation where multiple team members can score the same traces and spans.
   This reduces bias and provides more reliable evaluation results through
   automatic score aggregation. [Learn more
-  →](/tracing/annotate_traces#multi-value-feedback-scores)
+  →](/v1/tracing/annotate_traces#multi-value-feedback-scores)
 </Note>
 
 ## Running an Evaluation
@@ -68,7 +72,7 @@ from opik.evaluation.metrics import Hallucination
 
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
-dataset = opik_client.get_or_create_dataset("Evaluation test dataset")
+dataset = opik_client.get_or_create_dataset("Evaluation test dataset", project_name="my-project")
 dataset.insert([
     {"input": "Hello, world!", "expected_output": "Hello, world!"},
     {"input": "What is the capital of France?", "expected_output": "Paris"},
@@ -79,7 +83,8 @@ result = evaluate_prompt(
     dataset=dataset,
     messages=[{"role": "user", "content": "Translate the following text to French: {{input}}"}],
     model="gpt-3.5-turbo",  # or your preferred model
-    scoring_metrics=[Hallucination()]
+    scoring_metrics=[Hallucination()],
+    project_name="my-project"
 )
 ```
 
@@ -95,7 +100,7 @@ from opik.evaluation.metrics import ContextPrecision, ContextRecall
 
 # Create a dataset with questions and their contexts
 opik_client = opik.Opik()
-dataset = opik_client.get_or_create_dataset("RAG evaluation dataset")
+dataset = opik_client.get_or_create_dataset("RAG evaluation dataset", project_name="my-project")
 dataset.insert([
     {
         "input": "What are the key features of Python?",
@@ -125,7 +130,8 @@ result = evaluate(
         ContextPrecision(),
         ContextRecall()
     ],
-    experiment_name="rag_evaluation"
+    experiment_name="rag_evaluation",
+    project_name="my-project"
 )
 ```
 
@@ -133,7 +139,7 @@ result = evaluate(
 <Tab value="Using the Playground" title="Using the Playground">
     You can also use the Opik Playground to quickly evaluate different prompts and LLM models.
 
-    To use the Playground, you will need to navigate to the [Playground](/prompt_engineering/playground) page and:
+    To use the Playground, you will need to navigate to the [Playground](/v1/prompt_engineering/playground) page and:
 
     1. Configure the LLM provider you want to use
     2. Enter the prompts you want to evaluate - You should include variables in the prompts using the `{{variable}}` syntax
@@ -175,7 +181,7 @@ from opik.evaluation.metrics import Hallucination
 
 # Create a dataset that contains the samples you want to evaluate
 opik_client = opik.Opik()
-dataset = opik_client.get_or_create_dataset("Evaluation test dataset")
+dataset = opik_client.get_or_create_dataset("Evaluation test dataset", project_name="my-project")
 dataset.insert([
     {"input": "Hello, world!", "expected_output": "Hello, world!"},
     {"input": "What is the capital of France?", "expected_output": "Paris"},
@@ -187,6 +193,7 @@ result = evaluate_prompt(
     model="gpt-5",  # or model that you want to evaluate
     scoring_metrics=[Hallucination()],
     verbose=2,  # print detailed statistics report for every metric
+    project_name="my-project",
 )
 
 # Retrieve and print the aggregated scores statistics (mean, min, max, std) per metric
@@ -202,16 +209,16 @@ You can use aggregated scores to compare the performance of different models or 
 In addition to per-item metrics, you can compute experiment-level aggregate metrics that are calculated across all test results. These experiment scores are displayed in the Opik UI alongside feedback scores and can be used for sorting and filtering experiments.
 
 <Tip>
-  Learn more about computing experiment-level metrics in the [Evaluate your LLM application](/evaluation/evaluate_your_llm#computing-experiment-level-metrics) guide.
+  Learn more about computing experiment-level metrics in the [Evaluate your LLM application](/v1/evaluation/evaluate_your_llm#computing-experiment-level-metrics) guide.
 </Tip>
 
 ## Learn more
 
 You can learn more about Opik's evaluation features in:
 
-1. [Evaluation concepts](/evaluation/concepts)
-1. [Evaluate prompts](/evaluation/evaluate_prompt)
-1. [Evaluate threads](/evaluation/evaluate_threads)
-1. [Evaluate complex LLM applications](/evaluation/evaluate_your_llm)
-1. [Evaluation metrics](/evaluation/metrics/overview)
-1. [Manage datasets](/evaluation/manage_datasets)
+1. [Evaluation concepts](/v1/evaluation/concepts)
+1. [Evaluate prompts](/v1/evaluation/evaluate_prompt)
+1. [Evaluate threads](/v1/evaluation/evaluate_threads)
+1. [Evaluate complex LLM applications](/v1/evaluation/evaluate_your_llm)
+1. [Evaluation metrics](/v1/evaluation/metrics/overview)
+1. [Manage datasets](/v1/evaluation/manage_datasets)

@@ -29,8 +29,8 @@ import {
   SelectValue,
 } from "@/ui/select";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { cn } from "@/lib/utils";
 import AutoResizeTextarea from "./AutoResizeTextarea";
-import CollapsibleBlock from "./CollapsibleBlock";
 
 const EDITABLE_ROLES = [
   LLM_MESSAGE_ROLE.system,
@@ -61,8 +61,6 @@ type SortableMessageProps = {
   message: LLMMessage;
   index: number;
   messages: LLMMessage[];
-  isExpanded: boolean;
-  onToggle: () => void;
   editable: boolean;
   onChangeMessage?: (index: number, content: string) => void;
   onChangeRole?: (index: number, role: LLM_MESSAGE_ROLE) => void;
@@ -75,8 +73,6 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
   message,
   index,
   messages,
-  isExpanded,
-  onToggle,
   editable,
   onChangeMessage,
   onChangeRole,
@@ -128,23 +124,25 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
 
   return (
     <div ref={setNodeRef} style={style}>
-      <CollapsibleBlock
-        label={editable ? undefined : getRoleLabel(message.role)}
-        collapsible
-        expanded={isExpanded}
-        onToggle={onToggle}
-        tone={tone}
-        headerPrefix={
-          editable ? (
+      <div
+        className={cn(
+          "rounded-md border",
+          tone === "white" ? "bg-background" : "bg-primary-foreground",
+        )}
+      >
+        <div className="flex items-center gap-1 px-3 py-2">
+          {editable ? (
             <div className="flex items-center gap-1">
               {dragHandle}
               {roleSelector}
             </div>
-          ) : undefined
-        }
-        trailing={
-          editable ? (
-            <div className="flex items-center gap-0.5">
+          ) : (
+            <span className="comet-body-xs-accented truncate text-foreground">
+              {getRoleLabel(message.role)}
+            </span>
+          )}
+          {editable && (
+            <div className="ml-auto flex items-center gap-0.5">
               {onDuplicateMessage && (
                 <TooltipWrapper content="Duplicate">
                   <Button
@@ -168,28 +166,27 @@ const SortableMessage: React.FC<SortableMessageProps> = ({
                 </TooltipWrapper>
               )}
             </div>
-          ) : undefined
-        }
-      >
-        {editable ? (
-          <AutoResizeTextarea
-            value={text}
-            onChange={(v) => onChangeMessage?.(index, v)}
-          />
-        ) : (
-          <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
-            {text}
-          </div>
-        )}
-      </CollapsibleBlock>
+          )}
+        </div>
+        <div className="border-t px-3 py-2">
+          {editable ? (
+            <AutoResizeTextarea
+              value={text}
+              onChange={(v) => onChangeMessage?.(index, v)}
+            />
+          ) : (
+            <div className="comet-body-s whitespace-pre-wrap break-words text-foreground">
+              {text}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 };
 
 type BlueprintChatMessagesProps = {
   messages: LLMMessage[];
-  isExpanded: (index: number) => boolean;
-  onToggle: (index: number) => void;
   editable?: boolean;
   onChangeMessage?: (index: number, content: string) => void;
   onChangeRole?: (index: number, role: LLM_MESSAGE_ROLE) => void;
@@ -202,8 +199,6 @@ type BlueprintChatMessagesProps = {
 
 const BlueprintChatMessages: React.FC<BlueprintChatMessagesProps> = ({
   messages,
-  isExpanded,
-  onToggle,
   editable = false,
   onChangeMessage,
   onChangeRole,
@@ -239,8 +234,6 @@ const BlueprintChatMessages: React.FC<BlueprintChatMessagesProps> = ({
           message={message}
           index={index}
           messages={messages}
-          isExpanded={isExpanded(index)}
-          onToggle={() => onToggle(index)}
           editable={editable}
           onChangeMessage={onChangeMessage}
           onChangeRole={onChangeRole}

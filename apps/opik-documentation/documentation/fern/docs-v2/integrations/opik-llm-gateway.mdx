@@ -1,0 +1,99 @@
+---
+description: Start here to integrate Opik LLM Gateway into your genai application
+  for centralized LLM provider access using a consistent API format.
+headline: Opik LLM Gateway | Opik Documentation
+og:description: Learn to use the Opik LLM Gateway to centralize access to multiple
+  LLM providers using a consistent OpenAI-compatible API format.
+og:site_name: Opik Documentation
+og:title: Integrate Opik LLM Gateway for Centralized LLM Access
+title: Observability for Opik LLM Gateway with Opik
+---
+
+The Opik LLM Gateway is a light-weight proxy server that can be used to query different LLM APIs using the OpenAI format. It's designed for **development and testing purposes** and provides a centralized way to access multiple LLM providers through a single endpoint.
+
+## Gateway Overview
+
+An LLM gateway is a proxy server that forwards requests to an LLM API and returns the response. This is useful when you want to centralize access to LLM providers or query multiple LLM providers from a single endpoint using a consistent request and response format.
+
+The Opik LLM Gateway supports the OpenAI-compatible API format, making it easy to integrate with existing applications that use OpenAI's API structure.
+
+<Warning>
+  The Opik LLM Gateway is currently in beta and is subject to change.
+</Warning>
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=opik-llm-gateway&utm_campaign=opik) provides a hosted version of the Opik platform. [Simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=opik-llm-gateway&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=opik-llm-gateway&utm_campaign=opik) for more information.
+
+## Getting Started
+
+### Configuring LLM Provider Credentials
+
+In order to use the Opik LLM Gateway, you will first need to configure your LLM provider credentials in the Opik UI. Once this is done, you can use the Opik gateway to query your LLM provider.
+
+### Using the Opik LLM Gateway
+
+Once your LLM provider credentials are configured, you can make requests to the Opik LLM Gateway endpoint:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+    ```bash
+    curl -L 'https://www.comet.com/opik/api/v1/private/chat/completions' \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: text/event-stream' \
+    -H 'Comet-Workspace: <OPIK_WORKSPACE>' \
+    -H 'authorization: <OPIK_API_KEY>' \
+    -d '{
+        "model": "<LLM_MODEL>",
+        "messages": [
+            {
+                "role": "user",
+                "content": "What is Opik ?"
+            }
+        ],
+        "temperature": 1,
+        "stream": false,
+        "max_tokens": 10000
+    }'
+    ```
+    </Tab>
+    <Tab value="Opik self-hosted" title="Opik self-hosted">
+    ```bash
+    curl -L 'http://localhost:5173/api/v1/private/chat/completions' \
+    -H 'Content-Type: application/json' \
+    -H 'Accept: text/event-stream' \
+    -d '{
+        "model": "<LLM_MODEL>",
+        "messages": [
+            {
+                "role": "user",
+                "content": "What is Opik ?"
+            }
+        ],
+        "temperature": 1,
+        "stream": false,
+        "max_tokens": 10000
+    }'
+    ```
+    </Tab>
+</Tabs>
+
+### Request Parameters
+
+The Opik LLM Gateway accepts the following parameters in the request body:
+
+- **`model`**: The LLM model identifier (configured in Opik UI)
+- **`messages`**: Array of message objects with `role` and `content` fields
+- **`temperature`**: Sampling temperature (0-2)
+- **`stream`**: Boolean to enable streaming responses
+- **`max_tokens`**: Maximum number of tokens to generate
+
+### Response Format
+
+The gateway returns responses in the OpenAI-compatible format, making it easy to integrate with existing applications.
+
+## Further Improvements
+
+If you have suggestions for improving the Opik LLM Gateway, please let us know by opening an issue on [GitHub](https://github.com/comet-ml/opik/issues).

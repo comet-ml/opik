@@ -9,6 +9,10 @@ subtitle: Step-by-step guide on how to evaluate and optimize AI agents throughou
 title: Best practices for evaluating agents
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 Building AI agents isn’t just about making them work: it’s about making them reliable, intelligent, and scalable.
 
 As agents reason, act, and interact with real users, treating them like black boxes isn’t enough.
@@ -19,7 +23,7 @@ This guide walks you through the agent lifecycle and shows how Opik helps at eve
 
 <Tip>
   In this guide, we will focus on evaluating complex agentic applications. If you are looking at evaluating single
-  prompts you can refer to the [Evaluate A Prompt](/evaluation/evaluate_prompt) guide.
+  prompts you can refer to the [Evaluate A Prompt](/v1/evaluation/evaluate_prompt) guide.
 </Tip>
 
 ### 1. Start with Observability
@@ -35,7 +39,7 @@ With **just two lines of code**, you unlock full visibility into how your agent 
 <Tip>
   This guide uses a Python agent built with LangGraph to illustrate tracing and evaluation. If you're using other
   frameworks like OpenAI Agents, CrewAI, Haystack, or LlamaIndex, you can check out our [Integrations
-  Overview](/integrations/overview) to get started with tracing in your setup.
+  Overview](/v1/integrations/overview) to get started with tracing in your setup.
 </Tip>
 
 Once you’ve logged your first traces, Opik gives you immediate access to valuable insights, not just about what your agent did, but how it performed. You can explore detailed trace data, see how many traces and spans your agent is generating, track token usage, and monitor response latency across runs.
@@ -104,7 +108,7 @@ That’s where online evaluation becomes essential.
 With Opik, you can automatically score traces using a wide range of metrics, such as answer relevance, hallucination detection, agent moderation, user moderation, or even custom criteria tailored to your specific use case. These evaluations run continuously, giving you structured feedback on your agent’s quality without requiring manual review.
 
 <Tip>
-  Want to dive deeper? Check out the [Metrics Documentation](/evaluation/metrics/overview) to explore all the heuristic
+  Want to dive deeper? Check out the [Metrics Documentation](/v1/evaluation/metrics/overview) to explore all the heuristic
   metrics and LLM-as-a-judge evaluations that Opik offers out of the box.
 </Tip>
 
@@ -193,7 +197,7 @@ dataset = client.get_dataset(name="Your_Dataset")
 
 """
 Note: if you don't have a dataset yet, you can easily create it this way:
-dataset = client.get_or_create_dataset(name="My_Dataset")
+dataset = client.get_or_create_dataset(name="My_Dataset", project_name="my-project")
 
 # Define the items
 items = [
@@ -269,7 +273,8 @@ eval_results = evaluate(
   experiment_name="AgentToolSelectionExperiment",
   dataset=dataset,
   task=evaluation_task,
-  scoring_metrics=metrics
+  scoring_metrics=metrics,
+  project_name="my-project"
 )
 
 ```
@@ -393,9 +398,9 @@ But this is just the beginning.
 
 From here, you might want to:
 
-- Optimize your prompts to drive better agent behavior with **[Prompt Optimization](/agent_optimization/overview)**.
-- Monitor agents in production to catch regressions, errors, and drift in real-time with **[Production Monitoring](/production/production_monitoring)**.
-- Add **[Guardrails](/production/guardrails)** for security, content safety, and sensitive data leakage prevention, ensuring your agents behave responsibly even in dynamic environments.
+- Optimize your prompts to drive better agent behavior with **[Prompt Optimization](/v1/agent_optimization/overview)**.
+- Monitor agents in production to catch regressions, errors, and drift in real-time with **[Production Monitoring](/v1/production/production_monitoring)**.
+- Add **[Guardrails](/v1/production/guardrails)** for security, content safety, and sensitive data leakage prevention, ensuring your agents behave responsibly even in dynamic environments.
 
 Each of these steps builds on the foundation you’ve set: observability, evaluation, and continuous iteration.
 

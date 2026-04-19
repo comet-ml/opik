@@ -8,6 +8,10 @@ subtitle: Step-by-step guide to evaluate agent trajectories
 title: Evaluate agent trajectories
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 Evaluating agents requires more than checking the final output. You need to assess The
 **trajectory** — the steps your agent takes to reach an answer, including tool selection, reasoning
 chains, and intermediate decisions.
@@ -28,11 +32,11 @@ paths, and optimize agent behavior before it reaches production.
 
 Before evaluating agent trajectories, you need:
 
-1. **Opik SDK installed and configured** — See [Quickstart](/quickstart) for setup
+1. **Opik SDK installed and configured** — See [Quickstart](/v1/quickstart) for setup
 2. **Agent with observability enabled** — Your agent must be instrumented with Opik tracing
 3. **Test dataset** — Examples with expected agent behavior
 
-If your agent isn't traced yet, see [Log Traces](/tracing/log_traces) to add observability first.
+If your agent isn't traced yet, see [Log Traces](/v1/tracing/log_traces) to add observability first.
 
 ### Installing the Opik SDK
 
@@ -146,7 +150,7 @@ will allow us to capture the agent's trajectory and evaluate it.
 
 <Tip>
 If you're using specific agent frameworks like CrewAI, LangGraph, or OpenAI Agents, check our
-[integrations](/integrations/overview) for framework-specific setup instructions.
+[integrations](/v1/integrations/overview) for framework-specific setup instructions.
 </Tip>
 
 ## Evaluating your agent's trajectory
@@ -163,7 +167,7 @@ agent should be calling:
 from opik import Opik
 
 client = Opik()
-dataset = client.get_or_create_dataset(name="agent_tool_selection")
+dataset = client.get_or_create_dataset(name="agent_tool_selection", project_name="my-project")
 dataset.insert([
     {
         "input": "What is 25 * 17?",
@@ -327,7 +331,8 @@ from opik.evaluation import evaluate
 experiment = evaluate(
     dataset=dataset,
     task=evaluation_task,
-    scoring_metrics=[StrictToolAdherenceMetric()]
+    scoring_metrics=[StrictToolAdherenceMetric()],
+    project_name="my-project"
 )
 ```
 
@@ -360,7 +365,7 @@ using the `Trace` button.
 
 Now that you can evaluate agent trajectories:
 
-- Learn about [Task Span Metrics](/evaluation/metrics/task_span_metrics) for advanced trajectory
+- Learn about [Task Span Metrics](/v1/evaluation/metrics/task_span_metrics) for advanced trajectory
 analysis patterns
-- Optimize your agent with [Agent Optimization](/agent_optimization/overview)
-- Monitor agents in production with [Production Monitoring](/production/production_monitoring)
+- Optimize your agent with [Agent Optimization](/v1/agent_optimization/overview)
+- Monitor agents in production with [Production Monitoring](/v1/production/production_monitoring)

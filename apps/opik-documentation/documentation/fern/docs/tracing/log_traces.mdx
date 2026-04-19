@@ -8,7 +8,7 @@ title: Log traces
 ---
 
 <Tip>
-  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
+  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/v1/quickstart) guide that
   will walk you through the process of logging your first LLM call.
 </Tip>
 
@@ -22,16 +22,16 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 </Frame>
 
 Opik supports agent observability using our [Typescript SDK](/reference/typescript-sdk/overview),
-[Python SDK](/reference/python-sdk/overview), [first class OpenTelemetry support](/integrations/opentelemetry)
+[Python SDK](/reference/python-sdk/overview), [first class OpenTelemetry support](/v1/integrations/opentelemetry)
 and our [REST API](/reference/rest-api/overview).
 
 <Tip>
   We recommend starting with one of our integrations to get started quickly, you can find a full list of our
-  integrations in the [integrations overview](/integrations/overview) page.
+  integrations in the [integrations overview](/v1/integrations/overview) page.
 </Tip>
 
 We won't be covering how to track chat conversations in this guide, you can learn more about this in the
-[Logging conversations](/tracing/log_chat_conversations) guide.
+[Logging conversations](/v1/tracing/log_chat_conversations) guide.
 
 ## Enable agent observability
 
@@ -89,7 +89,7 @@ Opik SDK.
 
 <Tip>
   Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
-  guide](/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
+  guide](/v1/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
   [Comet](https://www.comet.com/signup?from=llm).
 </Tip>
 
@@ -377,22 +377,22 @@ Once you have installed and configured the Opik SDK, you can start using it to t
   </Tab>
   <Tab title="Other" value="other" language="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
-    a full list of integrations [here](/integrations/overview). For example:
+    a full list of integrations [here](/v1/integrations/overview). For example:
 
-    - [Dify](/integrations/dify)
-    - [Agno](/integrations/agno)
-    - [Ollama](/integrations/ollama)
+    - [Dify](/v1/integrations/dify)
+    - [Agno](/v1/integrations/agno)
+    - [Ollama](/v1/integrations/ollama)
 
     If you are using a framework or library that is not listed, you can still log your traces
     using either the function decorator or the Opik client, check out the
-    [Log Traces](/tracing/log_traces) guide for more information.
+    [Log Traces](/v1/tracing/log_traces) guide for more information.
 
   </Tab>
 </Tabs>
 
 <Tip>
   Opik has more than 40 integrations with the majority of the popular frameworks and libraries. You can find a full list
-  of integrations in the integrations [overview page](/integrations/overview).
+  of integrations in the integrations [overview page](/v1/integrations/overview).
 </Tip>
 
 If you would like more control over the logging process, you can use the low-level SDKs to log
@@ -402,13 +402,13 @@ your traces and spans.
 
 Now that you have observability enabled for your agents, you can start to review and analyze the
 agent calls in Opik. In the Opik UI, you can review each agent call, see the
-[agent graph](/tracing/log_agent_graphs) and review all the tool calls made by the agent.
+[agent graph](/v1/tracing/log_agent_graphs) and review all the tool calls made by the agent.
 
 <Frame>
   <img src="/img/tracing/tracing_agent_overview.png" />
 </Frame>
 
-As a next step, you can create an [offline evaluation](/evaluation/evaluate_prompt) to evaluate your
+As a next step, you can create an [offline evaluation](/v1/evaluation/evaluate_prompt) to evaluate your
 agent's performance on a fixed set of samples.
 
 ## Advanced usage
@@ -619,7 +619,7 @@ If you need full control over the logging process, you can use the low-level SDK
 
         <Tip>
             Make sure you define the environment variables for the Opik client in your `.env` file,
-            you can find more information about the configuration [here](/tracing/sdk_configuration).
+            you can find more information about the configuration [here](/v1/tracing/sdk_configuration).
         </Tip>
     </Tab>
     <Tab title="Python" value="python" language="python">
@@ -978,6 +978,25 @@ with opik.project_context("customer-support"):
 
 Nesting rules are the same: the first `project_context` or `@track(project_name=...)` to run owns the context. Inner calls with a different project name are ignored (a warning is logged).
 
+<Warning>
+When a script combines `@track` tracing with other Opik API calls — such as `evaluate()`, `get_or_create_dataset()`, or `Prompt()` — traces and API objects can land in different projects if the project name is not set consistently. Make sure the value passed to `opik.configure(project_name=...)` (which controls where `@track` traces go) matches the `project_name` argument passed explicitly to each API call:
+
+```python
+import opik
+
+opik.configure(project_name="my-project")
+
+dataset = client.get_or_create_dataset(name="my-dataset", project_name="my-project")
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    project_name="my-project",  # must match opik.configure value above
+    ...
+)
+```
+</Warning>
+
 ### Flushing traces and spans
 
 This process is optional and is only needed if you are running a short-lived script or if you are
@@ -1060,6 +1079,6 @@ debugging why traces and spans are not being logged to Opik.
 
 Once you have the observability set up for your agent, you can go one step further and:
 
-- [Logging chat conversations](/tracing/log_chat_conversations)
-- [Logging user feedback](/tracing/annotate_traces)
-- [Setup online evaluation metrics](/production/rules)
+- [Logging chat conversations](/v1/tracing/log_chat_conversations)
+- [Logging user feedback](/v1/tracing/annotate_traces)
+- [Setup online evaluation metrics](/v1/production/rules)

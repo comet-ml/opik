@@ -1,0 +1,203 @@
+---
+headline: Export Data | Opik Documentation
+og:description: Export traces, spans, threads, datasets, and experiments from Opik
+  using the SDK, REST API, UI, or command-line tools
+og:site_name: Opik Documentation
+og:title: Export Data from Opik
+title: Export data
+---
+
+Opik gives you several ways to export the data you've logged — pick the one that fits your workflow.
+
+## SDK
+
+The Python and TypeScript SDKs let you search and export traces, spans, and threads programmatically.
+
+### Traces
+
+<Tabs>
+  <Tab title="Python">
+    ```python
+    import opik
+
+    client = opik.Opik()
+
+    # Export all traces
+    traces = client.search_traces(project_name="Default project", max_results=1000000)
+
+    # Export filtered traces
+    traces = client.search_traces(
+      project_name="Default project",
+      filter_string='input contains "Opik"'
+    )
+
+    # Convert to dict if needed
+    traces = [trace.dict() for trace in traces]
+    ```
+  </Tab>
+  <Tab title="TypeScript">
+    ```typescript
+    import { Opik } from "opik";
+
+    const client = new Opik();
+
+    // Export all traces
+    const traces = await client.searchTraces({
+      projectName: "Default project",
+      maxResults: 1000000,
+    });
+
+    // Export filtered traces
+    const filtered = await client.searchTraces({
+      projectName: "Default project",
+      filterString: 'input contains "Opik"',
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Spans
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Export spans by trace ID
+spans = client.search_spans(
+  project_name="Default project",
+  trace_id="067092dc-e639-73ff-8000-e1c40172450f"
+)
+
+# Export filtered spans
+spans = client.search_spans(
+  project_name="Default project",
+  filter_string='input contains "Opik"'
+)
+```
+
+### Threads
+
+```python
+import opik
+
+client = opik.Opik()
+
+# Export all threads
+threads = client.search_threads(project_name="Default project", max_results=1000000)
+
+# Export filtered threads
+threads = client.search_threads(
+  project_name="Default project",
+  filter_string='number_of_messages >= 5'
+)
+```
+
+### Filtering with OQL
+
+All search methods accept a `filter_string` / `filterString` using the Opik Query Language (OQL):
+
+```
+"<COLUMN> <OPERATOR> <VALUE> [AND <COLUMN> <OPERATOR> <VALUE>]*"
+```
+
+- String values must be wrapped in double quotes
+- Multiple conditions can be combined with `AND` (OR is not supported)
+- DateTime fields require ISO 8601 format (e.g., `"2024-01-01T00:00:00Z"`)
+- Use dot notation for nested fields: `metadata.model`, `feedback_scores.accuracy`
+
+Common filter examples:
+
+```python
+client.search_traces(filter_string='start_time >= "2024-01-01T00:00:00Z"')
+client.search_traces(filter_string='usage.total_tokens > 1000')
+client.search_traces(filter_string='metadata.model = "gpt-4o"')
+client.search_traces(filter_string='feedback_scores.user_rating is_not_empty')
+client.search_traces(filter_string='tags contains "production"')
+```
+
+The full list of supported columns per entity type is documented below.
+
+## REST API
+
+Use the [`/traces`](/reference/rest-api/traces/get-traces-by-project) and [`/spans`](/reference/rest-api/spans/get-spans-by-project) endpoints to export data. Both endpoints are paginated.
+
+<Warning>
+  The REST API `filter` parameter has limited flexibility as it was designed for use with the Opik UI.
+  For complex queries, use the SDK instead.
+</Warning>
+
+## UI
+
+Select the traces or spans you want to export in the Opik dashboard and click **Export CSV** in the **Actions** dropdown.
+
+<Frame>
+  <img src="/img/tracing/download_traces.png" />
+</Frame>
+
+<Tip>
+  The UI exports up to 100 traces or spans at a time. For larger exports use the SDK or CLI.
+</Tip>
+
+## Command-line tools
+
+The `opik export` and `opik import` commands let you export traces, spans, datasets, prompts, and experiments to local JSON or CSV files, and import them back — useful for migrations, backups, and cross-environment syncs.
+
+### Export
+
+```bash
+opik export WORKSPACE TYPE NAME [OPTIONS]
+```
+
+`TYPE` is one of: `all`, `dataset`, `project`, `experiment`, `prompt`
+
+```bash
+# Export everything in a workspace
+opik export my-workspace all
+
+# Export a specific project
+opik export my-workspace project "my-project"
+
+# Export a specific dataset
+opik export my-workspace dataset "my-test-dataset"
+
+# Export with a date filter
+opik export my-workspace project "my-project" \
+  --filter 'created_at >= "2024-01-01T00:00:00Z"'
+
+# Export as CSV for analysis
+opik export my-workspace project "my-project" --format csv --path ./csv_data
+```
+
+### Import
+
+```bash
+opik import WORKSPACE TYPE NAME [OPTIONS]
+```
+
+```bash
+# Import a dataset
+opik import my-workspace dataset "my-dataset"
+
+# Import a project
+opik import my-workspace project "my-project"
+
+# Preview what would be imported
+opik import my-workspace project "my-project" --dry-run
+```
+
+Imports are automatically resumable — if interrupted, re-run the same command and it picks up where it left off using a local `migration_manifest.db`.
+
+### Migrating between environments
+
+```bash
+# Step 1: Export from source (use source credentials)
+OPIK_API_KEY=<source_key> OPIK_URL_OVERRIDE=https://source.opik.example.com \
+  opik export my-workspace project "my-project" --path ./migration_data
+
+# Step 2: Import to destination (use destination credentials)
+OPIK_API_KEY=<dest_key> OPIK_URL_OVERRIDE=https://dest.opik.example.com \
+  opik import my-workspace project "my-project" --path ./migration_data
+```
+
+See the CLI help (`opik export --help` / `opik import --help`) for all options and troubleshooting.

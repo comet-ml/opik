@@ -10,6 +10,7 @@ import { ExperimentItemStatus, ExecutionPolicy } from "./test-suites";
 
 export type { ExecutionPolicy };
 export type RunStatus = "passed" | "failed";
+export type DatasetListType = "dataset" | "test_suite";
 
 export interface Dataset {
   id: string;

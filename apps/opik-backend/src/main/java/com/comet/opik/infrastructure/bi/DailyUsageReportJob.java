@@ -13,10 +13,6 @@ import io.opentelemetry.context.Scope;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
-import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,10 +23,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.function.Tuple4;
 
-import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.comet.opik.infrastructure.bi.UsageReportService.UserCount;
@@ -48,7 +42,7 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     private final @NonNull UsageReportService usageReportService;
     private final @NonNull LockService lockService;
     private final @NonNull OpikConfiguration config;
-    private final @NonNull Client client;
+    private final @NonNull StatsClient statsClient;
     private final @NonNull TraceService traceService;
     private final @NonNull ExperimentService experimentService;
     private final @NonNull DatasetService datasetService;
@@ -109,34 +103,23 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
     private Mono<Void> reportEvent(String anonymousId) {
         return fetchAllReportData()
                 .flatMap(results -> Mono.just(mapResults(anonymousId, results)))
-                .flatMap(this::sendEvent)
-                .flatMap(this::processResponse)
+                .flatMap(biEvent -> {
+                    if (hasNoDataToSubmit(biEvent)) {
+                        log.info("No daily usage data to report");
+                        return Mono.empty();
+                    }
+                    return Mono.fromFuture(() -> statsClient.sendEvent(biEvent))
+                            .subscribeOn(Schedulers.boundedElastic());
+                })
+                .doOnNext(success -> {
+                    if (success) {
+                        usageReportService.markDailyReportAsSent();
+                        log.info("Daily usage reported successfully");
+                    } else {
+                        log.warn("Failed to report daily usage");
+                    }
+                })
                 .then();
-    }
-
-    private Mono<Void> processResponse(Response response) {
-        if (response.getStatusInfo().getFamily() == Response.Status.Family.SUCCESSFUL && response.hasEntity()) {
-
-            var notificationEventResponse = response.readEntity(NotificationEventResponse.class);
-
-            if (notificationEventResponse.success()) {
-                usageReportService.markDailyReportAsSent();
-                log.info("Event reported successfully: {}", notificationEventResponse.message());
-            } else {
-                log.warn("Failed to report event: {}", notificationEventResponse.message());
-            }
-
-            return Mono.empty();
-        }
-
-        log.warn("Failed to report event: {}", response.getStatusInfo());
-        if (response.hasEntity()) {
-            log.warn("Response: {}", response.readEntity(String.class));
-        }
-
-        log.info("Daily usage report not send");
-
-        return Mono.empty();
     }
 
     private Mono<Tuple4<UserCount, Long, Long, Long>> fetchAllReportData() {
@@ -159,21 +142,6 @@ public class DailyUsageReportJob extends Job implements InterruptableJob {
                         "daily_traces", String.valueOf(results.getT2()),
                         "daily_experiments", String.valueOf(results.getT3()),
                         "daily_datasets", String.valueOf(results.getT4())));
-    }
-
-    private Mono<Response> sendEvent(BiEvent biEvent) {
-
-        if (hasNoDataToSubmit(biEvent)) {
-            log.info("No data to process");
-            return Mono.empty();
-        }
-
-        return Mono.fromFuture(
-                () -> (CompletableFuture<Response>) client.target(URI.create(config.getUsageReport().getUrl()))
-                        .request()
-                        .accept(MediaType.APPLICATION_JSON_TYPE)
-                        .async()
-                        .post(Entity.json(biEvent)));
     }
 
     private boolean hasNoDataToSubmit(BiEvent biEvent) {

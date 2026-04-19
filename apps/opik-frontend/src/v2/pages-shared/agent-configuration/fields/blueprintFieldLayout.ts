@@ -12,9 +12,7 @@ export const isMultiLineField = (value: BlueprintValue): boolean => {
 };
 
 export const collectMultiLineKeys = (values: BlueprintValue[]): string[] =>
-  values
-    .filter((v) => v.type !== BlueprintValueType.PROMPT && isMultiLineField(v))
-    .map((v) => v.key);
+  values.filter((v) => isMultiLineField(v)).map((v) => v.key);
 
 export const hasAnyExpandableField = (values: BlueprintValue[]): boolean =>
   values.some(

@@ -1,5 +1,5 @@
 import React from "react";
-import { FileTerminal, Hash, ToggleLeft, Type } from "lucide-react";
+import { FileTerminal, Hash, Split, Type } from "lucide-react";
 import { BlueprintValueType } from "@/types/agent-configs";
 
 const TYPE_CONFIG: Record<
@@ -9,7 +9,7 @@ const TYPE_CONFIG: Record<
   [BlueprintValueType.INT]: { icon: Hash, color: "var(--color-blue)" },
   [BlueprintValueType.FLOAT]: { icon: Hash, color: "var(--color-blue)" },
   [BlueprintValueType.BOOLEAN]: {
-    icon: ToggleLeft,
+    icon: Split,
     color: "var(--color-green)",
   },
   [BlueprintValueType.PROMPT]: {

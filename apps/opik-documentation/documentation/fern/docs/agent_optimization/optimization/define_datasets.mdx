@@ -8,7 +8,11 @@ og:title: Define Datasets in Opik - Essential for Optimization
 title: Define datasets
 ---
 
-The optimizer evaluates candidate prompts against datasets stored in Opik. If you are brand new to datasets in Opik, start with [Manage datasets](/evaluation/manage_datasets); this page highlights specific tips to get you started.
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
+The optimizer evaluates candidate prompts against datasets stored in Opik. If you are brand new to datasets in Opik, start with [Manage datasets](/v1/evaluation/manage_datasets); this page highlights specific tips to get you started.
 
 Datasets are a crucial component of the optimizer SDK, serving as a key component to run and evaluate (score) each dataset item using optimizers to develop a better outcome. Without datasets, it's not possible to steer the optimizer on what is good and bad.
 
@@ -30,7 +34,7 @@ Every item is a JSON object. Required keys depend on your prompt template; optio
     import opik
 
     client = opik.Opik()
-    dataset = client.get_or_create_dataset(name="agent-opt-support")
+    dataset = client.get_or_create_dataset(name="agent-opt-support", project_name="my-project")
     dataset.insert([
         {"question": "Summarize Opik.", "answer": "Opik is an LLM observability platform."},
         {"question": "List two optimizer types.", "answer": "MetaPrompt and HRPO."},
@@ -97,7 +101,7 @@ records = [
 ]
 
 client = opik.Opik()
-dataset = client.get_or_create_dataset("your-hf-train")
+dataset = client.get_or_create_dataset("your-hf-train", project_name="my-project")
 dataset.insert(records)
 ```
 
@@ -119,7 +123,7 @@ import opik
 client = opik.Opik()
 
 # Create training dataset (70-80% of your data)
-training_dataset = client.get_or_create_dataset(name="agent-opt-train")
+training_dataset = client.get_or_create_dataset(name="agent-opt-train", project_name="my-project")
 training_dataset.insert([
     {"question": "What is Opik?", "answer": "Opik is an LLM observability platform."},
     {"question": "List optimizer types.", "answer": "MetaPrompt, Evolutionary, etc."},
@@ -127,7 +131,7 @@ training_dataset.insert([
 ])
 
 # Create validation dataset (20-30% of your data)
-validation_dataset = client.get_or_create_dataset(name="agent-opt-val")
+validation_dataset = client.get_or_create_dataset(name="agent-opt-val", project_name="my-project")
 validation_dataset.insert([
     {"question": "Explain Opik's purpose.", "answer": "Opik helps monitor LLMs."},
     {"question": "Name two optimizers.", "answer": "GEPA and Few-Shot Bayesian."},
@@ -164,6 +168,7 @@ test_results = evaluate_prompt(
     dataset=test_dataset,
     scoring_metrics=[my_metric],
     task_threads=4,
+    project_name="my-project",
 )
 
 print(f"Test score: {test_results.mean_scores}")
@@ -189,4 +194,4 @@ This final test score gives you confidence that improvements will transfer to re
 
 ## Next steps
 
-Define how you will score results with [Define metrics](/agent_optimization/optimization/define_metrics), then follow [Optimize prompts](/agent_optimization/optimization/optimize_prompts) to launch experiments. For domain-specific scoring, extend the dataset with extra fields and reference them inside [Custom metrics](/agent_optimization/advanced/custom_metrics).
+Define how you will score results with [Define metrics](/v1/agent_optimization/optimization/define_metrics), then follow [Optimize prompts](/v1/agent_optimization/optimization/optimize_prompts) to launch experiments. For domain-specific scoring, extend the dataset with extra fields and reference them inside [Custom metrics](/v1/agent_optimization/advanced/custom_metrics).

@@ -10,6 +10,7 @@ export enum EXPLAINER_ID {
   what_are_threads = "what_are_threads",
   whats_online_evaluation = "whats_online_evaluation",
   i_added_traces_to_an_test_suite_now_what = "i_added_traces_to_an_test_suite_now_what",
+  i_added_items_to_a_dataset_now_what = "i_added_items_to_a_dataset_now_what",
   how_to_choose_annotation_queue_type = "how_to_choose_annotation_queue_type",
   why_would_i_want_to_add_traces_to_an_test_suite = "why_would_i_want_to_add_traces_to_an_test_suite",
   hows_the_cost_estimated = "hows_the_cost_estimated",
@@ -29,6 +30,7 @@ export enum EXPLAINER_ID {
   whats_an_test_suite = "whats_an_test_suite",
   why_do_i_need_multiple_test_suites = "why_do_i_need_multiple_test_suites",
   what_format_is_this_to_add_my_test_suite_item = "what_format_is_this_to_add_my_test_suite_item",
+  what_format_is_this_to_add_my_dataset_item = "what_format_is_this_to_add_my_dataset_item",
   whats_the_prompt_library = "whats_the_prompt_library",
   how_do_i_use_this_prompt = "how_do_i_use_this_prompt",
   why_do_i_have_experiments_in_the_prompt_library = "why_do_i_have_experiments_in_the_prompt_library",
@@ -162,6 +164,14 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     docLink: "/evaluation/overview",
     docHash: "#running-an-evaluation",
   },
+  [EXPLAINER_ID.i_added_items_to_a_dataset_now_what]: {
+    id: EXPLAINER_ID.i_added_items_to_a_dataset_now_what,
+    title: "Items added to dataset",
+    description:
+      "Your items have been added to the dataset and can now be used in experiments to evaluate your agent.",
+    docLink: "/evaluation/overview",
+    docHash: "#running-an-evaluation",
+  },
   [EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite]: {
     id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite,
     description:
@@ -246,7 +256,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_are_experiment_items]: {
     id: EXPLAINER_ID.what_are_experiment_items,
     description:
-      "Experiment items are individual evaluations that connect a test suite sample with its LLM output, feedback scores, and trace.",
+      "Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace.",
     docLink: "/evaluation/overview",
     docHash: "#analyzing-evaluation-results",
   },
@@ -288,7 +298,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.what_format_is_this_to_add_my_test_suite_item]: {
     id: EXPLAINER_ID.what_format_is_this_to_add_my_test_suite_item,
     description:
-      'Define input-output examples for evaluating your LLM. Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
+      'Define the input data for triggering your agent. Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
+  },
+  [EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item]: {
+    id: EXPLAINER_ID.what_format_is_this_to_add_my_dataset_item,
+    description:
+      'Define input-output examples for evaluating your agent. Use a valid JSON object with key-value pairs. Example: {"key": "value"}',
   },
   [EXPLAINER_ID.whats_the_prompt_library]: {
     id: EXPLAINER_ID.whats_the_prompt_library,

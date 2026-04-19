@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useQuery, UseQueryResult } from "@tanstack/react-query";
 import api, {
   TRACES_KEY,
@@ -48,48 +49,61 @@ export default function useProjectOnboardingStats(
 ): ProjectStats | undefined {
   const enabled = !!projectId;
 
-  const { data: traceTotal, isLoading: tracesLoading } =
+  const { data: traceTotal, isFetched: tracesFetched } =
     useOnboardingCountQuery(TRACES_KEY, TRACES_REST_ENDPOINT, enabled, {
       project_id: projectId!,
       ...VISIBILITY_FILTER_PARAMS,
     });
 
-  const { data: experimentTotal, isLoading: experimentsLoading } =
+  const { data: experimentTotal, isFetched: experimentsFetched } =
     useOnboardingCountQuery(
       "experiments",
       `${PROJECTS_REST_ENDPOINT}${projectId}/experiments`,
       enabled,
     );
 
-  const { data: optimizationTotal, isLoading: optimizationsLoading } =
+  const { data: optimizationTotal, isFetched: optimizationsFetched } =
     useOnboardingCountQuery(
       OPTIMIZATIONS_KEY,
       `${PROJECTS_REST_ENDPOINT}${projectId}/optimizations`,
       enabled,
     );
 
-  const { data: blueprintTotal, isLoading: blueprintsLoading } =
+  const { data: blueprintTotal, isFetched: blueprintsFetched } =
     useOnboardingCountQuery(
       AGENT_CONFIGS_KEY,
       `/v1/private/agent-configs/blueprints/history/projects/${projectId}`,
       enabled,
     );
 
+  // Memoize so consumers (e.g. the bridge context) get a stable reference
+  // across refetches when values haven't changed. Without this, every 30s
+  // refetch re-renders the hook, returns a new object, and cascades into a
+  // `context:changed` emit to the Ollie iframe — causing a visible blink.
+  const stats = useMemo<ProjectStats>(
+    () => ({
+      traceCount: traceTotal ?? 0,
+      experimentCount: experimentTotal ?? 0,
+      optimizationCount: optimizationTotal ?? 0,
+      blueprintVersionCount: blueprintTotal ?? 0,
+    }),
+    [traceTotal, experimentTotal, optimizationTotal, blueprintTotal],
+  );
+
   if (!enabled) return undefined;
 
+  // Wait for every query's first fetch to complete (success OR error).
+  // Using `isFetched` instead of `isLoading` avoids a flicker back to
+  // `undefined` on each refetch when a query has errored (no cached data),
+  // which would otherwise happen every 30s and cause the Ollie iframe to blink.
   if (
-    tracesLoading ||
-    experimentsLoading ||
-    optimizationsLoading ||
-    blueprintsLoading
+    !tracesFetched ||
+    !experimentsFetched ||
+    !optimizationsFetched ||
+    !blueprintsFetched
   ) {
     return undefined;
   }
 
-  return {
-    traceCount: traceTotal ?? 0,
-    experimentCount: experimentTotal ?? 0,
-    optimizationCount: optimizationTotal ?? 0,
-    blueprintVersionCount: blueprintTotal ?? 0,
-  };
+  return stats;
 }

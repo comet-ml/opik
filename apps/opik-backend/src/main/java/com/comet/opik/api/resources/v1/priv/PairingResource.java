@@ -8,6 +8,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.pairing.PairingService;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -35,7 +36,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Path("/v1/private/pairing")
@@ -50,6 +53,7 @@ public class PairingResource {
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PairingService pairingService;
     private final @NonNull LocalRunnerConfig runnerConfig;
+    private final @NonNull AnalyticsService analyticsService;
 
     @POST
     @Path("/sessions")
@@ -67,6 +71,14 @@ public class PairingResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         CreateSessionResponse response = pairingService.create(workspaceId, userName, request);
+
+        analyticsService.trackEvent("opik_connect_started", Map.of(
+                "session_id", response.sessionId().toString(),
+                "project_id", request.projectId().toString(),
+                "workspace_id", workspaceId,
+                "user_name", userName,
+                "date", Instant.now().toString()));
+
         return Response.status(Response.Status.CREATED).entity(response).build();
     }
 
@@ -88,11 +100,29 @@ public class PairingResource {
         ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
-        UUID runnerId = pairingService.activate(workspaceId, userName, sessionId, request);
-        URI location = uriInfo.getBaseUriBuilder()
-                .path("v1/private/local-runners/{runnerId}")
-                .build(runnerId);
-        return Response.created(location).build();
+
+        try {
+            UUID runnerId = pairingService.activate(workspaceId, userName, sessionId, request);
+
+            analyticsService.trackEvent("opik_connect_succeeded", Map.of(
+                    "session_id", sessionId.toString(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "date", Instant.now().toString()));
+
+            URI location = uriInfo.getBaseUriBuilder()
+                    .path("v1/private/local-runners/{runnerId}")
+                    .build(runnerId);
+            return Response.created(location).build();
+        } catch (Exception e) {
+            analyticsService.trackEvent("opik_connect_failed", Map.of(
+                    "session_id", sessionId.toString(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "error", e.getClass().getSimpleName(),
+                    "date", Instant.now().toString()));
+            throw e;
+        }
     }
 
     private void ensureEnabled() {

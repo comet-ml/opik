@@ -31,6 +31,7 @@ const AgentConfigurationEditPanel: React.FC<
     isDirty: false,
     isSaving: false,
     hasErrors: false,
+    isEmpty: false,
     collapsibleKeys: [],
     hasExpandableFields: false,
   });
@@ -158,7 +159,12 @@ const AgentConfigurationEditPanel: React.FC<
           <Button
             size="sm"
             onClick={handleSave}
-            disabled={state.isSaving || state.hasErrors || !state.isDirty}
+            disabled={
+              state.isSaving ||
+              state.hasErrors ||
+              !state.isDirty ||
+              state.isEmpty
+            }
           >
             {state.isSaving ? "Saving…" : "Save as new version"}
           </Button>
