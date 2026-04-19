@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { useItemAssertions } from "@/store/EvaluationSuiteDraftStore";
+import { useItemAssertions } from "@/store/TestSuiteDraftStore";
 import { extractAssertions } from "@/lib/assertion-converters";
 import { Evaluator } from "@/types/datasets";
 

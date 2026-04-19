@@ -132,6 +132,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -446,6 +449,15 @@ usageLimit:
   # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
   errorMessage: ${USAGE_LIMIT_ERROR_MESSAGE:-You have exceeded the usage limit for this operation.}
 
+# Configuration for product analytics events
+analytics:
+  # Default: false
+  # Description: Whether or not to send product analytics events
+  enabled: ${OPIK_ANALYTICS_ENABLED:-false}
+  # Default: empty
+  # Description: Environment name included in every analytics event (e.g. "staging", "production")
+  environment: ${OPIK_ANALYTICS_ENVIRONMENT:-}
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: true
@@ -454,6 +466,12 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: ${OPIK_USAGE_REPORT_CONNECT_TIMEOUT:-5s}
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: ${OPIK_USAGE_REPORT_READ_TIMEOUT:-10s}
   # Description: Configuration for anonymous ID used to identify the installation
   # Default: empty
   anonymousId: ${OPIK_ANONYMOUS_ID:-}
@@ -593,14 +611,14 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
-# Configuration for Evaluation Suite assertions
-evalSuite:
+# Configuration for Test Suite assertions
+testSuite:
   # Default: 1
-  # Description: Number of LLM runs per dataset item during eval suite execution
-  defaultRunsPerItem: ${EVAL_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+  # Description: Number of LLM runs per dataset item during test suite execution
+  defaultRunsPerItem: ${TEST_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
   # Default: 10
   # Description: Timeout in seconds for fetching dataset evaluators and item evaluators
-  fetchTimeoutSeconds: ${EVAL_SUITE_FETCH_TIMEOUT_SECONDS:-10}
+  fetchTimeoutSeconds: ${TEST_SUITE_FETCH_TIMEOUT_SECONDS:-10}
 
 # Configuration for Experiment Execution (Redis Streams-based processing)
 experimentExecution:
@@ -1016,12 +1034,6 @@ localRunner:
   # Default: 5s
   # Description: Extra buffer added to the async response timeout beyond nextJobPollTimeout
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
-  # Default: 300s
-  # Description: Time-to-live for pairing codes used during runner registration
-  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-1h}
-  # Default: 1h
-  # Description: Time-to-live for runner entries during the pairing process
-  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-1h}
   # Default: 100
   # Description: Maximum number of runners the reaper processes per cycle across all workspaces
   reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}

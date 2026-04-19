@@ -1,11 +1,12 @@
 # Multi-stage build: Build stage
-FROM python:3.12.12-slim AS builder
+FROM python:3.12.13-slim AS builder
 
 WORKDIR /build
 
 # Copy requirements and install dependencies
 COPY requirements.txt .
 COPY scoring_runner.py .
+
 
 RUN pip install --no-cache-dir -r requirements.txt
 
@@ -38,7 +39,7 @@ RUN cp -r /usr/local/lib/python3.12/site-packages /runtime-python
 
 #######################################################################
 # Multi-stage build: Runtime stage
-FROM python:3.12.12-slim AS runtime
+FROM python:3.12.13-slim AS runtime
 
 WORKDIR /opt/opik-sandbox-executor-python
 

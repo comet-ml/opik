@@ -253,7 +253,7 @@ kubectl exec -it cometml-production-opik-zookeeper-0 -- \
 
 To avoid Zookeeper metadata loss issues:
 
-1. **Regular Backups**: Implement regular backups of ClickHouse data. See the [Advanced ClickHouse Backup](/docs/opik/self-host/backup) guide for details.
+1. **Regular Backups**: Implement regular backups of ClickHouse data. See the [Advanced ClickHouse Backup](/v1/self-host/backup) guide for details.
 
 2. **Monitoring**: Set up monitoring for Zookeeper health and ClickHouse replica status. Alert on `zookeeper_exception` in `system.replicas`.
 

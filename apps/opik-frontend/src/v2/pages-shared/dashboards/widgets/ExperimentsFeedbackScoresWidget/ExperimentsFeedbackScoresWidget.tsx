@@ -34,7 +34,7 @@ import LineChart from "@/shared/Charts/LineChart/LineChart";
 import BarChart from "@/shared/Charts/BarChart/BarChart";
 import RadarChart from "@/shared/Charts/RadarChart/RadarChart";
 import { MAX_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import {
   renderScoreTooltipValue,
   getScoreDisplayName,
@@ -204,7 +204,7 @@ function transformUngroupedExperimentsToChartData(
     });
 
     // pass_rate is a top-level metric, not subject to feedbackScores filtering
-    if (isEvalSuiteExperiment(experiment) && isNumber(experiment.pass_rate)) {
+    if (isTestSuiteExperiment(experiment) && isNumber(experiment.pass_rate)) {
       scores[PASS_RATE_LABEL] = experiment.pass_rate;
       allLines.push(PASS_RATE_LABEL);
     }

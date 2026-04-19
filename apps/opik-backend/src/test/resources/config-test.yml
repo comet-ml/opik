@@ -116,6 +116,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: 1s
 
 openTelemetry:
   # Default: 3h
@@ -200,11 +203,26 @@ usageLimit:
   # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
   errorMessage: "You have exceeded the usage limit for this operation."
 
+# Configuration for product analytics events
+analytics:
+  # Default: false
+  # Description: Whether or not to send product analytics events
+  enabled: false
+  # Default: empty
+  # Description: Environment name included in every analytics event (e.g. "staging", "production")
+  environment:
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: false
   # Description: Whether or not to send anonymous usage reports
   enabled: false
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: 5s
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: 10s
 
 # Configuration for application metadata
 metadata:

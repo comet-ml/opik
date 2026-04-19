@@ -8,6 +8,10 @@ subtitle: Step by step guide on how to evaluate LLM prompts
 title: Evaluate single prompts
 ---
 
+<Note>
+  In Opik 2.0, Experiments and Evaluation Suites are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments.
+</Note>
+
 When developing prompts and performing prompt engineering, it can be challenging to know if a new
 prompt is better than the previous version.
 
@@ -65,6 +69,7 @@ To run the experiment, you can use the following code:
             { role: "user", content: "Translate the following text to French: {{input}}" },
         ],
         model: "gpt-4o",
+        projectName: "my-project",
     });
     ```
 
@@ -74,7 +79,7 @@ To run the experiment, you can use the following code:
 
     # Create a dataset that contains the samples you want to evaluate
     opik_client = opik.Opik()
-    dataset = opik_client.get_or_create_dataset("my_dataset")
+    dataset = opik_client.get_or_create_dataset("my_dataset", project_name="my-project")
     dataset.insert([
         {"input": "Hello, world!", "expected_output": "Hello, world!"},
         {"input": "What is the capital of France?", "expected_output": "Paris"},
@@ -87,6 +92,7 @@ To run the experiment, you can use the following code:
             {"role": "user", "content": "Translate the following text to French: {{input}}"},
         ],
         model="gpt-3.5-turbo",
+        project_name="my-project",
     )
     ```
 
@@ -105,8 +111,8 @@ Opik has a set of built-in metrics that allow you to detect hallucinations, answ
 and if we don't have the metric you need, you can easily create your own.
 
 You can find a full list of all the Opik supported metrics in the
-[Metrics Overview](/evaluation/metrics/overview) section or you can define your own metric using
-[Custom Metrics](/evaluation/metrics/custom_metric) section.
+[Metrics Overview](/v1/evaluation/metrics/overview) section or you can define your own metric using
+[Custom Metrics](/v1/evaluation/metrics/custom_metric) section.
 
 By adding the `scoring_metrics` parameter to the `evaluate_prompt` function, you can specify a list
 of metrics to use for scoring. We will update the example above to use the `Hallucination` metric
@@ -120,7 +126,7 @@ for scoring:
 
     # Create a dataset that contains the samples you want to evaluate
     opik_client = opik.Opik()
-    dataset = opik_client.get_or_create_dataset("my_dataset")
+    dataset = opik_client.get_or_create_dataset("my_dataset", project_name="my-project")
     dataset.insert([
         {"input": "Hello, world!", "expected_output": "Hello, world!"},
         {"input": "What is the capital of France?", "expected_output": "Paris"},
@@ -134,6 +140,7 @@ for scoring:
         ],
         model="gpt-3.5-turbo",
         scoring_metrics=[Hallucination()],
+        project_name="my-project",
     )
     ```
 
@@ -158,6 +165,7 @@ for scoring:
         ],
         model: "gpt-4o",
         scoringMetrics: [new Hallucination()],
+        projectName: "my-project",
     });
     ```
 
@@ -176,7 +184,7 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
 
     # Create a dataset that contains the samples you want to evaluate
     opik_client = opik.Opik()
-    dataset = opik_client.get_or_create_dataset("my_dataset")
+    dataset = opik_client.get_or_create_dataset("my_dataset", project_name="my-project")
     dataset.insert([
         {"input": "Hello, world!", "expected_output": "Hello, world!"},
         {"input": "What is the capital of France?", "expected_output": "Paris"},
@@ -190,6 +198,7 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
         ],
         model=models.LiteLLMChatModel(model="gpt-3.5-turbo", temperature=0),
         scoring_metrics=[Hallucination()],
+        project_name="my-project",
     )
     ```
 
@@ -222,7 +231,8 @@ You can customize the model used by create a new model using the [`LiteLLMChatMo
         ],
         model: openai('gpt-4o'),
         scoringMetrics: [new Hallucination()],
-        temperature: 0
+        temperature: 0,
+        projectName: "my-project",
     });
     ```
 
@@ -239,7 +249,7 @@ You can evaluate only a subset of your dataset items by using the `dataset_filte
 
     # Create or get a dataset
     opik_client = opik.Opik()
-    dataset = opik_client.get_or_create_dataset("my_dataset")
+    dataset = opik_client.get_or_create_dataset("my_dataset", project_name="my-project")
 
     # Evaluate only items with specific tags
     evaluate_prompt(
@@ -249,6 +259,7 @@ You can evaluate only a subset of your dataset items by using the `dataset_filte
         ],
         model="gpt-3.5-turbo",
         dataset_filter_string='tags contains "production"',
+        project_name="my-project",
     )
 
     # Evaluate items matching multiple conditions
@@ -259,18 +270,19 @@ You can evaluate only a subset of your dataset items by using the `dataset_filte
         ],
         model="gpt-4",
         dataset_filter_string='data.category = "finance" AND data.difficulty = "hard"',
+        project_name="my-project",
     )
     ```
 
 </CodeBlocks>
 
-The filter uses Opik Query Language (OQL) syntax. For more details on filter syntax and supported columns, see [Filtering syntax](/evaluation/manage_datasets#filter-syntax).
+The filter uses Opik Query Language (OQL) syntax. For more details on filter syntax and supported columns, see [Filtering syntax](/v1/evaluation/manage_datasets#filter-syntax).
 
 ## Next steps
 
-To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/evaluation/evaluate_your_llm) function.
+To evaluate complex LLM applications like RAG applications or agents, you can use the [`evaluate`](/v1/evaluation/evaluate_your_llm) function.
 
 <Tip>
   You can also compute experiment-level aggregate metrics when evaluating prompts using the `experiment_scoring_functions` parameter. 
-  Learn more about [experiment-level metrics](/evaluation/evaluate_your_llm#computing-experiment-level-metrics).
+  Learn more about [experiment-level metrics](/v1/evaluation/evaluate_your_llm#computing-experiment-level-metrics).
 </Tip>

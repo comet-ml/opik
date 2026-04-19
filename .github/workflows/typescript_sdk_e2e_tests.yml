@@ -6,6 +6,7 @@ on:
     paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
+      - 'apps/opik-guardrails-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
   push:
     branches:
@@ -13,6 +14,7 @@ on:
     paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
+      - 'apps/opik-guardrails-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
 
 concurrency:
@@ -38,7 +40,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node_version: [18, 20, 22]
+        node_version: ${{ fromJSON(vars.NODE_VERSIONS) }}
 
     steps:
       - name: Checkout

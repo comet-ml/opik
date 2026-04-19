@@ -2,6 +2,7 @@ import atexit
 import contextvars
 import datetime
 import functools
+import json
 import logging
 from typing import (
     Any,
@@ -12,6 +13,7 @@ from typing import (
     Union,
     Literal,
     cast,
+    overload,
 )
 
 import httpx
@@ -36,7 +38,7 @@ from .annotation_queue import rest_operations as annotation_queue_rest_operation
 from .attachment import Attachment
 from .attachment import client as attachment_client
 from .attachment import converters as attachment_converters
-from .dataset import evaluation_suite
+from .dataset import test_suite
 from .dataset import execution_policy as dataset_execution_policy
 from .dataset import rest_operations as dataset_rest_operations
 from .experiment import experiments_client
@@ -44,8 +46,9 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .agent_config.base import AgentConfig
-from .agent_config.config import AgentConfigManager
+from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
+from .agent_config.base import Config
+from .agent_config.config import ConfigManager
 from .threads import threads_client
 from .trace import migration as trace_migration, trace_client
 from .. import config as opik_config
@@ -92,7 +95,7 @@ from ..file_upload import upload_manager
 LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
-_AgentConfigT = TypeVar("_AgentConfigT", bound=AgentConfig)
+_ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
@@ -1042,6 +1045,7 @@ class Opik:
             dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
+            client=self,
         )
 
     def get_datasets(
@@ -1146,6 +1150,7 @@ class Opik:
             project_name=project_name,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            client=self,
         )
 
         self._display_created_dataset_url(dataset_name=name, dataset_id=result.id)
@@ -1178,69 +1183,72 @@ class Opik:
                 )
             raise
 
-    def create_evaluation_suite(
+    def create_test_suite(
         self,
         name: str,
         description: Optional[str] = None,
-        assertions: Optional[List[str]] = None,
-        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Create a new evaluation suite for regression testing.
+        Create a new test suite for regression testing.
 
-        Evaluation suites are pre-configured test suites that let you validate
+        Test suites are pre-configured test suites that let you validate
         that prompt changes, model updates, or code modifications don't break
         existing functionality.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             description: Optional description of what this suite tests.
-            assertions: Suite-level assertions. Each string describes an
-                expected behavior that will be checked by an LLM.
-            execution_policy: Suite-level execution policy.
+            global_assertions: Suite-level assertions applied to all items.
+                Each string describes an expected behavior that will be
+                checked by an LLM.
+            global_execution_policy: Suite-level execution policy.
                 Example: {"runs_per_item": 3, "pass_threshold": 2}
             tags: Optional list of tags for the suite.
             project_name: Optional name of the project to associate the suite with.
 
         Returns:
-            EvaluationSuite: The created evaluation suite object.
+            TestSuite: The created test suite object.
 
         Example:
-            >>> suite = client.create_evaluation_suite(
+            >>> suite = client.create_test_suite(
             ...     name="Refund Policy Tests",
             ...     description="Regression tests for refund scenarios",
             ...     project_name="custom-project",
-            ...     assertions=[
+            ...     global_assertions=[
             ...         "No hallucinated information",
             ...         "Response is helpful",
             ...     ],
             ... )
             >>>
-            >>> suite.add_item(
-            ...     data={"user_input": "How do I get a refund?", "user_tier": "premium"},
-            ... )
+            >>> suite.insert([
+            ...     {"data": {"user_input": "How do I get a refund?", "user_tier": "premium"}},
+            ... ])
             >>>
             >>> results = suite.run(task=my_llm_function)
         """
         from .dataset import validators, rest_operations
 
-        if execution_policy is not None:
-            validators.validate_execution_policy(execution_policy)
+        if global_execution_policy is not None:
+            validators.validate_execution_policy(global_execution_policy)
 
         evaluators = validators.resolve_evaluators(
-            assertions, None, "suite-level assertions"
+            global_assertions, None, "suite-level assertions"
         )
 
         project_name = self._resolve_project_name(project_name)
-        rest_operations.create_evaluation_suite_dataset(
+        rest_operations.create_test_suite_dataset(
             rest_client=self._rest_client,
             dataset_name=name,
             project_name=project_name,
             description=description,
             evaluators=evaluators,
-            exec_policy=execution_policy,
+            exec_policy=global_execution_policy,
             tags=tags,
         )
         suite_dataset = dataset.Dataset(
@@ -1249,29 +1257,30 @@ class Opik:
             project_name=project_name,
             rest_client=self._rest_client,
             dataset_items_count=0,
+            client=self,
         )
 
-        return evaluation_suite.EvaluationSuite(
+        return test_suite.TestSuite(
             name=name,
             dataset_=suite_dataset,
             client=self,
         )
 
-    def get_evaluation_suite(
+    def get_test_suite(
         self, name: str, project_name: Optional[str] = None
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Get an existing evaluation suite by name.
+        Get an existing test suite by name.
 
         Retrieves the dataset and its version-level assertions and execution
-        policy from the backend, returning a fully configured EvaluationSuite.
+        policy from the backend, returning a fully configured TestSuite.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             project_name: Optional name of the project the suite is associated with.
 
         Returns:
-            EvaluationSuite: The evaluation suite object.
+            TestSuite: The test suite object.
 
         Raises:
             ApiError: If no dataset with the given name exists (404).
@@ -1286,72 +1295,130 @@ class Opik:
             dataset_fern=dataset_fern,
             project_name=project_name,
             rest_client=self._rest_client,
+            client=self,
         )
 
-        return evaluation_suite.EvaluationSuite(
+        return test_suite.TestSuite(
             name=name,
             dataset_=suite_dataset,
             client=self,
         )
 
-    def get_or_create_evaluation_suite(
+    def get_or_create_test_suite(
         self,
         name: str,
         description: Optional[str] = None,
-        assertions: Optional[List[str]] = None,
-        execution_policy: Optional[dataset_execution_policy.ExecutionPolicy] = None,
+        global_assertions: Optional[List[str]] = None,
+        global_execution_policy: Optional[
+            dataset_execution_policy.ExecutionPolicy
+        ] = None,
         tags: Optional[List[str]] = None,
         project_name: Optional[str] = None,
-    ) -> evaluation_suite.EvaluationSuite:
+    ) -> test_suite.TestSuite:
         """
-        Get an existing evaluation suite by name or create a new one if it does not exist.
+        Get an existing test suite by name or create a new one if it does not exist.
 
-        If the suite already exists and ``assertions``, ``execution_policy``,
-        or ``tags`` are provided, the suite is updated accordingly
-        (unspecified parameters retain their current values).
+        If the suite already exists it is returned as-is — the
+        ``global_assertions``, ``global_execution_policy``, ``description``,
+        and ``tags`` parameters are only used when creating a new suite.
+        To modify an existing suite, use :meth:`TestSuite.update` instead.
 
         Args:
-            name: The name of the evaluation suite.
+            name: The name of the test suite.
             description: Optional description (used only when creating).
-            assertions: Suite-level assertions. Each string describes an
-                expected behavior that will be checked by an LLM.
-            execution_policy: Execution policy for the suite.
-            tags: Optional list of tags for the suite.
+            global_assertions: Suite-level assertions (used only when creating).
+            global_execution_policy: Execution policy (used only when creating).
+            tags: Optional list of tags (used only when creating).
             project_name: Optional name of the project the suite is associated with.
 
         Returns:
-            EvaluationSuite: The evaluation suite object.
+            TestSuite: The test suite object.
         """
-        from .dataset import validators
-
-        if execution_policy is not None:
-            validators.validate_execution_policy(execution_policy)
-
         try:
-            suite = self.get_evaluation_suite(name, project_name=project_name)
+            return self.get_test_suite(name, project_name=project_name)
         except ApiError as e:
             if e.status_code == 404:
-                return self.create_evaluation_suite(
+                return self.create_test_suite(
                     name=name,
                     description=description,
-                    execution_policy=execution_policy,
-                    assertions=assertions,
+                    global_execution_policy=global_execution_policy,
+                    global_assertions=global_assertions,
                     tags=tags,
                     project_name=project_name,
                 )
             raise
 
-        has_updates = (
-            assertions is not None or execution_policy is not None or tags is not None
-        )
-        if has_updates:
-            suite.update(
-                assertions=assertions,
-                execution_policy=execution_policy,
-                tags=tags,
-            )
+    def delete_test_suite(self, name: str, project_name: Optional[str] = None) -> None:
+        """
+        Delete a test suite by name.
 
-        return suite
+        Args:
+            name: The name of the test suite.
+            project_name: The name of the project the suite belongs to.
+        """
+        project_name = self._resolve_project_name(project_name)
+        self._rest_client.datasets.delete_dataset_by_name(
+            dataset_name=name, project_name=project_name
+        )
+
+    def get_test_suites(
+        self,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[test_suite.TestSuite]:
+        """
+        Returns all test suites up to the specified limit.
+
+        Only returns test suites, not regular datasets.
+
+        Args:
+            max_results: The maximum number of test suites to return.
+            project_name: The name of the project the suites belong to.
+
+        Returns:
+            List[TestSuite]: A list of test suite objects.
+        """
+        from .dataset import rest_operations
+
+        return rest_operations.get_test_suites(
+            project_name=self._resolve_project_name(project_name),
+            rest_client=self._rest_client,
+            max_results=max_results,
+            client=self,
+        )
+
+    def get_test_suite_experiments(
+        self,
+        name: str,
+        max_results: int = 100,
+        project_name: Optional[str] = None,
+    ) -> List[experiment.Experiment]:
+        """
+        Returns all experiments for a test suite.
+
+        Args:
+            name: The name of the test suite.
+            max_results: The maximum number of experiments to return.
+            project_name: The name of the project the suite belongs to.
+
+        Returns:
+            List[Experiment]: A list of experiment objects.
+        """
+        from .dataset import rest_operations as dataset_rest_operations
+
+        project_name = self._resolve_project_name(project_name)
+        dataset_id = dataset_rest_operations.get_dataset_id(
+            self._rest_client, dataset_name=name, project_name=project_name
+        )
+
+        experiments_client = self.get_experiments_client()
+        return dataset_rest_operations.get_dataset_experiments(
+            rest_client=self._rest_client,
+            dataset_id=dataset_id,
+            max_results=max_results,
+            streamer=self._streamer,
+            experiments_client=experiments_client,
+        )
 
     def create_experiment(
         self,
@@ -2004,17 +2071,27 @@ class Opik:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
             ApiError: If there is an error during the creation of the prompt.
         """
+        validator = ChatPromptMessagesValidator(messages)
+        validator.validate()
+        validator.raise_if_validation_failed()
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
-        return prompt_module.ChatPrompt(
+        messages_str = json.dumps(messages)
+        prompt_version = prompt_client_.create_prompt(
             name=name,
-            messages=messages,
+            prompt=messages_str,
             metadata=metadata,
             type=type,
+            template_structure="chat",
             id=id,
             description=description,
             change_description=change_description,
             tags=tags,
             project_name=project_name,
+        )
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
+            name, prompt_version, project_name=project_name
         )
 
     def get_prompt(
@@ -2648,103 +2725,180 @@ class Opik:
             ids=[queue_id]
         )
 
-    def create_agent_config_version(
+    @overload
+    def get_or_create_config(
         self,
-        config: AgentConfig,
+        *,
+        fallback: _ConfigT,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> _ConfigT: ...
+
+    @overload
+    def get_or_create_config(
+        self,
+        *,
+        fallback: None = ...,
+        project_name: Optional[str] = ...,
+        env: Optional[str] = ...,
+        version: Optional[str] = ...,
+        timeout_in_seconds: Optional[int] = ...,
+    ) -> Config: ...
+
+    def get_or_create_config(
+        self,
+        *,
+        fallback: Optional[Config] = None,
+        project_name: Optional[str] = None,
+        env: Optional[str] = None,
+        version: Optional[str] = None,
+        timeout_in_seconds: Optional[int] = 5,
+    ) -> Config:
+        """Fetch a config from the backend, optionally auto-creating from a fallback.
+
+        Must be called from inside a function decorated with ``@opik.track``.
+
+        At most one of ``env`` or ``version`` may be provided.
+
+        * ``env`` — fetch the version deployed to an environment (e.g. ``"staging"``).
+        * ``version`` — fetch a specific version by name. The special value
+          ``"latest"`` fetches the latest version in the project; when no config
+          exists at all and ``fallback`` is provided, auto-creates one from it.
+        * Neither — equivalent to ``env="prod"``. If no config exists at all in
+          the project and ``fallback`` is provided, auto-creates one from it
+          (the backend tags the first version as ``"prod"``).
+
+        Failure modes depend on whether ``fallback`` is provided:
+
+        * **With fallback**: Backend errors (timeouts, network failures) return
+          the fallback instance with ``is_fallback=True``. If an explicit
+          ``env``/``version`` is requested but missing, raises
+          :class:`~opik.exceptions.ConfigNotFound`. If no config exists at all,
+          auto-creates from the fallback. The return value is an instance of
+          ``type(fallback)``.
+        * **Without fallback**: Backend errors are re-raised. If no config
+          exists at all, raises :class:`~opik.exceptions.ConfigNotFound`
+          instead of auto-creating. The return value is a generic ``Config``
+          instance — typed field access is only available when a fallback
+          supplies the subclass.
+
+        If the backend blueprint is missing any field declared on the
+        fallback's class, raises :class:`~opik.exceptions.ConfigMismatch`.
+
+        Args:
+            fallback: An instance of a user-defined ``Config`` subclass. When
+                provided, used as the return value if the backend is
+                unreachable and as the initial values when auto-creating.
+            project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            env: Environment tag to fetch (e.g. ``"prod"``, ``"staging"``).
+            version: Fetch a specific version by its name. Use ``"latest"`` to
+                fetch the latest version.
+            timeout_in_seconds: Maximum seconds to wait for the backend
+                response. With a fallback, a timeout returns the fallback and
+                the cache continues refreshing in the background; without one,
+                the timeout is raised. Pass ``None`` to wait indefinitely.
+        """
+        if fallback is not None and (
+            not isinstance(fallback, Config) or type(fallback) is Config
+        ):
+            raise TypeError(
+                "fallback must be an instance of a Config subclass, "
+                f"got {type(fallback).__name__}"
+            )
+
+        if env is not None and version is not None:
+            raise ValueError(
+                "Specify at most one of 'env' (fetch by environment tag) "
+                "or 'version' (fetch by version name)."
+            )
+
+        # Resolve selectors:
+        # - version="latest" → fetch latest blueprint; auto-create if empty.
+        # - explicit env or named version → fetch by selector; no auto-create.
+        # - neither → fetch env="prod"; auto-create if no config exists at all.
+        if version == "latest":
+            env = None
+            version = None
+            auto_create_if_empty = True
+        elif env is None and version is None:
+            env = "prod"
+            auto_create_if_empty = True
+        else:
+            auto_create_if_empty = False
+
+        resolved_project = self._resolve_project_name(project_name)
+        manager = ConfigManager(
+            project_name=resolved_project,
+            rest_client_=self._rest_client,
+        )
+        resolved_cls = type(fallback) if fallback is not None else Config
+        return resolved_cls._get_or_create_from_backend(
+            manager,
+            resolved_project,
+            fallback=fallback,
+            env=env,
+            version=version,
+            auto_create_if_empty=auto_create_if_empty,
+            timeout_in_seconds=timeout_in_seconds,
+        )
+
+    def create_config(
+        self,
+        config: Config,
         project_name: Optional[str] = None,
         description: Optional[str] = None,
     ) -> str:
-        """Write a config version to the backend. No-op if nothing changed.
+        """Write a config version to the backend unconditionally.
+
+        Unlike :meth:`get_or_create_config`, this does not require a
+        ``@opik.track`` context and always performs a write — the new version's
+        values overwrite the latest blueprint's values.
 
         Args:
-            config: An instance of a user-defined ``AgentConfig`` subclass.
+            config: An instance of a user-defined ``Config`` subclass.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             description: Optional description stored with the version.
 
         Returns:
-            The version name — either the newly created version or the
-            existing version when values already match.
+            The version name of the newly written blueprint.
         """
-        if not isinstance(config, AgentConfig) or type(config) is AgentConfig:
+        if not isinstance(config, Config) or type(config) is Config:
             raise TypeError(
-                "config must be an instance of an AgentConfig subclass, "
+                "config must be an instance of a Config subclass, "
                 f"got {type(config).__name__}"
             )
 
-        manager = AgentConfigManager(
+        manager = ConfigManager(
             project_name=self._resolve_project_name(project_name),
             rest_client_=self._rest_client,
         )
-        return config._create_version(manager, description)
+        return config._create_from_instance(manager, description)
 
-    def get_agent_config(
+    def set_config_env(
         self,
         *,
-        fallback: _AgentConfigT,
         project_name: Optional[str] = None,
-        env: Optional[str] = None,
-        latest: bool = False,
-        version: Optional[str] = None,
-        timeout_in_seconds: Optional[int] = 5,
-    ) -> _AgentConfigT:
-        """Fetch an agent config from the backend.
+        version: str,
+        env: str,
+    ) -> None:
+        """Tag a specific config version with an environment name.
 
-        Exactly one selector must be used to specify which version to fetch
-        (passing more than one raises ``ValueError``):
-
-        * ``env`` — fetch the version deployed to an environment (e.g. ``"prod"``).
-          This is the default when no selector is provided.
-        * ``latest=True`` — fetch the most recently published version.
-        * ``version`` — fetch a specific version by name, as returned by
-          ``create_agent_config_version``.
+        After tagging, ``get_or_create_config(env=env)`` for the project will
+        return this version.
 
         Args:
-            fallback: An instance of a user-defined ``AgentConfig`` subclass.
-                Used as the return value when the backend has no config, and
-                its type determines the return type.
             project_name: Opik project name. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
-            env: Environment tag to fetch. Defaults to ``"prod"`` when no other
-                selector is provided.
-            latest: If ``True``, fetch the latest version regardless of env tags.
-            version: Fetch a specific version by its name.
-            timeout_in_seconds: Maximum seconds to wait for the backend
-                response. If the request takes longer, ``fallback`` is returned
-                and the cache continues refreshing in the background. Pass
-                ``None`` to wait indefinitely.
+            version: Version name of the blueprint to tag.
+            env: Environment name (e.g. ``"prod"``, ``"staging"``).
         """
-        if not isinstance(fallback, AgentConfig) or type(fallback) is AgentConfig:
-            raise TypeError(
-                "fallback must be an instance of an AgentConfig subclass, "
-                f"got {type(fallback).__name__}"
-            )
-
-        selectors = sum([env is not None, latest, version is not None])
-        if selectors > 1:
-            raise ValueError(
-                "Specify exactly one of 'env' (fetch by environment tag), "
-                "'latest=True' (fetch the newest version), "
-                "or 'version' (fetch by version name)."
-            )
-        if selectors == 0:
-            env = "prod"
-
         resolved_project = self._resolve_project_name(project_name)
-        manager = AgentConfigManager(
+        manager = ConfigManager(
             project_name=resolved_project,
             rest_client_=self._rest_client,
         )
-        return cast(
-            _AgentConfigT,
-            type(fallback)._resolve_from_backend(
-                fallback,
-                manager,
-                resolved_project,
-                env=env,
-                latest=latest,
-                version=version,
-                timeout_in_seconds=timeout_in_seconds,
-            ),
-        )
+        manager.set_env(version=version, env=env)
 
     def _resolve_project_name(self, explicitly_passed_value: Optional[str]) -> str:
         return helpers.resolve_project_name(

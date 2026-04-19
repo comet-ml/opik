@@ -44,6 +44,9 @@ public class OpikConfiguration extends JobConfiguration {
     private UsageReportConfig usageReport = new UsageReportConfig();
 
     @Valid @NotNull @JsonProperty
+    private AnalyticsConfig analytics = new AnalyticsConfig();
+
+    @Valid @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
 
     @Valid @NotNull @JsonProperty
@@ -132,7 +135,7 @@ public class OpikConfiguration extends JobConfiguration {
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
 
     @Valid @NotNull @JsonProperty
-    private EvalSuiteConfig evalSuite = new EvalSuiteConfig();
+    private TestSuiteConfig testSuite = new TestSuiteConfig();
 
     @Valid @NotNull @JsonProperty
     private ExperimentExecutionConfig experimentExecution = new ExperimentExecutionConfig();

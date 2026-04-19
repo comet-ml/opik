@@ -1,8 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Database, Pause, Pencil, Play, RotateCcw, X } from "lucide-react";
+import {
+  ChevronDown,
+  Database,
+  ListChecks,
+  Pause,
+  Pencil,
+  Play,
+  RotateCcw,
+  X,
+} from "lucide-react";
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/ui/dropdown-menu";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import RunOnDatasetDialog from "@/v2/pages/PlaygroundPage/RunOnDatasetDialog";
@@ -29,6 +44,7 @@ import {
   useSetExperimentNamePrefix,
   useDatasetFilters,
   useSetDatasetType,
+  useDatasetType,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -78,11 +94,14 @@ const PlaygroundHeader = ({
   const filters = useDatasetFilters();
   const setDatasetType = useSetDatasetType();
 
+  const currentDatasetType = useDatasetType();
   const resetKeyRef = useRef(0);
   const leaveKeyRef = useRef(0);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [runOnDatasetOpen, setRunOnDatasetOpen] = useState(false);
+  const [runOnDatasetType, setRunOnDatasetType] = useState<DATASET_TYPE | null>(
+    null,
+  );
 
   const {
     permissions: { canViewExperiments, canViewDatasets },
@@ -247,13 +266,18 @@ const PlaygroundHeader = ({
           : datasetName
         : "Loading...";
 
+      const TypeIcon =
+        currentDatasetType === DATASET_TYPE.TEST_SUITE ? ListChecks : Database;
+
       return (
         <div className="flex h-6 items-center rounded-md border bg-background">
           <button
             className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
-            onClick={() => setRunOnDatasetOpen(true)}
+            onClick={() =>
+              setRunOnDatasetType(currentDatasetType ?? DATASET_TYPE.DATASET)
+            }
           >
-            <Database className="size-3.5 shrink-0 text-[#b8e54a]" />
+            <TypeIcon className="size-3.5 shrink-0 text-library-loaded" />
             <span className="comet-body-xs max-w-[200px] truncate">
               {chipLabel}
             </span>
@@ -274,14 +298,29 @@ const PlaygroundHeader = ({
     }
 
     return (
-      <Button
-        variant="outline"
-        size="2xs"
-        onClick={() => setRunOnDatasetOpen(true)}
-      >
-        <Database className="mr-1 size-3.5" />
-        Test on dataset
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="2xs">
+            <Database className="mr-1 size-3.5" />
+            Test on
+            <ChevronDown className="ml-1 size-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            onClick={() => setRunOnDatasetType(DATASET_TYPE.DATASET)}
+          >
+            <Database className="mr-2 size-4" />
+            Dataset
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => setRunOnDatasetType(DATASET_TYPE.TEST_SUITE)}
+          >
+            <ListChecks className="mr-2 size-4" />
+            Test suite
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     );
   };
 
@@ -395,13 +434,14 @@ const PlaygroundHeader = ({
       />
 
       <RunOnDatasetDialog
-        open={runOnDatasetOpen}
-        onClose={() => setRunOnDatasetOpen(false)}
+        open={runOnDatasetType !== null}
+        onClose={() => setRunOnDatasetType(null)}
         onRun={handleRunOnDataset}
         workspaceName={workspaceName}
         initialDatasetId={datasetId}
         initialSelectedRuleIds={selectedRuleIds}
         initialFilters={filters}
+        datasetType={runOnDatasetType ?? undefined}
       />
     </>
   );

@@ -1,0 +1,97 @@
+---
+headline: Quickstart | Opik Documentation
+og:description: Integrate Opik with your LLM application to log calls and chains efficiently.
+  Get started with our step-by-step guide.
+og:site_name: Opik Documentation
+og:title: Quickstart Guide - Opik Integration
+title: Quickstart
+---
+
+This guide helps you integrate the Opik platform with your existing Agent. The goal of
+this guide is to help you log your first traces and start tracking your prompts and agent
+configuration in Opik.
+
+<Frame>
+  <img src="/img/v2/home/traces_page_for_quickstart.png" />
+</Frame>
+
+## Prerequisites
+
+Before you begin, you'll need to choose how you want to use Opik:
+
+- **Opik Cloud**: Create a free account at [comet.com/opik](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=quickstart&utm_campaign=opik)
+- **Self-hosting**: Follow the [self-hosting guide](/self-host/overview) to deploy Opik locally or on Kubernetes
+
+## Logging your first LLM calls
+
+Opik makes it easy to integrate with your existing LLM application, the best way to get started is to use the Opik skill:
+
+<Tabs>
+  <Tab title="AI integration">
+    The simplest way to integrate with Opik is using the Opik Skills and your favorite coding agent.
+
+    <Steps>
+      <Step title="Install the Opik skill">
+        ```bash
+        npx skills add comet-ml/opik-skills
+        ```
+
+        This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
+      </Step>
+      <Step title="Run the integration">
+        Once the skill is installed, you can integrate with Opik using the following prompt:
+        ```
+        Instrument my agent with Opik using the /instrument command.
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Manual integration">
+    Opik has integrations with all the popular Agent frameworks in both Python and Typescript as well as first-class support
+    for OpenTelemetry:
+
+      <CardGroup cols={3}>
+        <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
+        <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
+        <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
+        <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
+        <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
+        <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
+      </CardGroup>
+
+      **[View all 30+ integrations →](/integrations/overview)**
+  </Tab>
+</Tabs>
+
+## Analyze your traces
+
+After running your application, you will start seeing your traces in Opik and you can use Ollie to analyze them and improve your agent.
+
+{/* [text](TODO: Update video) */}
+
+<video
+  src="/img/tracing/quickstart.mp4"
+  width="854"
+  height="480"
+  autoPlay
+  muted
+  loop
+  playsInline
+  preload="auto"
+/>
+
+If you don't see traces appearing, reach out to us on [Slack](https://chat.comet.com) or raise an issue on [GitHub](https://github.com/comet-ml/opik/issues) and we'll help you troubleshoot.
+
+## Next steps
+
+{/* [text](TODO: Update links and next steps) */}
+
+Now that you have logged your first Agent calls to, why not check out:
+
+1. [In depth guide on agent observability](/tracing/advanced/log_traces): Learn how to customize the data
+   that is logged to Opik and how to log conversations.
+2. [Opik Experiments](/evaluation/concepts): Opik allows you to automated the evaluation process of
+   your LLM application so that you no longer need to manually review every LLM response.
+3. [Opik's evaluation metrics](/evaluation/metrics/overview): Opik provides a suite of evaluation
+   metrics (Hallucination, Answer Relevance, Context Recall, etc.) that you can use to score your
+   LLM responses.

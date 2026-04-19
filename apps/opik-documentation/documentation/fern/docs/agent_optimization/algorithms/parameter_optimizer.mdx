@@ -19,7 +19,7 @@ The `ParameterOptimizer` uses Bayesian optimization to tune LLM call parameters 
 </Note>
 
 <Info>
-  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/agent_optimization/faq)
+  Have questions about `ParameterOptimizer`? Our [Optimizer & SDK FAQ](/v1/agent_optimization/faq)
   answers common questions, including when to use this optimizer, how parameters like `default_n_trials` and `local_search_ratio`
   work, and how to define custom parameter search spaces.
 </Info>
@@ -55,9 +55,9 @@ The optimizer intelligently balances exploration (trying diverse parameters) wit
 
 <Tip>
   The core of this optimizer relies on robust evaluation where each parameter configuration is assessed using your `metric` against the `dataset`. Understanding Opik's evaluation platform is key to effective use:
-  - [Evaluation Overview](/evaluation/overview)
-  - [Evaluate Prompts](/evaluation/evaluate_prompt)
-  - [Metrics Overview](/evaluation/metrics/overview)
+  - [Evaluation Overview](/v1/evaluation/overview)
+  - [Evaluate Prompts](/v1/evaluation/evaluate_prompt)
+  - [Metrics Overview](/v1/evaluation/metrics/overview)
 </Tip>
 
 ## Configuration Options
@@ -348,6 +348,7 @@ optimizer = ParameterOptimizer(
          prompt=result.prompt,
          dataset=test_dataset,
          scoring_metrics=[my_metric],
+         project_name="my-project",
      )
      print(f"Test score: {test_results.mean_scores}")
      ```
@@ -358,6 +359,6 @@ optimizer = ParameterOptimizer(
 
 ## Next Steps
 
-1. Explore specific [Optimizers](/agent_optimization/algorithms/overview) for algorithm details.
-2. Refer to the [FAQ](/agent_optimization/faq) for common questions and troubleshooting.
-3. Refer to the [API Reference](/agent_optimization/advanced/api_reference) for detailed configuration options.
+1. Explore specific [Optimizers](/v1/agent_optimization/algorithms/overview) for algorithm details.
+2. Refer to the [FAQ](/v1/agent_optimization/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/v1/agent_optimization/advanced/api_reference) for detailed configuration options.

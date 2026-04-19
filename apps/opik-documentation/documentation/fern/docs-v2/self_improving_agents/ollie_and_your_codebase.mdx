@@ -1,0 +1,118 @@
+---
+headline: Ollie and Your Codebase | Opik Documentation
+og:description: How Ollie reads your source files, proposes code changes, reruns your
+  agent, and verifies fixes — all through opik connect
+og:site_name: Opik Documentation
+og:title: Ollie and Your Codebase — Opik
+title: Ollie and your codebase
+---
+
+Ollie is useful even without code access — it can analyze traces, search your workspace, and help you understand failures. But when you pair it with `opik connect`, it becomes something more: an AI that can read your source files, propose changes, rerun your agent, and verify fixes with test suites. All from the Opik UI.
+
+## Setting up opik connect
+
+From the root of your agent project, run:
+
+```bash
+opik connect --project <project-name>
+```
+
+That's it. `opik connect` pairs your local project with your Opik workspace. Ollie discovers your source files and gains the ability to read and propose changes to them.
+
+<Tip>
+  `opik connect` is opt-in and scoped to the session. Ollie can only access
+  files in the project you connect, and every write operation requires your
+  explicit approval.
+</Tip>
+
+## What Ollie can do with your code
+
+### Read source files
+
+Once connected, Ollie can read any file in your project when investigating an issue. When a trace shows a failure in your retrieval step, Ollie doesn't just tell you *"the retrieval returned empty results"* — it reads the actual retrieval function, understands the logic, and identifies why it failed for that specific input.
+
+This bridges the gap between *what went wrong* (the trace) and *why it went wrong* (the code).
+
+### Propose code changes
+
+After identifying a root cause, Ollie proposes a fix as a diff. You see exactly what will change before anything happens. Click approve, and the file is updated on your machine. Click reject, and nothing changes.
+
+Common fixes Ollie proposes:
+- Adjusting prompt templates to handle edge cases
+- Adding guardrails to tool call outputs
+- Fixing retrieval query construction
+- Updating response formatting logic
+
+### Rerun your agent
+
+With the fix applied locally, Ollie can rerun your agent through `opik connect` using the same inputs from the original failing trace. The new trace streams back into Opik in real time, so you can see immediately whether the fix worked.
+
+This eliminates the manual cycle of:
+1. Fix code locally
+2. Run agent manually with the same input
+3. Copy the output somewhere
+4. Compare to the original failure
+
+Instead, it's one click — and the comparison is side-by-side in the Opik UI.
+
+### Verify with test suites
+
+The final step: ask Ollie to run your test suite against the updated agent. This checks not just the trace you fixed, but every test case in the suite. You get a pass/fail summary and confidence that nothing regressed.
+
+```
+"Run the customer-support-qa suite against the updated agent"
+```
+
+## The full workflow
+
+Here's what the complete loop looks like with `opik connect` active:
+
+<Steps>
+
+### Spot a problem
+
+You see a trace in the dashboard where the agent hallucinated a step in a how-to response. The trace shows the LLM ignored the retrieved context.
+
+### Ask Ollie
+
+Open Ollie from the trace view:
+
+*"Why did the agent make up step 3 instead of using the context from the knowledge base?"*
+
+Ollie reads the span tree, identifies that the retrieval step returned the right document but the prompt template doesn't instruct the model to stay grounded in the context.
+
+### Let Ollie read the code
+
+Ollie asks to read your prompt template file. With `opik connect` running, it reads the file and confirms the issue — the system prompt says "answer the user's question" but doesn't include an instruction to only use provided context.
+
+### Approve the fix
+
+Ollie proposes adding a grounding instruction to the system prompt:
+
+```diff
+- You are a helpful customer support assistant.
++ You are a helpful customer support assistant. Only use information
++ from the provided context when answering. If the context doesn't
++ contain the answer, say you don't know.
+```
+
+You review the diff and click approve.
+
+### Rerun and verify
+
+Ollie reruns the agent with the same input from the failing trace. The new trace shows the agent now correctly uses the context and doesn't hallucinate. Ollie then runs the full test suite to confirm nothing else broke.
+
+</Steps>
+
+## Security and access control
+
+- **Scoped to your session**: `opik connect` only exposes files in the project directory you connect. It cannot access files outside that directory.
+- **Read requires connection**: Without `opik connect` running, Ollie has no access to your source files. It can still analyze traces and search your workspace.
+- **Writes require approval**: Every code change Ollie proposes requires explicit approval. The diff is shown before anything is written.
+- **Local execution**: Your agent runs on your machine. Code and data stay local — only traces and metadata are sent to Opik.
+
+## Next steps
+
+- [Agent sandbox](/development/agent-sandbox) — Technical details on `opik connect` and `opik endpoint`
+- [The Flywheel](/self-improving-agents/the-flywheel) — The complete self-improvement cycle
+- [Debugging agents with Ollie](/tracing/debug-agents) — Example prompts for common debugging scenarios

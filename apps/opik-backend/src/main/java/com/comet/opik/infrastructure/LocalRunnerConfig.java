@@ -55,14 +55,6 @@ public class LocalRunnerConfig {
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration nextJobAsyncTimeoutBuffer = Duration.seconds(5);
 
-    @Valid @NotNull @JsonProperty
-    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration pairingCodeTtl = Duration.hours(1);
-
-    @Valid @NotNull @JsonProperty
-    @MinDuration(value = 1, unit = TimeUnit.SECONDS)
-    private Duration pairingRunnerTtl = Duration.hours(1);
-
     @Valid @JsonProperty
     @Min(1) private int reaperMaxRunnersPerCycle = 100;
 

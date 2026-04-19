@@ -11,6 +11,7 @@ import {
 import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
+import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
@@ -22,8 +23,6 @@ import ProjectPage from "@/v2/pages/ProjectPage/ProjectPage";
 import ProjectsPage from "@/v2/pages/ProjectsPage/ProjectsPage";
 import LogsPage from "@/v2/pages/LogsPage/LogsPage";
 import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
-import PromptsPage from "@/v2/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v2/pages/PromptPage/PromptPage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
@@ -37,6 +36,7 @@ import AnnotationQueuesPage from "@/v2/pages/AnnotationQueuesPage/AnnotationQueu
 import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueuePage";
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
+import PairingPage from "@/v2/pages/PairingPage/PairingPage";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -46,12 +46,15 @@ import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
-import EvaluationSuitesPage from "@/v2/pages/EvaluationSuitesPage/EvaluationSuitesPage";
-import EvaluationSuitePage from "@/v2/pages/EvaluationSuitePage/EvaluationSuitePage";
-import EvaluationSuiteItemsPage from "@/v2/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import DatasetsPage from "@/v2/pages/DatasetsPage/DatasetsPage";
+import DatasetDetailPage from "@/v2/pages-shared/datasets/DatasetDetailPage/DatasetDetailPage";
+import TestSuitesPage from "@/v2/pages/TestSuitesPage/TestSuitesPage";
+import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage";
+import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
+
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
-import InsightsPage from "@/v2/pages/InsightsPage/InsightsPage";
+import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -94,6 +97,28 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
   id: "workspaceGuardEmptyLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
+// ----------- pairing (root-level, no layout)
+// TanStack strips the router basepath before matching, so the canonical
+// route is basepath-relative: "/pair/v1" covers cloud (basepath "/opik"
+// → URL "/opik/pair/v1" strips to "/pair/v1").
+//
+// The legacy "/opik/pair/v1" alias below is an OSS-only fallback: the
+// Python SDK hardcodes "{origin}/opik/pair/v1" regardless of deployment
+// (see sdks/python/src/opik/cli/pairing.py), so on OSS (basepath "/") the
+// "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
+// TODO: make the Python SDK build basepath-aware pairing URLs and drop
+// this alias once shipped CLI versions roll over.
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair/v1",
+  component: PairingPage,
+});
+const pairingRouteOssAlias = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/opik/pair/v1",
+  component: PairingPage,
 });
 
 // ----------- base redirect
@@ -176,9 +201,6 @@ const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
   component: ProjectHomePage,
-  staticData: {
-    title: "Project home",
-  },
 });
 
 // ----------- logs (project-scoped)
@@ -191,13 +213,13 @@ const logsRoute = createRoute({
   },
 });
 
-// ----------- insights (project-scoped)
-const insightsRoute = createRoute({
-  path: "/insights",
+// ----------- dashboards (project-scoped)
+const projectDashboardsRoute = createRoute({
+  path: "/dashboards",
   getParentRoute: () => projectScopedRoute,
-  component: InsightsPage,
+  component: ProjectDashboardsPage,
   staticData: {
-    title: "Insights",
+    title: "Dashboards",
   },
 });
 
@@ -234,59 +256,66 @@ const compareExperimentsRoute = createRoute({
   },
 });
 
-// ----------- evaluation suites (project-scoped)
-const evaluationSuitesRoute = createRoute({
-  path: "/evaluation-suites",
+// ----------- datasets (project-scoped)
+const datasetsRoute = createRoute({
+  path: "/datasets",
   getParentRoute: () => projectScopedRoute,
   component: DatasetsPageGuard,
   staticData: {
-    title: "Evaluation suites",
+    title: "Datasets",
   },
 });
 
-const evaluationSuitesListRoute = createRoute({
+const datasetsListRoute = createRoute({
   path: "/",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitesPage,
+  getParentRoute: () => datasetsRoute,
+  component: DatasetsPage,
 });
 
-const evaluationSuiteRoute = createRoute({
+const datasetDetailRoute = createRoute({
+  path: "/$datasetId",
+  getParentRoute: () => datasetsRoute,
+  component: DatasetDetailPage,
+  staticData: {
+    param: "datasetId",
+  },
+});
+
+const datasetItemsRoute = createRoute({
+  path: "/items",
+  getParentRoute: () => datasetDetailRoute,
+  component: DatasetItemsPage,
+});
+
+// ----------- test suites (project-scoped)
+const testSuitesRoute = createRoute({
+  path: "/test-suites",
+  getParentRoute: () => projectScopedRoute,
+  component: DatasetsPageGuard,
+  staticData: {
+    title: "Test suites",
+  },
+});
+
+const testSuitesListRoute = createRoute({
+  path: "/",
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitesPage,
+});
+
+const testSuiteRoute = createRoute({
   path: "/$suiteId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitePage,
+  getParentRoute: () => testSuitesRoute,
+  component: DatasetDetailPage,
   staticData: {
     param: "suiteId",
   },
 });
 
-const evaluationSuiteItemsRoute = createRoute({
+const testSuiteItemsRoute = createRoute({
   path: "/items",
-  getParentRoute: () => evaluationSuiteRoute,
-  component: EvaluationSuiteItemsPage,
-});
-
-// ----------- prompts (project-scoped)
-const promptsRoute = createRoute({
-  path: "/prompts",
-  getParentRoute: () => projectScopedRoute,
-  staticData: {
-    title: "Prompt library",
-  },
-});
-
-const promptsListRoute = createRoute({
-  path: "/",
-  getParentRoute: () => promptsRoute,
-  component: PromptsPage,
-});
-
-const promptRoute = createRoute({
-  path: "/$promptId",
-  getParentRoute: () => promptsRoute,
-  component: PromptPage,
-  staticData: {
-    param: "promptId",
-  },
+  getParentRoute: () => testSuiteRoute,
+  component: TestSuiteItemsPage,
 });
 
 // ----------- playground (project-scoped)
@@ -296,6 +325,12 @@ const playgroundRoute = createRoute({
   staticData: {
     title: "Playground",
   },
+  component: PlaygroundPageGuard,
+});
+
+const playgroundIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => playgroundRoute,
   component: PlaygroundPage,
 });
 
@@ -369,7 +404,7 @@ const agentRunnerRoute = createRoute({
   path: "/agent-runner",
   getParentRoute: () => projectScopedRoute,
   staticData: {
-    title: "Agent sandbox",
+    title: "Agent playground",
   },
   component: AgentRunnerPage,
 });
@@ -527,6 +562,8 @@ const v1RedirectRoutes = createV1RedirectRoutes(workspaceRoute);
 // ═══════════════════════════════════════════════════════════════
 
 const routeTree = rootRoute.addChildren([
+  pairingRoute,
+  pairingRouteOssAlias,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -543,18 +580,21 @@ const routeTree = rootRoute.addChildren([
         projectScopedRoute.addChildren([
           projectHomeRoute,
           logsRoute,
-          insightsRoute,
+          projectDashboardsRoute,
           tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,
             compareExperimentsRoute,
           ]),
-          evaluationSuitesRoute.addChildren([
-            evaluationSuitesListRoute,
-            evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+          datasetsRoute.addChildren([
+            datasetsListRoute,
+            datasetDetailRoute.addChildren([datasetItemsRoute]),
           ]),
-          promptsRoute.addChildren([promptsListRoute, promptRoute]),
-          playgroundRoute,
+          testSuitesRoute.addChildren([
+            testSuitesListRoute,
+            testSuiteRoute.addChildren([testSuiteItemsRoute]),
+          ]),
+          playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
             optimizationsNewRoute,

@@ -43,8 +43,10 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
+import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -123,7 +125,7 @@ export const DEFAULT_COLUMNS: ColumnData<Optimization>[] = [
 export const FILTER_COLUMNS = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Evaluation suite",
+    label: "Test suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -318,96 +320,111 @@ const OptimizationsPage: React.FunctionComponent = () => {
     return <Loader />;
   }
 
+  const isEmpty = noData && optimizations.length === 0;
+
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-1 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
           Optimization Studio
         </h1>
       </div>
-      <ExplainerDescription
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
-      />
-      {isOptimizationStudioEnabled && <StudioTemplates />}
-      <div className="pt-6">
-        <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
-          Optimization runs
-        </h2>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-          <div className="flex items-center gap-2">
-            <SearchInput
-              searchText={search!}
-              setSearchText={setSearch}
-              placeholder="Search by dataset name"
-              className="w-[320px]"
-              dimension="sm"
-            ></SearchInput>
-            {canViewDatasets && (
-              <FiltersButton
-                columns={FILTER_COLUMNS}
-                config={filtersConfig as never}
-                filters={filters}
-                onChange={setFilters}
-                layout="icon"
-              />
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {canDeleteOptimizationRuns && (
-              <>
-                <OptimizationsActionsPanel optimizations={selectedRows} />
-                <Separator orientation="vertical" className="mx-2 h-4" />
-              </>
-            )}
-            <TooltipWrapper content="Refresh optimizations list">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={() => refetch()}
-              >
-                <RotateCw />
-              </Button>
-            </TooltipWrapper>
-            <ColumnsButton
-              columns={visibleColumns}
-              selectedColumns={selectedColumns}
-              onSelectionChange={setSelectedColumns}
-              order={columnsOrder}
-              onOrderChange={setColumnsOrder}
-            ></ColumnsButton>
-          </div>
-        </div>
-        <DataTable
-          columns={columns as never}
-          data={optimizations as never}
-          getRowId={(row: Optimization) => row.id}
-          onRowClick={handleRowClick}
-          resizeConfig={resizeConfig}
-          selectionConfig={{
-            rowSelection,
-            setRowSelection,
-          }}
-          noData={
-            <DataTableNoData title={noDataText}>
-              {noData && (
-                <Button variant="link" onClick={handleNewOptimizationClick}>
-                  Create new optimization
-                </Button>
-              )}
-            </DataTableNoData>
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyOptStudioLightUrl}
+          darkImageUrl={emptyOptStudioDarkUrl}
+          title="No optimization runs yet"
+          description={
+            "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
           }
-          showLoadingOverlay={isPlaceholderData && isFetching}
+          primaryActionLabel="Create optimization run"
+          onPrimaryAction={handleNewOptimizationClick}
+          docsUrl={buildDocsUrl("/agent_optimization/optimization_studio")}
         />
-        <div className="py-4">
-          <DataTablePagination
-            page={page!}
-            pageChange={setPage}
-            size={pageSize}
-            total={total}
-          />
-        </div>
-      </div>
+      ) : (
+        <>
+          {isOptimizationStudioEnabled && <StudioTemplates />}
+          <div className="pt-4">
+            <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
+              Optimization runs
+            </h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+              <div className="flex items-center gap-2">
+                <SearchInput
+                  searchText={search!}
+                  setSearchText={setSearch}
+                  placeholder="Search by dataset name"
+                  className="w-[320px]"
+                  dimension="sm"
+                ></SearchInput>
+                {canViewDatasets && (
+                  <FiltersButton
+                    columns={FILTER_COLUMNS}
+                    config={filtersConfig as never}
+                    filters={filters}
+                    onChange={setFilters}
+                    layout="icon"
+                  />
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {canDeleteOptimizationRuns && (
+                  <>
+                    <OptimizationsActionsPanel optimizations={selectedRows} />
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                  </>
+                )}
+                <TooltipWrapper content="Refresh optimizations list">
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    className="shrink-0"
+                    onClick={() => refetch()}
+                  >
+                    <RotateCw />
+                  </Button>
+                </TooltipWrapper>
+                <ColumnsButton
+                  columns={visibleColumns}
+                  selectedColumns={selectedColumns}
+                  onSelectionChange={setSelectedColumns}
+                  order={columnsOrder}
+                  onOrderChange={setColumnsOrder}
+                ></ColumnsButton>
+              </div>
+            </div>
+            <DataTable
+              columns={columns as never}
+              data={optimizations as never}
+              getRowId={(row: Optimization) => row.id}
+              onRowClick={handleRowClick}
+              resizeConfig={resizeConfig}
+              selectionConfig={{
+                rowSelection,
+                setRowSelection,
+              }}
+              noData={
+                <DataTableNoData title={noDataText}>
+                  {noData && (
+                    <Button variant="link" onClick={handleNewOptimizationClick}>
+                      Create optimization
+                    </Button>
+                  )}
+                </DataTableNoData>
+              }
+              showLoadingOverlay={isPlaceholderData && isFetching}
+            />
+            <div className="py-4">
+              <DataTablePagination
+                page={page!}
+                pageChange={setPage}
+                size={pageSize}
+                total={total}
+              />
+            </div>
+          </div>
+        </>
+      )}
       <AddOptimizationDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

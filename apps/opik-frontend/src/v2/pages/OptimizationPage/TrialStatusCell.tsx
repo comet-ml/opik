@@ -17,13 +17,13 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const {
     candidates,
     bestCandidateId,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
   } = (custom ?? {}) as {
     candidates: AggregatedCandidate[];
     bestCandidateId?: string;
-    isEvaluationSuite?: boolean;
+    isTestSuite?: boolean;
     isInProgress?: boolean;
     inProgressInfo?: InProgressInfo;
   };
@@ -34,11 +34,11 @@ const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
     () =>
       computeCandidateStatuses(
         candidates ?? [],
-        isEvaluationSuite,
+        isTestSuite,
         isInProgress,
         inProgressInfo,
       ),
-    [candidates, isEvaluationSuite, isInProgress, inProgressInfo],
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
   const status = statusMap.get(row.candidateId) ?? "pruned";
   const tagSize = getCellTagSize(context, TAG_SIZE_MAP);

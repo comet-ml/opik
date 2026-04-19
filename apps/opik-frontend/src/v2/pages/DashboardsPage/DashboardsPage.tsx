@@ -9,9 +9,14 @@ import {
 } from "use-query-params";
 import { ColumnPinningState, ColumnSort } from "@tanstack/react-table";
 import useLocalStorageState from "use-local-storage-state";
+import { Plus } from "lucide-react";
 
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
+import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
@@ -36,8 +41,6 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import {
   generateActionsColumDef,
@@ -252,9 +255,6 @@ const DashboardsPage: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search && (!filters || filters.length === 0);
-  const noDataText = noData
-    ? "There are no dashboards yet"
-    : "No search results";
 
   const selectedDashboards = useMemo(() => {
     return dashboards.filter((dashboard) => rowSelection[dashboard.id]);
@@ -352,90 +352,91 @@ const DashboardsPage: React.FunctionComponent = () => {
     return <Loader />;
   }
 
+  const isEmpty = noData && dashboards.length === 0;
+
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <div className="flex items-center">
-          <h1 className="comet-title-l truncate break-words">Dashboards</h1>
-        </div>
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">Dashboards</h1>
+        {canCreateDashboards && (
+          <Button variant="default" size="xs" onClick={handleNewDashboardClick}>
+            <Plus className="mr-1 size-4" />
+            Create dashboard
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_dashboards]}
-      />
-      <div className="mb-4 flex items-center justify-between gap-8">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTERS_COLUMNS}
-            config={FILTERS_CONFIG as never}
-            filters={filters!}
-            onChange={setFilters}
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyTestSuitesLightUrl}
+          darkImageUrl={emptyTestSuitesDarkUrl}
+          title="No dashboards yet"
+          description={
+            "Build a cross-project dashboard to get a real-time view of your agents, metrics,\nand costs. Or explore a project to see detailed insights."
+          }
+          primaryActionLabel="Create your first dashboard"
+          onPrimaryAction={handleNewDashboardClick}
+          docsUrl={buildDocsUrl("/production/dashboards")}
+        />
+      ) : (
+        <>
+          <div className="mb-4 flex items-center justify-between gap-8">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTERS_COLUMNS}
+                config={FILTERS_CONFIG as never}
+                filters={filters!}
+                onChange={setFilters}
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {canDeleteDashboards && (
+                <>
+                  <DashboardsActionsPanel dashboards={selectedDashboards} />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <ColumnsButton
+                columns={columnsDef}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              ></ColumnsButton>
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={dashboards}
+            onRowClick={handleRowClick}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={<DataTableNoMatchingData />}
+            showLoadingOverlay={isPlaceholderData && isFetching}
           />
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeleteDashboards && (
-            <>
-              <DashboardsActionsPanel dashboards={selectedDashboards} />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={columnsDef}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
-          {canCreateDashboards && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={handleNewDashboardClick}
-            >
-              Create new dashboard
-            </Button>
-          )}
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={dashboards}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && canCreateDashboards && (
-              <Button variant="link" onClick={handleNewDashboardClick}>
-                Create new dashboard
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page!}
-          pageChange={setPage}
-          size={size!}
-          sizeChange={setSize}
-          total={total}
-        ></DataTablePagination>
-      </div>
+          <div className="py-4">
+            <DataTablePagination
+              page={page!}
+              pageChange={setPage}
+              size={size!}
+              sizeChange={setSize}
+              total={total}
+            ></DataTablePagination>
+          </div>
+        </>
+      )}
       <AddEditCloneDashboardDialog
         mode="create"
         key={resetDialogKeyRef.current}

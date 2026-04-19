@@ -1,0 +1,128 @@
+---
+description: Describes the Meaning Match metric
+headline: Meaning Match | Opik Documentation
+og:description: Evaluate LLM outputs with Meaning Match to ensure semantic accuracy
+  in question-answering systems using Opik's automation tools.
+og:site_name: Opik Documentation
+og:title: Meaning Match Metric - Opik
+title: Meaning Match
+---
+
+# Meaning Match
+
+The Meaning Match metric evaluates whether an LLM's output semantically matches a ground truth answer, regardless of phrasing or formatting. This metric is particularly useful for evaluating question-answering systems where the same answer can be expressed in different ways.
+
+## How to use the Meaning Match metric
+
+The Meaning Match metric is available as an **LLM-as-a-Judge** metric in automation rules. You can use it to automatically evaluate traces in your project by creating a new rule.
+
+### Creating a rule with Meaning Match
+
+1. Navigate to your project in Opik
+2. Click on **"Rules"** in the sidebar
+3. Click **"Create new rule"**
+4. Select **"LLM-as-judge"** as the metric type
+5. Choose **"Meaning Match"** from the prompt dropdown
+6. Configure the variable mapping:
+   - **input**: The original question or prompt
+   - **ground_truth**: The expected correct answer
+   - **output**: The LLM's generated response
+7. Select your preferred LLM model for evaluation
+8. Configure sampling rate and filters as needed
+9. Click **"Create rule"**
+
+## Understanding the scores
+
+The Meaning Match metric returns a **boolean score**:
+
+- **true** (1.0): The output conveys the same essential answer as the ground truth, even if worded differently
+- **false** (0.0): The output contradicts, differs from, or fails to include the core answer in the ground truth
+
+Each score includes a detailed reason explaining the judgment.
+
+## Evaluation Guidelines
+
+The Meaning Match metric follows these rules when evaluating responses:
+
+1. **Focus on factual equivalence** - Ignores style, grammar, or verbosity
+2. **Accept aliases and synonyms** - "NYC" ≈ "New York City"; "Da Vinci" ≈ "Leonardo da Vinci"
+3. **Ignore formatting** - Case, punctuation, and whitespace differences are acceptable
+4. **Allow extra context** - Additional details are okay if they don't contradict the main answer
+5. **Reject hedging** - Uncertain or incomplete answers score as false
+6. **Treat numeric equivalents** - "100" = "one hundred"
+7. **Reject multiple alternatives** - If the output includes the correct answer with incorrect alternatives, it scores as false
+
+## Example evaluations
+
+| Input | Ground Truth | Output | Score | Reason |
+|-------|--------------|---------|-------|--------|
+| What's the capital of France? | Paris | It's Paris | ✅ true | Output conveys the same factual answer as the ground truth |
+| Who painted the Mona Lisa? | Leonardo da Vinci | Da Vinci | ✅ true | "Da Vinci" is an accepted alias for "Leonardo da Vinci" |
+| Who painted the Mona Lisa? | Leonardo da Vinci | Pablo Picasso | ❌ false | Output names a different painter than the ground truth |
+| What's 10 + 10? | 20 | The answer is twenty | ✅ true | Numeric and textual forms are treated as equivalent |
+
+## Meaning Match Prompt
+
+Opik uses an LLM as a Judge to evaluate semantic equivalence. By default, the evaluation uses the model you select when creating the rule. The prompt template used for evaluation is:
+
+```
+You are an expert semantic equivalence judge. Your task is to decide whether the OUTPUT conveys the same essential answer as the GROUND_TRUTH, regardless of phrasing or formatting.
+
+## What to judge
+- TRUE if the OUTPUT expresses the same core fact/entity/value as the GROUND_TRUTH.
+- FALSE if the OUTPUT contradicts, differs from, or fails to include the core fact/value in GROUND_TRUTH.
+
+## Rules
+1. Focus only on the factual equivalence of the core answer. Ignore style, grammar, or verbosity.
+2. Accept aliases, synonyms, paraphrases, or equivalent expressions.
+   Examples: "NYC" ≈ "New York City"; "Da Vinci" ≈ "Leonardo da Vinci".
+3. Ignore case, punctuation, and formatting differences.
+4. Extra contextual details are acceptable **only if they don't change or contradict** the main answer.
+5. If the OUTPUT includes the correct answer along with additional unrelated or incorrect alternatives → FALSE.
+6. Uncertain, hedged, or incomplete answers → FALSE.
+7. Treat numeric and textual forms as equivalent (e.g., "100" = "one hundred").
+8. Ignore whitespace, articles, and small typos that don't change meaning.
+
+## Output Format
+Your response **must** be a single JSON object in the following format:
+{
+  "score": true or false,
+  "reason": ["short reason for the response"]
+}
+
+## Example
+INPUT: "Who painted the Mona Lisa?"
+GROUND_TRUTH: "Leonardo da Vinci"
+
+OUTPUT: "It was painted by Leonardo da Vinci."
+→ {"score": true, "reason": ["Output conveys the same factual answer as the ground truth."]}
+
+OUTPUT: "Pablo Picasso"
+→ {"score": false, "reason": ["Output names a different painter than the ground truth."]}
+
+INPUT:
+{{input}}
+
+GROUND_TRUTH:
+{{ground_truth}}
+
+OUTPUT:
+{{output}}
+```
+
+## Use cases
+
+The Meaning Match metric is ideal for:
+
+- **Question-answering systems** - Evaluate if answers are semantically correct
+- **Information extraction** - Verify extracted entities match expected values
+- **Knowledge base validation** - Check if responses align with ground truth knowledge
+- **RAG systems** - Assess if retrieved information correctly answers questions
+- **Multi-language systems** - Compare answers across translations (when ground truth is translated)
+
+## Best practices
+
+- **Provide clear ground truth** - The more specific the ground truth, the more accurate the evaluation
+- **Use with other metrics** - Combine with other metrics like hallucination or answer relevance for comprehensive evaluation
+- **Monitor false positives/negatives** - Review evaluation results periodically to ensure the metric works well for your use case
+- **Test with edge cases** - Try the metric with ambiguous or borderline cases to understand its behavior

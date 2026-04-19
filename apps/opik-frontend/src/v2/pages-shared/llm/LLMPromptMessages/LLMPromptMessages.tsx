@@ -104,28 +104,6 @@ const LLMPromptMessages = ({
     [onChange, messages],
   );
 
-  const handleReplaceWithChatPrompt = useCallback(
-    (newMessages: LLMMessage[]) => {
-      // Replace all messages with the chat prompt's messages
-      onChange(newMessages);
-    },
-    [onChange],
-  );
-
-  const handleClearOtherPromptLinks = useCallback(
-    (currentMessageId: string) => () => {
-      // Clear prompt links from all messages except the current one
-      onChange(
-        messages.map((m) =>
-          m.id !== currentMessageId
-            ? { ...m, promptId: undefined, promptVersionId: undefined }
-            : m,
-        ),
-      );
-    },
-    [onChange, messages],
-  );
-
   const handleDragEnd = useCallback(
     (event: DragEndEvent) => {
       const { active, over } = event;
@@ -181,8 +159,6 @@ const LLMPromptMessages = ({
               onChangeMessage={(changes) =>
                 handleChangeMessage(message.id, changes)
               }
-              onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
-              onClearOtherPromptLinks={handleClearOtherPromptLinks(message.id)}
               onFocus={() => handleMessageFocus(message.id)}
               message={message}
               disableMedia={disableMedia}

@@ -8,6 +8,10 @@ subtitle: Step-by-step guide to evaluate multi-turn agents
 title: Evaluate multi-turn agents
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 When working on chatbots or multi-turn agents, it can be challenging to evaluate the agent's
 behavior over multiple turns because you don't know what the user would ask as a follow-up question.
 
@@ -63,7 +67,7 @@ turn evaluate.
         import opik
 
         opik_client = opik.Opik()
-        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation")
+        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation", project_name="my-project")
         dataset.insert([
             {"user_persona": "You are a frustrated user who wants a refund"},
             {"user_persona": "You are a user who is happy with your product and wants to buy more"},
@@ -115,7 +119,7 @@ turn evaluate.
 
         # Fetch the user personas
         opik_client = opik.Opik()
-        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation")
+        dataset = opik_client.get_or_create_dataset(name="Multi-turn evaluation", project_name="my-project")
 
         # Run the simulations
         all_simulations = []
@@ -158,7 +162,7 @@ turn evaluate.
 ## Scoring threads
 
 When working on evaluating multi-turn conversations, you can use one of Opik's built-in conversation
-metrics or [create your own](/evaluation/metrics/custom_conversation_metric).
+metrics or [create your own](/v1/evaluation/metrics/custom_conversation_metric).
 
 If you've used the `run_simulation` function, you will already have a list of conversation messages
 that you can pass directly to the metrics, otherwise you can use the `evaluate_threads` function:
@@ -218,7 +222,7 @@ that you can pass directly to the metrics, otherwise you can use the `evaluate_t
 </CodeBlock>
 
 <Tip>
-You can learn more about the `evaluate_threads` function in the [evaluate_threads guide](/evaluation/evaluate_threads).
+You can learn more about the `evaluate_threads` function in the [evaluate_threads guide](/v1/evaluation/evaluate_threads).
 </Tip>
 
 Once the threads have been scored, you can view the results in the Opik thread UI:
@@ -229,7 +233,7 @@ Once the threads have been scored, you can view the results in the Opik thread U
 
 ## Next steps
 
-- Learn more about [conversation metrics](/evaluation/metrics/conversation_threads_metrics)
-- Learn more about [custom conversation metrics](/evaluation/metrics/custom_conversation_metric)
-- Learn more about [evaluate_threads](/evaluation/evaluate_threads)
-- Learn more about [agent trajectory evaluation](/evaluation/evaluate_agent_trajectory)
+- Learn more about [conversation metrics](/v1/evaluation/metrics/conversation_threads_metrics)
+- Learn more about [custom conversation metrics](/v1/evaluation/metrics/custom_conversation_metric)
+- Learn more about [evaluate_threads](/v1/evaluation/evaluate_threads)
+- Learn more about [agent trajectory evaluation](/v1/evaluation/evaluate_agent_trajectory)

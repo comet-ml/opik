@@ -109,6 +109,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      label: "Claude Opus 4.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
       label: "Claude Opus 4.6",
     },
@@ -278,6 +282,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST,
       label: "anthropic/claude-opus-4.6-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7,
+      label: "anthropic/claude-opus-4.7",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -791,6 +799,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
       label: "meta-llama/llama-guard-4-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B_FREE,
+      label: "meta-llama/llama-guard-4-12b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -1433,6 +1445,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/bodybuilder",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_ELEPHANT_ALPHA,
+      label: "openrouter/elephant-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
       label: "openrouter/free",
     },
@@ -1954,6 +1970,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
+      label: "Gemini 3.1 Flash TTS Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,

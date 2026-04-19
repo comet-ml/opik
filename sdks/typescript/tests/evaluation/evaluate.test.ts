@@ -168,6 +168,7 @@ describe("evaluate function", () => {
     expect(result).toEqual({
       experimentId: expect.any(String),
       experimentName: "test-experiment",
+      resultUrl: expect.any(String),
       errors: [],
       testResults: [
         expect.objectContaining({
@@ -280,5 +281,72 @@ describe("evaluate function", () => {
     ).rejects.toThrow("Task function is required for evaluation");
 
     expect(createExperimentSpy).not.toHaveBeenCalled();
+  });
+
+  test("should include blueprint metadata when blueprintId is provided", async () => {
+    const getBlueprintSpy = vi
+      .spyOn(opikClient.api.agentConfigs, "getBlueprintById")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "bp-123",
+          name: "v9",
+          type: "blueprint",
+          values: [],
+        })
+      );
+
+    const mockTask: EvaluationTask = async () => {
+      return { output: "result" };
+    };
+
+    await evaluate({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "blueprint-test",
+      client: opikClient,
+      blueprintId: "bp-123",
+    });
+
+    expect(getBlueprintSpy).toHaveBeenCalledWith("bp-123");
+    expect(createExperimentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          agent_configuration: {
+            _blueprint_id: "bp-123",
+            blueprint_version: "v9",
+          },
+        }),
+      })
+    );
+  });
+
+  test("should store blueprint_id even when fetch fails", async () => {
+    vi.spyOn(opikClient.api.agentConfigs, "getBlueprintById").mockImplementation(
+      () => {
+        throw new Error("not found");
+      }
+    );
+
+    const mockTask: EvaluationTask = async () => {
+      return { output: "result" };
+    };
+
+    await evaluate({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "blueprint-fail-test",
+      client: opikClient,
+      blueprintId: "bp-456",
+    });
+
+    expect(createExperimentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          agent_configuration: {
+            _blueprint_id: "bp-456",
+          },
+        }),
+      })
+    );
   });
 });

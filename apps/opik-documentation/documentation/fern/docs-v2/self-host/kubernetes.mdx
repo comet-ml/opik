@@ -1,0 +1,295 @@
+---
+headline: Kubernetes deployment | Opik Documentation
+og:description: Learn to configure and deploy Opik on Kubernetes using our Helm chart
+  for robust, production-ready environments.
+og:site_name: Opik Documentation
+og:title: 'Deploying with Opik: Kubernetes Made Easy'
+subtitle: Describes how to run Opik on a Kubernetes cluster
+title: Kubernetes deployment
+---
+
+> **Important:** If you're using or looking to use Opik or Comet enterprise version please reach out to Sales@comet.com to gain access to the correct deployment documentation.
+
+For production deployments, we recommend using our Kubernetes Helm chart. This chart is designed to be highly configurable and has been battle-tested in Comet's managed cloud offering.
+
+# Prerequisites
+
+In order to install Opik on a Kubernetes cluster, you will need to have the following tools installed:
+
+- [Helm](https://helm.sh/)
+- [kubectl](https://kubernetes.io/docs/tasks/tools/)
+- Optional: [kubectx](https://github.com/ahmetb/kubectx) and [kubens](https://github.com/ahmetb/kubectx) to switch between Kubernetes clusters and namespaces.
+
+# Installation
+
+You can install Opik using the helm chart maintained by the Opik team by running the following commands:
+
+Add Opik Helm repo
+
+```bash
+helm repo add opik https://comet-ml.github.io/opik/
+helm repo update
+```
+
+You can set VERSION to the specific Opik version or leave it as 'latest'
+
+```bash
+VERSION=latest
+helm upgrade --install opik -n opik --create-namespace opik/opik \
+    --set component.backend.image.tag=$VERSION \
+    --set component.python-backend.image.tag=$VERSION \
+    --set component.python-backend.env.PYTHON_CODE_EXECUTOR_IMAGE_TAG="$VERSION" \
+    --set component.frontend.image.tag=$VERSION
+```
+
+You can port-forward any service you need to your local machine:
+
+```bash
+kubectl port-forward -n opik svc/opik-frontend 5173
+```
+
+Opik will be available at `http://localhost:5173`.
+
+# Configuration
+
+You can find a full list of the configuration options in the [helm chart documentation](https://comet-ml.github.io/opik/).
+
+# Advanced deployment options
+
+## Configure external access
+
+### Configure ingress for opik-frontend
+
+```yaml
+component:
+    frontend:
+      ingress:
+        enabled: true
+        ingressClassName: <your ingress class>
+        annotations:
+            <your annotations>
+        hosts:
+            - host: opik.example.com
+              paths:
+                - path: /
+                  port: 5173
+                  pathType: Prefix
+        # For TLS configuration (optional)
+        tls:
+            enabled: true
+            hosts:  # Optional - defaults to hosts from rules if not specified
+                - opik.example.com
+            secretName: <your-tls-secret>  # Optional - omit if using cert-manager or similar
+```
+
+### Configure LoadBalancer service for clickhouse
+
+```yaml
+clickhouse:
+  service:
+    serviceTemplate: clickhouse-cluster-svc-lb-template
+    annotations: <your clickhouse LB service annotations>
+```
+
+## Configure Clickhouse backup
+
+[Clickhouse Backup](./backup)
+
+## Configure replication for Clickhouse
+
+<Warning>
+
+**Important Limitation:**  
+You must have Opik running _before_ you enable replication for ClickHouse.  
+Attempting to set up replication before Opik is running may result in errors or misconfiguration.
+
+</Warning>
+
+```yaml
+clickhouse:
+  replicasCount: 2
+```
+
+## Configure additional ClickHouse users and profiles
+
+You can create read-only ClickHouse users with custom settings profiles.
+
+### Using inline passwords
+
+```yaml
+clickhouse:
+  additionalProfiles:
+    - name: readonly_profile
+      settings:
+        readonly: 1
+        max_execution_time: 60
+        max_memory_usage: 10000000000
+        max_rows_to_read: 20000000
+        max_concurrent_queries_for_user: 2
+  additionalUsers:
+    - username: myuser
+      password: my_secure_password
+      profile: readonly_profile
+```
+
+### Using Kubernetes secrets
+
+When `adminUser.useSecret.enabled: true`, user passwords are read from a Kubernetes secret. By default, it uses the admin secret (`adminUser.secretname`) with the key `<username>_pass`:
+
+```yaml
+clickhouse:
+  adminUser:
+    useSecret:
+      enabled: true
+    secretname: clickhouse-admin-pass
+  additionalProfiles:
+    - name: readonly_profile
+      settings:
+        readonly: 1
+        max_execution_time: 60
+        max_memory_usage: 10000000000
+        max_rows_to_read: 20000000
+        max_concurrent_queries_for_user: 2
+  additionalUsers:
+    - username: myuser
+      profile: readonly_profile
+      # password read from secret "clickhouse-admin-pass", key "myuser_pass"
+    - username: anotheruser
+      profile: readonly_profile
+      secretname: my-custom-secret  # override secret name
+      password_key: custom_key      # override key name
+```
+
+## Use S3 bucket for Opik
+
+### Using AWS key and secret keys
+
+```yaml
+component:
+  backend:
+    env:
+      S3_BUCKET: <your_bucket_name>
+      S3_REGION: <aws_region>
+      AWS_ACCESS_KEY_ID: <your AWS Key>
+      AWS_SECRET_ACCESS_KEY: <your AWS Secret>
+```
+
+## Use IAM Role
+
+If your IAM role is configured for the k8s nodes, the only things you will need is to set for opik-backend:
+
+```yaml
+component:
+  backend:
+    env:
+      S3_BUCKET: <your_bucket_name>
+      S3_REGION: <aws_region> 
+```
+
+If your role should be used by opik-backend serviceAccount, in addition you need to set:
+
+```yaml
+component:
+  backend:
+    serviceAccount:
+      enabled: true
+      annotations:
+        eks.amazonaws.com/role-arn: <your IAM Role arn>
+```
+
+## Use external Clickhouse installation
+
+Supported from Opik chart version 1.4.2
+
+Configuration snippet for using external Clickhouse:
+
+```yaml
+component:
+    backend:
+      ...
+      waitForClickhouse:
+        clickhouse:
+          host: <YOUR CLICKHOUSE HOST>
+          port: 8123
+          protocol: http
+      env:
+        ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
+        ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
+        ANALYTICS_DB_DATABASE_NAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_USER: "opik"
+        ANALYTICS_DB_USERNAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_PASS: "xxx"
+        ANALYTICS_DB_PASS: "xxx"
+    ...
+clickhouse:
+    enabled: false
+```
+
+The passwords can be handled in the secret, and then you should configure it as following
+
+```yaml
+component:
+    backend:
+      ...
+      envFrom:
+        - configMapRef:
+            name: opik-backend
+        - secretRef:
+            name: <your secret name>
+      env:
+        ANALYTICS_DB_MIGRATIONS_URL: "jdbc:clickhouse://<YOUR CLICKHOUSE HOST>:8123"
+        ANALYTICS_DB_HOST: "<YOUR CLICKHOUSE HOST>"
+        ANALYTICS_DB_DATABASE_NAME: "opik"
+        ANALYTICS_DB_MIGRATIONS_USER: "opik"
+        ANALYTICS_DB_USERNAME: "opik"
+...
+clickhouse:
+    enabled: false
+```
+
+# Delete your installation 
+
+Before deleting opik installation with helm, make sure to remove finalizer on the clickhouse resource:
+
+```bash
+kubectl patch -n opik chi opik-clickhouse --type json --patch='[ { "op": "remove", "path": "/metadata/finalizers" } ]'
+```
+
+Then, uninstall the opik:
+
+```bash
+helm uninstall opik -n opik
+```
+
+# Version Compatibility
+
+It's important to ensure that your Python SDK version matches your Kubernetes deployment version to avoid compatibility issues.
+
+## Check your current versions
+
+### Check Opik UI version
+You can check your current Opik deployment version in the UI by clicking on the user menu in the top right corner.
+
+### Check Python SDK version
+You can check your installed Python SDK version by running:
+
+```bash
+pip show opik
+```
+
+## Ensure version compatibility
+
+Make sure both versions match. If they don't match:
+
+1. **To update your Python SDK**: Run `pip install --upgrade opik==<VERSION>` where `<VERSION>` matches your Kubernetes deployment
+2. **To update your Kubernetes deployment**: Update the VERSION variable in the helm installation command to match your Python SDK version
+
+# Troubleshooting
+
+If you get this error when running helm
+
+```bash
+ERROR: Exception Primary Reason:  Code: 225. DB::Exception: Can't create replicated table without ZooKeeper. (NO_ZOOKEEPER) (version 24.3.5.47.altinitystable (altinity build))
+```
+
+Please make sure you use the latest Opik helm chart version that runs zookeeper by default

@@ -277,98 +277,6 @@ export class RunnersClient {
     }
 
     /**
-     * Exchange a pairing code or API key for local runner credentials
-     *
-     * @param {OpikApi.LocalRunnerConnectRequest} request
-     * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.BadRequestError}
-     * @throws {@link OpikApi.NotFoundError}
-     *
-     * @example
-     *     await client.runners.connectRunner({
-     *         pairingCode: "pairing_code",
-     *         runnerName: "runner_name"
-     *     })
-     */
-    public connectRunner(
-        request: OpikApi.LocalRunnerConnectRequest,
-        requestOptions?: RunnersClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.LocalRunnerConnectResponse> {
-        return core.HttpResponsePromise.fromPromise(this.__connectRunner(request, requestOptions));
-    }
-
-    private async __connectRunner(
-        request: OpikApi.LocalRunnerConnectRequest,
-        requestOptions?: RunnersClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.LocalRunnerConnectResponse>> {
-        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
-            this._options?.headers,
-            mergeOnlyDefinedHeaders({
-                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
-            }),
-            requestOptions?.headers,
-        );
-        const _response = await core.fetcher({
-            url: core.url.join(
-                (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.OpikApiEnvironment.Default,
-                "v1/private/local-runners/connections",
-            ),
-            method: "POST",
-            headers: _headers,
-            contentType: "application/json",
-            queryParameters: requestOptions?.queryParams,
-            requestType: "json",
-            body: serializers.LocalRunnerConnectRequest.jsonOrThrow(request, {
-                unrecognizedObjectKeys: "strip",
-                omitUndefined: true,
-            }),
-            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
-            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
-            withCredentials: true,
-            abortSignal: requestOptions?.abortSignal,
-            fetchFn: this._options?.fetch,
-            logging: this._options.logging,
-        });
-        if (_response.ok) {
-            return {
-                data: serializers.LocalRunnerConnectResponse.parseOrThrow(_response.body, {
-                    unrecognizedObjectKeys: "passthrough",
-                    allowUnrecognizedUnionMembers: true,
-                    allowUnrecognizedEnumValues: true,
-                    skipValidation: true,
-                    breadcrumbsPrefix: ["response"],
-                }),
-                rawResponse: _response.rawResponse,
-            };
-        }
-
-        if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 400:
-                    throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
-                case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                        rawResponse: _response.rawResponse,
-                    });
-            }
-        }
-
-        return handleNonStatusCodeError(
-            _response.error,
-            _response.rawResponse,
-            "POST",
-            "/v1/private/local-runners/connections",
-        );
-    }
-
-    /**
      * Submit a bridge command for execution by the local daemon
      *
      * @param {string} runnerId
@@ -561,29 +469,30 @@ export class RunnersClient {
     }
 
     /**
-     * Generate a pairing code for a local runner in the current workspace
+     * Get a single local runner with its registered agents
      *
-     * @param {OpikApi.LocalRunnerPairRequest} request
+     * @param {string} runnerId
+     * @param {OpikApi.GetRunnerRequest} request
      * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.NotFoundError}
      *
      * @example
-     *     await client.runners.generatePairingCode({
-     *         projectId: "project_id"
-     *     })
+     *     await client.runners.getRunner("runnerId")
      */
-    public generatePairingCode(
-        request: OpikApi.LocalRunnerPairRequest,
+    public getRunner(
+        runnerId: string,
+        request: OpikApi.GetRunnerRequest = {},
         requestOptions?: RunnersClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.LocalRunnerPairResponse> {
-        return core.HttpResponsePromise.fromPromise(this.__generatePairingCode(request, requestOptions));
+    ): core.HttpResponsePromise<OpikApi.LocalRunner> {
+        return core.HttpResponsePromise.fromPromise(this.__getRunner(runnerId, request, requestOptions));
     }
 
-    private async __generatePairingCode(
-        request: OpikApi.LocalRunnerPairRequest,
+    private async __getRunner(
+        runnerId: string,
+        _request: OpikApi.GetRunnerRequest = {},
         requestOptions?: RunnersClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.LocalRunnerPairResponse>> {
+    ): Promise<core.WithRawResponse<OpikApi.LocalRunner>> {
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
             this._options?.headers,
             mergeOnlyDefinedHeaders({
@@ -596,17 +505,11 @@ export class RunnersClient {
                 (await core.Supplier.get(this._options.baseUrl)) ??
                     (await core.Supplier.get(this._options.environment)) ??
                     environments.OpikApiEnvironment.Default,
-                "v1/private/local-runners/pairs",
+                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}`,
             ),
-            method: "POST",
+            method: "GET",
             headers: _headers,
-            contentType: "application/json",
             queryParameters: requestOptions?.queryParams,
-            requestType: "json",
-            body: serializers.LocalRunnerPairRequest.jsonOrThrow(request, {
-                unrecognizedObjectKeys: "strip",
-                omitUndefined: true,
-            }),
             timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
             maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
             withCredentials: true,
@@ -616,7 +519,7 @@ export class RunnersClient {
         });
         if (_response.ok) {
             return {
-                data: serializers.LocalRunnerPairResponse.parseOrThrow(_response.body, {
+                data: serializers.LocalRunner.parseOrThrow(_response.body, {
                     unrecognizedObjectKeys: "passthrough",
                     allowUnrecognizedUnionMembers: true,
                     allowUnrecognizedEnumValues: true,
@@ -643,8 +546,75 @@ export class RunnersClient {
         return handleNonStatusCodeError(
             _response.error,
             _response.rawResponse,
-            "POST",
-            "/v1/private/local-runners/pairs",
+            "GET",
+            "/v1/private/local-runners/{runnerId}",
+        );
+    }
+
+    /**
+     * Disconnect a local runner, terminating its connection and failing any pending jobs
+     *
+     * @param {string} runnerId
+     * @param {OpikApi.DisconnectRunnerRequest} request
+     * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.runners.disconnectRunner("runnerId")
+     */
+    public disconnectRunner(
+        runnerId: string,
+        request: OpikApi.DisconnectRunnerRequest = {},
+        requestOptions?: RunnersClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__disconnectRunner(runnerId, request, requestOptions));
+    }
+
+    private async __disconnectRunner(
+        runnerId: string,
+        _request: OpikApi.DisconnectRunnerRequest = {},
+        requestOptions?: RunnersClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}`,
+            ),
+            method: "DELETE",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "DELETE",
+            "/v1/private/local-runners/{runnerId}",
         );
     }
 
@@ -821,89 +791,6 @@ export class RunnersClient {
             _response.rawResponse,
             "GET",
             "/v1/private/local-runners/jobs/{jobId}",
-        );
-    }
-
-    /**
-     * Get a single local runner with its registered agents
-     *
-     * @param {string} runnerId
-     * @param {OpikApi.GetRunnerRequest} request
-     * @param {RunnersClient.RequestOptions} requestOptions - Request-specific configuration.
-     *
-     * @throws {@link OpikApi.NotFoundError}
-     *
-     * @example
-     *     await client.runners.getRunner("runnerId")
-     */
-    public getRunner(
-        runnerId: string,
-        request: OpikApi.GetRunnerRequest = {},
-        requestOptions?: RunnersClient.RequestOptions,
-    ): core.HttpResponsePromise<OpikApi.LocalRunner> {
-        return core.HttpResponsePromise.fromPromise(this.__getRunner(runnerId, request, requestOptions));
-    }
-
-    private async __getRunner(
-        runnerId: string,
-        _request: OpikApi.GetRunnerRequest = {},
-        requestOptions?: RunnersClient.RequestOptions,
-    ): Promise<core.WithRawResponse<OpikApi.LocalRunner>> {
-        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
-            this._options?.headers,
-            mergeOnlyDefinedHeaders({
-                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
-            }),
-            requestOptions?.headers,
-        );
-        const _response = await core.fetcher({
-            url: core.url.join(
-                (await core.Supplier.get(this._options.baseUrl)) ??
-                    (await core.Supplier.get(this._options.environment)) ??
-                    environments.OpikApiEnvironment.Default,
-                `v1/private/local-runners/${core.url.encodePathParam(runnerId)}`,
-            ),
-            method: "GET",
-            headers: _headers,
-            queryParameters: requestOptions?.queryParams,
-            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
-            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
-            withCredentials: true,
-            abortSignal: requestOptions?.abortSignal,
-            fetchFn: this._options?.fetch,
-            logging: this._options.logging,
-        });
-        if (_response.ok) {
-            return {
-                data: serializers.LocalRunner.parseOrThrow(_response.body, {
-                    unrecognizedObjectKeys: "passthrough",
-                    allowUnrecognizedUnionMembers: true,
-                    allowUnrecognizedEnumValues: true,
-                    skipValidation: true,
-                    breadcrumbsPrefix: ["response"],
-                }),
-                rawResponse: _response.rawResponse,
-            };
-        }
-
-        if (_response.error.reason === "status-code") {
-            switch (_response.error.statusCode) {
-                case 404:
-                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
-                default:
-                    throw new errors.OpikApiError({
-                        statusCode: _response.error.statusCode,
-                        body: _response.error.body,
-                        rawResponse: _response.rawResponse,
-                    });
-            }
-        }
-
-        return handleNonStatusCodeError(
-            _response.error,
-            _response.rawResponse,
-            "GET",
-            "/v1/private/local-runners/{runnerId}",
         );
     }
 

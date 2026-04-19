@@ -11,4 +11,5 @@ export interface LocalRunner {
     agents?: OpikApi.Agent[];
     capabilities?: string[];
     checklist?: OpikApi.JsonNode;
+    type?: OpikApi.LocalRunnerType;
 }

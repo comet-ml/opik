@@ -1,0 +1,4902 @@
+paths:
+  /v1/internal/usage/bi-datasets:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              bi_information:
+                - workspace_id: team-alpha-123
+                  user: jane.doe@example.com
+                  count: 42
+  /v1/internal/usage/workspace-trace-counts:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              workspaces_traces_count:
+                - workspace: data-science-team
+                  trace_count: 15432
+                - workspace: ml-engineering
+                  trace_count: 9876
+                - workspace: research-lab
+                  trace_count: 4321
+  /v1/private/alerts/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: High Error Rate Alert
+              enabled: true
+              alert_type: general
+              metadata:
+                severity: high
+                owner: dev-team
+              webhook:
+                id: 7b9c9f1a-8d3e-4f2a-9a1b-2d4f5e6a7b8c
+                name: Error Notifications Webhook
+                url: https://hooks.example.com/alerts/error
+                secret_token: s3cr3tT0k3n123
+                headers:
+                  Authorization: Bearer abcdef123456
+                  Content-Type: application/json
+                created_at: '2024-01-15T09:30:00Z'
+                created_by: alice@example.com
+                last_updated_at: '2024-04-10T11:45:00Z'
+                last_updated_by: bob@example.com
+              triggers:
+                - id: d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a
+                  alert_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  event_type: trace:errors
+                  trigger_configs:
+                    - id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      alert_trigger_id: d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a
+                      type: scope:project
+                      config_value:
+                        project: opik-backend
+                      created_at: '2024-01-15T09:30:00Z'
+                      created_by: alice@example.com
+                      last_updated_at: '2024-04-10T11:45:00Z'
+                      last_updated_by: bob@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-04-10T11:45:00Z'
+              last_updated_by: bob@example.com
+              project_id: 9f8e7d6c-5b4a-3210-9f8e-7d6c5b4a3210
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: a3bb189e-8bf9-3888-9912-ace4e6543002
+          request:
+            webhook:
+              url: https://hooks.example.com/alerts
+              id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              name: Primary Alert Webhook
+              secret_token: s3cr3tT0k3n123
+              headers:
+                Authorization: Bearer abcdef123456
+                Content-Type: application/json
+            name: High Latency Alert
+            enabled: true
+            alert_type: general
+            metadata:
+              environment: production
+              team: backend
+            triggers:
+              - id: b1a7f3d2-4c3e-4f5a-9a2b-1c2d3e4f5a6b
+                event_type: trace:latency
+                trigger_configs:
+                  - id: c2d3e4f5-a6b7-4c3e-9a2b-1b1a7f3d2f5a
+                    type: threshold:latency
+                    config_value:
+                      threshold_ms: '500'
+            project_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/alerts/webhooks/examples:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              response_examples:
+                general:
+                  alert_id: alert_1234567890abcdef
+                  alert_type: general
+                  timestamp: '2024-06-01T12:00:00Z'
+                  message: CPU usage exceeded threshold
+                  severity: warning
+                  details:
+                    cpu_usage_percent: 92.5
+                    threshold_percent: 90
+                    host: server-01.example.com
+                slack:
+                  alert_id: alert_abcdef1234567890
+                  alert_type: slack
+                  timestamp: '2024-06-01T12:05:00Z'
+                  message: 'New message in #alerts channel'
+                  slack_channel: '#alerts'
+                  user: ops_team
+                  text: High memory usage detected on server-02
+                  severity: critical
+                pagerduty:
+                  alert_id: alert_0987654321fedcba
+                  alert_type: pagerduty
+                  timestamp: '2024-06-01T12:10:00Z'
+                  incident_key: incident_20240601_001
+                  service: database-cluster
+                  severity: error
+                  description: Database connection timeout
+                  status: triggered
+                  assigned_to: db_admin
+  /v1/private/agent-configs/blueprints/blueprint_id/deltas:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            blueprint_id: blueprint_id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Data Processing Blueprint v2
+              type: blueprint
+              description: Updates to data ingestion and transformation steps for improved accuracy
+              envs:
+                - production
+                - staging
+              created_by: alice.jones@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob.smith@example.com
+              last_updated_at: '2024-02-10T14:45:00Z'
+              values:
+                - id: 7b9c9f1e-8d3a-4f2a-9a1e-3c2d4e5f6789
+                  project_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                  key: max_retry_attempts
+                  value: '5'
+                  type: integer
+                  description: Maximum number of retry attempts for failed jobs
+                  valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+  /v1/private/alerts/webhooks/tests:
+    post:
+      x-fern-examples:
+        - request:
+            webhook:
+              url: https://hooks.example.com/alert
+          response:
+            body:
+              status: success
+              status_code: 200
+              request_body: '{"alert":"test"}'
+              error_message: ''
+  /v1/private/agent-configs/blueprints/history/projects/project_id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            project_id: project_id
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Initial Deployment Blueprint
+                  type: blueprint
+                  description: Blueprint for initial agent deployment with default settings
+                  envs:
+                    - production
+                    - staging
+                  created_by: alice.jones@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_by: bob.smith@example.com
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  values:
+                    - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      project_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                      key: max_connections
+                      value: '100'
+                      type: integer
+                      description: Maximum number of concurrent connections allowed
+                      valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+  /v1/private/annotation-queues:
+    post:
+      x-fern-examples:
+        - request:
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            name: Image Labeling Queue
+            scope: trace
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_name: Image Classification Project
+                  name: Bounding Box Annotations
+                  description: Queue for annotating bounding boxes on images
+                  instructions: Please label all visible objects with bounding boxes.
+                  scope: trace
+                  comments_enabled: true
+                  feedback_definition_names:
+                    - Accuracy
+                    - Completeness
+                  reviewers:
+                    - username: jdoe
+                      status: 2
+                    - username: asmith
+                      status: 1
+                  feedback_scores:
+                    - name: Accuracy
+                      value: 4.5
+                    - name: Completeness
+                      value: 4
+                  items_count: 125
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: admin_user
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: jdoe
+              sortableBy:
+                - name
+                - created_at
+                - items_count
+  /v1/private/agent-configs/blueprints/latest/projects/project_id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            project_id: project_id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Production Deployment Blueprint
+              type: blueprint
+              description: Blueprint for the production environment deployment with optimized resource allocation.
+              envs:
+                - production
+                - staging
+              created_by: alice.jones@comet.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob.smith@comet.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              values:
+                - id: 7b9c9f3e-8d3a-4f1a-9c2e-1a2b3c4d5e6f
+                  project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  key: max_concurrent_jobs
+                  value: '10'
+                  type: integer
+                  description: Maximum number of concurrent jobs allowed for this project.
+                  valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+  /v1/private/alerts:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: High Error Rate Alert
+                  enabled: true
+                  alert_type: general
+                  metadata:
+                    severity: high
+                    description: Alert for error rate exceeding threshold
+                  webhook:
+                    id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                    name: Error Alert Webhook
+                    url: https://hooks.example.com/alerts/error
+                    secret_token: s3cr3tT0k3n123
+                    headers:
+                      Authorization: Bearer abcdef123456
+                    created_at: '2024-01-15T09:30:00Z'
+                    created_by: admin_user
+                    last_updated_at: '2024-01-15T09:30:00Z'
+                    last_updated_by: admin_user
+                  triggers:
+                    - id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                      alert_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      event_type: trace:errors
+                      trigger_configs:
+                        - id: 9f8e7d6c-5b4a-3c2d-1e0f-9a8b7c6d5e4f
+                          alert_trigger_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                          type: threshold:errors
+                          config_value:
+                            threshold: '100'
+                            period: 5m
+                          created_at: '2024-01-15T09:30:00Z'
+                          created_by: admin_user
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          last_updated_by: admin_user
+                      created_at: '2024-01-15T09:30:00Z'
+                      created_by: admin_user
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: admin_user
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  last_updated_by: admin_user
+                  project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              sortable_by:
+                - name
+                - created_at
+                - enabled
+    post:
+      x-fern-examples:
+        - request:
+            webhook:
+              url: https://hooks.example.com/alerts
+  /v1/private/annotation-queues/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              project_name: Image Classification Project
+              name: Initial Annotation Queue
+              description: Queue for annotating initial batch of images
+              instructions: Please label all images with the appropriate category tags.
+              scope: trace
+              comments_enabled: true
+              feedback_definition_names:
+                - accuracy
+                - consistency
+              reviewers:
+                - username: annotator_jane
+                  status: 2
+                - username: reviewer_mike
+                  status: 1
+              feedback_scores:
+                - name: accuracy
+                  value: 0.95
+                - name: consistency
+                  value: 0.89
+              items_count: 150
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: admin_user
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: lead_annotator
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Image Labeling Queue
+            description: Queue for labeling images in the wildlife dataset
+            instructions: Please annotate all visible animals and mark any occlusions clearly.
+            comments_enabled: true
+            feedback_definition_names:
+              - clarity
+              - accuracy
+              - completeness
+  /v1/internal/usage/bi-experiments:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              bi_information:
+                - workspace_id: team-alpha-123
+                  user: jane.doe@example.com
+                  count: 42
+  /v1/private/agent-configs/blueprints:
+    patch:
+      x-fern-examples:
+        - request:
+            blueprint:
+              type: blueprint
+              values:
+                - key: max_iterations
+                  type: integer
+    post:
+      x-fern-examples:
+        - request:
+            blueprint:
+              type: blueprint
+              values:
+                - key: max_iterations
+                  type: integer
+  /v1/private/agent-configs/blueprints/environments/env_name/projects/project_id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            env_name: env_name
+            project_id: project_id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Production Environment Blueprint
+              type: blueprint
+              description: Configuration blueprint for the production environment with optimized settings.
+              envs:
+                - production
+              created_by: alice.jones@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob.smith@example.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              values:
+                - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  key: max_connections
+                  value: '100'
+                  type: integer
+                  description: Maximum number of concurrent connections allowed.
+                  valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+    put:
+      x-fern-examples:
+        - path-parameters:
+            env_name: env_name
+            project_id: project_id
+          request:
+            blueprint_name: production-deployment-blueprint
+  /v1/private/agent-configs/blueprints/projects/project_id/names/name:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            name: name
+            project_id: project_id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Data Processing Blueprint
+              type: blueprint
+              description: Blueprint for standard data ingestion and preprocessing pipeline
+              envs:
+                - production
+                - staging
+              created_by: alice.jones@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob.smith@example.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              values:
+                - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  key: max_retries
+                  value: '5'
+                  type: integer
+                  description: Maximum number of retry attempts for failed jobs
+                  valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+  /v1/internal/usage/workspace-span-counts:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              workspaces_spans_count:
+                - workspace: data-science-team
+                  span_count: 15432
+                - workspace: marketing-analytics
+                  span_count: 9876
+                - workspace: product-engineering
+                  span_count: 20345
+  /v1/internal/usage/bi-spans:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              bi_information:
+                - workspace_id: team-alpha-123
+                  user: jane.doe@example.com
+                  count: 42
+  /v1/private/attachment/list:
+    get:
+      x-fern-examples:
+        - query-parameters:
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            entity_type: trace
+            entity_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            path: /logs/error
+            page: 1
+            size: 50
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - link: https://cdn.comet.com/opik/attachments/7c9e6679-7425-40de-944b-e07fc1f90ae7/error-log.txt
+                  file_name: error-log.txt
+                  file_size: 2048
+                  mime_type: text/plain
+              sortableBy:
+                - file_name
+                - file_size
+                - mime_type
+  /v1/private/agent-configs/blueprints/blueprint_id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            blueprint_id: blueprint_id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Default Agent Blueprint
+              type: blueprint
+              description: Blueprint configuration for default agent setup with optimized parameters.
+              envs:
+                - production
+                - staging
+              created_by: alice@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob@example.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              values:
+                - id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                  key: max_concurrent_tasks
+                  value: '10'
+                  type: integer
+                  description: Maximum number of concurrent tasks the agent can handle.
+                  valid_from_blueprint_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  valid_to_blueprint_id: 00000000-0000-0000-0000-000000000000
+  /v1/private/attachment/upload-start:
+    post:
+      x-fern-examples:
+        - request:
+            file_name: experiment_results.csv
+            num_of_file_parts: 5
+            entity_type: trace
+            entity_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            path: /uploads/2024/06/experiment_results.csv
+          response:
+            body:
+              upload_id: upload_9f8b7c6d-1234-4e56-8a9b-0c1d2e3f4a5b
+              pre_sign_urls:
+                - https://storage.example.com/upload/part1?signature=abcdef1234567890
+                - https://storage.example.com/upload/part2?signature=abcdef1234567891
+                - https://storage.example.com/upload/part3?signature=abcdef1234567892
+                - https://storage.example.com/upload/part4?signature=abcdef1234567893
+                - https://storage.example.com/upload/part5?signature=abcdef1234567894
+  /v1/private/automations/evaluators:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_name: Image Classification Project
+                  projects:
+                    - project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      project_name: Image Classification Project
+                  name: Sentiment Analysis Evaluator
+                  sampling_rate: 0.75
+                  enabled: true
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice.jones@example.com
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: bob.smith@example.com
+                  type: llm_as_judge
+                  action: evaluator
+              sortable_by:
+                - name
+                - created_at
+                - last_updated_at
+    post:
+      x-fern-examples:
+        - request:
+            name: Quality Assessment Evaluator
+            type: llm_as_judge
+            action: evaluator
+  /v1/private/automations/evaluators/id/logs:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              content:
+                - timestamp: '2024-04-20T14:22:35Z'
+                  rule_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  level: INFO
+                  message: Automation rule evaluated successfully with no errors.
+                  markers:
+                    user: jane.doe@example.com
+                    execution_id: exec-20240420-1422
+              page: 1
+              size: 1
+              total: 1
+  /v1/private/agent-configs/blueprints/remove-keys:
+    post:
+      x-fern-examples:
+        - request:
+            keys:
+              - enable_feature_x
+  /v1/private/automations/evaluators/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              project_name: Image Classification Project
+              projects:
+                - project_id: 1a2b3c4d-5e6f-7a8b-9c0d-ef1234567890
+                  project_name: Object Detection
+              name: Quality Check Evaluator
+              sampling_rate: 0.75
+              enabled: true
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob@example.com
+              type: llm_as_judge
+              action: evaluator
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Latency Threshold Evaluator
+            action: evaluator
+  /v1/private/auth/workspace:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              workspace_name: data-science-team
+  /v1/private/dashboards:
+    post:
+      x-fern-examples:
+        - request:
+            name: Team Performance Dashboard
+            config: {}
+          response:
+            body:
+              id: d4f5a6b7-c8e9-4f01-9a2b-3c4d5e6f7a8b
+              workspace_id: workspace-12345
+              project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              name: Team Performance Dashboard
+              slug: team-performance-dashboard
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key performance metrics across multiple projects.
+              config: {}
+              created_by: user_jane_doe
+              last_updated_by: user_jane_doe
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  workspace_id: workspace-12345
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  name: Q1 Marketing Dashboard
+                  slug: q1-marketing-dashboard
+                  type: multi_project
+                  scope: workspace
+                  description: Dashboard showing key marketing metrics for Q1 campaigns.
+                  config:
+                    widgets:
+                      - type: line_chart
+                        data_source: campaign_performance
+                        settings:
+                          x_axis: date
+                          y_axis: clicks
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+              page: 1
+              size: 1
+              total: 1
+              sortable_by:
+                - name
+                - created_at
+                - last_updated_at
+  /v1/private/dashboards/dashboardId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            dashboardId: dashboardId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: workspace-12345
+              project_id: 7b9e1f2a-4d3c-4f8a-9a2e-1c2b3d4e5f6a
+              name: Q2 Marketing Dashboard
+              slug: q2-marketing-dashboard
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key marketing metrics and campaign performance for Q2.
+              config:
+                widgets:
+                  - type: chart
+                    title: Website Traffic
+                    data_source: google_analytics
+                    metrics:
+                      - sessions
+                      - users
+                    time_range: last_30_days
+                  - type: table
+                    title: Campaign ROI
+                    data_source: ad_platform
+                    columns:
+                      - campaign_name
+                      - spend
+                      - revenue
+                      - roi
+                layout:
+                  columns: 2
+                  rows: 1
+              created_by: alice.jones@example.com
+              last_updated_by: bob.smith@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            dashboardId: dashboardId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: workspace-12345
+              project_id: 7b9e1f2a-4d3c-4f8a-9a2e-1c2d3e4f5a6b
+              name: Q2 Marketing Dashboard
+              slug: q2-marketing-dashboard
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key marketing metrics for Q2 campaigns.
+              config: {}
+              created_by: alice@example.com
+              last_updated_by: bob@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+  /v1/private/datasets/id/items/changes:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              version_hash: a1b2c3d4e5f67890abcdef1234567890
+              tags:
+                - initial-release
+                - validated
+              is_latest: true
+              version_name: v3
+              items_total: 1500
+              items_added: 200
+              items_modified: 50
+              items_deleted: 10
+              change_description: Added new samples and corrected labels in batch 3
+              metadata: {}
+              evaluators:
+                - name: Quality Check LLM
+                  type: llm_judge
+                  config: {}
+              execution_policy:
+                runs_per_item: 3
+                pass_threshold: 2
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              last_updated_by: alice@example.com
+  /v1/private/chat/completions:
+    post:
+      x-fern-examples:
+        - response:
+            body:
+              id: chatcmpl-7X9b2QfJkL8vN3pZ0YwR1TqM5eH7J
+              created: 1712345678
+              model: opik-chat-1.0
+              choices:
+                - index: 0
+                  message:
+                    role: assistant
+                    content: Hello! How can I assist you with your data analysis today?
+                    reasoning_content: The assistant is initiating a friendly greeting to engage the user.
+                    name: OpikAssistant
+                    tool_calls:
+                      - id: toolcall-12345
+                        index: 0
+                        type: function
+                        function:
+                          name: fetchUserPreferences
+                          arguments: '{"userId":"user-789"}'
+                    refusal: ''
+                    function_call:
+                      name: fetchUserPreferences
+                      arguments: '{"userId":"user-789"}'
+                  delta:
+                    role: assistant
+                    content: Hello! How can I assist you with your data analysis today?
+                    reasoning_content: The assistant is initiating a friendly greeting to engage the user.
+                    tool_calls:
+                      - id: toolcall-12345
+                        index: 0
+                        type: function
+                        function:
+                          name: fetchUserPreferences
+                          arguments: '{"userId":"user-789"}'
+                    function_call:
+                      name: fetchUserPreferences
+                      arguments: '{"userId":"user-789"}'
+                  finish_reason: stop
+              usage:
+                total_tokens: 45
+                prompt_tokens: 20
+                prompt_tokens_details:
+                  cached_tokens: 5
+                completion_tokens: 25
+                completion_tokens_details:
+                  reasoning_tokens: 10
+              system_fingerprint: abc123def456ghi789jkl012mno345pq
+              service_tier: standard
+  /v1/private/datasets:
+    post:
+      x-fern-examples:
+        - request:
+            name: Customer Churn Dataset
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Customer Churn Dataset
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  type: dataset
+                  visibility: private
+                  tags:
+                    - churn
+                    - telecom
+                    - '2024'
+                  description: Dataset containing customer churn data for telecom analysis
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: data.scientist@example.com
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: data.engineer@example.com
+                  experiment_count: 12
+                  dataset_items_count: 15000
+                  optimization_count: 3
+                  most_recent_experiment_at: '2024-04-09T16:20:00Z'
+                  last_created_experiment_at: '2024-04-09T16:20:00Z'
+                  most_recent_optimization_at: '2024-04-08T11:00:00Z'
+                  last_created_optimization_at: '2024-04-08T11:00:00Z'
+                  status: completed
+                  latest_version:
+                    id: 9b2d6f3a-8c4e-4f1a-9a2b-3d5e6f7a8b9c
+                    version_hash: a1b2c3d4e5f67890
+                    version_name: v3
+                    change_description: Added new features and fixed missing values
+                    tags:
+                      - stable
+                      - production
+              page: 1
+              size: 1
+              total: 1
+              sortableBy:
+                - name
+                - created_at
+                - last_updated_at
+                - experiment_count
+  /v1/private/datasets/items/from-csv:
+    post:
+      x-fern-examples:
+        - request:
+            file: {}
+            dataset_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  /v1/private/datasets/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: ImageNet Sample Dataset
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              type: dataset
+              visibility: private
+              tags:
+                - image-classification
+                - benchmark
+              description: A subset of the ImageNet dataset for benchmarking image classification models.
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob@example.com
+              experiment_count: 42
+              dataset_items_count: 10000
+              optimization_count: 5
+              most_recent_experiment_at: '2024-04-09T16:20:00Z'
+              last_created_experiment_at: '2024-04-09T16:20:00Z'
+              most_recent_optimization_at: '2024-04-08T11:00:00Z'
+              last_created_optimization_at: '2024-04-08T11:00:00Z'
+              status: completed
+              latest_version:
+                id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                version_hash: a3f5c9d8e7b4f2a1c6d8e9f0b1a2c3d4
+                version_name: v3
+                change_description: Added 2000 new labeled images and fixed label inconsistencies.
+                tags:
+                  - v3
+                  - augmented
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Customer Churn Dataset
+            description: Dataset containing customer churn information for telecom analysis.
+            visibility: private
+            tags:
+              - telecom
+              - churn
+              - '2024'
+  /v1/internal/usage/bi-traces:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              bi_information:
+                - workspace_id: team-alpha-123
+                  user: jane.doe@example.com
+                  count: 42
+  /v1/private/datasets/id/items/experiments/items:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          query-parameters:
+            experiment_ids: experiment_ids
+          response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  span_id: 1c9e6679-7425-40de-944b-e07fc1f90ae7
+                  source: manual
+                  data:
+                    image_url: https://example.com/images/sample1.png
+                    metadata:
+                      label: cat
+                      confidence: 0.98
+                  description: Image of a domestic cat sitting on a windowsill.
+                  tags:
+                    - animal
+                    - cat
+                    - indoor
+                  evaluators:
+                    - name: QualityCheckLLM
+                      type: llm_judge
+                      config:
+                        model: gpt-4
+                        threshold: 0.85
+                  execution_policy:
+                    runs_per_item: 3
+                    pass_threshold: 2
+                  experiment_items:
+                    - id: 9b2d6f3a-4f3e-4a2a-9f3b-1a2b3c4d5e6f
+                      experiment_id: d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a
+                      dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      input:
+                        text: Classify the image content.
+                      output:
+                        label: cat
+                        confidence: 0.97
+                      feedback_scores:
+                        - name: AccuracyScore
+                          category_name: classification
+                          value: 0.97
+                          reason: Model correctly identified the object.
+                          source: ui
+                          created_at: '2024-01-15T09:30:00Z'
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          created_by: user123
+                          last_updated_by: user123
+                          value_by_author:
+                            user123:
+                              value: 0.97
+                              reason: Verified correct classification
+                              category_name: classification
+                              source: ui
+                              last_updated_at: '2024-01-15T09:30:00Z'
+                              span_type: classification
+                              span_id: 9b2d6f3a-4f3e-4a2a-9f3b-1a2b3c4d5e6f
+                      comments:
+                        - id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                          text: The classification looks accurate based on the image.
+                          created_at: '2024-01-15T09:30:00Z'
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          created_by: reviewer456
+                          last_updated_by: reviewer456
+                      total_estimated_cost: 0.005
+                      duration: 1.2
+                      usage:
+                        tokens: 1500
+                        compute_ms: 1200
+                      created_at: '2024-01-15T09:30:00Z'
+                      last_updated_at: '2024-01-15T09:30:00Z'
+                      created_by: experimenter789
+                      last_updated_by: experimenter789
+                      trace_visibility_mode: default
+                      description: Experiment run for image classification model v1.2
+                      assertion_results:
+                        - value: classification == 'cat'
+                          passed: true
+                          reason: Output label matches expected label.
+                      status: passed
+                  run_summaries_by_experiment:
+                    d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a:
+                      passed_runs: 5
+                      total_runs: 5
+                      status: passed
+                  dataset_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                  created_at: '2024-01-10T08:00:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  created_by: dataset_admin
+                  last_updated_by: dataset_admin
+              page: 1
+              size: 1
+              total: 1
+              columns:
+                - name: label
+                  types:
+                    - string
+                  filter_field_prefix: data.metadata
+                  filterField: data.metadata.label
+                - name: confidence
+                  types:
+                    - number
+                  filter_field_prefix: data.metadata
+                  filterField: data.metadata.confidence
+              sortableBy:
+                - created_at
+                - last_updated_at
+                - confidence
+  /v1/private/datasets/id/expansions:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            model: gpt-4
+          response:
+            body:
+              generated_samples:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  span_id: 1c9e6679-7425-40de-944b-e07fc1f90ae7
+                  source: manual
+                  data: {}
+                  description: Synthetic sample generated to augment dataset with edge case variations
+                  tags:
+                    - synthetic
+                    - edge-case
+                  evaluators:
+                    - name: LLM Quality Judge
+                      type: llm_judge
+                      config: {}
+                  execution_policy:
+                    runs_per_item: 3
+                    pass_threshold: 2
+                  experiment_items:
+                    - id: 9b2d6f4e-3c4a-4f1a-9f3e-2a1b2c3d4e5f
+                      experiment_id: d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a
+                      dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      project_name: Customer Support Chatbot
+                      input: {}
+                      output: {}
+                      feedback_scores:
+                        - name: Relevance Score
+                          category_name: Quality Metrics
+                          value: 87.5
+                          reason: High semantic similarity to original data
+                          source: ui
+                          created_at: '2024-01-15T09:30:00Z'
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          created_by: data_scientist_01
+                          last_updated_by: data_scientist_01
+                          value_by_author: {}
+                      comments:
+                        - id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                          text: Sample passed initial quality checks and is ready for review.
+                          created_at: '2024-01-15T09:30:00Z'
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          created_by: qa_lead
+                          last_updated_by: qa_lead
+                      total_estimated_cost: 0.045
+                      duration: 1.25
+                      usage: {}
+                      created_at: '2024-01-15T09:30:00Z'
+                      last_updated_at: '2024-01-15T09:30:00Z'
+                      created_by: automation_bot
+                      last_updated_by: automation_bot
+                      trace_visibility_mode: default
+                      description: Experiment run for synthetic sample validation
+                      assertion_results:
+                        - value: Semantic similarity > 85%
+                          passed: true
+                          reason: Sample meets semantic similarity threshold
+                      status: passed
+                  run_summaries_by_experiment: {}
+                  dataset_id: b1a2c3d4-e5f6-7890-abcd-ef1234567890
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  created_by: automation_bot
+                  last_updated_by: automation_bot
+              model: gpt-4
+              total_generated: 10
+              generation_time: '2024-01-15T09:30:00Z'
+  /v1/private/datasets/retrieve:
+    post:
+      x-fern-examples:
+        - request:
+            dataset_name: Customer Churn Dataset
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Customer Churn Dataset
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              type: dataset
+              visibility: private
+              tags:
+                - churn
+                - customer-data
+                - telecom
+              description: Dataset containing customer churn information for telecom analysis.
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: data.scientist@company.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: data.engineer@company.com
+              experiment_count: 12
+              dataset_items_count: 15000
+              optimization_count: 5
+              most_recent_experiment_at: '2024-04-09T16:20:00Z'
+              last_created_experiment_at: '2024-04-09T16:20:00Z'
+              most_recent_optimization_at: '2024-04-08T11:00:00Z'
+              last_created_optimization_at: '2024-04-08T11:00:00Z'
+              status: completed
+              latest_version:
+                id: 9b2d6f3a-4c3e-4f1a-9a2b-8f7e2d1c5a6b
+                version_hash: a1b2c3d4e5f67890
+                version_name: v3
+                change_description: Added new features for customer demographics and updated labels.
+                tags:
+                  - v3
+                  - feature-update
+  /v1/private/datasets/id/items/experiments/items/stats:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          query-parameters:
+            experiment_ids: experiment_ids
+          response:
+            body:
+              stats:
+                - name: Total Experiment Runs
+                  type: COUNT
+                - name: Success Rate
+                  type: PERCENTAGE
+                - name: Average Accuracy
+                  type: AVG
+  /v1/private/alerts/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/datasets/export-jobs:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                dataset_id: 7b9c9f1e-4d3a-4f2a-9a1e-8b2d3c4e5f6a
+                dataset_name: Customer Purchase History
+                status: COMPLETED
+                file_path: /exports/customer_purchase_history_2024-04-20.csv
+                error_message: ''
+                created_at: '2024-04-20T08:15:30Z'
+                last_updated_at: '2024-04-20T08:45:00Z'
+                expires_at: '2024-05-20T08:15:30Z'
+                viewed_at: '2024-04-20T09:00:00Z'
+                created_by: alice.jones
+                last_updated_by: alice.jones
+              - id: d2f1e3a4-9b7c-4e5d-8f1a-3c2b4d5e6f7a
+                dataset_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                dataset_name: Website Traffic Logs
+                status: FAILED
+                file_path: ''
+                error_message: Export failed due to timeout after 30 minutes.
+                created_at: '2024-04-19T14:00:00Z'
+                last_updated_at: '2024-04-19T14:30:00Z'
+                expires_at: '2024-05-19T14:00:00Z'
+                viewed_at: '2024-04-19T15:00:00Z'
+                created_by: bob.smith
+                last_updated_by: system
+              - id: a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d
+                dataset_id: 9f8e7d6c-5b4a-3c2d-1e0f-9a8b7c6d5e4f
+                dataset_name: Sales Forecast Q2
+                status: PROCESSING
+                file_path: ''
+                error_message: ''
+                created_at: '2024-04-21T10:00:00Z'
+                last_updated_at: '2024-04-21T10:15:00Z'
+                expires_at: '2024-05-21T10:00:00Z'
+                viewed_at: ''
+                created_by: carol.white
+                last_updated_by: carol.white
+  /v1/private/datasets/items/itemId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            itemId: itemId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              span_id: 1c9e6679-7425-40de-944b-e07fc1f90ae7
+              source: manual
+              data:
+                image_url: https://example.com/images/sample1.png
+                label: cat
+                metadata:
+                  resolution: 1024x768
+                  format: png
+              description: Image of a domestic cat sitting on a windowsill.
+              tags:
+                - animal
+                - cat
+                - indoor
+              evaluators:
+                - name: Image Quality Judge
+                  type: llm_judge
+                  config:
+                    threshold: 0.85
+                    criteria:
+                      - sharpness
+                      - brightness
+              execution_policy:
+                runs_per_item: 5
+                pass_threshold: 3
+              experiment_items:
+                - id: 9b2d6f3e-8c4a-4f3a-9a2b-1d2e3f4a5b6c
+                  experiment_id: 2a1b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                  dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f90
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  trace_visibility_mode: default
+              run_summaries_by_experiment:
+                2a1b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d:
+                  passed_runs: 4
+                  total_runs: 5
+                  status: passed
+              dataset_id: 5f6a7b8c-9d0e-1f2a-3b4c-5d6e7f8a9b0c
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_by: bob@example.com
+  /v1/private/datasets/export-jobs/jobId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            jobId: jobId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              dataset_name: Customer Purchase History
+              status: PROCESSING
+              file_path: /exports/3fa85f64-5717-4562-b3fc-2c963f66afa6/export.csv
+              error_message: ''
+              created_at: '2024-04-20T14:22:00Z'
+              last_updated_at: '2024-04-20T15:00:00Z'
+              expires_at: '2024-05-20T14:22:00Z'
+              viewed_at: '2024-04-20T15:05:00Z'
+              created_by: jane.doe@example.com
+              last_updated_by: john.smith@example.com
+  /v1/private/annotation-queues/id/items/delete:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/datasets/id/items:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  span_id: 1c9e6679-7425-40de-944b-e07fc1f90ae7
+                  source: manual
+                  data:
+                    image_url: https://example.com/images/sample1.png
+                    label: cat
+                    metadata:
+                      resolution: 1024x768
+                      format: png
+                  description: Image of a domestic cat sitting on a windowsill.
+                  tags:
+                    - animal
+                    - cat
+                    - indoor
+                  evaluators:
+                    - name: Image Quality Judge
+                      type: llm_judge
+                      config:
+                        threshold: 0.85
+                        criteria:
+                          - clarity
+                          - lighting
+                  execution_policy:
+                    runs_per_item: 5
+                    pass_threshold: 3
+                  experiment_items:
+                    - id: 9b2d6f3a-4f3a-4d3a-9f3a-4f3a9b2d6f3a
+                      experiment_id: d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a
+                      dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      trace_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                      project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                      created_at: '2024-01-15T09:30:00Z'
+                      last_updated_at: '2024-01-15T09:30:00Z'
+                      created_by: jane.doe@example.com
+                      last_updated_by: jane.doe@example.com
+                      trace_visibility_mode: default
+                  run_summaries_by_experiment:
+                    d4e5f6a7-b8c9-4d0e-9f1a-2b3c4d5e6f7a:
+                      passed_runs: 4
+                      total_runs: 5
+                      status: passed
+                  dataset_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  created_by: jane.doe@example.com
+                  last_updated_by: jane.doe@example.com
+              page: 1
+              size: 1
+              total: 1
+              columns:
+                - name: label
+                  types:
+                    - string
+                  filter_field_prefix: data
+                  filterField: data.label
+              sortableBy:
+                - created_at
+                - last_updated_at
+                - label
+  /v1/private/datasets/id/items/experiments/items/output/columns:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              columns:
+                - name: accuracy_score
+                  types:
+                    - number
+                  filter_field_prefix: metrics
+                  filterField: metrics.accuracy_score
+                - name: model_name
+                  types:
+                    - string
+                  filter_field_prefix: metadata
+                  filterField: metadata.model_name
+                - name: is_validated
+                  types:
+                    - boolean
+                  filter_field_prefix: flags
+                  filterField: flags.is_validated
+  /v1/private/auth:
+    post:
+      x-fern-examples:
+        - {}
+  /v1/private/agent-configs/blueprints/environments:
+    post:
+      x-fern-examples:
+        - request:
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            envs:
+              - env_name: production
+                blueprint_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/datasets/id/export:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              dataset_name: Customer Purchase History
+              status: PENDING
+              file_path: ''
+              error_message: ''
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              expires_at: '2024-01-22T09:30:00Z'
+              viewed_at: ''
+              created_by: jane.doe@example.com
+              last_updated_by: jane.doe@example.com
+  /v1/private/automations/evaluators/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/datasets/id/versions/retrieve:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            version_name: v12
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              version_hash: a1b2c3d4e5f67890abcdef1234567890
+              tags:
+                - production
+                - validated
+              is_latest: false
+              version_name: v12
+              items_total: 15000
+              items_added: 500
+              items_modified: 200
+              items_deleted: 100
+              change_description: Added new user data and fixed label inconsistencies
+              metadata: {}
+              evaluators:
+                - name: Accuracy Evaluator
+                  type: code_metric
+                  config: {}
+              execution_policy:
+                runs_per_item: 3
+                pass_threshold: 85
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: data.engineer@company.com
+              last_updated_at: '2024-02-10T14:45:00Z'
+              last_updated_by: ml.lead@company.com
+  /v1/private/datasets/id/versions:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_id: 1c9d4f8e-2b7a-4d3e-9f1a-8b7e2a9c4d5f
+                  version_hash: a1b2c3d4e5f67890123456789abcdef0
+                  tags:
+                    - initial-release
+                    - validated
+                  is_latest: true
+                  version_name: v3
+                  items_total: 1500
+                  items_added: 200
+                  items_modified: 50
+                  items_deleted: 10
+                  change_description: Added new labeled images and corrected annotations in batch 3
+                  metadata:
+                    source: internal-collection
+                    quality: high
+                  evaluators:
+                    - name: AccuracyEvaluator
+                      type: code_metric
+                      config:
+                        metric: accuracy
+                        threshold: '0.95'
+                  execution_policy:
+                    runs_per_item: 3
+                    pass_threshold: 2
+                  created_at: '2024-04-10T14:22:00Z'
+                  created_by: jane.doe@example.com
+                  last_updated_at: '2024-04-15T10:00:00Z'
+                  last_updated_by: john.smith@example.com
+              page: 1
+              size: 10
+              total: 3
+  /v1/private/datasets/items/stream:
+    post:
+      x-fern-examples:
+        - request:
+            dataset_name: customer_feedback_dataset
+  /v1/private/datasets/id/versions/restore:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            version_ref: a1b2c3d4e5f67890123456789abcdef0
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7e57d004-2b97-0e7a-b45f-5387367791cd
+              version_hash: a1b2c3d4e5f67890123456789abcdef0
+              tags:
+                - release-candidate
+                - stable
+              is_latest: true
+              version_name: v5
+              items_total: 1500
+              items_added: 200
+              items_modified: 50
+              items_deleted: 10
+              change_description: Restored dataset to version v4 after rollback due to data corruption.
+              metadata: {}
+              evaluators:
+                - name: QualityCheckLLM
+                  type: llm_judge
+                  config: {}
+              execution_policy:
+                runs_per_item: 3
+                pass_threshold: 85
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: data.engineer@company.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              last_updated_by: data.engineer@company.com
+  /v1/private/datasets/id/versions/diff:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              from_version: v1.4.2
+              to_version: draft
+              statistics:
+                itemsAdded: 12
+                itemsModified: 5
+                itemsDeleted: 3
+                itemsUnchanged: 87
+  /v1/private/datasets/id/versions/hash/versionHash:
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            versionHash: versionHash
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              version_hash: a1b2c3d4e5f67890123456789abcdef0
+              tags:
+                - production
+                - v1.2
+              is_latest: true
+              version_name: v3
+              items_total: 1500
+              items_added: 200
+              items_modified: 50
+              items_deleted: 10
+              change_description: Added new labeled data and fixed annotation errors
+              metadata: {}
+              evaluators:
+                - name: QualityCheckLLM
+                  type: llm_judge
+                  config: {}
+              execution_policy:
+                runs_per_item: 3
+                pass_threshold: 2
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob@example.com
+  /v1/private/experiments:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_name: ImageNet Sample Dataset
+                  dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  project_name: Vision Model Training
+                  name: ResNet50 Experiment 2024-06
+                  metadata: {}
+                  tags:
+                    - resnet
+                    - image-classification
+                    - baseline
+                  type: regular
+                  evaluation_method: dataset
+                  optimization_id: 9a7b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                  feedback_scores:
+                    - name: accuracy
+                      value: 0.87
+                  comments:
+                    - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                      text: Initial experiment with default hyperparameters.
+                      created_at: '2024-01-15T09:30:00Z'
+                      last_updated_at: '2024-01-15T09:30:00Z'
+                      created_by: alice@example.com
+                      last_updated_by: alice@example.com
+                  trace_count: 1500
+                  dataset_item_count: 10000
+                  created_at: '2024-01-15T09:30:00Z'
+                  duration:
+                    p50: 120.5
+                    p90: 180
+                    p99: 240
+                  total_estimated_cost: 350.75
+                  total_estimated_cost_avg: 0.23
+                  usage:
+                    gpu_hours: 15.5
+                    cpu_hours: 120
+                  last_updated_at: '2024-01-20T12:00:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  status: running
+                  experiment_scores:
+                    - name: f1_score
+                      value: 0.82
+                  prompt_version:
+                    prompt_version_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    commit: a1b2c3d4e5f6g7h8i9j0
+                    prompt_id: c9bf9e57-1685-4c89-bafb-ff5af830be8a
+                    prompt_name: Image Classification Prompt v1
+                  prompt_versions:
+                    - prompt_version_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                      commit: a1b2c3d4e5f6g7h8i9j0
+                      prompt_id: c9bf9e57-1685-4c89-bafb-ff5af830be8a
+                      prompt_name: Image Classification Prompt v1
+                  dataset_version_id: e4eaaaf2-d142-11e1-b3e4-080027620cdd
+                  dataset_version_summary:
+                    id: e4eaaaf2-d142-11e1-b3e4-080027620cdd
+                    version_hash: abc123def456ghi789jkl
+                    version_name: v3
+                    change_description: Added new labeled images for classes 10-20
+                    tags:
+                      - augmented
+                      - 2024-05-update
+                  pass_rate: 0.95
+                  passed_count: 950
+                  total_count: 1000
+                  assertion_scores:
+                    - name: class_10_accuracy
+                      value: 0.92
+              sortableBy:
+                - created_at
+                - name
+                - status
+                - total_estimated_cost
+    post:
+      x-fern-examples:
+        - request:
+            dataset_name: ImageNet-2024
+  /v1/private/experiments/groups:
+    get:
+      x-fern-examples:
+        - query-parameters:
+            groups: status,model
+            types: training,validation
+            name: resnet
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            project_deleted: false
+            filters: accuracy>0.8
+          response:
+            body:
+              content:
+                group1:
+                  label: status:completed, model:resnet50
+                group2:
+                  label: status:running, model:resnet101
+              details:
+                groups_details:
+                  - group_sorting:
+                      - status
+                      - model
+  /v1/private/experiments/groups/aggregations:
+    get:
+      x-fern-examples:
+        - query-parameters:
+            groups: project_id,experiment_status
+            types: count,sum,avg
+            name: image-classification
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            project_deleted: false
+            filters: experiment_status:completed
+          response:
+            body:
+              content:
+                project_3fa85f64-5717-4562-b3fc-2c963f66afa6|status_completed:
+                  label: Project 3fa85f64-5717-4562-b3fc-2c963f66afa6 - Completed
+                  aggregations:
+                    experiment_count: 125
+                    trace_count: 4500
+                    total_estimated_cost: 12345.67
+                    total_estimated_cost_avg: 98.77
+                    duration:
+                      p50: 3600.5
+                      p90: 7200
+                      p99: 10800
+                    feedback_scores:
+                      - name: accuracy
+                        value: 0.92
+                      - name: f1_score
+                        value: 0.88
+                    experiment_scores:
+                      - name: validation_loss
+                        value: 0.15
+                    pass_rate_avg: 0.85
+                    passed_count_sum: 106
+                    total_count_sum: 125
+  /v1/private/experiments/feedback-scores/names:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              scores:
+                - name: User Engagement
+                  type: numeric
+                - name: Bug Severity
+                  type: categorical
+                - name: Response Time
+                  type: duration
+  /v1/private/experiments/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              dataset_name: ImageNet Classification Set
+              dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              project_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+              project_name: Image Classification Project
+              name: Baseline Experiment Run 1
+              metadata:
+                framework: PyTorch
+                model_version: v1.0.3
+                notes: Initial baseline with ResNet50
+              tags:
+                - baseline
+                - resnet50
+                - '2024'
+              type: regular
+              evaluation_method: dataset
+              optimization_id: 9f8c7d6e-4b3a-4d2f-9a1b-123456789abc
+              feedback_scores:
+                - name: accuracy
+                  value: 0.87
+              comments:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  text: Experiment completed successfully with expected accuracy.
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: alice@example.com
+              trace_count: 1500
+              dataset_item_count: 50000
+              created_at: '2024-01-15T09:30:00Z'
+              duration:
+                p50: 120.5
+                p90: 180
+                p99: 240
+              total_estimated_cost: 350.75
+              total_estimated_cost_avg: 0.23
+              usage:
+                cpu_hours: 48.5
+                gpu_hours: 12
+                memory_gb_hours: 96
+              last_updated_at: '2024-01-16T10:00:00Z'
+              created_by: alice@example.com
+              last_updated_by: bob@example.com
+              status: completed
+              experiment_scores:
+                - name: top-1 accuracy
+                  value: 0.87
+                - name: top-5 accuracy
+                  value: 0.95
+              prompt_version:
+                prompt_version_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                commit: f4e3d2c1b0a987654321fedcba0987654321abcd
+                prompt_id: 123e4567-e89b-12d3-a456-426614174000
+                prompt_name: ImageNet Classification Prompt v1
+              prompt_versions:
+                - prompt_version_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                  commit: f4e3d2c1b0a987654321fedcba0987654321abcd
+                  prompt_id: 123e4567-e89b-12d3-a456-426614174000
+                  prompt_name: ImageNet Classification Prompt v1
+                - prompt_version_id: b2c3d4e5-f678-90ab-cdef-1234567890ab
+                  commit: abcdef1234567890fedcba0987654321abcdef12
+                  prompt_id: 223e4567-e89b-12d3-a456-426614174001
+                  prompt_name: ImageNet Classification Prompt v2
+              dataset_version_id: 4a5b6c7d-8e9f-0123-4567-89abcdef0123
+              dataset_version_summary:
+                id: 4a5b6c7d-8e9f-0123-4567-89abcdef0123
+                version_hash: 9f86d081884c7d659a2feaa0c55ad015
+                version_name: v3
+                change_description: Added 10k new labeled images for better coverage
+                tags:
+                  - stable
+                  - augmented
+              pass_rate: 0.92
+              passed_count: 46000
+              total_count: 50000
+              assertion_scores:
+                - name: precision
+                  value: 0.89
+                - name: recall
+                  value: 0.91
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Image Classification Experiment
+            metadata:
+              dataset: CIFAR-10
+              framework: TensorFlow 2.8
+              notes: Testing new data augmentation techniques
+            tags:
+              - image-classification
+              - augmentation
+              - tensorflow
+            tags_to_add:
+              - experiment-2024
+              - baseline
+            tags_to_remove:
+              - old-tag
+            type: regular
+            status: running
+            experiment_scores:
+              - name: accuracy
+                value: 0.87
+              - name: loss
+                value: 0.35
+  /v1/private/annotation-queues/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/experiments/items/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              experiment_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              dataset_item_id: 1c6b147a-8f3a-4d2a-9f3e-2a1b4c5d6e7f
+              trace_id: 9b2d7f3e-4a1c-4f8b-9d3e-5a7c8e9f0b1d
+              project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_by: bob@example.com
+              trace_visibility_mode: default
+  /v1/private/experiments/items/stream:
+    post:
+      x-fern-examples:
+        - request:
+            experiment_name: Image Classification Experiment
+  /v1/private/feedback-definitions:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Response Quality Score
+                  description: This feedback definition is used to rate response quality
+                  createdAt: '2024-01-15T09:30:00Z'
+                  createdBy: admin_user
+                  lastUpdatedAt: '2024-01-15T09:30:00Z'
+                  lastUpdatedBy: admin_user
+                  type: numerical
+    post:
+      x-fern-examples:
+        - request:
+            name: Response Time Feedback
+            type: numerical
+  /v1/private/experiments/stream:
+    post:
+      x-fern-examples:
+        - request:
+            name: experiment-stream-2024
+  /v1/private/feedback-definitions/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Response Quality Rating
+              description: This feedback definition is used to rate response quality
+              createdAt: '2024-01-15T09:30:00Z'
+              createdBy: jane.doe@example.com
+              lastUpdatedAt: '2024-01-15T09:30:00Z'
+              lastUpdatedBy: john.smith@example.com
+              type: numerical
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Response Time Feedback
+            type: numerical
+  /v1/private/datasets/dataset_id/items/from-spans:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            dataset_id: dataset_id
+          request:
+            span_ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            enrichment_options:
+              includeTags: true
+              includeFeedbackScores: false
+              includeComments: true
+              includeUsage: false
+              includeMetadata: true
+  /v1/private/datasets/delete:
+    post:
+      x-fern-examples:
+        - request:
+            dataset_name: customer-churn-2023
+            project_name: telecom-analytics
+  /v1/private/datasets/id/versions/hash/versionHash/tags:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            versionHash: versionHash
+            id: id
+          request:
+            tag: production
+  /v1/private/insights-views/insightsViewId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            insightsViewId: insightsViewId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: workspace-12345
+              project_id: 7b9e1f2a-4d3c-4f6a-9a2b-8e7d5c1f9a0b
+              name: Model Performance Overview
+              slug: model-performance-overview
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key metrics and insights across multiple projects for performance tracking.
+              config:
+                widgets:
+                  - type: line_chart
+                    title: Accuracy Over Time
+                    data_source: experiment_metrics
+                    metric: accuracy
+                    filters:
+                      date_range: last_30_days
+                  - type: table
+                    title: Top Experiments
+                    data_source: experiments
+                    columns:
+                      - experiment_id
+                      - accuracy
+                      - loss
+                      - created_at
+                    sort_by: accuracy
+                    sort_order: desc
+                layout: grid
+              created_by: user_jane_doe
+              last_updated_by: user_jane_doe
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            insightsViewId: insightsViewId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: team-alpha
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              name: Q2 Marketing Insights
+              slug: q2-marketing-insights
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key marketing metrics and campaign performance for Q2.
+              config: {}
+              created_by: jane.doe@company.com
+              last_updated_by: john.smith@company.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+  /v1/private/insights-views:
+    post:
+      x-fern-examples:
+        - request:
+            name: Team Performance Overview
+            config: {}
+          response:
+            body:
+              id: d4f5a8b2-9c3e-4f7a-8b1e-2a7f9c6d5e4b
+              workspace_id: workspace-12345
+              project_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              name: Team Performance Overview
+              slug: team-performance-overview
+              type: multi_project
+              scope: workspace
+              description: Dashboard showing key performance metrics across multiple projects within the workspace.
+              config: {}
+              created_by: user_jane_doe
+              last_updated_by: user_jane_doe
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  workspace_id: workspace-12345
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  name: Monthly Sales Insights
+                  slug: monthly-sales-insights
+                  type: multi_project
+                  scope: workspace
+                  description: Dashboard showing aggregated sales metrics across multiple projects for the last month.
+                  config:
+                    widgets:
+                      - type: line_chart
+                        data_source: sales_data
+                        metrics:
+                          - revenue
+                          - units_sold
+                        time_range: last_30_days
+                    layout: grid
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T09:30:00Z'
+              page: 1
+              size: 1
+              total: 1
+              sortable_by:
+                - name
+                - created_at
+                - last_updated_at
+  /v1/private/annotation-queues/id/items/add:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/attachment/delete:
+    post:
+      x-fern-examples:
+        - request:
+            file_name: error_log_2024-06-01.txt
+            entity_type: trace
+            entity_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            file_size: 2048
+            upload_id: upload_987654321
+            uploaded_file_parts:
+              - e_tag: 9b2cf535f27731c974343645a3985328
+                part_number: 1
+  /v1/private/llm/models:
+    get:
+      x-fern-examples:
+        - response:
+            body: |-
+              {
+                "OpenAI": [
+                  "gpt-4",
+                  "gpt-3.5-turbo",
+                  "davinci"
+                ],
+                "Anthropic": [
+                  "claude-v1",
+                  "claude-instant-v1"
+                ],
+                "Cohere": [
+                  "command-xlarge",
+                  "command-medium"
+                ],
+                "HuggingFace": [
+                  "bert-base-uncased",
+                  "gpt2"
+                ]
+              }
+  /v1/private/datasets/dataset_id/items/from-traces:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            dataset_id: dataset_id
+          request:
+            trace_ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            enrichment_options:
+              includeSpans: true
+              includeTags: true
+              includeFeedbackScores: false
+              includeComments: true
+              includeUsage: false
+              includeMetadata: true
+  /v1/private/annotation-queues/batch:
+    post:
+      x-fern-examples:
+        - request:
+            annotation_queues:
+              - project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                name: User Session Annotations
+                scope: trace
+                description: Queue for annotating user session traces
+                instructions: Please review the session traces carefully and tag any anomalies or errors.
+                comments_enabled: true
+                feedback_definition_names:
+                  - Error Type
+                  - Severity Level
+  /v1/private/llm-provider-key:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  provider: openai
+                  api_key: sk-4a7b9c8d0e1f2g3h4i5j6k7l8m9n0o1p
+                  name: Primary OpenAI Key
+                  provider_name: ''
+                  headers:
+                    Authorization: Bearer sk-4a7b9c8d0e1f2g3h4i5j6k7l8m9n0o1p
+                  configuration:
+                    model: gpt-4
+                    region: us-east-1
+                  base_url: https://api.openai.com/v1
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: admin_user
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  last_updated_by: admin_user
+                  read_only: true
+              sortableBy:
+                - provider
+                - name
+                - created_at
+  /v1/private/llm-provider-key/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              provider: openai
+              api_key: sk-4a7b9c8d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t
+              name: OpenAI Production Key
+              provider_name: ''
+              headers:
+                User-Agent: OpikClient/1.0
+                Authorization: Bearer sk-4a7b9c8d0e1f2g3h4i5j6k7l8m9n0o1p2q3r4s5t
+              configuration:
+                model: gpt-4
+                temperature: '0.7'
+                max_tokens: '2048'
+              base_url: https://api.openai.com/v1
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: admin_user
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: admin_user
+              read_only: true
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            api_key: sk-4f8b7c9d2e3f4a5b6c7d8e9f0a1b2c3d
+            name: OpenAI GPT-4 Key
+            provider_name: ollama
+            headers:
+              Authorization: Bearer sk-4f8b7c9d2e3f4a5b6c7d8e9f0a1b2c3d
+              Content-Type: application/json
+            configuration:
+              model: gpt-4
+              temperature: '0.7'
+            base_url: https://api.openai.com/v1
+  /v1/private/local-runners/jobs/jobId/logs:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            jobId: jobId
+          response:
+            body:
+              - stream: stdout
+                text: 2024-06-01T12:34:56Z - Job started successfully.
+              - stream: stderr
+                text: '2024-06-01T12:35:10Z - Warning: Low disk space.'
+              - stream: stdout
+                text: 2024-06-01T12:36:00Z - Processing data batch 1 of 10.
+              - stream: stdout
+                text: 2024-06-01T12:37:45Z - Job completed without errors.
+    post:
+      x-fern-examples:
+        - path-parameters:
+            jobId: jobId
+          request:
+            - stream: stdout
+              text: Job started successfully. Initializing environment variables.
+  /v1/private/dashboards/delete-batch:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/datasets/items/delete:
+    post:
+      x-fern-examples:
+        - request:
+            item_ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/experiments/items/bulk:
+    put:
+      x-fern-examples:
+        - request:
+            experiment_name: Image Classification Experiment
+            dataset_name: CIFAR-10 Dataset
+            items:
+              - dataset_item_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  /v1/private/local-runners/jobs:
+    post:
+      x-fern-examples:
+        - request:
+            agent_name: local-runner-01
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  /v1/private/datasets/delete-batch:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/local-runners/pairs:
+    post:
+      x-fern-examples:
+        - request:
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          response:
+            body:
+              pairing_code: AB12-CD34-EF56
+              runner_id: 9b2d7f4e-8c3a-4f1b-9d2e-7a1c2b3d4e5f
+              expires_in_seconds: 3600
+  /v1/private/local-runners/connections:
+    post:
+      x-fern-examples:
+        - request:
+            pairing_code: ABCD-1234-EFGH-5678
+            runner_name: DataProcessingRunner01
+          response:
+            body:
+              runner_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: team-alpha
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              project_name: Image Classification Pipeline
+  /v1/private/attachment/upload-complete:
+    post:
+      x-fern-examples:
+        - request:
+            file_name: experiment_results.csv
+            entity_type: trace
+            entity_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            file_size: 5242880
+            upload_id: upload-20240612-abc123
+            uploaded_file_parts:
+              - e_tag: 9b2cf535f27731c974343645a3985328
+                part_number: 1
+              - e_tag: a3c1e5f7d8b9c0e1f2a3b4c5d6e7f890
+                part_number: 2
+  /v1/private/local-runners/runnerId/jobs:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            runnerId: runnerId
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  runner_id: a3bb189e-8bf9-3888-9912-ace4e6543002
+                  agent_name: LocalRunnerAgent01
+                  status: pending
+                  inputs:
+                    task: data_preprocessing
+                    parameters:
+                      normalize: true
+                      batch_size: 32
+                  result: {}
+                  error: ''
+                  project_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                  trace_id: 9c858901-8a57-4791-81fe-4c455b099bc9
+                  mask_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  metadata:
+                    dataset_id: 1c6b147a-3f3a-4d2a-9f3a-1a2b3c4d5e6f
+                    dataset_version_id: 2d7c258b-4e4b-5e3b-af4b-2b3c4d5e6f7a
+                    dataset_item_version_id: 3e8d369c-5f5c-6f4c-bg5c-3c4d5e6f7a8b
+                    dataset_item_id: 4f9e47ad-6g6d-7g5d-ch6d-4d5e6f7a8b9c
+                  timeout: 3600
+                  created_at: '2024-01-15T09:30:00Z'
+                  started_at: '2024-01-15T09:35:00Z'
+                  completed_at: '2024-01-15T10:00:00Z'
+  /v1/private/local-runners/jobs/jobId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            jobId: jobId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              runner_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              agent_name: LocalRunnerAgent01
+              status: completed
+              inputs:
+                task: image-classification
+                parameters:
+                  model: resnet50
+                  batch_size: 32
+              result:
+                accuracy: 0.92
+                predictions:
+                  - image_id: img_001
+                    label: cat
+                  - image_id: img_002
+                    label: dog
+              error: ''
+              project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              trace_id: 9b2d7f3a-1c4e-4f3a-8a2e-3f4b5c6d7e8f
+              mask_id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+              metadata:
+                dataset_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                dataset_version_id: c56a4180-65aa-42ec-a945-5fd21dec0538
+                dataset_item_version_id: e7d13b5a-3f1a-4a2a-9f3b-1a2b3c4d5e6f
+                dataset_item_id: b1a2c3d4-e5f6-7890-abcd-ef1234567890
+              timeout: 300
+              created_at: '2024-01-15T09:30:00Z'
+              started_at: '2024-01-15T09:35:00Z'
+              completed_at: '2024-01-15T09:45:00Z'
+  /v1/private/experiments/items/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/local-runners/runnerId/jobs/next:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            runnerId: runnerId
+          response:
+            body:
+              id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              runner_id: a3bb189e-8bf9-3888-9912-ace4e6543002
+              agent_name: local-runner-01
+              status: pending
+              inputs:
+                task: process-dataset
+                parameters:
+                  batch_size: 32
+                  shuffle: true
+              result: {}
+              error: ''
+              project_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+              trace_id: 9c858901-8a57-4791-81fe-4c455b099bc9
+              mask_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              metadata:
+                dataset_id: 1c6b147a-3f3a-4a2a-9f3e-1a2b3c4d5e6f
+                dataset_version_id: 2d7c258b-4f4b-5b3b-af4f-2b3c4d5e6f7a
+                dataset_item_version_id: 3e8d369c-5f5c-6c4c-bf5f-3c4d5e6f7a8b
+                dataset_item_id: 4f9e47ad-6f6d-7d5d-cf6f-4d5e6f7a8b9c
+              timeout: 300
+              created_at: '2024-01-15T09:30:00Z'
+              started_at: '2024-01-15T09:35:00Z'
+              completed_at: '2024-01-15T10:00:00Z'
+  /v1/private/local-runners/runnerId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            runnerId: runnerId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Local Runner Alpha
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              status: connected
+              connected_at: '2024-01-15T09:30:00Z'
+              agents:
+                - name: Data Processor
+                  description: Processes incoming data streams for analysis
+                  language: Python
+                  executable: python3
+                  source_file: data_processor.py
+                  params:
+                    - name: input_path
+                      type: string
+                    - name: verbose
+                      type: boolean
+                  timeout: 120
+  /v1/private/local-runners/runnerId/heartbeats:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            runnerId: runnerId
+          response:
+            body:
+              cancelled_job_ids:
+                - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+  /v1/private/ollama/test-connection:
+    post:
+      x-fern-examples:
+        - request:
+            base_url: http://localhost:11434/v1
+          response:
+            body:
+              connected: true
+              version: ollama-server-1.2.3
+              error_message: ''
+  /v1/private/optimizations:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Hyperparameter Tuning Run 2024-06
+                  dataset_name: Customer Churn Dataset
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  objective_name: Maximize Accuracy
+                  status: running
+                  metadata:
+                    notes: Initial tuning phase
+                    tags:
+                      - churn
+                      - classification
+                      - priority-high
+                  studio_config:
+                    dataset_name: Customer Churn Dataset
+                    prompt:
+                      messages:
+                        - role: system
+                          content: Optimize hyperparameters for classification model to maximize accuracy.
+                    llm_model:
+                      model: gpt-4-opik
+                      parameters:
+                        temperature: 0.7
+                        max_tokens: 512
+                    evaluation:
+                      metrics:
+                        - type: accuracy
+                          parameters:
+                            average: macro
+                    optimizer:
+                      type: bayesian
+                      parameters:
+                        init_points: 5
+                        n_iter: 25
+                  dataset_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  num_trials: 30
+                  feedback_scores:
+                    - name: user_satisfaction
+                      value: 4.5
+                  experiment_scores:
+                    - name: validation_accuracy
+                      value: 0.87
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+                  last_updated_at: '2024-06-10T14:45:00Z'
+                  last_updated_by: bob@example.com
+                  baseline_objective_score: 0.75
+                  best_objective_score: 0.89
+                  baseline_duration: 3600
+                  best_duration: 5400
+                  baseline_cost: 120
+                  best_cost: 180
+                  total_optimization_cost: 300
+              sortableBy:
+                - created_at
+                - best_objective_score
+                - status
+    post:
+      x-fern-examples:
+        - request:
+            dataset_name: customer_churn_data
+            objective_name: maximize_accuracy
+            status: running
+    put:
+      x-fern-examples:
+        - request:
+            dataset_name: customer_churn_data
+            objective_name: maximize_accuracy
+            status: running
+  /v1/private/local-runners:
+    get:
+      x-fern-examples:
+        - query-parameters:
+            project_id: project_id
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Local Runner Alpha
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  status: connected
+                  connected_at: '2024-01-15T09:30:00Z'
+                  agents:
+                    - name: Data Processor
+                      description: Processes incoming data streams
+                      language: Python
+                      executable: python3
+                      source_file: processor.py
+                      params:
+                        - name: input_path
+                          type: string
+                      timeout: 300
+  /v1/private/ollama/models:
+    post:
+      x-fern-examples:
+        - request:
+            base_url: http://localhost:11434/v1
+          response:
+            body:
+              - name: llama2
+                size: 2147483648
+                digest: 3a7bd3e2360a4f5b9c8d7e2f1a9b4c6d
+                modified_at: '2024-01-15T09:30:00Z'
+  /v1/private/optimizations/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Image Classification Optimization
+              dataset_name: CIFAR-10
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              objective_name: accuracy
+              status: running
+              metadata:
+                notes: Initial run with default parameters
+                tags:
+                  - baseline
+                  - image-classification
+              studio_config:
+                dataset_name: CIFAR-10
+                prompt:
+                  messages:
+                    - role: system
+                      content: Optimize model hyperparameters for best accuracy on CIFAR-10 dataset.
+                llm_model:
+                  model: gpt-4-opik
+                  parameters:
+                    temperature: 0.7
+                    max_tokens: 512
+                evaluation:
+                  metrics:
+                    - type: accuracy
+                      parameters:
+                        top_k: 1
+                optimizer:
+                  type: bayesian
+                  parameters:
+                    initial_points: 5
+                    n_iter: 25
+              dataset_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              num_trials: 30
+              feedback_scores:
+                - name: user_satisfaction
+                  value: 4.5
+              experiment_scores:
+                - name: validation_accuracy
+                  value: 0.87
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice@example.com
+              last_updated_at: '2024-01-20T15:45:00Z'
+              last_updated_by: bob@example.com
+              baseline_objective_score: 0.75
+              best_objective_score: 0.89
+              baseline_duration: 3600
+              best_duration: 4200
+              baseline_cost: 50
+              best_cost: 65
+              total_optimization_cost: 115
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Image Classification Optimization
+            status: running
+  /v1/private/projects/projectId/alerts:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: d4f5a8e2-3c9b-4f7a-9a2e-1b2c3d4e5f6a
+                  name: High Error Rate Alert
+                  enabled: true
+                  alert_type: general
+                  metadata:
+                    severity: high
+                    description: Triggered when error rate exceeds threshold
+                  webhook:
+                    id: a1b2c3d4-e5f6-7890-abcd-ef1234567890
+                    name: Error Notifications Webhook
+                    url: https://hooks.example.com/alerts/error
+                    secret_token: s3cr3tT0k3n123
+                    headers:
+                      Authorization: Bearer abcdef123456
+                    created_at: '2024-01-15T09:30:00Z'
+                    created_by: admin_user
+                    last_updated_at: '2024-01-15T09:30:00Z'
+                    last_updated_by: admin_user
+                  triggers:
+                    - id: f1e2d3c4-b5a6-7890-cdef-1234567890ab
+                      alert_id: d4f5a8e2-3c9b-4f7a-9a2e-1b2c3d4e5f6a
+                      event_type: trace:errors
+                      trigger_configs:
+                        - id: 123e4567-e89b-12d3-a456-426614174000
+                          alert_trigger_id: f1e2d3c4-b5a6-7890-cdef-1234567890ab
+                          type: scope:project
+                          config_value:
+                            project_id: 7f8e9d0c-1b2a-3c4d-5e6f-7a8b9c0d1e2f
+                          created_at: '2024-01-15T09:30:00Z'
+                          created_by: admin_user
+                          last_updated_at: '2024-01-15T09:30:00Z'
+                          last_updated_by: admin_user
+                      created_at: '2024-01-15T09:30:00Z'
+                      created_by: admin_user
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: admin_user
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  last_updated_by: admin_user
+                  project_id: 7f8e9d0c-1b2a-3c4d-5e6f-7a8b9c0d1e2f
+              sortable_by:
+                - name
+                - created_at
+                - enabled
+  /v1/private/optimizations/studio/id/logs:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              url: https://s3.amazonaws.com/opik-logs/optimizations/studio/123e4567-e89b-12d3-a456-426614174000/logs-2024-01-15T09-30-00Z.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20240115%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20240115T093000Z&X-Amz-Expires=3600&X-Amz-SignedHeaders=host&X-Amz-Signature=abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890
+              last_modified: '2024-01-15T09:30:00Z'
+              expires_at: '2024-01-15T10:30:00Z'
+  /v1/private/experiments/finish:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/projects/projectId/experiments:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  dataset_name: Customer Churn Dataset
+                  dataset_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  project_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  project_name: Churn Prediction Project
+                  name: Experiment Alpha
+                  metadata: {}
+                  tags:
+                    - baseline
+                    - v1
+                  type: regular
+                  evaluation_method: dataset
+                  optimization_id: 9a7b3c2d-4f1e-4a2b-8f3d-2e5a7c9d8b1f
+                  feedback_scores:
+                    - name: accuracy
+                      value: 0.87
+                  comments:
+                    - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                      text: Initial experiment with default parameters.
+                      created_at: '2024-01-15T09:30:00Z'
+                      last_updated_at: '2024-01-15T09:30:00Z'
+                      created_by: alice@example.com
+                      last_updated_by: alice@example.com
+                  trace_count: 150
+                  dataset_item_count: 10000
+                  created_at: '2024-01-15T09:30:00Z'
+                  duration:
+                    p50: 120.5
+                    p90: 180
+                    p99: 240
+                  total_estimated_cost: 35.75
+                  total_estimated_cost_avg: 0.24
+                  usage:
+                    cpu_hours: 12.5
+                    gpu_hours: 3.2
+                  last_updated_at: '2024-01-20T15:45:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  status: running
+                  experiment_scores:
+                    - name: f1_score
+                      value: 0.82
+                  prompt_version:
+                    prompt_version_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                    commit: a1b2c3d4
+                    prompt_id: c9bf9e57-1685-4c89-bafb-ff5af830be8a
+                    prompt_name: Initial Prompt
+                  prompt_versions:
+                    - prompt_version_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                      commit: a1b2c3d4
+                      prompt_id: c9bf9e57-1685-4c89-bafb-ff5af830be8a
+                      prompt_name: Initial Prompt
+                  dataset_version_id: e4eaaaf2-d142-11e1-b3e4-080027620cdd
+                  dataset_version_summary:
+                    id: e4eaaaf2-d142-11e1-b3e4-080027620cdd
+                    version_hash: abc123def456
+                    version_name: v3
+                    change_description: Added new customer segments
+                    tags:
+                      - release
+                      - stable
+                  pass_rate: 0.95
+                  passed_count: 95
+                  total_count: 100
+                  assertion_scores:
+                    - name: assertion_1
+                      value: 0.98
+              sortableBy:
+                - created_at
+                - name
+                - status
+  /v1/private/projects/projectId/optimizations:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Hyperparameter Tuning Run 2024-01
+                  dataset_name: Customer Churn Dataset
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  objective_name: Maximize Accuracy
+                  status: running
+                  metadata:
+                    tags:
+                      - churn
+                      - classification
+                      - baseline
+                  studio_config:
+                    dataset_name: Customer Churn Dataset
+                    prompt:
+                      messages:
+                        - role: system
+                          content: Optimize hyperparameters for best accuracy on churn prediction.
+                    llm_model:
+                      model: gpt-4-opik
+                      parameters:
+                        temperature: 0.7
+                        max_tokens: 512
+                    evaluation:
+                      metrics:
+                        - type: accuracy
+                          parameters:
+                            average: macro
+                    optimizer:
+                      type: bayesian
+                      parameters:
+                        init_points: 5
+                        n_iter: 25
+                  dataset_id: 1b4e28ba-2fa1-11d2-883f-0016d3cca427
+                  num_trials: 30
+                  feedback_scores:
+                    - name: user_satisfaction
+                      value: 4.5
+                  experiment_scores:
+                    - name: validation_accuracy
+                      value: 0.87
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+                  last_updated_at: '2024-01-20T15:45:00Z'
+                  last_updated_by: bob@example.com
+                  baseline_objective_score: 0.75
+                  best_objective_score: 0.89
+                  baseline_duration: 3600
+                  best_duration: 5400
+                  baseline_cost: 120
+                  best_cost: 180
+                  total_optimization_cost: 300
+              sortableBy:
+                - created_at
+                - best_objective_score
+                - status
+  /v1/private/projects/projectId/datasets:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Customer Churn Dataset
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  type: dataset
+                  visibility: private
+                  tags:
+                    - churn
+                    - customer
+                    - telecom
+                  description: Dataset containing customer churn information for telecom analysis
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: jane.doe@example.com
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: john.smith@example.com
+                  experiment_count: 12
+                  dataset_items_count: 15000
+                  optimization_count: 3
+                  most_recent_experiment_at: '2024-04-09T16:20:00Z'
+                  last_created_experiment_at: '2024-04-09T16:20:00Z'
+                  most_recent_optimization_at: '2024-04-08T11:00:00Z'
+                  last_created_optimization_at: '2024-04-08T11:00:00Z'
+                  status: completed
+                  latest_version:
+                    id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                    version_hash: a1b2c3d4e5f67890abcdef1234567890
+                    version_name: v3
+                    change_description: Added new features and fixed missing values
+                    tags:
+                      - stable
+                      - v3
+              page: 1
+              size: 10
+              total: 25
+              sortableBy:
+                - name
+                - created_at
+                - last_updated_at
+                - experiment_count
+  /v1/private/projects/projectId/dashboards:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  workspace_id: workspace-12345
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  name: Sales Performance Dashboard
+                  slug: sales-performance-dashboard
+                  type: multi_project
+                  scope: workspace
+                  description: Dashboard showing key sales metrics and trends across multiple projects.
+                  config:
+                    widgets:
+                      - type: chart
+                        title: Monthly Revenue
+                        data_source: sales_db
+                        chart_type: line
+                      - type: table
+                        title: Top Products
+                        data_source: product_db
+                    layout: grid
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-04-10T14:45:00Z'
+              page: 1
+              size: 1
+              total: 1
+              sortable_by:
+                - name
+                - created_at
+                - last_updated_at
+  /v1/private/projects/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: AI Research Project
+              visibility: private
+              description: A project focused on developing advanced AI models for natural language processing.
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice.jones@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob.smith@example.com
+              last_updated_trace_at: '2024-04-10T14:45:00Z'
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: AI Research Project
+            description: A project focused on developing advanced machine learning models for natural language processing.
+            visibility: private
+  /v1/private/projects:
+    post:
+      x-fern-examples:
+        - request:
+            name: AI Research Project Alpha
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Image Classification Project
+                  visibility: private
+                  description: Project for training image classification models on CIFAR-10 dataset
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice@example.com
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: bob@example.com
+                  last_updated_trace_at: '2024-04-10T14:45:00Z'
+              sortableBy:
+                - name
+                - created_at
+                - last_updated_at
+                - visibility
+  /v1/private/projects/projectId/prompts:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            projectId: projectId
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Image Captioning Prompt
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  description: Generate descriptive captions for images in the dataset.
+                  template_structure: text
+                  tags:
+                    - image
+                    - caption
+                    - nlp
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: alice.jones
+                  last_updated_at: '2024-02-10T14:45:00Z'
+                  last_updated_by: bob.smith
+                  version_count: 3
+              sortableBy:
+                - name
+                - created_at
+                - last_updated_at
+  /v1/private/projects/id/token-usage/names:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              names:
+                - summary_tokens
+                - description_tokens
+                - comment_tokens
+                - code_tokens
+                - metadata_tokens
+  /v1/private/projects/id/kpi-cards:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            entity_type: traces
+            interval_start: '2024-04-01T00:00:00Z'
+            interval_end: '2024-04-30T23:59:59Z'
+          response:
+            body:
+              stats:
+                - type: count
+                  current_value: 12500
+                  previous_value: 11800
+                - type: errors
+                  current_value: 320
+                  previous_value: 290
+                - type: avg_duration
+                  current_value: 350.5
+                  previous_value: 365.2
+                - type: total_cost
+                  current_value: 4500.75
+                  previous_value: 4300.6
+  /v1/private/projects/feedback-scores/names:
+    get:
+      x-fern-examples:
+        - query-parameters:
+            project_ids: proj_12345,proj_67890
+          response:
+            body:
+              scores:
+                - name: Code Quality
+                  type: numeric
+                - name: User Satisfaction
+                  type: percentage
+                - name: Bug Count
+                  type: integer
+  /v1/private/projects/id/metrics:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              metric_type: FEEDBACK_SCORES
+              interval: HOURLY
+              results:
+                - name: User Satisfaction
+                  data:
+                    - time: '2024-01-15T09:30:00Z'
+                      value: 4.7
+  /v1/private/prompts:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  name: Customer Support Greeting
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  description: A friendly greeting prompt for customer support chatbots.
+                  template_structure: text
+                  tags:
+                    - support
+                    - greeting
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: jane.doe@example.com
+                  last_updated_at: '2024-04-10T14:45:00Z'
+                  last_updated_by: john.smith@example.com
+                  version_count: 3
+              sortableBy:
+                - name
+                - created_at
+                - last_updated_at
+    post:
+      x-fern-examples:
+        - request:
+            name: Generate Product Description
+  /v1/private/projects/stats:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              content:
+                - project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  feedback_scores:
+                    - name: user_satisfaction
+                      value: 4.7
+                    - name: response_accuracy
+                      value: 4.3
+                  duration:
+                    p50: 120.5
+                    p90: 250
+                    p99: 480.2
+                  total_estimated_cost: 1345.75
+                  total_estimated_cost_sum: 98765.4
+                  usage:
+                    cpu_hours: 350.5
+                    memory_gb_hours: 1200.75
+                    api_calls: 150000
+                  trace_count: 4523
+                  thread_count: 12
+                  guardrails_failed_count: 3
+                  error_count:
+                    count: 27
+                    deviation: 5
+                    deviation_percentage: 18
+  /v1/private/prompts/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Customer Support Greeting
+              project_id: 7e9f1d2a-4c3b-4f8a-9d2e-1a2b3c4d5e6f
+              description: A prompt template for greeting customers in support chat sessions.
+              template_structure: text
+              tags:
+                - support
+                - greeting
+                - chatbot
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice.jones
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob.smith
+              version_count: 3
+              latest_version:
+                id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                prompt_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                commit: a1b2c3d4
+                template: Hello {{customer_name}}, how can I assist you today?
+                metadata:
+                  language: en
+                  category: greeting
+                type: mustache
+                change_description: Updated greeting to include customer name variable.
+                tags:
+                  - support
+                  - personalized
+                variables:
+                  - customer_name
+                template_structure: text
+                created_at: '2024-04-10T14:45:00Z'
+                created_by: bob.smith
+              requested_version:
+                id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                prompt_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                commit: a1b2c3d4
+                template: Hello {{customer_name}}, how can I assist you today?
+                metadata:
+                  language: en
+                  category: greeting
+                type: mustache
+                change_description: Updated greeting to include customer name variable.
+                tags:
+                  - support
+                  - personalized
+                variables:
+                  - customer_name
+                template_structure: text
+                created_at: '2024-04-10T14:45:00Z'
+                created_by: bob.smith
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: Customer Feedback Survey
+            description: A prompt designed to gather detailed customer feedback on recent product updates.
+            tags:
+              - survey
+              - customer-feedback
+              - product
+  /v1/private/projects/retrieve:
+    post:
+      x-fern-examples:
+        - request:
+            name: AlphaProject
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: AlphaProject
+              visibility: private
+              description: This project focuses on developing the next generation AI model for natural language processing.
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: john.smith@example.com
+              last_updated_trace_at: '2024-04-10T14:50:00Z'
+              feedback_scores:
+                - name: accuracy
+                  value: 92.5
+              duration:
+                p50: 120.5
+                p90: 250.75
+                p99: 400
+              total_estimated_cost: 15000.75
+              total_estimated_cost_sum: 45000.25
+              usage: {}
+              trace_count: 350
+              thread_count: 8
+              guardrails_failed_count: 2
+              error_count:
+                count: 5
+                deviation: 1
+                deviation_percentage: 20
+  /v1/private/prompts/versions:
+    post:
+      x-fern-examples:
+        - request:
+            name: Customer Support Greeting
+            version:
+              template: Hello {{customer_name}}, how can I assist you today?
+          response:
+            body:
+              id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              prompt_id: a3f1c2d4-5b67-4e89-9f12-3c4d5e6f7a8b
+              commit: 1a2b3c4d
+              template: Hello {{customer_name}}, how can I assist you today?
+              metadata: {}
+              type: mustache
+              change_description: Initial version of customer support greeting prompt
+              tags:
+                - support
+                - greeting
+              variables:
+                - customer_name
+              template_structure: text
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              tags:
+                - machine-learning
+                - nlp
+                - beta
+            merge_tags: true
+  /v1/private/prompts/by-commit/commit:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            commit: commit
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              name: Customer Support Response Prompt
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              description: Prompt template for generating customer support replies based on user queries.
+              template_structure: text
+              tags:
+                - support
+                - customer-service
+                - response
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: alice.jones@example.com
+              last_updated_at: '2024-04-10T14:45:00Z'
+              last_updated_by: bob.smith@example.com
+              version_count: 3
+              latest_version:
+                id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                prompt_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                commit: a1b2c3d4
+                template: Dear {{customer_name}}, thank you for reaching out. Regarding your issue with {{product_name}}, please try the following steps...
+                metadata:
+                  language: en
+                  category: support
+                type: mustache
+                change_description: Updated greeting and added product-specific instructions.
+                tags:
+                  - support
+                  - updated
+                variables:
+                  - customer_name
+                  - product_name
+                template_structure: text
+                created_at: '2024-04-10T14:45:00Z'
+                created_by: bob.smith@example.com
+              requested_version:
+                id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                prompt_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                commit: a1b2c3d4
+                template: Dear {{customer_name}}, thank you for reaching out. Regarding your issue with {{product_name}}, please try the following steps...
+                metadata:
+                  language: en
+                  category: support
+                type: mustache
+                change_description: Updated greeting and added product-specific instructions.
+                tags:
+                  - support
+                  - updated
+                variables:
+                  - customer_name
+                  - product_name
+                template_structure: text
+                created_at: '2024-04-10T14:45:00Z'
+                created_by: bob.smith@example.com
+  /v1/private/prompts/retrieve-by-commits:
+    post:
+      x-fern-examples:
+        - request:
+            commits:
+              - a1b2c3d4e5f67890123456789abcdef123456789
+          response:
+            body:
+              - prompt_version_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                commit: a1b2c3d4e5f67890123456789abcdef123456789
+                prompt_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                prompt_name: Image Captioning Model v2
+  /v1/private/insights-views/delete-batch:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/experiments/items:
+    post:
+      x-fern-examples:
+        - request:
+            experiment_items:
+              - experiment_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                dataset_item_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                trace_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/prompts/id/versions:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              page: 1
+              size: 1
+              total: 3
+              content:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  prompt_id: a3bb189e-8bf9-3888-9912-ace4e6543002
+                  commit: 1a2b3c4d
+                  template: Hello {{user}}, welcome to our platform!
+                  metadata:
+                    version: '1.0'
+                    language: en
+                  type: mustache
+                  change_description: Initial version with basic greeting
+                  tags:
+                    - welcome
+                    - greeting
+                  template_structure: text
+                  created_at: '2024-01-15T09:30:00Z'
+                  created_by: jane.doe@example.com
+              sortableBy:
+                - created_at
+                - commit
+                - change_description
+  /v1/private/feedback-definitions/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/prompts/versions/versionId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            versionId: versionId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              prompt_id: 7b9e1d2a-4f3c-4d2a-9f1e-8a7b6c5d4e3f
+              commit: a1b2c3d4
+              template: Hello {{user_name}}, welcome to our service!
+              metadata:
+                version: '1.0'
+                author: jdoe
+                last_updated: '2024-01-15T09:00:00Z'
+              type: mustache
+              change_description: Initial version of the welcome prompt template
+              tags:
+                - welcome
+                - user-greeting
+              variables:
+                - user_name
+              template_structure: text
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: jdoe
+  /v1/private/prompts/promptId/versions/versionId/restore:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            promptId: promptId
+            versionId: versionId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              prompt_id: 7b9e1d2a-4f3c-4d2a-9f1e-8a7b6c5d4e3f
+              commit: a1b2c3d4
+              template: Hello {{user}}, welcome back to our service!
+              metadata:
+                version: 3
+                lastEditedBy: jane.doe@example.com
+              type: mustache
+              change_description: Restored to version with personalized greeting
+              tags:
+                - welcome
+                - personalization
+              variables:
+                - user
+              template_structure: text
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+  /v1/private/retention/rules:
+    post:
+      x-fern-examples:
+        - request:
+            retention: short_14d
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: workspace-1234
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              level: organization
+              retention: short_14d
+              apply_to_past: true
+              enabled: true
+              created_by: admin_user
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: admin_user
+              last_updated_at: '2024-01-15T09:30:00Z'
+              catch_up_cursor: 1c6e7f9a-8b3d-4f2a-9f1e-2a3b4c5d6e7f
+              catch_up_done: true
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  workspace_id: workspace_12345
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  level: organization
+                  retention: short_14d
+                  apply_to_past: true
+                  enabled: true
+                  created_by: admin_user
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_by: admin_user
+                  last_updated_at: '2024-01-15T09:30:00Z'
+                  catch_up_cursor: 1c6e7f9a-8b3d-4f2a-9f3e-2d4a5b6c7d8e
+                  catch_up_done: true
+              page: 1
+              size: 1
+              total: 1
+  /v1/private/prompts/versions/retrieve:
+    post:
+      x-fern-examples:
+        - request:
+            name: Customer Feedback Survey
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              prompt_id: 7e4a1b2c-9d3f-4f5a-8e2b-1c2d3e4f5a6b
+              commit: a1b2c3d4
+              template: Dear {{customer_name}}, thank you for your recent purchase. Please provide your feedback.
+              metadata: {}
+              type: mustache
+              change_description: Initial version of customer feedback prompt
+              tags:
+                - survey
+                - customer-feedback
+              variables:
+                - customer_name
+              template_structure: text
+              created_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+  /v1/private/retention/rules/ruleId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            ruleId: ruleId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              workspace_id: workspace-12345
+              project_id: 7e57d004-2b97-0e7a-b45f-5387367791cd
+              level: organization
+              retention: short_14d
+              apply_to_past: true
+              enabled: true
+              created_by: alice@example.com
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_by: bob@example.com
+              last_updated_at: '2024-01-15T09:30:00Z'
+              catch_up_cursor: 9c858901-8a57-4791-81fe-4c455b099bc9
+              catch_up_done: true
+  /v1/private/experiments/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/toggles:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              pythonEvaluatorEnabled: false
+              traceThreadPythonEvaluatorEnabled: true
+              spanLlmAsJudgeEnabled: false
+              spanUserDefinedMetricPythonEnabled: true
+              guardrailsEnabled: true
+              opikAIEnabled: true
+              alertsEnabled: false
+              welcomeWizardEnabled: true
+              csvUploadEnabled: true
+              exportEnabled: false
+              optimizationStudioEnabled: true
+              datasetVersioningEnabled: true
+              datasetExportEnabled: false
+              openaiProviderEnabled: true
+              anthropicProviderEnabled: false
+              geminiProviderEnabled: true
+              openrouterProviderEnabled: false
+              vertexaiProviderEnabled: true
+              bedrockProviderEnabled: false
+              customllmProviderEnabled: true
+              ollamaProviderEnabled: false
+              collaboratorsTabEnabled: true
+              forceWorkspaceVersion: v2.3.1
+  /v1/private/experiments/batch:
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              name: Updated Experiment Batch
+              metadata:
+                description: Batch update for Q2 experiments
+                priority: high
+              tags:
+                - Q2
+                - batch-update
+                - priority-high
+              tags_to_add:
+                - reviewed
+              tags_to_remove:
+                - draft
+              type: regular
+              status: running
+              experiment_scores:
+                - name: accuracy
+                  value: 0.92
+                - name: loss
+                  value: 0.15
+            merge_tags: true
+  /v1/private/spans/id/comments:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            text: This span captures the user login process for troubleshooting.
+  /v1/private/spans:
+    post:
+      x-fern-examples:
+        - request:
+            start_time: '2024-01-15T09:30:00Z'
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  project_name: Image Classification Project
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  trace_id: 1c6b147e-8f3a-4d2a-9f3e-2a1b9f7c8d3e
+                  parent_span_id: 2a4f6b8c-3d7e-4f1a-9b2c-5d6e7f8a9b0c
+                  name: Model Inference Span
+                  type: general
+                  start_time: '2024-01-15T09:30:00Z'
+                  end_time: '2024-01-15T09:30:02Z'
+                  input:
+                    - image_001.png
+                    - 'resize: 224x224'
+                  output:
+                    - 'label: cat'
+                    - 'confidence: 0.98'
+                  metadata:
+                    device: GPU
+                    batch_size: '1'
+                  model: resnet50-v1
+                  provider: AWS SageMaker
+                  tags:
+                    - inference
+                    - resnet
+                    - production
+                  usage:
+                    tokens: 1500
+                    compute_ms: 2000
+                  error_info:
+                    exception_type: None
+                    message: ''
+                    traceback: ''
+                  created_at: '2024-01-15T09:30:03Z'
+                  last_updated_at: '2024-01-15T09:30:04Z'
+                  created_by: user123
+                  last_updated_by: user123
+                  feedback_scores:
+                    - name: accuracy
+                      category_name: performance
+                      value: 0.98
+                      reason: High confidence in classification
+                      source: ui
+                      created_at: '2024-01-15T10:00:00Z'
+                      last_updated_at: '2024-01-15T10:05:00Z'
+                      created_by: reviewer456
+                      last_updated_by: reviewer456
+                      value_by_author:
+                        user123:
+                          value: 0.98
+                          reason: Validated by test set
+                          category_name: performance
+                          source: ui
+                          last_updated_at: '2024-01-15T10:05:00Z'
+                          span_type: general
+                          span_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  comments:
+                    - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                      text: Inference ran smoothly with expected latency.
+                      created_at: '2024-01-15T09:45:00Z'
+                      last_updated_at: '2024-01-15T09:50:00Z'
+                      created_by: user123
+                      last_updated_by: user123
+                  total_estimated_cost: 0.0025
+                  total_estimated_cost_version: v1.0
+                  duration: 2000.5
+                  ttft: 150.3
+                  source: sdk
+              sortableBy:
+                - start_time
+                - duration
+                - total_estimated_cost
+  /v1/private/spans/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              project_name: Image Classification Project
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              trace_id: 1c6b147e-8f3a-4d2a-9f3b-2a1d3e4f5b6c
+              parent_span_id: 2a4f6e7d-8b9c-4d3e-9a1b-3c5d7e8f9a0b
+              name: Model Inference Span
+              type: general
+              start_time: '2024-01-15T09:30:00Z'
+              end_time: '2024-01-15T09:45:30Z'
+              input:
+                - input_image.png
+                - 'resize: 224x224'
+              output:
+                - 'label: cat'
+                - 'confidence: 0.98'
+              metadata:
+                device: GPU
+                batch_size: '32'
+              model: resnet50-v1
+              provider: aws-sagemaker
+              tags:
+                - inference
+                - resnet
+                - production
+              usage:
+                cpu_ms: 1500
+                memory_mb: 512
+              error_info:
+                exception_type: None
+                message: ''
+                traceback: ''
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:46:00Z'
+              created_by: user_12345
+              last_updated_by: user_12345
+              feedback_scores:
+                - name: accuracy
+                  category_name: model_performance
+                  value: 0.95
+                  reason: Validated on test set
+                  source: ui
+                  created_at: '2024-01-16T10:00:00Z'
+                  last_updated_at: '2024-01-16T10:00:00Z'
+                  created_by: reviewer_67890
+                  last_updated_by: reviewer_67890
+                  value_by_author:
+                    user_12345:
+                      value: 0.95
+                      reason: Initial validation
+                      category_name: model_performance
+                      source: ui
+                      last_updated_at: '2024-01-16T10:00:00Z'
+                      span_type: general
+                      span_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              comments:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  text: Inference latency is within acceptable range.
+                  created_at: '2024-01-15T10:00:00Z'
+                  last_updated_at: '2024-01-15T10:05:00Z'
+                  created_by: user_12345
+                  last_updated_by: user_12345
+              total_estimated_cost: 0.023
+              total_estimated_cost_version: v1.2.0
+              duration: 930000.5
+              ttft: 150.75
+              source: sdk
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            trace_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            project_name: Image Classification Project
+            project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+            parent_span_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            name: Data Preprocessing
+            type: tool
+            end_time: '2024-06-01T15:45:30Z'
+            input:
+              - raw_images.zip
+              - config.yaml
+            output:
+              - processed_images.zip
+            metadata:
+              resolution: 1024x768
+              format: JPEG
+            model: ResNet50
+            provider: AWS SageMaker
+            tags:
+              - preprocessing
+              - image
+              - batch1
+            tags_to_add:
+              - urgent
+              - review
+            tags_to_remove:
+              - deprecated
+            usage:
+              cpu_seconds: 120
+              memory_mb: 2048
+            total_estimated_cost: 0.45
+            error_info:
+              exception_type: ValueError
+              message: Invalid image format detected
+              traceback: 'Traceback (most recent call last): ...'
+            ttft: 3.75
+            source: sdk
+  /v1/private/spans/feedback-scores/names:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              scores:
+                - name: accuracy
+                  type: general
+                - name: response_time
+                  type: tool
+                - name: relevance
+                  type: llm
+                - name: policy_compliance
+                  type: guardrail
+  /v1/private/llm-provider-key/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/spans/spanId/comments/commentId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+            spanId: spanId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              text: This span highlights the key performance bottleneck in the data processing pipeline.
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+              last_updated_by: jane.doe@example.com
+  /v1/private/spans/search:
+    post:
+      x-fern-examples:
+        - {}
+  /v1/private/spans/stats:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              stats:
+                - name: total_spans
+                  type: COUNT
+                - name: error_rate
+                  type: PERCENTAGE
+                - name: average_duration_ms
+                  type: AVG
+  /v1/private/traces/threads/id/comments:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            text: I believe the root cause of this issue is related to the recent database migration. We should verify the schema changes.
+  /v1/private/traces/id/comments:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            text: This trace shows an unexpected spike in CPU usage during the data processing phase.
+  /v1/private/projects/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/traces:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                  name: 'Model Training Run #42'
+                  start_time: '2024-01-15T09:30:00Z'
+                  end_time: '2024-01-15T10:15:00Z'
+                  input:
+                    - dataset: ImageNet
+                      batch_size: 32
+                      learning_rate: 0.001
+                  output:
+                    - accuracy: 0.87
+                      loss: 0.35
+                  metadata:
+                    - environment: production
+                      framework: PyTorch 1.12
+                  tags:
+                    - training
+                    - resnet50
+                  error_info:
+                    exception_type: ValueError
+                    message: Invalid input shape
+                    traceback: |-
+                      Traceback (most recent call last):
+                        File "train.py", line 45, in <module>
+                          main()
+                        File "train.py", line 30, in main
+                          model.fit(data)
+                      ValueError: Invalid input shape
+                  usage:
+                    cpu_seconds: 3600
+                    gpu_seconds: 1800
+                    memory_mb: 2048
+                  created_at: '2024-01-15T09:30:00Z'
+                  last_updated_at: '2024-01-15T10:20:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: bob@example.com
+                  feedback_scores:
+                    - name: accuracy
+                      category_name: performance
+                      value: 87
+                      reason: Validated on test set
+                      source: ui
+                      created_at: '2024-01-16T08:00:00Z'
+                      last_updated_at: '2024-01-16T08:00:00Z'
+                      created_by: alice@example.com
+                      last_updated_by: alice@example.com
+                      value_by_author: {}
+                  span_feedback_scores:
+                    - name: latency
+                      category_name: performance
+                      value: 120.5
+                      reason: Measured during inference
+                      source: ui
+                      created_at: '2024-01-16T08:05:00Z'
+                      last_updated_at: '2024-01-16T08:05:00Z'
+                      created_by: bob@example.com
+                      last_updated_by: bob@example.com
+                      value_by_author: {}
+                  comments:
+                    - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                      text: Model performed well on validation set.
+                      created_at: '2024-01-15T11:00:00Z'
+                      last_updated_at: '2024-01-15T11:00:00Z'
+                      created_by: carol@example.com
+                      last_updated_by: carol@example.com
+                  guardrails_validations:
+                    - span_id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                      checks:
+                        - name: TOPIC
+                          result: passed
+                  total_estimated_cost: 12.75
+                  span_count: 5
+                  duration: 2700000.5
+                  ttft: 1500.25
+                  thread_id: thread-1234
+                  visibility_mode: default
+                  llm_span_count: 2
+                  has_tool_spans: true
+                  providers:
+                    - OpenAI
+                    - HuggingFace
+                  experiment:
+                    id: 9b2d6f4e-3c1a-4f2a-9f3b-1a2b3c4d5e6f
+                    name: ResNet50 Hyperparameter Tuning
+                    dataset_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+                    dataset_item_id: 7f8e9d0c-1b2a-3c4d-5e6f-7a8b9c0d1e2f
+                  source: sdk
+              sortableBy:
+                - start_time
+                - duration
+                - total_estimated_cost
+    post:
+      x-fern-examples:
+        - request:
+            start_time: '2024-01-15T09:30:00Z'
+  /v1/private/datasets/items/batch:
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              input: 'Translate the following English sentence to French: ''Hello, how are you?'''
+              expected_output: Bonjour, comment ça va ?
+              metadata:
+                source: user_submission
+                language: en-fr
+              data:
+                difficulty: easy
+                category: translation
+              description: French translation of a greeting sentence
+              tags:
+                - translation
+                - french
+                - greeting
+              tags_to_add:
+                - reviewed
+              tags_to_remove:
+                - pending
+              evaluators:
+                - name: French Grammar Checker
+                  type: llm_judge
+                  config:
+                    model: gpt-4
+                    criteria: grammar_accuracy
+              execution_policy:
+                runs_per_item: 3
+                pass_threshold: 2
+              clear_execution_policy: false
+            merge_tags: false
+  /v1/private/traces/id:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              project_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              name: User Signup Flow Trace
+              start_time: '2024-01-15T09:30:00Z'
+              end_time: '2024-01-15T09:45:00Z'
+              input:
+                - '{"username": "johndoe", "email": "john@example.com"}'
+              output:
+                - '{"status": "success", "user_id": "12345"}'
+              metadata:
+                environment: production
+                version: 1.2.3
+              tags:
+                - signup
+                - user-flow
+              error_info:
+                exception_type: ValueError
+                message: Invalid email format
+                traceback: |-
+                  Traceback (most recent call last):
+                    File "signup.py", line 42, in validate_email
+                      raise ValueError("Invalid email format")
+              usage:
+                token_count: 256
+                api_calls: 3
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:50:00Z'
+              created_by: alice@example.com
+              last_updated_by: bob@example.com
+              feedback_scores:
+                - name: accuracy
+                  category_name: performance
+                  value: 95.5
+                  reason: High accuracy in user data processing
+                  source: ui
+                  created_at: '2024-01-15T10:00:00Z'
+                  last_updated_at: '2024-01-15T10:05:00Z'
+                  created_by: alice@example.com
+                  last_updated_by: alice@example.com
+                  value_by_author:
+                    alice@example.com:
+                      value: 95.5
+                      reason: Reviewed and confirmed
+                      category_name: performance
+                      source: ui
+                      last_updated_at: '2024-01-15T10:05:00Z'
+                      span_type: validation
+                      span_id: span-1234
+              span_feedback_scores:
+                - name: latency
+                  category_name: performance
+                  value: 120
+                  reason: Measured latency in ms
+                  source: sdk
+                  created_at: '2024-01-15T10:10:00Z'
+                  last_updated_at: '2024-01-15T10:15:00Z'
+                  created_by: bob@example.com
+                  last_updated_by: bob@example.com
+                  value_by_author:
+                    bob@example.com:
+                      value: 120
+                      reason: Automated measurement
+                      category_name: performance
+                      source: sdk
+                      last_updated_at: '2024-01-15T10:15:00Z'
+                      span_type: execution
+                      span_id: span-5678
+              comments:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  text: Trace looks good, no issues found.
+                  created_at: '2024-01-15T10:20:00Z'
+                  last_updated_at: '2024-01-15T10:25:00Z'
+                  created_by: carol@example.com
+                  last_updated_by: carol@example.com
+              guardrails_validations:
+                - span_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                  checks:
+                    - name: TOPIC
+                      result: passed
+                    - name: PII
+                      result: passed
+              total_estimated_cost: 0.023
+              span_count: 12
+              duration: 900000.123
+              ttft: 150.75
+              thread_id: thread-42
+              visibility_mode: default
+              llm_span_count: 5
+              has_tool_spans: false
+              providers:
+                - OpenAI
+                - HuggingFace
+              experiment:
+                id: 9b2d6f3a-1c4e-4f3a-8a2b-3f4e5d6c7b8a
+                name: Signup Flow Optimization
+                dataset_id: 4a5b6c7d-8e9f-0a1b-2c3d-4e5f6a7b8c9d
+                dataset_item_id: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+              source: sdk
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            project_name: Image Classification Project
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            name: ResNet50 Training Run
+            end_time: '2024-06-10T18:45:00Z'
+            input:
+              - dataset: imagenet_v1
+                batch_size: 64
+                augmentation: random_flip
+            output:
+              - accuracy: '0.87'
+                loss: '0.35'
+            metadata:
+              - gpu: NVIDIA Tesla V100
+                framework: PyTorch 1.13
+            tags:
+              - resnet
+              - training
+              - imagenet
+            tags_to_add:
+              - completed
+              - baseline
+            tags_to_remove:
+              - in-progress
+            error_info:
+              exception_type: ValueError
+              message: Invalid input shape
+              traceback: |-
+                Traceback (most recent call last):
+                  File "train.py", line 45, in <module>
+                    main()
+                  File "train.py", line 30, in main
+                    raise ValueError('Invalid input shape')
+                ValueError: Invalid input shape
+            thread_id: thread-42
+            ttft: 3600.5
+            source: experiment
+  /v1/private/optimizations/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/spans/comments/commentId:
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+          request:
+            text: Updated the span comment to clarify the timing details.
+  /v1/private/prompts/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/spans/id/feedback-scores:
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: latency_score
+            value: 85.5
+            source: ui
+  /v1/private/traces/stats:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              stats:
+                - name: Total Traces
+                  type: COUNT
+                - name: Error Rate
+                  type: PERCENTAGE
+                - name: Average Duration (ms)
+                  type: AVG
+  /v1/private/traces/threads/feedback-scores/names:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              scores:
+                - name: User Satisfaction
+                  type: numeric
+                - name: Response Accuracy
+                  type: percentage
+                - name: Latency
+                  type: milliseconds
+  /v1/private/traces/feedback-scores/names:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              scores:
+                - name: Accuracy
+                  type: numeric
+                - name: User Satisfaction
+                  type: categorical
+                - name: Response Time
+                  type: duration
+  /v1/private/traces/id/feedback-scores:
+    put:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: latency
+            value: 123.45
+            source: ui
+  /v1/private/spans/comments/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/traces/threads/threadId/comments/commentId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+            threadId: threadId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              text: I believe the root cause of the issue is related to the recent deployment of the new logging module.
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+              last_updated_by: jane.doe@example.com
+  /v1/private/spans/id/feedback-scores/delete:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: accuracy
+            author: jane.doe@example.com
+  /v1/private/traces/traceId/comments/commentId:
+    get:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+            traceId: traceId
+          response:
+            body:
+              id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              text: This trace comment highlights the anomaly detected in the data processing step.
+              created_at: '2024-01-15T09:30:00Z'
+              last_updated_at: '2024-01-15T09:30:00Z'
+              created_by: jane.doe@example.com
+              last_updated_by: jane.doe@example.com
+  /v1/private/traces/threads/stats:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              stats:
+                - name: active_threads
+                  type: COUNT
+                - name: cpu_usage_percentage
+                  type: PERCENTAGE
+                - name: average_response_time_ms
+                  type: AVG
+  /v1/private/traces/threads/retrieve:
+    post:
+      x-fern-examples:
+        - request:
+            thread_id: thread-9f8b7c6d5e4a3b2c1d0e
+          response:
+            body:
+              id: thread-9f8b7c6d5e4a3b2c1d0e
+              project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              thread_model_id: 7e4a1b2c-3d4f-5a6b-7c8d-9e0f1a2b3c4d
+              start_time: '2024-01-15T09:30:00Z'
+              end_time: '2024-01-15T09:45:00Z'
+              duration: 900
+              first_message: {}
+              last_message: {}
+              feedback_scores:
+                - name: Response Accuracy
+                  category_name: Quality
+                  value: 95.5
+                  reason: High relevance to query
+                  source: ui
+                  created_at: '2024-01-15T09:35:00Z'
+                  last_updated_at: '2024-01-15T09:40:00Z'
+                  created_by: user123
+                  last_updated_by: user123
+                  value_by_author: {}
+              status: active
+              number_of_messages: 12
+              total_estimated_cost: 0.023
+              usage: {}
+              comments:
+                - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  text: Initial analysis looks promising.
+                  created_at: '2024-01-15T09:32:00Z'
+                  last_updated_at: '2024-01-15T09:33:00Z'
+                  created_by: analyst_jane
+                  last_updated_by: analyst_jane
+              tags:
+                - urgent
+                - model-v1.2
+              last_updated_at: '2024-01-15T09:45:00Z'
+              last_updated_by: analyst_jane
+              created_by: system_bot
+              created_at: '2024-01-15T09:30:00Z'
+  /v1/private/traces/threads:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              page: 1
+              size: 1
+              total: 1
+              content:
+                - id: a3f1c9d2-4b7e-4f9a-9c3d-2e5b7f8a1c2d
+                  project_id: d9f8e7c6-b5a4-4321-9f8e-7d6c5b4a3f2e
+                  thread_model_id: b1c2d3e4-f5a6-7890-b1c2-d3e4f5a67890
+                  start_time: '2024-01-15T09:30:00Z'
+                  end_time: '2024-01-15T09:45:30Z'
+                  duration: 930
+                  first_message:
+                    - 'User: How do I improve model accuracy?'
+                    - 'System: Please provide your dataset details.'
+                  last_message:
+                    - 'User: Thanks, the suggestions helped!'
+                    - 'System: Glad to assist you.'
+                  feedback_scores:
+                    - name: User Satisfaction
+                      category_name: Engagement
+                      value: 8.5
+                      reason: Positive user feedback
+                      source: ui
+                      created_at: '2024-01-15T09:50:00Z'
+                      last_updated_at: '2024-01-15T09:55:00Z'
+                      created_by: jane.doe@example.com
+                      last_updated_by: jane.doe@example.com
+                      value_by_author:
+                        jane.doe@example.com:
+                          value: 8.5
+                          reason: User rated helpfulness
+                          category_name: Engagement
+                          source: ui
+                          last_updated_at: '2024-01-15T09:55:00Z'
+                          span_type: message
+                          span_id: msg-12345
+                  status: active
+                  number_of_messages: 12
+                  total_estimated_cost: 0.023
+                  usage:
+                    tokens: 350
+                    api_calls: 1
+                  comments:
+                    - id: f47ac10b-58cc-4372-a567-0e02b2c3d479
+                      text: Thread shows good user engagement and quick response times.
+                      created_at: '2024-01-15T10:00:00Z'
+                      last_updated_at: '2024-01-15T10:05:00Z'
+                      created_by: admin@example.com
+                      last_updated_by: admin@example.com
+                  tags:
+                    - model-improvement
+                    - user-feedback
+                  last_updated_at: '2024-01-15T10:05:00Z'
+                  last_updated_by: admin@example.com
+                  created_by: jane.doe@example.com
+                  created_at: '2024-01-15T09:30:00Z'
+              sortableBy:
+                - start_time
+                - end_time
+                - duration
+                - number_of_messages
+                - total_estimated_cost
+  /v1/private/local-runners/runnerId/agents:
+    put:
+      x-fern-examples:
+        - path-parameters:
+            runnerId: runnerId
+          request:
+            agentAlpha:
+              version: 1.4.2
+              status: active
+              lastHeartbeat: '2024-06-10T09:15:00Z'
+              capabilities:
+                - build
+                - test
+                - deploy
+            agentBeta:
+              version: 2.0.0
+              status: idle
+              lastHeartbeat: '2024-06-10T08:50:00Z'
+              capabilities:
+                - test
+                - monitor
+  /v1/private/traces/threads/search:
+    post:
+      x-fern-examples:
+        - {}
+  /v1/private/traces/search:
+    post:
+      x-fern-examples:
+        - {}
+  /v1/private/guardrails:
+    post:
+      x-fern-examples:
+        - request:
+            guardrails:
+              - entity_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                secondary_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                name: TOPIC
+                result: passed
+                config:
+                  threshold: 0.85
+                  checkType: keyword_presence
+                details:
+                  matchedKeywords:
+                    - machine learning
+                    - AI
+                    - data science
+                  confidenceScore: 0.92
+  /v1/private/welcome-wizard:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              completed: true
+    post:
+      x-fern-examples:
+        - request:
+            role: Data Scientist
+            integrations:
+              - GitHub
+              - Slack
+              - Jupyter
+            email: user@example.com
+            join_beta_program: true
+  /v1/private/traces/threads/close:
+    put:
+      x-fern-examples:
+        - request:
+            project_name: Image Classification Project
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            thread_ids:
+              - thread-12345
+              - thread-67890
+              - thread-abcde
+  /v1/private/traces/id/feedback-scores/delete:
+    post:
+      x-fern-examples:
+        - path-parameters:
+            id: id
+          request:
+            name: accuracy
+  /v1/private/spans/feedback-scores:
+    put:
+      x-fern-examples:
+        - request:
+            scores:
+              - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                name: response_time
+                value: 250.5
+                source: ui
+                project_name: Website Redesign
+                project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                category_name: performance
+                reason: User reported slow response
+                author: jane.doe@example.com
+  /v1/private/workspace-permissions:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              userName: jane.doe@example.com
+              workspaceName: marketing-team
+              permissions:
+                - permissionName: project_read
+                  permissionValue: allowed
+                - permissionName: project_write
+                  permissionValue: denied
+                - permissionName: workspace_admin
+                  permissionValue: denied
+  /v1/private/traces/threads/batch:
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              tags:
+                - experiment
+                - production
+              tags_to_add:
+                - urgent
+                - review
+              tags_to_remove:
+                - deprecated
+            merge_tags: true
+  /v1/private/workspaces/configurations:
+    get:
+      x-fern-examples:
+        - response:
+            body:
+              timeout_to_mark_thread_as_inactive: PT30M
+              truncation_on_tables: true
+              color_map:
+                error: '#FF0000'
+                warning: '#FFA500'
+                info: '#0000FF'
+                success: '#008000'
+                debug: '#808080'
+    put:
+      x-fern-examples:
+        - response:
+            body:
+              timeout_to_mark_thread_as_inactive: PT45M
+              truncation_on_tables: true
+              color_map: {}
+  /v1/private/workspaces/costs/summaries:
+    post:
+      x-fern-examples:
+        - request:
+            interval_start: '2024-04-01T00:00:00Z'
+            interval_end: '2024-04-30T23:59:59Z'
+          response:
+            body:
+              name: April 2024 Cost Summary
+              current: 1250.75
+              previous: 1100.5
+  /v1/private/workspaces/costs:
+    post:
+      x-fern-examples:
+        - request:
+            interval_start: '2024-04-01T00:00:00Z'
+            interval_end: '2024-04-07T23:59:59Z'
+          response:
+            body:
+              results:
+                - name: Compute Costs
+                  current: 1250.75
+                  previous: 1100.5
+                - name: Storage Costs
+                  current: 300.4
+                  previous: 280
+                - name: Network Costs
+                  current: 150.2
+                  previous: 140.1
+  /v1/private/workspaces/metrics/summaries:
+    post:
+      x-fern-examples:
+        - request:
+            interval_start: '2024-01-01T00:00:00Z'
+            interval_end: '2024-01-31T23:59:59Z'
+          response:
+            body:
+              results:
+                - name: Average CPU Usage
+                  current: 65.4
+                  previous: 58.7
+                - name: Total API Calls
+                  current: 12450
+                  previous: 11320
+                - name: Error Rate
+                  current: 0.02
+                  previous: 0.03
+  /v1/private/workspaces/metrics:
+    post:
+      x-fern-examples:
+        - request:
+            interval_start: '2024-04-01T00:00:00Z'
+            interval_end: '2024-04-07T23:59:59Z'
+          response:
+            body:
+              results:
+                - name: daily_active_users
+                  current: 1523.5
+                  previous: 1478.2
+                - name: average_session_length_minutes
+                  current: 35.7
+                  previous: 33.4
+                - name: error_rate_percentage
+                  current: 0.8
+                  previous: 1.1
+  /v1/private/traces/threads/feedback-scores/delete:
+    post:
+      x-fern-examples:
+        - request:
+            project_name: image-classification-model
+            thread_id: thread-9f8b7c6d
+            names:
+              - accuracy_score
+              - precision_score
+              - recall_score
+  /v1/private/traces/threads/comments/commentId:
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+          request:
+            text: Updated comment text with clarifications on the experiment results.
+  /v1/private/traces/threads/comments/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/traces/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+              - f47ac10b-58cc-4372-a567-0e02b2c3d479
+  /v1/private/traces/comments/commentId:
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            commentId: commentId
+          request:
+            text: Updated the trace comment to clarify the anomaly observed in the data.
+  /v1/private/traces/threads/delete:
+    post:
+      x-fern-examples:
+        - request:
+            project_name: Image Classification Project
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            thread_ids:
+              - thread-9f8b7c6d
+  /v1/private/traces/threads/threadModelId:
+    patch:
+      x-fern-examples:
+        - path-parameters:
+            threadModelId: threadModelId
+          request:
+            tags:
+              - experiment
+              - baseline
+              - v1.2
+            tags_to_add:
+              - urgent
+              - review-needed
+            tags_to_remove:
+              - deprecated
+              - test
+  /v1/private/traces/comments/delete:
+    post:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+  /v1/private/traces/threads/feedback-scores:
+    put:
+      x-fern-examples:
+        - request:
+            scores:
+              - name: Thread Feedback Score
+                value: 4.5
+                source: ui
+                thread_id: thread-9f8b7c6d5e4a3b2c1d0e
+  /v1/private/traces/threads/open:
+    put:
+      x-fern-examples:
+        - request:
+            project_name: Image Classification Project
+            project_id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+            thread_id: thread-987654321
+            truncate: false
+  /v1/private/traces/feedback-scores:
+    put:
+      x-fern-examples:
+        - request:
+            scores:
+              - id: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                name: Latency Improvement
+                source: ui
+                value: 0.85
+                project_name: Image Classification
+                project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                category_name: performance
+                reason: Reduced inference time after model update
+                author: jane.doe@example.com
+  /v1/private/traces/batch:
+    post:
+      x-fern-examples:
+        - request:
+            traces:
+              - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                project_name: Image Classification
+                name: Model Training Run 42
+                start_time: '2024-01-15T09:30:00Z'
+                end_time: '2024-01-15T10:45:00Z'
+                input:
+                  - dataset_v3.csv
+                  - config.yaml
+                output:
+                  - model_v42.pkl
+                  - training_log.txt
+                metadata:
+                  gpu: NVIDIA RTX 3090
+                  epochs: 50
+                tags:
+                  - training
+                  - resnet
+                  - experiment-42
+                error_info:
+                  exception_type: None
+                  message: ''
+                  traceback: ''
+                last_updated_at: '2024-01-15T10:50:00Z'
+                ttft: 1200.5
+                thread_id: thread-7
+                source: experiment
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              project_name: Image Classification Project
+              project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              name: Updated Trace Name
+              end_time: '2024-06-01T12:00:00Z'
+              input:
+                - image_url: https://example.com/image1.png
+                - image_url: https://example.com/image2.png
+              output:
+                - label: cat
+                - label: dog
+              metadata:
+                - device: GPU
+                - framework: TensorFlow 2.8
+              tags:
+                - experiment-42
+                - baseline
+              tags_to_add:
+                - reviewed
+              tags_to_remove:
+                - draft
+              error_info:
+                exception_type: ValueError
+                message: Invalid input format
+                traceback: |-
+                  Traceback (most recent call last):
+                    File "train.py", line 42, in <module>
+                      main()
+                  ValueError: Invalid input format
+              thread_id: thread-1234
+              ttft: 0.256
+              source: experiment
+  /v1/private/spans/batch:
+    post:
+      x-fern-examples:
+        - request:
+            spans:
+              - id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                project_name: Image Classification
+                trace_id: 4a1e5f3b-8c2d-4f7a-9f3e-2b6c9d7a1f4e
+                parent_span_id: 7c9e6679-7425-40de-944b-e07fc1f90ae7
+                name: Data Preprocessing
+                type: tool
+                start_time: '2024-01-15T09:30:00Z'
+                end_time: '2024-01-15T09:45:00Z'
+                input:
+                  - raw_images.zip
+                output:
+                  - processed_images/
+                metadata:
+                  step: resize and normalize
+                model: ResNet50
+                provider: AWS SageMaker
+                tags:
+                  - preprocessing
+                  - image
+                usage:
+                  cpu_ms: 15000
+                  memory_mb: 512
+                error_info:
+                  exception_type: None
+                  message: ''
+                  traceback: ''
+                last_updated_at: '2024-01-15T09:46:00Z'
+                total_estimated_cost: 0.023
+                total_estimated_cost_version: v1.2
+                ttft: 0
+                source: sdk
+    patch:
+      x-fern-examples:
+        - request:
+            ids:
+              - 3fa85f64-5717-4562-b3fc-2c963f66afa6
+              - 7c9e6679-7425-40de-944b-e07fc1f90ae7
+            update:
+              trace_id: 1c6b147e-8f3a-4d2a-9f3b-2a1e4d5c6b7f
+              project_name: Image Classification Project
+              project_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+              parent_span_id: 5a1d3f4e-9b2c-4f7a-8d3e-1f2b3c4d5e6f
+              name: Data Preprocessing
+              type: tool
+              end_time: '2024-06-10T15:45:30Z'
+              input:
+                - raw_images.zip
+                - config.yaml
+              output:
+                - processed_images.zip
+              metadata:
+                steps: resize, normalize
+              model: ResNet50
+              provider: AWS SageMaker
+              tags:
+                - preprocessing
+                - batch1
+              tags_to_add:
+                - urgent
+              tags_to_remove:
+                - deprecated
+              usage:
+                cpu_seconds: 120
+                memory_mb: 512
+              total_estimated_cost: 0.45
+              error_info:
+                exception_type: ValueError
+                message: Invalid image format detected
+                traceback: 'Traceback (most recent call last): ...'
+              ttft: 3.25
+              source: sdk
+            merge_tags: true

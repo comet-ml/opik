@@ -6,6 +6,7 @@ import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { BridgeSurface } from "@/types/assistant-sidebar";
 
 type PluginStore = {
   UserMenu: React.ComponentType | null;
@@ -26,8 +27,10 @@ type PluginStore = {
   WorkspaceSelector: React.ComponentType | null;
   SidebarWorkspaceSelector: React.ComponentType<{ expanded?: boolean }> | null;
   AssistantSidebar: React.ComponentType<{
+    surface?: BridgeSurface;
     onWidthChange: (width: number) => void;
   }> | null;
+  AssistantPrewarmer: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -49,6 +52,7 @@ const PLUGIN_NAMES = [
   "WorkspaceSelector",
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
+  "AssistantPrewarmer",
   "UpgradeButton",
   "init",
 ];
@@ -68,6 +72,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   WorkspaceSelector: null,
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
+  AssistantPrewarmer: null,
   UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {

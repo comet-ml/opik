@@ -3,7 +3,12 @@ import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import { useNavigate } from "@tanstack/react-router";
+import { Plus } from "lucide-react";
 
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyAlertsLightUrl from "/images/empty-alerts-light.svg";
+import emptyAlertsDarkUrl from "/images/empty-alerts-dark.svg";
 import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
 import AlertsRowActionsCell from "@/v2/pages/AlertsPage/AlertsRowActionsCell";
 import AlertsEventsCell from "@/v2/pages/AlertsPage/AlertsEventsCell";
@@ -328,84 +333,101 @@ const AlertsPage: React.FunctionComponent = () => {
     return <Loader />;
   }
 
+  const isEmpty = noData && alerts.length === 0;
+
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l">Alerts</h1>
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-1 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented">Alerts</h1>
+        {canUpdateAlerts && (
+          <Button variant="default" size="xs" onClick={handleNewAlertClick}>
+            <Plus className="mr-1 size-4" />
+            Create alert
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_alert]}
-      />
-
-      <div className="mt-2">
-        <div className="mb-4 flex items-center justify-between gap-8">
-          <div className="flex items-center gap-2">
-            <SearchInput
-              searchText={search!}
-              setSearchText={setSearch}
-              placeholder="Search by name"
-              className="w-[320px]"
-              dimension="sm"
-            ></SearchInput>
-            <FiltersButton
-              columns={FILTERS_COLUMNS}
-              filters={filters}
-              onChange={setFilters}
-              config={filtersConfig}
-              layout="icon"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <AlertsActionsPanel alerts={selectedRows} />
-            <Separator orientation="vertical" className="mx-2 h-4" />
-            <ColumnsButton
-              columns={DEFAULT_COLUMNS}
-              selectedColumns={selectedColumns}
-              onSelectionChange={setSelectedColumns}
-              order={columnsOrder}
-              onOrderChange={setColumnsOrder}
-            ></ColumnsButton>
-            {canUpdateAlerts && (
-              <Button variant="default" size="sm" onClick={handleNewAlertClick}>
-                Create new alert
-              </Button>
-            )}
-          </div>
-        </div>
-        <DataTable
-          columns={columns}
-          data={alerts}
-          resizeConfig={resizeConfig}
-          sortConfig={sortConfig}
-          selectionConfig={{
-            rowSelection,
-            setRowSelection,
-          }}
-          getRowId={getRowId}
-          columnPinning={DEFAULT_COLUMN_PINNING}
-          noData={
-            <DataTableNoData title={noDataText}>
-              {noData && canUpdateAlerts && (
-                <Button variant="link" onClick={handleNewAlertClick}>
-                  Create new alert
-                </Button>
-              )}
-            </DataTableNoData>
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyAlertsLightUrl}
+          darkImageUrl={emptyAlertsDarkUrl}
+          title="No alerts yet"
+          description={
+            "Monitor important events in your project and get notified when something needs your attention."
           }
-          showLoadingOverlay={isPlaceholderData && isFetching}
+          primaryActionLabel="Create your first alert"
+          onPrimaryAction={handleNewAlertClick}
+          docsUrl={buildDocsUrl("/production/alerts")}
         />
-        <div className="py-4">
-          <DataTablePagination
-            page={page}
-            pageChange={setPage}
-            size={size}
-            sizeChange={setSize}
-            total={total}
-          ></DataTablePagination>
-        </div>
-      </div>
+      ) : (
+        <>
+          <ExplainerDescription
+            className="mb-4"
+            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_alert]}
+          />
+          <div className="mt-2">
+            <div className="mb-4 flex items-center justify-between gap-8">
+              <div className="flex items-center gap-2">
+                <SearchInput
+                  searchText={search!}
+                  setSearchText={setSearch}
+                  placeholder="Search by name"
+                  className="w-[320px]"
+                  dimension="sm"
+                ></SearchInput>
+                <FiltersButton
+                  columns={FILTERS_COLUMNS}
+                  filters={filters}
+                  onChange={setFilters}
+                  config={filtersConfig}
+                  layout="icon"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <AlertsActionsPanel alerts={selectedRows} />
+                <Separator orientation="vertical" className="mx-2 h-4" />
+                <ColumnsButton
+                  columns={DEFAULT_COLUMNS}
+                  selectedColumns={selectedColumns}
+                  onSelectionChange={setSelectedColumns}
+                  order={columnsOrder}
+                  onOrderChange={setColumnsOrder}
+                ></ColumnsButton>
+              </div>
+            </div>
+            <DataTable
+              columns={columns}
+              data={alerts}
+              resizeConfig={resizeConfig}
+              sortConfig={sortConfig}
+              selectionConfig={{
+                rowSelection,
+                setRowSelection,
+              }}
+              getRowId={getRowId}
+              columnPinning={DEFAULT_COLUMN_PINNING}
+              noData={
+                <DataTableNoData title={noDataText}>
+                  {noData && canUpdateAlerts && (
+                    <Button variant="link" onClick={handleNewAlertClick}>
+                      Create alert
+                    </Button>
+                  )}
+                </DataTableNoData>
+              }
+              showLoadingOverlay={isPlaceholderData && isFetching}
+            />
+            <div className="py-4">
+              <DataTablePagination
+                page={page}
+                pageChange={setPage}
+                size={size}
+                sizeChange={setSize}
+                total={total}
+              ></DataTablePagination>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 };

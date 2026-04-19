@@ -1,5 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.connect.ActivateRequest;
+import com.comet.opik.api.connect.CreateSessionRequest;
+import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -12,6 +15,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.Custom
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.LocalRunnersResourceClient;
+import com.comet.opik.api.resources.utils.resources.PairingResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.runner.BridgeCommand;
 import com.comet.opik.api.runner.BridgeCommandBatchResponse;
@@ -23,16 +27,14 @@ import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
 import com.comet.opik.api.runner.BridgeCommandType;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
-import com.comet.opik.api.runner.LocalRunnerConnectRequest;
-import com.comet.opik.api.runner.LocalRunnerConnectResponse;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobMetadata;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
-import com.comet.opik.api.runner.LocalRunnerPairResponse;
 import com.comet.opik.api.runner.LocalRunnerStatus;
+import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -53,6 +55,14 @@ import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -116,6 +126,7 @@ class LocalRunnersResourceTest {
     }
 
     private LocalRunnersResourceClient runnersClient;
+    private PairingResourceClient pairingClient;
     private ProjectResourceClient projectClient;
 
     @BeforeAll
@@ -126,6 +137,7 @@ class LocalRunnersResourceTest {
         mockTargetWorkspace(OTHER_API_KEY, OTHER_WORKSPACE, OTHER_WORKSPACE_ID, OTHER_USER);
 
         this.runnersClient = new LocalRunnersResourceClient(client, baseURI);
+        this.pairingClient = new PairingResourceClient(client, baseURI);
         this.projectClient = new ProjectResourceClient(client, baseURI, PodamFactoryUtils.newPodamFactory());
     }
 
@@ -154,19 +166,61 @@ class LocalRunnersResourceTest {
         return projectClient.createProject("test-project-" + randomUUID(), apiKey, workspace);
     }
 
+    private static byte[] randomActivationKey() {
+        byte[] bytes = new byte[32];
+        new SecureRandom().nextBytes(bytes);
+        return bytes;
+    }
+
+    private static String computeHmac(UUID sessionId, byte[] activationKey, String runnerName) {
+        try {
+            byte[] sessionIdBytes = uuidToBytes(sessionId);
+            byte[] runnerNameHash = MessageDigest.getInstance("SHA-256")
+                    .digest(runnerName.getBytes(StandardCharsets.UTF_8));
+            byte[] message = new byte[sessionIdBytes.length + runnerNameHash.length];
+            System.arraycopy(sessionIdBytes, 0, message, 0, sessionIdBytes.length);
+            System.arraycopy(runnerNameHash, 0, message, sessionIdBytes.length, runnerNameHash.length);
+
+            Mac mac = Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(activationKey, "HmacSHA256"));
+            return Base64.getEncoder().encodeToString(mac.doFinal(message));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    private static byte[] uuidToBytes(UUID uuid) {
+        ByteBuffer bb = ByteBuffer.allocate(16);
+        bb.putLong(uuid.getMostSignificantBits());
+        bb.putLong(uuid.getLeastSignificantBits());
+        return bb.array();
+    }
+
     private UUID connectRunnerWithPairing(String name, UUID projectId, String apiKey, String workspace) {
-        LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, apiKey, workspace);
-        LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                .pairingCode(pair.pairingCode())
-                .runnerName(name)
+        return connectRunnerWithPairing(name, projectId, apiKey, workspace, RunnerType.ENDPOINT);
+    }
+
+    private UUID connectRunnerWithPairing(String name, UUID projectId, String apiKey, String workspace,
+            RunnerType type) {
+        byte[] activationKey = randomActivationKey();
+        CreateSessionRequest sessionReq = CreateSessionRequest.builder()
+                .projectId(projectId)
+                .activationKey(Base64.getEncoder().encodeToString(activationKey))
+                .ttlSeconds(300)
+                .type(type)
                 .build();
-        LocalRunnerConnectResponse resp = runnersClient.connect(req, apiKey, workspace);
+        CreateSessionResponse session = pairingClient.createSession(sessionReq, apiKey, workspace);
+        ActivateRequest activateReq = ActivateRequest.builder()
+                .runnerName(name)
+                .hmac(computeHmac(session.sessionId(), activationKey, name))
+                .build();
+        UUID runnerId = pairingClient.activate(session.sessionId(), activateReq, apiKey, workspace);
         LocalRunner.Agent agent = LocalRunner.Agent.builder()
                 .name(AGENT_NAME)
                 .build();
-        runnersClient.registerAgents(resp.runnerId(), Map.of(AGENT_NAME, agent), apiKey, workspace);
-        runnersClient.heartbeat(resp.runnerId(), apiKey, workspace);
-        return resp.runnerId();
+        runnersClient.registerAgents(runnerId, Map.of(AGENT_NAME, agent), apiKey, workspace);
+        runnersClient.heartbeat(runnerId, apiKey, workspace);
+        return runnerId;
     }
 
     private UUID createRunningJob(UUID runnerId, String agentName, UUID projectId, String apiKey, String workspace) {
@@ -186,23 +240,28 @@ class LocalRunnersResourceTest {
     }
 
     @Test
-    @DisplayName("Happy path: pair, connect, register agents, heartbeat, create job, poll next, logs, report result, get job")
-    void happyPath() {
+    @DisplayName("opik endpoint happy path: pair → activate → register agents → heartbeat → create job → poll → logs → report result")
+    void endpointHappyPath() {
         UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
 
-        LocalRunnerPairResponse pairResponse = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
-        assertThat(pairResponse.pairingCode()).isNotBlank();
-        assertThat(pairResponse.runnerId()).isNotNull();
-        assertThat(pairResponse.expiresInSeconds()).isPositive();
-
-        LocalRunnerConnectRequest connectRequest = LocalRunnerConnectRequest.builder()
-                .pairingCode(pairResponse.pairingCode())
-                .runnerName("test-runner")
+        byte[] activationKey = randomActivationKey();
+        CreateSessionRequest sessionReq = CreateSessionRequest.builder()
+                .projectId(projectId)
+                .activationKey(Base64.getEncoder().encodeToString(activationKey))
+                .ttlSeconds(300)
+                .type(RunnerType.ENDPOINT)
                 .build();
-        LocalRunnerConnectResponse connectResp = runnersClient.connect(connectRequest, API_KEY, TEST_WORKSPACE);
-        UUID runnerId = connectResp.runnerId();
-        assertThat(runnerId).isEqualTo(pairResponse.runnerId());
-        assertThat(connectResp.projectId()).isEqualTo(projectId);
+        CreateSessionResponse session = pairingClient.createSession(sessionReq, API_KEY, TEST_WORKSPACE);
+        assertThat(session.sessionId()).isNotNull();
+        assertThat(session.runnerId()).isNotNull();
+
+        String runnerName = "test-runner";
+        ActivateRequest activateReq = ActivateRequest.builder()
+                .runnerName(runnerName)
+                .hmac(computeHmac(session.sessionId(), activationKey, runnerName))
+                .build();
+        UUID runnerId = pairingClient.activate(session.sessionId(), activateReq, API_KEY, TEST_WORKSPACE);
+        assertThat(runnerId).isEqualTo(session.runnerId());
 
         LocalRunner.LocalRunnerPage runnerPage = runnersClient.listRunners(projectId, API_KEY, TEST_WORKSPACE);
         assertThat(runnerPage.content()).extracting(LocalRunner::id).contains(runnerId);
@@ -210,11 +269,13 @@ class LocalRunnersResourceTest {
                 .filter(r -> r.id().equals(runnerId)).findFirst().orElseThrow();
         assertThat(listedRunner.name()).isEqualTo("test-runner");
         assertThat(listedRunner.status().getValue()).isEqualTo("connected");
+        assertThat(listedRunner.type()).isEqualTo(RunnerType.ENDPOINT);
 
         LocalRunner runner = runnersClient.getRunner(runnerId, API_KEY, TEST_WORKSPACE);
         assertThat(runner.id()).isEqualTo(runnerId);
         assertThat(runner.name()).isEqualTo("test-runner");
         assertThat(runner.status().getValue()).isEqualTo("connected");
+        assertThat(runner.type()).isEqualTo(RunnerType.ENDPOINT);
 
         LocalRunner.Agent agent = LocalRunner.Agent.builder()
                 .name("my-agent")
@@ -308,63 +369,119 @@ class LocalRunnersResourceTest {
         assertThat(cancelledJob.completedAt()).isNotNull();
     }
 
-    @Nested
-    @DisplayName("Generate Pairing Code")
-    class GeneratePairingCode {
+    @Test
+    @DisplayName("opik connect happy path: pair → activate → heartbeat with bridge → submit command → poll → report result")
+    void connectHappyPath() {
+        var ctx = createIsolatedWorkspace();
+        UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-        @Test
-        void createsValidCode() {
-            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            LocalRunnerPairResponse resp = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
+        byte[] activationKey = randomActivationKey();
+        CreateSessionRequest sessionReq = CreateSessionRequest.builder()
+                .projectId(projectId)
+                .activationKey(Base64.getEncoder().encodeToString(activationKey))
+                .ttlSeconds(300)
+                .type(RunnerType.CONNECT)
+                .build();
+        CreateSessionResponse session = pairingClient.createSession(sessionReq, ctx.apiKey, ctx.workspace);
+        assertThat(session.sessionId()).isNotNull();
 
-            assertThat(resp.pairingCode()).hasSize(6);
-            assertThat(resp.pairingCode()).matches("[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{6}");
-            assertThat(resp.runnerId()).isNotNull();
-            assertThat(resp.expiresInSeconds()).isEqualTo(3600);
+        String runnerName = "connect-runner";
+        ActivateRequest activateReq = ActivateRequest.builder()
+                .runnerName(runnerName)
+                .hmac(computeHmac(session.sessionId(), activationKey, runnerName))
+                .build();
+        UUID runnerId = pairingClient.activate(session.sessionId(), activateReq, ctx.apiKey, ctx.workspace);
+        assertThat(runnerId).isEqualTo(session.runnerId());
+
+        runnersClient.heartbeatWithCapabilities(runnerId, List.of("jobs", "bridge"), ctx.apiKey, ctx.workspace);
+
+        LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+        assertThat(runner.type()).isEqualTo(RunnerType.CONNECT);
+        assertThat(runner.status().getValue()).isEqualTo("connected");
+        assertThat(runner.capabilities()).containsExactly("jobs", "bridge");
+
+        ObjectMapper mapper = new ObjectMapper();
+        BridgeCommandSubmitRequest submitReq = BridgeCommandSubmitRequest.builder()
+                .type(BridgeCommandType.READ_FILE)
+                .args(mapper.createObjectNode().put("path", "src/main.py"))
+                .timeoutSeconds(30)
+                .build();
+        BridgeCommandSubmitResponse submitResp = runnersClient.createBridgeCommand(runnerId, submitReq,
+                ctx.apiKey, ctx.workspace);
+        UUID commandId = submitResp.commandId();
+        assertThat(commandId).isNotNull();
+
+        BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(runnerId,
+                BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
+        assertThat(batch.commands()).hasSize(1);
+        assertThat(batch.commands().getFirst().commandId()).isEqualTo(commandId);
+        assertThat(batch.commands().getFirst().type()).isEqualTo(BridgeCommandType.READ_FILE);
+
+        BridgeCommandResultRequest resultReq = BridgeCommandResultRequest.builder()
+                .status(BridgeCommandStatus.COMPLETED)
+                .result(mapper.createObjectNode().put("content", "print('hello')"))
+                .durationMs(42L)
+                .build();
+        try (var response = runnersClient.callReportBridgeResult(runnerId, commandId, resultReq,
+                ctx.apiKey, ctx.workspace)) {
+            assertThat(response.getStatus()).isEqualTo(204);
         }
+
+        BridgeCommand cmd = runnersClient.getBridgeCommand(runnerId, commandId, false, 0,
+                ctx.apiKey, ctx.workspace);
+        assertThat(cmd.status()).isEqualTo(BridgeCommandStatus.COMPLETED);
+        assertThat(cmd.result().get("content").asText()).isEqualTo("print('hello')");
     }
 
-    @Nested
-    @DisplayName("Connect")
-    class Connect {
+    @Test
+    @DisplayName("Type coexistence: CONNECT and ENDPOINT runners coexist on same user+project")
+    void typeCoexistence() {
+        var ctx = createIsolatedWorkspace();
+        UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
-        @Test
-        void withExpiredPairingCode_returns400() {
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .pairingCode("ZZZZZZ")
-                    .runnerName("runner")
-                    .build();
+        UUID endpointRunner = connectRunnerWithPairing("endpoint-runner", projectId,
+                ctx.apiKey, ctx.workspace, RunnerType.ENDPOINT);
+        UUID connectRunner = connectRunnerWithBridge("connect-runner", projectId,
+                ctx.apiKey, ctx.workspace);
 
-            try (var response = runnersClient.callConnect(req, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(400);
-            }
-        }
+        LocalRunner.LocalRunnerPage page = runnersClient.listRunners(projectId, ctx.apiKey, ctx.workspace);
+        assertThat(page.content()).hasSize(2);
+        assertThat(page.content()).extracting(LocalRunner::id)
+                .containsExactlyInAnyOrder(endpointRunner, connectRunner);
 
-        @Test
-        void withPairingCodeFromDifferentWorkspace_returns400() {
-            UUID projectId = createProject(API_KEY, TEST_WORKSPACE);
-            LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, API_KEY, TEST_WORKSPACE);
+        LocalRunner endpoint = page.content().stream()
+                .filter(r -> r.id().equals(endpointRunner)).findFirst().orElseThrow();
+        assertThat(endpoint.type()).isEqualTo(RunnerType.ENDPOINT);
+        assertThat(endpoint.status().getValue()).isEqualTo("connected");
 
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .pairingCode(pair.pairingCode())
-                    .runnerName("runner")
-                    .build();
+        LocalRunner connect = page.content().stream()
+                .filter(r -> r.id().equals(connectRunner)).findFirst().orElseThrow();
+        assertThat(connect.type()).isEqualTo(RunnerType.CONNECT);
+        assertThat(connect.status().getValue()).isEqualTo("connected");
 
-            try (var response = runnersClient.callConnect(req, OTHER_API_KEY, OTHER_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(400);
-            }
-        }
+        CreateLocalRunnerJobRequest jobReq = CreateLocalRunnerJobRequest.builder()
+                .agentName(AGENT_NAME)
+                .projectId(projectId)
+                .build();
+        UUID jobId = runnersClient.createJob(jobReq, ctx.apiKey, ctx.workspace);
+        LocalRunnerJob job = runnersClient.getJob(jobId, ctx.apiKey, ctx.workspace);
+        assertThat(job.runnerId()).isEqualTo(endpointRunner);
 
-        @Test
-        void withoutPairingCode_returns422() {
-            LocalRunnerConnectRequest req = LocalRunnerConnectRequest.builder()
-                    .runnerName("runner")
-                    .build();
+        ObjectMapper mapper = new ObjectMapper();
+        BridgeCommandSubmitResponse bridgeResp = runnersClient.createBridgeCommand(connectRunner,
+                BridgeCommandSubmitRequest.builder()
+                        .type(BridgeCommandType.READ_FILE)
+                        .args(mapper.createObjectNode().put("path", "f.py"))
+                        .build(),
+                ctx.apiKey, ctx.workspace);
+        assertThat(bridgeResp.commandId()).isNotNull();
 
-            try (var response = runnersClient.callConnect(req, API_KEY, TEST_WORKSPACE)) {
-                assertThat(response.getStatus()).isEqualTo(422);
-            }
-        }
+        UUID newEndpoint = connectRunnerWithPairing("endpoint-v2", projectId,
+                ctx.apiKey, ctx.workspace, RunnerType.ENDPOINT);
+        assertThat(newEndpoint).isNotEqualTo(endpointRunner);
+
+        LocalRunner connectAfterEviction = runnersClient.getRunner(connectRunner, ctx.apiKey, ctx.workspace);
+        assertThat(connectAfterEviction.status().getValue()).isEqualTo("connected");
     }
 
     @Nested
@@ -461,20 +578,11 @@ class LocalRunnersResourceTest {
         }
 
         @Test
-        void filtersByPairingStatus() {
+        void filtersByConnectedStatus() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
 
             UUID connectedRunner = connectRunnerWithPairing("connected-runner", projectId, ctx.apiKey, ctx.workspace);
-
-            LocalRunnerPairResponse pair = runnersClient.generatePairingCode(projectId, ctx.apiKey, ctx.workspace);
-            UUID pairingRunner = pair.runnerId();
-
-            LocalRunner.LocalRunnerPage pairingPage = runnersClient.listRunners(projectId,
-                    LocalRunnerStatus.PAIRING, 0, 25, ctx.apiKey, ctx.workspace);
-            assertThat(pairingPage.content()).hasSize(1);
-            assertThat(pairingPage.content().getFirst().id()).isEqualTo(pairingRunner);
-            assertThat(pairingPage.total()).isEqualTo(1);
 
             LocalRunner.LocalRunnerPage connectedPage = runnersClient.listRunners(projectId,
                     LocalRunnerStatus.CONNECTED, 0, 25, ctx.apiKey, ctx.workspace);
@@ -482,6 +590,10 @@ class LocalRunnersResourceTest {
             assertThat(connectedPage.content().getFirst().id()).isEqualTo(connectedRunner);
             assertThat(connectedPage.total()).isEqualTo(1);
 
+            LocalRunner.LocalRunnerPage pairingPage = runnersClient.listRunners(projectId,
+                    LocalRunnerStatus.PAIRING, 0, 25, ctx.apiKey, ctx.workspace);
+            assertThat(pairingPage.content()).isEmpty();
+            assertThat(pairingPage.total()).isEqualTo(0);
         }
 
         @Test
@@ -1277,7 +1389,7 @@ class LocalRunnersResourceTest {
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private UUID connectRunnerWithBridge(String name, UUID projectId, String apiKey, String workspace) {
-        UUID runnerId = connectRunnerWithPairing(name, projectId, apiKey, workspace);
+        UUID runnerId = connectRunnerWithPairing(name, projectId, apiKey, workspace, RunnerType.CONNECT);
         runnersClient.heartbeatWithCapabilities(runnerId, List.of("jobs", "bridge"), apiKey, workspace);
         return runnerId;
     }
@@ -1352,9 +1464,11 @@ class LocalRunnersResourceTest {
         void noInterferenceWithJobs() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
-            UUID runnerId = connectRunnerWithBridge("bridge-no-interference", projectId, ctx.apiKey, ctx.workspace);
+            UUID connectRunner = connectRunnerWithBridge("bridge-no-interference", projectId,
+                    ctx.apiKey, ctx.workspace);
+            connectRunnerWithPairing("endpoint-runner", projectId, ctx.apiKey, ctx.workspace, RunnerType.ENDPOINT);
 
-            runnersClient.createBridgeCommand(runnerId,
+            runnersClient.createBridgeCommand(connectRunner,
                     BridgeCommandSubmitRequest.builder()
                             .type(BridgeCommandType.READ_FILE)
                             .args(MAPPER.createObjectNode().put("path", "f.py"))
@@ -1365,7 +1479,7 @@ class LocalRunnersResourceTest {
                     .agentName(AGENT_NAME).projectId(projectId).build(), ctx.apiKey, ctx.workspace);
             assertThat(jobId).isNotNull();
 
-            BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(runnerId,
+            BridgeCommandBatchResponse batch = runnersClient.nextBridgeCommands(connectRunner,
                     BridgeCommandNextRequest.builder().maxCommands(10).build(), ctx.apiKey, ctx.workspace);
             assertThat(batch.commands()).hasSize(1);
         }

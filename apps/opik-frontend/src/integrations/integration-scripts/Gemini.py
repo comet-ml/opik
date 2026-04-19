@@ -4,7 +4,7 @@ import google.genai
 from opik import configure  # HIGHLIGHTED_LINE
 from opik.integrations.genai import track_genai  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # os.environ["GEMINI_API_KEY"] = "your-api-key-here"
 

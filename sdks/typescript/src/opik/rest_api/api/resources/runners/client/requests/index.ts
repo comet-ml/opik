@@ -4,16 +4,15 @@ export type { BridgeCommandResultRequest } from "./BridgeCommandResultRequest.js
 export type { BridgeCommandSubmitRequest } from "./BridgeCommandSubmitRequest.js";
 export type { CancelJobRequest } from "./CancelJobRequest.js";
 export type { CreateLocalRunnerJobRequest } from "./CreateLocalRunnerJobRequest.js";
+export type { DisconnectRunnerRequest } from "./DisconnectRunnerRequest.js";
 export type { GetBridgeCommandRequest } from "./GetBridgeCommandRequest.js";
 export type { GetJobLogsRequest } from "./GetJobLogsRequest.js";
 export type { GetJobRequest } from "./GetJobRequest.js";
 export type { GetRunnerRequest } from "./GetRunnerRequest.js";
 export type { ListJobsRequest } from "./ListJobsRequest.js";
 export type { ListRunnersRequest } from "./ListRunnersRequest.js";
-export type { LocalRunnerConnectRequest } from "./LocalRunnerConnectRequest.js";
 export type { LocalRunnerHeartbeatRequest } from "./LocalRunnerHeartbeatRequest.js";
 export type { LocalRunnerJobResultRequest } from "./LocalRunnerJobResultRequest.js";
-export type { LocalRunnerPairRequest } from "./LocalRunnerPairRequest.js";
 export type { NextJobRequest } from "./NextJobRequest.js";
 export type { PatchChecklistRequest } from "./PatchChecklistRequest.js";
 export type { RegisterAgentsRequest } from "./RegisterAgentsRequest.js";

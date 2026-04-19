@@ -106,6 +106,7 @@ export class ChatPrompt extends BasePrompt {
     promptData: OpikApi.PromptPublic,
     apiResponse: OpikApi.PromptVersionDetail,
     opik: OpikClient,
+    projectName?: string,
   ): ChatPrompt {
     // Validate required fields
     if (!apiResponse.template) {
@@ -172,6 +173,7 @@ export class ChatPrompt extends BasePrompt {
         description: promptData.description,
         tags: promptData.tags,
         synced: true,
+        projectName,
       },
       opik,
     );

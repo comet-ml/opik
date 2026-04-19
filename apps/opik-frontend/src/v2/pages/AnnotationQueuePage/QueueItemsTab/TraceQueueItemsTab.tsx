@@ -49,9 +49,8 @@ import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
@@ -68,7 +67,9 @@ import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodySt
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import QueueItemActionsPanel from "@/v2/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/v2/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
-import NoQueueItemsPage from "@/v2/pages/AnnotationQueuePage/QueueItemsTab/NoQueueItemsPage";
+import { Link } from "@tanstack/react-router";
+import { ExternalLink } from "lucide-react";
+import { LOGS_TYPE } from "@/constants/traces";
 import useTracesList from "@/api/traces/useTracesList";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
@@ -420,11 +421,6 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     [annotationQueue.feedback_definition_names],
   );
 
-  const noData = !search && filters.length === 0;
-  const noDataText = noData
-    ? "There are no items in this queue yet"
-    : "No search results";
-
   const rows: Trace[] = useMemo(() => data?.content ?? [], [data]);
 
   const sortableBy: string[] = useMemo(
@@ -584,18 +580,6 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     return <Loader />;
   }
 
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <NoQueueItemsPage
-        queueScope={annotationQueue.scope}
-        annotationQueue={annotationQueue}
-        Wrapper={NoDataPage}
-        height={278}
-        className="px-6"
-      />
-    );
-  }
-
   return (
     <>
       <PageBodyStickyContainer
@@ -653,7 +637,27 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         getRowId={getRowId}
         rowHeight={height as ROW_HEIGHT}
         columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
+        noData={
+          <DataTableEmptyContent
+            title="No items to review"
+            description="Add traces to this queue to start annotating."
+          >
+            {annotationQueue.project_id && (
+              <Link
+                to="/$workspaceName/projects/$projectId/logs"
+                params={{
+                  workspaceName,
+                  projectId: annotationQueue.project_id,
+                }}
+                search={{ logsType: LOGS_TYPE.traces }}
+                className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"
+              >
+                Go to traces
+                <ExternalLink className="size-3" />
+              </Link>
+            )}
+          </DataTableEmptyContent>
+        }
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
         showLoadingOverlay={isPlaceholderData && isFetching}

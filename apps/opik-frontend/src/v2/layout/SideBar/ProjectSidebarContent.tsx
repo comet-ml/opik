@@ -5,7 +5,6 @@ import ProjectSelector from "@/v2/layout/SideBar/ProjectSelector/ProjectSelector
 import GitHubStarListItem from "@/v2/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
 import SidebarMenuItem from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import { getWorkspaceMenuItems } from "@/v2/layout/SideBar/helpers/getMenuItems";
-import { usePermissions } from "@/contexts/PermissionsContext";
 import { Separator } from "@/ui/separator";
 
 interface ProjectSidebarContentProps {
@@ -16,17 +15,14 @@ const ProjectSidebarContent: React.FC<ProjectSidebarContentProps> = ({
   expanded,
 }) => {
   useActiveWorkspaceName();
-  const {
-    permissions: { canViewDashboards },
-  } = usePermissions();
 
-  const workspaceItems = getWorkspaceMenuItems({ canViewDashboards });
+  const workspaceItems = getWorkspaceMenuItems();
 
   return (
     <>
+      <ProjectSelector expanded={expanded} />
+      {expanded && <Separator className="my-2" />}
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        <ProjectSelector expanded={expanded} />
-        {expanded && <Separator className="my-2" />}
         <ul className="flex flex-col">
           <SideBarMenuItems expanded={expanded} />
         </ul>

@@ -1,0 +1,170 @@
+---
+headline: Getting Started with Observability | Opik Documentation
+og:description: Add observability to your LLM application with Opik tracing using
+  AI-powered skills or manual SDK integration
+og:site_name: Opik Documentation
+og:title: Getting Started with Observability — Opik
+title: Getting started with Observability
+---
+
+Opik makes it easy to add observability to your existing LLM application. You can get started
+using Opik Connect for AI-assisted setup, the Opik skill for automated integration, or manually add tracing using the SDK.
+
+<video
+  src="/img/v2/observability/getting-started.mp4"
+  width="854"
+  height="480"
+  autoPlay
+  muted
+  loop
+  playsInline
+  preload="auto"
+/>
+
+## Adding observability to your code
+
+<Tabs>
+  <Tab title="Opik Connect">
+    Opik Connect links your local repository to Opik so that [Ollie](/tracing/ollie), Opik's AI coding assistant,
+    can inspect your code, add tracing, and guide you through setup.
+
+    <Steps>
+      <Step title="Install Opik">
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step title="Set your environment variables">
+        <Tabs>
+          <Tab title="Opik Cloud">
+            ```bash
+            export OPIK_API_KEY="<YOUR_API_KEY>"
+            export OPIK_WORKSPACE="<YOUR_WORKSPACE>"
+            ```
+
+            You can find your API key and workspace name in the [Opik dashboard](https://www.comet.com/opik).
+          </Tab>
+          <Tab title="Self-hosted">
+            ```bash
+            export OPIK_URL_OVERRIDE="http://localhost:5173/api"
+            ```
+
+            Replace the URL with your Opik instance address if it differs from the default.
+          </Tab>
+        </Tabs>
+      </Step>
+      <Step title="Connect your repository">
+        Run this command in the repository you want Ollie to work in:
+
+        ```bash
+        opik connect --project "<YOUR_PROJECT_NAME>"
+        ```
+
+        This creates a local connection between Opik and your machine so Ollie can inspect your
+        code and help add tracing.
+      </Step>
+    </Steps>
+
+    Once connected, open Opik and Ollie will be able to help you instrument your code and
+    set up tracing. See the [Ollie documentation](/tracing/ollie) for more details.
+  </Tab>
+  <Tab title="AI Integration">
+    The simplest way to add observability is using the Opik Skills with your favorite coding agent:
+
+    <Steps>
+      <Step title="Install the Opik skill">
+        ```bash
+        npx skills add comet-ml/opik-skills
+        ```
+
+        This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
+      </Step>
+      <Step title="Run the integration">
+        Once the skill is installed, you can add tracing using the following prompt:
+        ```
+        Instrument my agent with Opik using the /instrument command.
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Manual integration">
+    Opik has integrations with all the popular Agent frameworks in both Python and TypeScript as well as
+    first-class support for OpenTelemetry:
+
+    <CardGroup cols={3}>
+      <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
+      <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
+      <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
+      <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
+      <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
+      <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
+    </CardGroup>
+
+    **[View all 30+ integrations →](/integrations/overview)**
+
+    If your framework is not listed, you can use the `@track` decorator (Python) or `track` wrapper
+    (TypeScript) to manually instrument your code:
+
+    <CodeBlocks>
+      ```python title="Python"
+      import opik
+
+      opik.configure()
+
+      @opik.track
+      def my_llm_call(user_message):
+          # Your LLM call here
+          response = call_llm(user_message)
+          return response
+
+      @opik.track(name="my-agent")
+      def my_agent(user_message):
+          context = retrieve_context(user_message)
+          response = my_llm_call(user_message)
+          return response
+      ```
+
+      ```ts title="Typescript"
+      import { Opik } from "opik";
+
+      const client = new Opik();
+
+      const myLlmCall = client.track({
+        name: "my_llm_call",
+        fn: async (userMessage: string) => {
+          // Your LLM call here
+          const response = await callLlm(userMessage);
+          return response;
+        },
+      });
+
+      const myAgent = client.track({
+        name: "my-agent",
+        fn: async (userMessage: string) => {
+          const context = await retrieveContext(userMessage);
+          const response = await myLlmCall(userMessage);
+          return response;
+        },
+      });
+      ```
+    </CodeBlocks>
+  </Tab>
+</Tabs>
+
+## Viewing your traces
+
+After running your application, traces will appear in the Opik dashboard. Each trace captures the
+full execution path of a request, including all nested spans, inputs, outputs, and timing information.
+
+<Frame>
+  <img src="/img/v2/observability/traces-page.png" alt="Opik traces page showing trace details with span tree, outputs, and feedback scores" />
+</Frame>
+
+You can use [Ollie](/tracing/ollie) to analyze your traces, identify issues in your agent's
+behavior, and get actionable suggestions for improvement.
+
+## Next steps
+
+- [Concepts](/tracing/concepts) — Learn about traces, spans, threads, and feedback scores
+- [Log traces](/tracing/advanced/log_traces) — In-depth guide on customizing what gets logged
+- [Cost tracking](/tracing/advanced/cost_tracking) — Monitor token usage and spending

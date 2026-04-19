@@ -10,28 +10,39 @@ import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
   BridgeContext,
+  BridgeSurface,
   HostEventMap,
   RunnerBridgeState,
   SidebarEventMap,
 } from "@/types/assistant-sidebar";
 import { useActiveWorkspaceName } from "@/store/AppStore";
+import { useTheme } from "@/contexts/theme-provider";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
-import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
-import { Spinner } from "@/ui/spinner";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
+import OllieLoader, { OllieLoaderVariant } from "@/plugins/comet/OllieLoader";
+import {
+  ASSISTANT_DEV_BASE_URL,
+  IS_ASSISTANT_DEV,
+} from "@/plugins/comet/constants/assistant";
 
-const DEV_BASE_URL = import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL;
-const IS_DEV = import.meta.env.DEV;
 const BRIDGE_PROTOCOL_VERSION = 1;
 
 const LOADER_DEFAULT_WIDTH = 400;
 const LOADER_COLLAPSED_WIDTH = 33;
+
+// Pod may serve /console/manifest.json before /health/ready flips — retry
+// with backoff so transient 404/503 during warmup don't permanently fail.
+// Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
+// give up before health polling does.
+const MANIFEST_RETRY_COUNT = 30;
+const MANIFEST_RETRY_BASE_DELAY_MS = 500;
+const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
 
 function getStoredSidebarWidth(): number {
   try {
@@ -55,28 +66,20 @@ function getStoredSidebarOpen(): boolean {
   }
 }
 
-const PHASE_MESSAGES: Partial<
-  Record<AssistantBackendPhase | "manifest", string>
-> = {
-  compute: "Starting assistant\u2026",
-  health: "Connecting\u2026",
-  manifest: "Loading interface\u2026",
-};
-
 interface AssistantSidebarLoaderProps {
-  phase: AssistantBackendPhase | "manifest";
   error: string | null;
   onWidthChange: (width: number) => void;
   onRetry?: () => void;
   retryCount?: number;
+  surface: BridgeSurface;
 }
 
 const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
-  phase,
   error,
   onWidthChange,
   onRetry,
   retryCount = 0,
+  surface,
 }) => {
   const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
   const initialWidth = useRef(
@@ -109,19 +112,13 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
     );
   }
 
-  const message = PHASE_MESSAGES[phase] ?? "Loading\u2026";
-
-  return (
-    <div className="relative size-full border-l">
-      <div className="absolute inset-0 animate-pulse bg-muted" />
-      <div className="relative flex size-full items-center justify-center">
-        <Spinner size={collapsed ? "xs" : "small"} />
-        {!collapsed && (
-          <span className="ml-2 text-sm text-light-slate">{message}</span>
-        )}
-      </div>
-    </div>
-  );
+  let variant: OllieLoaderVariant = "sidebar";
+  if (collapsed) {
+    variant = "collapsed";
+  } else if (surface === "page") {
+    variant = "page";
+  }
+  return <OllieLoader variant={variant} />;
 };
 
 const stopPropagation = (e: Event) => e.stopPropagation();
@@ -217,7 +214,7 @@ const createBridge = (refs: BridgeRefs): AssistantSidebarBridge => ({
         );
         break;
       default:
-        if (IS_DEV) {
+        if (IS_ASSISTANT_DEV) {
           console.warn(
             `[AssistantBridge] Unhandled sidebar event: "${event}"`,
             data,
@@ -238,8 +235,12 @@ function emitHostEvent<E extends keyof HostEventMap>(
   }
 }
 
-function useBridgeContext(assistantBackendUrl: string): BridgeContext {
+function useBridgeContext(
+  assistantBackendUrl: string,
+  surface: BridgeSurface,
+): BridgeContext {
   const workspaceName = useActiveWorkspaceName();
+  const { themeMode } = useTheme();
   const workspace = useWorkspace();
 
   const { projectId } = useParams({ strict: false }) as {
@@ -266,7 +267,8 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       projectName,
       baseApiUrl: BASE_API_URL,
       assistantBackendUrl,
-      theme: "light",
+      theme: themeMode,
+      surface,
       projectStats,
     }),
     [
@@ -276,6 +278,8 @@ function useBridgeContext(assistantBackendUrl: string): BridgeContext {
       resolvedProjectId,
       projectName,
       assistantBackendUrl,
+      themeMode,
+      surface,
       projectStats,
     ],
   );
@@ -289,7 +293,7 @@ interface AssistantMeta {
 }
 
 function resolveManifestUrl(backendUrl: string | null): string | null {
-  if (DEV_BASE_URL) return `${DEV_BASE_URL}/manifest.json`;
+  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
   if (backendUrl) return `${backendUrl}/console/manifest.json`;
   return null;
 }
@@ -317,40 +321,64 @@ function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `${manifestBase}/${manifest.shell}`,
+        shellUrl: `/assistant/${manifest.shell}`,
         version: manifest.ver,
       };
     },
-    enabled: !(IS_DEV && DEV_BASE_URL) && !!manifestUrl,
+    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
     staleTime: Infinity,
-    retry: 1,
+    retry: MANIFEST_RETRY_COUNT,
+    retryDelay: (attempt) =>
+      Math.min(
+        MANIFEST_RETRY_BASE_DELAY_MS * 2 ** attempt,
+        MANIFEST_RETRY_MAX_DELAY_MS,
+      ),
   });
 
-  if (IS_DEV && DEV_BASE_URL) return DEV_META;
+  if (IS_ASSISTANT_DEV) return DEV_META;
 
   return data ?? null;
 }
 
 interface AssistantSidebarProps {
+  surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
 }
 
 const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
+  surface = "sidebar",
   onWidthChange,
 }) => {
   const {
     backendUrl,
+    probeUrl,
     isReady: isBackendReady,
     error,
     phase,
     retry,
     retryCount,
   } = useAssistantBackend();
-  const meta = useAssistantMeta(backendUrl);
-  const context = useBridgeContext(backendUrl ?? "");
+  const meta = useAssistantMeta(probeUrl);
+  const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
   const { toast } = useToast();
+
+  // Warm DNS/TCP/TLS to the pod origin while health polling is in flight.
+  // Attributes must be set BEFORE appendChild — browsers evaluate the hint at
+  // insertion time, and late crossorigin changes may not upgrade the handshake.
+  useEffect(() => {
+    if (!probeUrl || IS_ASSISTANT_DEV) return;
+    const origin = new URL(probeUrl).origin;
+    const link = document.createElement("link");
+    link.rel = "preconnect";
+    link.href = origin;
+    link.setAttribute("crossorigin", "use-credentials");
+    document.head.appendChild(link);
+    return () => {
+      link.remove();
+    };
+  }, [probeUrl]);
 
   const contextRef = useLatestRef(context);
   const onWidthChangeRef = useLatestRef(onWidthChange);
@@ -410,15 +438,25 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }),
   );
 
-  // Expose bridge and meta on window for iframe access
+  // Expose bridge and meta on window for iframe access.
+  // Guard the cleanup: when another AssistantSidebar instance mounts (e.g.
+  // switching between sidebar and page surface), it overwrites these globals
+  // with its own bridge/meta. A later unmount of the previous instance must
+  // NOT clobber the new values — only clean up when our bridge is still the
+  // active one. Meta cleanup is tied to bridge ownership because both serve
+  // the same iframe and meta is a shared React Query cache reference that
+  // cannot be compared with === across instances.
   useEffect(() => {
-    window.opikBridge = bridgeRef.current;
+    const bridge = bridgeRef.current;
+    window.opikBridge = bridge;
     if (meta) {
       window.__opikAssistantMeta__ = meta;
     }
     return () => {
-      delete window.opikBridge;
-      delete window.__opikAssistantMeta__;
+      if (window.opikBridge === bridge) {
+        delete window.opikBridge;
+        delete window.__opikAssistantMeta__;
+      }
     };
   }, [meta]);
 
@@ -450,16 +488,37 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     }
   }, []);
 
+  // On the page surface, the iframe fills the whole main area, so clicks
+  // inside Ollie never bubble to the parent document. Detect the resulting
+  // window blur and synthesize the events Radix's DismissableLayer is
+  // waiting for, so any open popover/select/dropdown closes. Different
+  // Radix versions listen on `pointerdown` and/or `mousedown`; dispatch both.
+  useEffect(() => {
+    if (surface !== "page") return;
+    const handleBlur = () => {
+      // Only dismiss when focus actually moved INTO our iframe (skip
+      // tab/window switches).
+      if (document.activeElement !== iframeRef.current) return;
+      document.dispatchEvent(
+        new PointerEvent("pointerdown", { bubbles: true, composed: true }),
+      );
+      document.dispatchEvent(
+        new MouseEvent("mousedown", { bubbles: true, composed: true }),
+      );
+    };
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [surface]);
+
   if (!meta || !isBackendReady) {
     if (phase === "disabled") return null;
-    const effectivePhase = isBackendReady && !meta ? "manifest" : phase;
     return (
       <AssistantSidebarLoader
-        phase={effectivePhase}
         error={error}
         onWidthChange={onWidthChange}
         onRetry={retry}
         retryCount={retryCount}
+        surface={surface}
       />
     );
   }

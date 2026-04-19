@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
@@ -17,6 +19,7 @@ import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.domain.evaluators.SpanFilterEvaluationService;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.comet.opik.podam.PodamFactoryUtils;
 import dev.langchain4j.data.message.ChatMessageType;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -24,17 +27,23 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode;
+import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanUserDefinedMetricPython.SpanUserDefinedMetricPythonCode;
 import static com.comet.opik.api.resources.utils.AutomationRuleEvaluatorTestUtils.toProjects;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -45,11 +54,14 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("OnlineScoringSpanSampler Tests")
 class OnlineScoringSpanSamplerTest {
+
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
     private AutomationRuleEvaluatorService ruleEvaluatorService;
@@ -111,8 +123,7 @@ class OnlineScoringSpanSamplerTest {
             // When
             sampler.onSpansCreated(event);
 
-            // Then
-            // When both toggles are disabled, findAll is never called since we return early
+            // Then, When both toggles are disabled, findAll is never called since we return early
             verify(ruleEvaluatorService, never()).findAll(any(), any(),
                     eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
             verify(ruleEvaluatorService, never()).findAll(any(), any(),
@@ -151,13 +162,15 @@ class OnlineScoringSpanSamplerTest {
                     eq(AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE));
         }
 
-        @Test
+        @ParameterizedTest
+        @EnumSource(value = Source.class, names = {"SDK"})
+        @NullSource
         @DisplayName("Should process sampling when span LLM as Judge is enabled")
-        void shouldProcessSamplingWhenToggleEnabled() {
+        void shouldProcessSamplingWhenToggleEnabled(Source source) {
             // Given
             when(serviceTogglesConfig.isSpanLlmAsJudgeEnabled()).thenReturn(true);
             when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
-            Span span = createTestSpan();
+            Span span = createTestSpan(projectId, source);
             SpansCreated event = new SpansCreated(List.of(span), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator = createTestEvaluator(true, 1.0f, List.of());
@@ -185,6 +198,24 @@ class OnlineScoringSpanSamplerTest {
             assertThat(messages).hasSize(1);
             assertThat(messages.getFirst().span()).isEqualTo(span);
             assertThat(messages.getFirst().ruleId()).isEqualTo(evaluator.getId());
+        }
+    }
+
+    @Nested
+    class SourceFilteringTests {
+
+        @ParameterizedTest
+        @EnumSource(value = Source.class, mode = EnumSource.Mode.EXCLUDE, names = {"SDK"})
+        void shouldSkipNonSdkSourceSpans(Source source) {
+            var span = createTestSpan(projectId, source);
+            var event = new SpansCreated(List.of(span), workspaceId, userName);
+
+            sampler.onSpansCreated(event);
+
+            verifyNoInteractions(ruleEvaluatorService);
+            verifyNoInteractions(filterEvaluationService);
+            verifyNoInteractions(onlineScorePublisher);
+            verifyNoInteractions(serviceTogglesConfig);
         }
     }
 
@@ -364,6 +395,25 @@ class OnlineScoringSpanSamplerTest {
             // With rate 0.0, no spans should be sampled
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
         }
+
+        @Test
+        @DisplayName("Should respect sampling rate for python evaluators")
+        void shouldRespectSamplingRateForPythonEvaluators() {
+            when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(true);
+            var span = createTestSpan();
+            var event = new SpansCreated(List.of(span), workspaceId, userName);
+
+            var evaluator = newPythonEvaluator();
+            when(ruleEvaluatorService
+                    .<SpanUserDefinedMetricPythonCode, SpanFilter, AutomationRuleEvaluatorSpanUserDefinedMetricPython>findAll(
+                            projectId, workspaceId, AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON))
+                    .thenReturn(List.of(evaluator));
+
+            sampler.onSpansCreated(event);
+
+            // With rate 0.0, messages list is empty -> enqueueMessage must NOT be called
+            verifyNoInteractions(onlineScorePublisher);
+        }
     }
 
     @Nested
@@ -378,8 +428,8 @@ class OnlineScoringSpanSamplerTest {
             when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(false);
             UUID projectId2 = UUID.randomUUID();
 
-            Span span1 = createTestSpan(projectId);
-            Span span2 = createTestSpan(projectId2);
+            Span span1 = createTestSpan(projectId, null);
+            Span span2 = createTestSpan(projectId2, null);
             SpansCreated event = new SpansCreated(List.of(span1, span2), workspaceId, userName);
 
             AutomationRuleEvaluatorSpanLlmAsJudge evaluator1 = createTestEvaluator(true, 1.0f, List.of());
@@ -495,17 +545,17 @@ class OnlineScoringSpanSamplerTest {
     // Helper methods
 
     private Span createTestSpan() {
-        return createTestSpan(projectId);
+        return createTestSpan(projectId, null);
     }
 
-    private Span createTestSpan(UUID projectId) {
-        java.time.Instant now = java.time.Instant.now();
+    private Span createTestSpan(UUID projectId, Source source) {
         return Span.builder()
                 .id(UUID.randomUUID())
                 .projectId(projectId)
                 .traceId(UUID.randomUUID())
                 .name("test-span")
-                .startTime(now)
+                .startTime(Instant.now())
+                .source(source)
                 .build();
     }
 
@@ -543,10 +593,19 @@ class OnlineScoringSpanSamplerTest {
                 .enabled(enabled)
                 .filters(filters)
                 .code(code)
-                .createdAt(java.time.Instant.now())
+                .createdAt(Instant.now())
                 .createdBy(userName)
-                .lastUpdatedAt(java.time.Instant.now())
+                .lastUpdatedAt(Instant.now())
                 .lastUpdatedBy(userName)
+                .build();
+    }
+
+    private AutomationRuleEvaluatorSpanUserDefinedMetricPython newPythonEvaluator() {
+        return podamFactory.manufacturePojo(AutomationRuleEvaluatorSpanUserDefinedMetricPython.class).toBuilder()
+                .projects(toProjects(Set.of(projectId)))
+                .samplingRate(0.0f)
+                .enabled(true)
+                .filters(List.of())
                 .build();
     }
 }

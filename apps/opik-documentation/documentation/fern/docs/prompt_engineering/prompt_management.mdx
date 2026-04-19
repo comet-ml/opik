@@ -11,6 +11,10 @@ Opik provides a prompt library that you can use to manage your prompts. Storing
 prompts in a library allows you to version them, reuse them across projects, and
 manage them in a central location.
 
+<Note>
+  In Opik 2.0, prompts are project-scoped. Specify a `project_name` when creating prompts to associate them with the correct project.
+</Note>
+
 Using a prompt library does not mean you can't store your prompt in code, we
 have designed the prompt library to work seamlessly with your existing prompt
 files while providing the benefits of a central prompt library.
@@ -47,7 +51,8 @@ so you can more easily keep track of your progress.
         prompt = opik.Prompt(
             name="prompt-summary",
             prompt=PROMPT_TEXT,
-            metadata={"environment": "production"}
+            metadata={"environment": "production"},
+            project_name="my-project"
         )
 
         # Print the prompt text
@@ -72,6 +77,7 @@ so you can more easily keep track of your progress.
           name: "prompt-summary",
           prompt: PROMPT_TEXT,
           metadata: { environment: "production" },
+          projectName: "my-project",
         });
 
         // Print the prompt text
@@ -98,7 +104,7 @@ Prompts can also be stored in a file and loaded from it:
         with open("prompt.txt", "r") as f:
             prompt_text = f.read()
 
-        prompt = opik.Prompt(name="prompt-summary", prompt=prompt_text)
+        prompt = opik.Prompt(name="prompt-summary", prompt=prompt_text, project_name="my-project")
 
         # Print the prompt text
         print(prompt.prompt)
@@ -121,6 +127,7 @@ Prompts can also be stored in a file and loaded from it:
         const prompt = await client.createPrompt({
           name: "prompt-summary",
           prompt: promptText,
+          projectName: "my-project",
         });
 
         // Print the prompt text
@@ -175,7 +182,7 @@ You can create a new prompt in the library using both the SDK and the UI:
         client = opik.Opik()
 
         # Create a new prompt
-        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}", metadata={"environment": "development"})
+        prompt = client.create_prompt(name="prompt-summary", prompt="Write a summary of the following text: {{text}}", metadata={"environment": "development"}, project_name="my-project")
         ```
     </Tab>
     <Tab value="TypeScript SDK" title="TypeScript SDK">
@@ -189,6 +196,7 @@ You can create a new prompt in the library using both the SDK and the UI:
           name: "prompt-summary",
           prompt: "Write a summary of the following text: {{text}}",
           metadata: { environment: "development" },
+          projectName: "my-project",
         });
         ```
     </Tab>
@@ -218,7 +226,8 @@ You can associate prompts with your traces and spans using the `opik_context` mo
         # Create prompts
         system_prompt = opik.Prompt(
             name="system-prompt",
-            prompt="You are a helpful assistant that provides accurate and concise answers."
+            prompt="You are a helpful assistant that provides accurate and concise answers.",
+            project_name="my-project"
         )
 
         # Get prompt from the Prompt library
@@ -248,7 +257,8 @@ You can associate prompts with your traces and spans using the `opik_context` mo
         # Create a prompt for a specific operation
         analysis_prompt = opik.Prompt(
             name="text-analysis-prompt",
-            prompt="Analyze the sentiment of the following text: {{text}}"
+            prompt="Analyze the sentiment of the following text: {{text}}",
+            project_name="my-project"
         )
 
         @opik.track
@@ -274,12 +284,14 @@ You can associate prompts with your traces and spans using the `opik_context` mo
         # Create different prompts for different purposes
         main_prompt = opik.Prompt(
             name="main-processing-prompt",
-            prompt="Process the following data: {{data}}"
+            prompt="Process the following data: {{data}}",
+            project_name="my-project"
         )
         
         validation_prompt = opik.Prompt(
             name="validation-prompt",
-            prompt="Validate this result: {{result}}"
+            prompt="Validate this result: {{result}}",
+            project_name="my-project"
         )
 
         @opik.track
@@ -328,9 +340,9 @@ Further details on using prompts from the Prompt library are provided in the fol
 
 #### Using prompts in supported integrations
 
-Prompts can be used in all supported third-party integrations by attaching them to traces and spans through the [`opik_context` module](/docs/opik/prompt_engineering/prompt_management#adding-prompts-to-traces-and-spans).
+Prompts can be used in all supported third-party integrations by attaching them to traces and spans through the [`opik_context` module](/v1/prompt_engineering/prompt_management#adding-prompts-to-traces-and-spans).
 
-For instance, you can use prompts with the `Google ADK` integration, as shown in the [example here](/docs/opik/integrations/adk#prompts-integration).
+For instance, you can use prompts with the `Google ADK` integration, as shown in the [example here](/v1/integrations/adk#prompts-integration).
 
 
 #### Downloading your text prompts
@@ -348,7 +360,7 @@ Once a prompt is created in the library, you can download it in code:
         client = opik.Opik()
 
         # Get a dataset
-        dataset = client.get_or_create_dataset("test_dataset")
+        dataset = client.get_or_create_dataset("test_dataset", project_name="my-project")
 
         # Get the prompt
         prompt = client.get_prompt(name="prompt-summary")
@@ -504,7 +516,8 @@ centralized management in the Opik platform.
         chat_prompt = opik.ChatPrompt(
             name="educational-assistant",
             messages=messages,
-            metadata={"category": "education"}
+            metadata={"category": "education"},
+            project_name="my-project"
         )
 
         # Format the prompt with variables
@@ -546,6 +559,7 @@ centralized management in the Opik platform.
           name: "educational-assistant",
           messages: messages,
           metadata: { category: "education" },
+          projectName: "my-project",
         });
 
         // Format the prompt with variables
@@ -587,7 +601,8 @@ Chat prompts work seamlessly with OpenAI's chat completion API:
         chat_prompt = opik.ChatPrompt(
             name="educational-assistant",
             messages=messages,
-            metadata={"category": "education"}
+            metadata={"category": "education"},
+            project_name="my-project"
         )
 
         # Format the prompt with variables
@@ -632,6 +647,7 @@ Chat prompts work seamlessly with OpenAI's chat completion API:
           name: "educational-assistant",
           messages: messages,
           metadata: { category: "education" },
+          projectName: "my-project",
         });
 
         // Format the prompt with variables
@@ -672,7 +688,8 @@ You can create templates for multi-turn conversations:
 
         chat_prompt = opik.ChatPrompt(
             name="customer-support-flow",
-            messages=messages
+            messages=messages,
+            project_name="my-project"
         )
 
         # Format with specific values
@@ -772,7 +789,8 @@ Chat prompts support multimodal content, allowing you to include images and vide
 
         chat_prompt = opik.ChatPrompt(
             name="image-analyzer",
-            messages=messages
+            messages=messages,
+            project_name="my-project"
         )
 
         # Format with variables
@@ -862,7 +880,8 @@ Chat prompts can also include video content:
 
         chat_prompt = opik.ChatPrompt(
             name="video-analyzer",
-            messages=messages
+            messages=messages,
+            project_name="my-project"
         )
 
         # Format with variables
@@ -954,7 +973,8 @@ You can combine multiple types of content in a single message:
 
         chat_prompt = opik.ChatPrompt(
             name="image-comparison",
-            messages=messages
+            messages=messages,
+            project_name="my-project"
         )
 
         formatted = chat_prompt.format(
@@ -1053,7 +1073,8 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
         chat_prompt = client.create_chat_prompt(
             name="greeting-prompt",
             messages=messages,
-            metadata={"environment": "development"}
+            metadata={"environment": "development"},
+            project_name="my-project"
         )
 
         # Format and use the prompt
@@ -1079,6 +1100,7 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
           name: "greeting-prompt",
           messages: messages,
           metadata: { environment: "development" },
+          projectName: "my-project",
         });
 
         // Format and use the prompt
@@ -1210,7 +1232,8 @@ Chat prompts support two template types for variable substitution.
         chat_prompt = opik.ChatPrompt(
             name="mustache-example",
             messages=messages,
-            type=PromptType.MUSTACHE  # Default
+            type=PromptType.MUSTACHE,  # Default
+            project_name="my-project"
         )
 
         formatted = chat_prompt.format(variables={"name": "Alice", "city": "Paris"})
@@ -1265,7 +1288,8 @@ For more advanced templating with conditionals, loops, and filters:
         chat_prompt = opik.ChatPrompt(
             name="jinja-example",
             messages=messages,
-            type=PromptType.JINJA2
+            type=PromptType.JINJA2,
+            project_name="my-project"
         )
 
         # With premium user
@@ -1344,7 +1368,8 @@ Chat prompts are automatically versioned when the messages change. Each version 
 
         chat_prompt_v1 = opik.ChatPrompt(
             name="assistant-prompt",
-            messages=messages_v1
+            messages=messages_v1,
+            project_name="my-project"
         )
 
         print(f"Version 1 commit: {chat_prompt_v1.commit}")
@@ -1358,7 +1383,8 @@ Chat prompts are automatically versioned when the messages change. Each version 
 
         chat_prompt_v2 = opik.ChatPrompt(
             name="assistant-prompt",
-            messages=messages_v2
+            messages=messages_v2,
+            project_name="my-project"
         )
 
         print(f"Version 2 commit: {chat_prompt_v2.commit}")
@@ -1439,14 +1465,16 @@ import opik
 # Create a chat prompt
 chat_prompt = opik.ChatPrompt(
     name="my-prompt",
-    messages=[{"role": "user", "content": "Hello"}]
+    messages=[{"role": "user", "content": "Hello"}],
+    project_name="my-project"
 )
 
 # Attempting to create a text prompt with the same name will raise an error
 try:
     text_prompt = opik.Prompt(
         name="my-prompt",
-        prompt="Hello {{name}}"
+        prompt="Hello {{name}}",
+        project_name="my-project"
     )
 except opik.exceptions.PromptTemplateStructureMismatch as e:
     print("Error: Cannot change prompt structure from chat to text")
@@ -1926,7 +1954,8 @@ The following end-to-end example shows a common workflow: create a new prompt ve
         # Create a new version
         candidate = opik.Prompt(
             name="summarizer",
-            prompt="Provide a concise summary of: {{text}}"
+            prompt="Provide a concise summary of: {{text}}",
+            project_name="my-project"
         )
 
         # ... run your evaluation logic here ...
@@ -2010,10 +2039,10 @@ The following end-to-end example shows a common workflow: create a new prompt ve
         openai_client = OpenAI()
 
         # Get a dataset
-        dataset = opik_client.get_or_create_dataset("test_dataset")
+        dataset = opik_client.get_or_create_dataset("test_dataset", project_name="my-project")
 
         # Create a text prompt
-        prompt = opik.Prompt(name="My prompt", prompt="Summarize: {{text}}")
+        prompt = opik.Prompt(name="My prompt", prompt="Summarize: {{text}}", project_name="my-project")
 
         # Create an evaluation task
         def evaluation_task(dataset_item):
@@ -2034,6 +2063,7 @@ The following end-to-end example shows a common workflow: create a new prompt ve
             dataset=dataset,
             task=evaluation_task,
             prompts=[prompt],
+            project_name="my-project",
         )
         ```
     </Tab>
@@ -2049,14 +2079,14 @@ The following end-to-end example shows a common workflow: create a new prompt ve
         openai_client = OpenAI()
 
         # Get a dataset
-        dataset = opik_client.get_or_create_dataset("test_dataset")
+        dataset = opik_client.get_or_create_dataset("test_dataset", project_name="my-project")
 
         # Create a chat prompt
         messages = [
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Summarize: {{text}}"}
         ]
-        chat_prompt = opik.ChatPrompt(name="My chat prompt", messages=messages)
+        chat_prompt = opik.ChatPrompt(name="My chat prompt", messages=messages, project_name="my-project")
 
         # Create an evaluation task
         def evaluation_task(dataset_item):
@@ -2079,6 +2109,7 @@ The following end-to-end example shows a common workflow: create a new prompt ve
             dataset=dataset,
             task=evaluation_task,
             prompts=[chat_prompt],
+            project_name="my-project",
         )
         ```
     </Tab>
@@ -2102,7 +2133,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
         client = opik.Opik()
 
         # Get the dataset
-        dataset = client.get_or_create_dataset("test_dataset")
+        dataset = client.get_or_create_dataset("test_dataset", project_name="my-project")
 
         # Get different versions of the same text prompt
         prompt_v1 = client.get_prompt(name="prompt-summary", commit="abc123")
@@ -2125,6 +2156,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
             dataset=dataset,
             task=evaluation_task_v1,
             prompts=[prompt_v1],
+            project_name="my-project",
         )
 
         experiment_v2 = evaluate(
@@ -2132,6 +2164,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
             dataset=dataset,
             task=evaluation_task_v2,
             prompts=[prompt_v2],
+            project_name="my-project",
         )
 
         # Compare results in the Opik UI
@@ -2146,7 +2179,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
         client = opik.Opik()
 
         # Get the dataset
-        dataset = client.get_or_create_dataset("test_dataset")
+        dataset = client.get_or_create_dataset("test_dataset", project_name="my-project")
 
         # Get different versions of the same chat prompt
         chat_prompt_v1 = client.get_chat_prompt(name="assistant-prompt", commit="abc123")
@@ -2173,6 +2206,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
             dataset=dataset,
             task=evaluation_task_v1,
             prompts=[chat_prompt_v1],
+            project_name="my-project",
         )
 
         experiment_v2 = evaluate(
@@ -2180,6 +2214,7 @@ The experiment will now be linked to the prompt, allowing you to view all experi
             dataset=dataset,
             task=evaluation_task_v2,
             prompts=[chat_prompt_v2],
+            project_name="my-project",
         )
 
         # Compare results in the Opik UI

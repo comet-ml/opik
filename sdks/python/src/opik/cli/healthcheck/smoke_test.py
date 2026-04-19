@@ -297,4 +297,6 @@ def run_smoke_test(
 
     # Re-raise the original exception if one occurred
     if original_exception is not None:
-        raise click.ClickException(f"Smoke test failed: {original_exception}")
+        raise click.ClickException(
+            f"Smoke test failed: {original_exception}"
+        ) from original_exception

@@ -22,7 +22,7 @@ from ..api_objects.experiment import helpers as experiment_helpers
 from ..api_objects.dataset import execution_policy as dataset_execution_policy
 from ..api_objects.prompt.chat import chat_prompt_template
 from ..api_objects.prompt import types as prompt_types
-from ..api_objects.dataset import evaluation_suite
+from ..api_objects.dataset import test_suite as test_suite_module
 from . import (
     asyncio_support,
     engine,
@@ -37,10 +37,10 @@ from .scorers import scorer_function, scorer_wrapper_metric
 from . import test_result
 from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
 from .. import url_helpers
-from ..api_objects.dataset.evaluation_suite import suite_result_constructor
+from ..api_objects.dataset.test_suite import suite_result_constructor
 
 if TYPE_CHECKING:
-    from ..api_objects.dataset.evaluation_suite import types as suite_types
+    from ..api_objects.dataset.test_suite import types as suite_types
 
 LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
@@ -48,6 +48,26 @@ MODALITY_SUPPORT_DOC_URL = (
 )
 
 EVALUATION_STREAM_DATASET_BATCH_SIZE = 200
+
+
+def _merge_blueprint_into_config(
+    client: "opik_client.Opik",
+    blueprint_id: str,
+    experiment_config: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Add blueprint reference to experiment_config under ``agent_configuration``."""
+    experiment_config = dict(experiment_config) if experiment_config else {}
+    agent_config: Dict[str, str] = {"_blueprint_id": blueprint_id}
+    try:
+        blueprint = client._rest_client.agent_configs.get_blueprint_by_id(
+            blueprint_id=blueprint_id,
+        )
+        if blueprint.name:
+            agent_config["blueprint_version"] = blueprint.name
+    except Exception:
+        LOGGER.debug("Failed to fetch blueprint %s", blueprint_id, exc_info=True)
+    experiment_config["agent_configuration"] = agent_config
+    return experiment_config
 
 
 def _calculate_total_items(
@@ -150,9 +170,7 @@ def _compute_experiment_scores(
 
 
 def evaluate(
-    dataset: Union[
-        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
-    ],
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -172,6 +190,7 @@ def evaluate(
     experiment_scoring_functions: Optional[List[ExperimentScoreFunction]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
 ) -> evaluation_result.EvaluationResult:
     """
     Performs task evaluation on a given dataset. You can use either `scoring_metrics` or `scorer_functions` to calculate
@@ -258,7 +277,7 @@ def evaluate(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
-    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+    if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.dataset
 
@@ -272,6 +291,13 @@ def evaluate(
     )
 
     client = opik_client.get_global_client()
+
+    if blueprint_id:
+        experiment_config = _merge_blueprint_into_config(
+            client,
+            blueprint_id,
+            experiment_config,
+        )
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
@@ -315,40 +341,56 @@ def evaluate(
     )
 
 
-def evaluate_suite(
-    dataset: dataset.Dataset,
+def __internal_api__run_test_suite__(
+    suite_dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     *,
     client: Optional[opik_client.Opik],
-    dataset_item_ids: Optional[List[str]],
-    dataset_filter_string: Optional[str],
-    experiment_name_prefix: Optional[str],
-    experiment_name: Optional[str],
-    project_name: Optional[str],
-    experiment_config: Optional[Dict[str, Any]],
-    prompts: Optional[List[base_prompt.BasePrompt]],
-    experiment_tags: Optional[List[str]],
-    verbose: int,
-    task_threads: int,
-    evaluator_model: Optional[str],
-    optimization_id: Optional[str],
-    experiment_type: Optional[str],
-) -> "suite_types.EvaluationSuiteResult":
+    dataset_item_ids: Optional[List[str]] = None,
+    dataset_filter_string: Optional[str] = None,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_name: Optional[str] = None,
+    project_name: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 2,
+    task_threads: int = 16,
+    evaluator_model: Optional[str] = None,
+    optimization_id: Optional[str] = None,
+    experiment_type: Optional[str] = None,
+    generate_report: bool = True,
+    report_output_path: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
+) -> "suite_types.TestSuiteResult":
     """
-    Run evaluation on a dataset configured as an evaluation suite.
+    Internal function that runs the full test suite evaluation pipeline:
+    task validation, evaluation, report generation, and result display.
 
-    This function is designed for evaluation suites where evaluators and execution
-    policies are stored in the dataset itself. Unlike the general `evaluate` function,
-    this function:
-    - Does not accept scoring_metrics (they come from the dataset)
-    - Does not accept trial_count (it comes from the dataset's execution_policy)
-    - Does not accept dataset_sampler or nb_samples (suites evaluate all items)
-
-    Returns:
-        EvaluationSuiteResult with pass/fail status for each item and the suite.
+    Used by both ``run_tests()`` and
+    ``TestSuite.__internal_api__run_optimization_suite__()``.
     """
+    from ..api_objects.dataset.test_suite.test_suite import validate_task_result
+    from ..api_objects.dataset.test_suite.report_processors import (
+        displayer,
+        file_writer,
+    )
+
+    import functools
+
     if client is None:
         client = opik_client.get_global_client()
+
+    if blueprint_id:
+        experiment_config = _merge_blueprint_into_config(
+            client,
+            blueprint_id,
+            experiment_config,
+        )
+
+    @functools.wraps(task)
+    def _validated_task(data: Dict[str, Any]) -> Any:
+        return validate_task_result(task(data), input_data=data)
 
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
@@ -357,9 +399,10 @@ def evaluate_suite(
 
     create_experiment_kwargs: Dict[str, Any] = dict(
         name=experiment_name,
-        dataset_name=dataset.name,
+        dataset_name=suite_dataset.name,
         experiment_config=experiment_config,
         prompts=prompts,
+        # TODO: OPIK-5795 - migrate DB value from 'evaluation_suite' to 'test_suite'
         evaluation_method="evaluation_suite",
         tags=experiment_tags,
         dataset_version_id=None,
@@ -376,16 +419,16 @@ def evaluate_suite(
     if verbose >= 1:
         experiment_url = url_helpers.get_experiment_url_by_id(
             experiment_id=experiment_.id,
-            dataset_id=dataset.id,
+            dataset_id=suite_dataset.id,
             url_override=client.config.url_override,
         )
         report.display_evaluation_in_progress(experiment_url)
 
-    eval_result, total_time = _evaluate_suite_task(
+    eval_result, total_time = _evaluate_test_suite_task(
         client=client,
         experiment=experiment_,
-        dataset=dataset,
-        task=task,
+        dataset=suite_dataset,
+        task=_validated_task,
         project_name=project_name,
         verbose=verbose,
         task_threads=task_threads,
@@ -395,10 +438,111 @@ def evaluate_suite(
         source=source,  # type: ignore[arg-type]
     )
 
-    return suite_result_constructor.build_suite_result(
+    suite_result = suite_result_constructor.build_suite_result(
         eval_result,
-        suite_name=dataset.name,
+        suite_name=suite_dataset.name,
         total_time=total_time,
+    )
+
+    report_path: Optional[str] = None
+    if generate_report:
+        try:
+            report_path = file_writer.save_report(
+                suite_result,
+                output_path=report_output_path,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning(
+                "Failed to save test suite report file.",
+                exc_info=True,
+            )
+
+    if verbose >= 1:
+        displayer.display_suite_results(
+            suite_result,
+            verbose=verbose,
+            report_path=report_path,
+        )
+
+    return suite_result
+
+
+def run_tests(
+    test_suite: Union[test_suite_module.TestSuite, test_suite_module.TestSuiteVersion],
+    task: LLMTask,
+    *,
+    experiment_name: Optional[str] = None,
+    experiment_name_prefix: Optional[str] = None,
+    experiment_config: Optional[Dict[str, Any]] = None,
+    prompts: Optional[List[base_prompt.BasePrompt]] = None,
+    experiment_tags: Optional[List[str]] = None,
+    verbose: int = 2,
+    worker_threads: int = 16,
+    model: Optional[str] = None,
+    generate_report: bool = True,
+    report_output_path: Optional[str] = None,
+    blueprint_id: Optional[str] = None,
+) -> "suite_types.TestSuiteResult":
+    """
+    Run a test suite against a task function.
+
+    Accepts either a :class:`TestSuite` (runs against the latest version) or
+    a :class:`TestSuiteVersion` (runs against a specific version snapshot).
+
+    The task function receives each test item's data dict and must return
+    either a dict (with ``"input"`` and ``"output"`` keys) or any other
+    value, which will be automatically wrapped as
+    ``{"input": <item data>, "output": <returned value>}``.
+
+    Args:
+        test_suite: The test suite or test suite version to run.
+        task: A callable that takes a dict and returns a result.
+        experiment_name: Optional explicit name for the experiment.
+        experiment_name_prefix: Optional prefix for auto-generated name.
+        experiment_config: Optional configuration dict for the experiment.
+        prompts: Optional list of Prompt objects to associate.
+        experiment_tags: Optional list of tags for the experiment.
+        verbose: Verbosity level. 0=silent, 1=summary, 2=detailed (default).
+        worker_threads: Number of threads for parallel task execution.
+        model: Optional model name for checking assertions.
+        generate_report: Whether to generate a JSON report file.
+        report_output_path: Optional file path for the report.
+
+    Returns:
+        TestSuiteResult with pass/fail status based on execution policy.
+
+    Example:
+        >>> import opik
+        >>> result = opik.run_tests(
+        ...     test_suite=suite,
+        ...     task=my_llm_function,
+        ...     experiment_name="v2-prompt-test",
+        ... )
+        >>> print(f"Pass rate: {result.pass_rate:.0%}")
+    """
+    suite_dataset: Union[dataset.Dataset, dataset.DatasetVersion]
+    if isinstance(test_suite, test_suite_module.TestSuiteVersion):
+        suite_dataset = test_suite._dataset_version
+    else:
+        suite_dataset = test_suite._dataset
+    client = suite_dataset.client
+
+    return __internal_api__run_test_suite__(
+        suite_dataset=suite_dataset,
+        task=task,
+        client=client,
+        experiment_name_prefix=experiment_name_prefix,
+        experiment_name=experiment_name,
+        project_name=test_suite.project_name,
+        experiment_config=experiment_config,
+        prompts=prompts,
+        experiment_tags=experiment_tags,
+        verbose=verbose,
+        task_threads=worker_threads,
+        evaluator_model=model,
+        generate_report=generate_report,
+        report_output_path=report_output_path,
+        blueprint_id=blueprint_id,
     )
 
 
@@ -502,11 +646,11 @@ def _evaluate_task(
     return evaluation_result_
 
 
-def _evaluate_suite_task(
+def _evaluate_test_suite_task(
     *,
     client: opik_client.Opik,
     experiment: experiment.Experiment,
-    dataset: dataset.Dataset,
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     project_name: Optional[str],
     verbose: int,
@@ -777,9 +921,7 @@ def _build_prompt_evaluation_task(
 
 
 def evaluate_prompt(
-    dataset: Union[
-        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
-    ],
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     messages: List[Dict[str, Any]],
     model: Optional[Union[str, base_model.OpikBaseModel]] = None,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
@@ -866,7 +1008,7 @@ def evaluate_prompt(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
-    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+    if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.dataset
 
@@ -1001,9 +1143,7 @@ def evaluate_prompt(
 
 def evaluate_optimization_trial(
     optimization_id: str,
-    dataset: Union[
-        dataset.Dataset, dataset.DatasetVersion, evaluation_suite.EvaluationSuite
-    ],
+    dataset: Union[dataset.Dataset, dataset.DatasetVersion],
     task: LLMTask,
     scoring_metrics: Optional[List[base_metric.BaseMetric]] = None,
     scoring_functions: Optional[List[scorer_function.ScorerFunction]] = None,
@@ -1108,7 +1248,7 @@ def evaluate_optimization_trial(
             - `data.category = "test"` - Items with specific data field value
             - `created_at >= "2024-01-01T00:00:00Z"` - Items created after date
     """
-    if isinstance(dataset, evaluation_suite.EvaluationSuite):
+    if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
         dataset = dataset.dataset
 

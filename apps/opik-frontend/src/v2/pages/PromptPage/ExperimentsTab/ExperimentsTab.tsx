@@ -78,10 +78,10 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "total_estimated_cost_avg",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
 ];
@@ -92,13 +92,13 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "prompt",
   COLUMN_DATASET_ID,
   "dataset_version",
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "duration.p90",
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   COLUMN_COMMENTS_ID,
@@ -207,7 +207,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Evaluation suite",
+        label: "Test suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -218,7 +218,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "dataset_version",
-        label: "Evaluation suite version",
+        label: "Test suite version",
         type: COLUMN_TYPE.string,
         iconType: "version" as const,
         accessorFn: (row: GroupedExperiment) =>

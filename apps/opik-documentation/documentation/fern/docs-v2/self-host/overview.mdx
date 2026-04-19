@@ -1,0 +1,91 @@
+---
+headline: Overview | Opik Documentation
+og:description: Explore how to self-host Opik on your infrastructure with full feature
+  access, including tracing and evaluation, without user management.
+og:site_name: Opik Documentation
+og:title: 'Self-Hosting Opik: Deployment Options and Features'
+subtitle: High-level overview on how to self-host Opik
+title: Overview
+---
+
+You can use Opik through [Comet's Managed Cloud offering](https://comet.com) or you can self-host Opik on your own infrastructure. When choosing to self-host Opik, you get access to all Opik features including tracing, evaluation, etc but without user management features.
+
+If you choose to self-host Opik, you can choose between two deployment options:
+
+1. [Local installation](/self-host/local_deployment): Perfect to get started but not production-ready.
+2. [Kubernetes installation](/self-host/kubernetes): Production ready Opik platform that runs on a Kubernetes cluster.
+
+## Getting started
+
+If you would like to try out Opik locally, we recommend using our Local installation
+script. Assuming you have `git` and `docker` installed, you can get started with
+just one line of code:
+
+<Tabs>
+ <Tab value="Linux / Mac" title="Linux / Mac">
+```bash
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
+
+# Navigate to the opik folder
+
+cd opik
+
+# Start the Opik platform
+
+./opik.sh
+
+```
+
+</Tab>
+<Tab value="Windows" title="Windows">
+
+```powershell
+# Clone the Opik repository
+git clone https://github.com/comet-ml/opik.git
+
+# Navigate to the opik folder
+cd opik
+
+# Start the Opik platform
+powershell -ExecutionPolicy ByPass -c ".\opik.ps1"
+```
+
+</Tab>
+</Tabs>
+
+Opik will now be available at
+
+<a href="http://localhost:5173" target="_blank">
+  http://localhost:5173
+</a>
+and all traces logged from your local machine will be logged to this local Opik instance. In order for traces and other data
+to be logged to your Opik instance, you need to make sure that the Opik Python SDK is configured to point to the Opik server
+you just started. You can do this by running the following command:
+
+```bash
+# Configure the Python SDK to point to the local Opik platform
+export OPIK_BASE_URL=http://localhost:5173/api
+```
+
+or in Python:
+
+```python
+import os
+
+os.environ["OPIK_BASE_URL"] = "http://localhost:5173/api"
+```
+
+To learn more about how to manage you local Opik deployment, you can refer to our [local deployment guide](/self-host/local_deployment).
+
+## SDK version compatibility
+
+For self-hosted deployments, we recommend keeping the Opik server and SDKs on the latest versions for best compatibility. The Python SDK (`opik`), TypeScript SDK (`opik`), and Opik Agent Optimizer SDK (`opik-optimizer`) are designed to work with the latest Opik server release. Older SDK versions may not support newer server features, and newer SDK versions may require a minimum server version. Check the [changelog](https://www.comet.com/docs/opik/changelog) for version-specific compatibility notes.
+
+## Advanced deployment options
+
+If you would like to deploy Opik on a Kubernetes cluster, we recommend following our Kubernetes deployment guide [here](/self-host/kubernetes).
+
+## Comet managed deployments
+
+The Opik platform is being developed and maintained by the Comet team. If you are looking for a managed deployment solution, feel free to reach out to the Comet team at sales@comet.com or visit the [Comet website](https://comet.com) to learn more.

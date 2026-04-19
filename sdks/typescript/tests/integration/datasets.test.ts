@@ -100,10 +100,56 @@ describe.skipIf(!shouldRunApiTests)("Dataset CRUD Integration Test", () => {
     );
     expect(itemsFound.length).toBe(2);
 
+    // DEDUP: Same data with different evaluators should not be deduplicated
+    const datasetForEvalInsert = await client.getDataset(testDatasetName);
+    await datasetForEvalInsert.insert([
+      {
+        input: "Hello",
+        output: "Hi",
+        evaluators: [
+          { name: "relevance", type: "llm_judge", config: { model: "gpt-4o" } },
+        ],
+      },
+    ]);
+
+    const itemsAfterEval = await searchAndWaitForDone(
+      async () => {
+        const fresh = await client.getDataset(testDatasetName);
+        return await fresh.getItems();
+      },
+      3,
+      10000,
+      1000
+    );
+    expect(itemsAfterEval.length).toBe(3);
+
+    // DEDUP: Exact duplicate (same data + same evaluators) should be deduplicated
+    const datasetForDupInsert = await client.getDataset(testDatasetName);
+    await datasetForDupInsert.insert([
+      {
+        input: "Hello",
+        output: "Hi",
+        evaluators: [
+          { name: "relevance", type: "llm_judge", config: { model: "gpt-4o" } },
+        ],
+      },
+    ]);
+
+    const itemsAfterDup = await searchAndWaitForDone(
+      async () => {
+        const fresh = await client.getDataset(testDatasetName);
+        return await fresh.getItems();
+      },
+      3,
+      10000,
+      1000
+    );
+    expect(itemsAfterDup.length).toBe(3);
+
     // UPDATE: Fetch dataset again and update an item
     const datasetForUpdate = await client.getDataset(testDatasetName);
     const items = await datasetForUpdate.getItems();
-    expect(items.length).toBe(2);
+    expect(items.length).toBe(3);
 
     const itemToUpdate = {
       id: items[0].id,

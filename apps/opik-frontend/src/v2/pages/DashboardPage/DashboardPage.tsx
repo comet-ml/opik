@@ -71,9 +71,9 @@ const DashboardPage: React.FunctionComponent = () => {
 
   return (
     <>
-      <div className="sticky top-0 z-10 -mx-6 flex items-center justify-between gap-4 bg-soft-background px-6 pb-3 pt-6">
+      <div className="sticky top-0 z-10 -mx-6 flex items-center justify-between gap-4 bg-soft-background px-6 pb-3 pt-4">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h1 className="comet-title-l truncate break-words">
+          <h1 className="comet-title-xs truncate break-words">
             {dashboard.name}
           </h1>
           {dashboard.description && (

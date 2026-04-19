@@ -7,7 +7,8 @@ import useProviderKeys from "@/api/provider-keys/useProviderKeys";
 import useAppStore from "@/store/AppStore";
 import ManageAIProviderDialog from "@/v2/pages-shared/llm/ManageAIProviderDialog/ManageAIProviderDialog";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
@@ -120,12 +121,6 @@ const AIProvidersTab = () => {
     setOpenDialog(true);
   };
 
-  const getNoDataLabel = () => {
-    if (search !== "") return "No search results";
-    if (!canUpdateAIProviders) return "No AI providers configured yet.";
-    return "Configure AI providers to use the playground and online scoring.";
-  };
-
   if (isPending) {
     return <Loader />;
   }
@@ -156,13 +151,23 @@ const AIProvidersTab = () => {
         data={filteredProviderKeys}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableNoData title={getNoDataLabel()}>
-            {search === "" && canUpdateAIProviders && (
-              <Button variant="link" onClick={handleAddConfigurationClick}>
-                Add configuration
-              </Button>
-            )}
-          </DataTableNoData>
+          search === "" ? (
+            <DataTableEmptyContent
+              title="No AI providers yet"
+              description="Configure AI providers to use the playground and online scoring."
+            >
+              {canUpdateAIProviders && (
+                <button
+                  onClick={handleAddConfigurationClick}
+                  className="comet-body-s underline underline-offset-4 hover:text-primary"
+                >
+                  Add configuration
+                </button>
+              )}
+            </DataTableEmptyContent>
+          ) : (
+            <DataTableNoMatchingData />
+          )
         }
       />
       {canUpdateAIProviders && (

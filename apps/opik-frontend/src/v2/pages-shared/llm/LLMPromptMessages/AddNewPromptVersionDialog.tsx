@@ -41,6 +41,7 @@ import {
 } from "@/types/prompts";
 import usePromptById from "@/api/prompts/usePromptById";
 import usePromptCreateMutation from "@/api/prompts/usePromptCreateMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 type SaveMode = "update" | "new";
@@ -85,6 +86,11 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
+
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
+
   const [promptId, setPromptId] = useState<string | undefined>(prompt?.id);
   const [saveMode, setSaveMode] = useState<SaveMode>(
     prompt?.id ? "update" : "new",
@@ -145,7 +151,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
   }, [isPending, selectedPrompt, providedMetadata]);
 
   const hasValidTemplate = template.length > 0;
-  const canSaveNewPrompt = !isEdit && name.length > 0;
+  const canSaveNewPrompt = !isEdit && name.length > 0 && canCreatePrompts;
   const canSaveExistingPrompt = isEdit && !isPending && Boolean(selectedPrompt);
 
   const isValid =
@@ -215,7 +221,7 @@ const AddNewPromptVersionDialog: React.FC<AddNewPromptVersionDialogProps> = ({
           <DialogTitle>Save to prompt library</DialogTitle>
         </DialogHeader>
         <DialogAutoScrollBody>
-          {prompt && (
+          {prompt && canCreatePrompts && (
             <div className="flex flex-col gap-2 pb-4">
               <ToggleGroup
                 type="single"

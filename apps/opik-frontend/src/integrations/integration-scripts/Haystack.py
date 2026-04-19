@@ -2,7 +2,7 @@ import os
 
 from opik import configure  # HIGHLIGHTED_LINE
 
-configure()  # HIGHLIGHTED_LINE
+configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 os.environ["HAYSTACK_CONTENT_TRACING_ENABLED"] = "true"  # HIGHLIGHTED_LINE
 

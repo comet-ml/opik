@@ -14,13 +14,14 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const activeProjectId = useActiveProjectId();
   const {
-    permissions: { canViewExperiments, canViewDatasets },
+    permissions: { canViewExperiments, canViewDatasets, canUsePlayground },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     projectId: activeProjectId,
     canViewExperiments,
     canViewDatasets,
+    canUsePlayground,
   });
 
   const renderItems = (items: MenuItem[]) => {

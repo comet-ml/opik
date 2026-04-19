@@ -1,0 +1,326 @@
+---
+headline: Agent Configuration | Opik Documentation
+og:description: Learn to utilize Opik's Agent Configuration for versioning, reusing, and
+  managing your prompts and agent parameters in Opik
+og:site_name: Opik Documentation
+og:title: Manage Prompts Effectively with Opik
+title: Getting started with Agent Configuration
+---
+
+Agents depend on prompts, model settings, and tool definitions that change frequently. Opik lets
+you manage all of these outside your codebase, update them without redeploying, and keep a full
+history of every change.
+
+<Frame>
+  <img src="/img/v2/agent-configuration/getting-started.png" alt="Agent Configuration page showing versioned prompts, model parameters, and environment labels" />
+</Frame>
+
+## Adding Agent Configuration to your code
+
+<Tabs>
+  <Tab title="AI Integration">
+    You can use the Opik skills to add support for Agent Configuration in your existing agent:
+
+    <Steps>
+      <Step title="Install the Opik skill">
+        ```bash
+        npx skills add comet-ml/opik-skills
+        ```
+
+        This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
+      </Step>
+      <Step title="Run the integration">
+        Once the skill is installed, you can integrate with Opik using the following prompt:
+        ```
+        Version my prompts and agent parameters in Opik using the /instrument:agent-configuration command.
+        ```
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Manual integration">
+    There are two parts: you **create** a configuration, and then you **fetch** it at runtime inside your agent.
+
+    ### Step 1 — Define and push your first configuration
+
+    Start by defining what your agent needs — model name, temperature, prompts, etc. — and push it to Opik. You only do this once (or whenever you want to create a new version from code).
+
+    <CodeBlocks>
+
+    ```python title="Python"
+    import opik
+
+    client = opik.Opik()
+
+    # Define your configuration schema with default values
+    class MyConfig(opik.Config):
+        model: str = "gpt-4o-mini"
+        temperature: float = 0.7
+        system_prompt: opik.Prompt = None
+
+    # Push the first version
+    client.create_config(
+        config=MyConfig(
+            model="gpt-4o-mini",
+            temperature=0.7,
+            system_prompt=opik.Prompt(
+                name="system_prompt",
+                prompt="You are a helpful assistant specializing in {{domain}}.",
+            ),
+        ),
+        project_name="my-agent",
+    )
+    ```
+
+    ```ts title="TypeScript"
+    import { Opik } from "opik";
+
+    const client = new Opik();
+
+    // Create a versioned prompt
+    const systemPrompt = await client.createPrompt({
+      name: "system_prompt",
+      prompt: "You are a helpful assistant specializing in {{domain}}.",
+    });
+
+    // Push the first version
+    await client.createConfig(
+      {
+        model: "gpt-4o-mini",
+        temperature: 0.7,
+        system_prompt: systemPrompt,
+      },
+      { projectName: "my-agent" },
+    );
+    ```
+    </CodeBlocks>
+
+    ### Step 2 — Fetch the configuration at runtime
+
+    Now use `get_or_create_config` / `getOrCreateConfig` inside your agent to pull the active configuration. The `fallback` gives your agent safe defaults to use if Opik is temporarily unreachable.
+
+    <CodeBlocks>
+      ```python title="Python"
+      import opik
+
+      client = opik.Opik()
+
+      class MyConfig(opik.Config):
+          model: str = "gpt-4o-mini"
+          temperature: float = 0.7
+          system_prompt: opik.Prompt = None
+
+      @opik.track(project_name="my-agent")
+      def run_agent(user_input: str):
+          cfg = client.get_or_create_config(
+              fallback=MyConfig(
+                  model="gpt-4o-mini",
+                  temperature=0.7,
+                  system_prompt=opik.Prompt(
+                      name="system_prompt",
+                      prompt="You are a helpful assistant.",
+                  ),
+              ),
+          )
+
+          # Use the config values in your agent
+          response = call_llm(
+              model=cfg.model,
+              temperature=cfg.temperature,
+              system_prompt=cfg.system_prompt.format(domain="customer support"),
+          )
+          return response
+      ```
+
+      ```ts title="TypeScript"
+      import { Opik, track } from "opik";
+
+      const client = new Opik();
+
+      const runAgent = track(
+        { name: "run_agent", projectName: "my-agent" },
+        async (userInput: string) => {
+          const cfg = await client.getOrCreateConfig({
+            fallback: {
+              model: "gpt-4o-mini",
+              temperature: 0.7,
+              system_prompt: "You are a helpful assistant.",
+            },
+          });
+
+          // Use the config values in your agent
+          const response = await callLlm({
+            model: cfg.model as string,
+            temperature: cfg.temperature as number,
+            systemPrompt: String(cfg.system_prompt),
+          });
+          return response;
+        },
+      );
+      ```
+    </CodeBlocks>
+
+    <Warning>
+      `get_or_create_config` / `getOrCreateConfig` **must** be called inside a tracked function
+      (`@opik.track` in Python, `track()` in TypeScript). We need this to link the configuration
+      version to the trace automatically.
+    </Warning>
+
+    <Tip>
+      When you don't pass `env` or `version`, the SDK defaults to the version labeled `prod`.
+      See [Managing versions](#managing-agent-configuration-versions) below for how to control this.
+    </Tip>
+  </Tab>
+</Tabs>
+
+## Managing Agent Configuration versions
+
+You can update your agent's behavior through the Opik platform without triggering a new code release. This works through **environment labels** and **version pinning**.
+
+By default the SDK fetches the version labeled `prod`, but you can control which version is fetched using two parameters:
+
+* **`env`** — Fetch by environment label:
+  * `"prod"` (default): The version labeled as production
+  * `"staging"`, `"canary"`, or any custom label you create in the Opik UI
+* **`version`** — Fetch by version name:
+  * `"latest"`: The most recently created version
+  * `"v3"` (or any version name): A specific pinned version
+
+<Note>
+  You can specify `env` **or** `version`, but not both. If neither is specified, the SDK defaults to `env="prod"`.
+</Note>
+
+Pass the parameter when fetching your config:
+
+<CodeBlocks>
+  ```python title="Python"
+  @opik.track(project_name="my-agent")
+  def run_agent(user_input: str):
+      # Fetch the staging version
+      cfg = client.get_or_create_config(
+          fallback=MyConfig(
+              model="gpt-4o-mini",
+              temperature=0.7,
+              system_prompt=opik.Prompt(
+                  name="system_prompt",
+                  prompt="You are a helpful assistant.",
+              ),
+          ),
+          env="staging",
+      )
+      # ...
+  ```
+
+  ```ts title="TypeScript"
+  const runAgent = track(
+    { name: "run_agent", projectName: "my-agent" },
+    async (userInput: string) => {
+      // Fetch the staging version
+      const cfg = await client.getOrCreateConfig({
+        fallback: {
+          model: "gpt-4o-mini",
+          temperature: 0.7,
+          system_prompt: "You are a helpful assistant.",
+        },
+        env: "staging",
+      });
+      // ...
+    },
+  );
+  ```
+</CodeBlocks>
+
+## Supported configuration parameter types
+
+You can version prompts, model settings, tool definitions, and any other parameter your agent relies on. Here are the supported types:
+
+### Prompts
+
+Use `opik.Prompt` to version text prompts. Prompts support variable substitution using `{{variable_name}}`
+syntax, allowing you to define templates that are filled in at runtime.
+
+<CodeBlocks>
+  ```python title="Python"
+  system_prompt=opik.Prompt(
+    name="system_prompt",
+    prompt="You are a helpful assistant specializing in {{domain}}."
+  )
+  ```
+
+  ```ts title="TypeScript"
+  const systemPrompt = await client.createPrompt({
+    name: "system_prompt",
+    prompt: "You are a helpful assistant specializing in {{domain}}.",
+  });
+  ```
+</CodeBlocks>
+
+### Chat Prompts
+
+Use `opik.ChatPrompt` to version a list of chat messages. This is preferred over `opik.Prompt` when your
+agent uses a multi-turn message format with system, user, and assistant roles.
+
+<CodeBlocks>
+  ```python title="Python"
+  chat_prompt=opik.ChatPrompt(
+    name="chat_prompt",
+    messages=[
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "{{user_query}}"},
+    ]
+  )
+  ```
+
+  ```ts title="TypeScript"
+  const chatPrompt = await client.createChatPrompt({
+    name: "chat_prompt",
+    messages: [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "{{user_query}}" },
+    ],
+  });
+  ```
+</CodeBlocks>
+
+### Strings
+
+Use strings to version model names, tool definitions, or any other text parameter.
+
+<CodeBlocks>
+  ```python title="Python"
+  class MyConfig(opik.Config):
+      model: str = "gpt-4o-mini"
+      tool_definition: str = "{}"
+  ```
+
+  ```ts title="TypeScript"
+  await client.createConfig(
+    {
+      model: "gpt-4o-mini",           // string field
+      tool_definition: "{}",           // string field
+    },
+    { projectName: "my-agent" }
+  );
+  ```
+</CodeBlocks>
+
+### Floats
+
+Use floats to version numeric parameters like LLM sampling settings or RAG retrieval thresholds.
+
+<CodeBlocks>
+  ```python title="Python"
+  class MyConfig(opik.Config):
+      temperature: float = 0.7
+      similarity_threshold: float = 0.8
+  ```
+
+  ```ts title="TypeScript"
+  await client.createConfig(
+    {
+      temperature: 0.7,               // float field
+      similarity_threshold: 0.8,       // float field
+    },
+    { projectName: "my-agent" }
+  );
+  ```
+</CodeBlocks>

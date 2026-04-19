@@ -5,7 +5,6 @@ import com.comet.opik.api.CreateDatasetItemsFromTracesRequest;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.EvaluatorItem;
-import com.comet.opik.api.EvaluatorType;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.ScoreSource;
@@ -387,7 +386,8 @@ class DatasetsResourceCreateFromTracesTest {
 
     static Stream<Arguments> evaluatorsWithExecutionPolicyProvider() {
         return Stream.of(
-                Arguments.of(new ExecutionPolicy(3, 2), "with execution policy"),
+                Arguments.of(ExecutionPolicy.builder().runsPerItem(3).passThreshold(2).build(),
+                        "with execution policy"),
                 Arguments.of(null, "without execution policy"));
     }
 
@@ -412,13 +412,7 @@ class DatasetsResourceCreateFromTracesTest {
 
         traceResourceClient.createTrace(trace, apiKey, workspaceName);
 
-        var evaluatorConfig = JsonUtils.getJsonNodeFromString(
-                "{\"version\":\"1\",\"name\":\"llm_judge\",\"schema\":[{\"name\":\"is_correct\",\"type\":\"BOOLEAN\",\"description\":\"is_correct\"}]}");
-        var evaluator = EvaluatorItem.builder()
-                .name("llm_judge")
-                .type(EvaluatorType.LLM_JUDGE)
-                .config(evaluatorConfig)
-                .build();
+        var evaluator = factory.manufacturePojo(EvaluatorItem.class);
 
         var request = CreateDatasetItemsFromTracesRequest.builder()
                 .traceIds(Set.of(trace.id()))
@@ -435,9 +429,7 @@ class DatasetsResourceCreateFromTracesTest {
 
         var item = actualEntity.content().getFirst();
         assertThat(item.source()).isEqualTo(DatasetItemSource.TRACE);
-        assertThat(item.evaluators()).hasSize(1);
-        assertThat(item.evaluators().getFirst().name()).isEqualTo("llm_judge");
-        assertThat(item.evaluators().getFirst().type()).isEqualTo(EvaluatorType.LLM_JUDGE);
+        assertThat(item.evaluators()).containsExactly(evaluator);
 
         assertThat(item.executionPolicy()).isEqualTo(executionPolicy);
     }

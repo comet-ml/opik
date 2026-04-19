@@ -468,9 +468,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     ei.trace_id,
                     JSONExtractUInt(ei.execution_policy, 'pass_threshold') AS item_pass_threshold,
                     JSONExtractUInt(ed.execution_policy, 'pass_threshold') AS suite_pass_threshold,
+                    countIf(ar.name != '') > 0 AS has_assertions,
                     if(
                         countIf(ar.name != '') = 0,
-                        1,
+                        0,
                         if(minIf(ar.value, ar.name != '') >= 1.0, 1, 0)
                     ) AS run_passed
                 FROM experiment_items_scope ei
@@ -481,6 +482,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ), items AS (
                 SELECT
                     dataset_item_id,
+                    max(has_assertions) AS has_assertions,
                     if(sum(run_passed) >=
                        if(item_pass_threshold > 0, item_pass_threshold,
                           if(suite_pass_threshold > 0, suite_pass_threshold, 1)),
@@ -490,9 +492,9 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             )
             SELECT
                 :experiment_id as experiment_id,
-                toDecimal64(if(count(*) = 0, 0, sum(item_passed) / count(*)), 9) AS pass_rate,
-                sum(item_passed) AS passed_count,
-                count(*) AS total_count
+                toDecimal64(ifNull(sumIf(item_passed, has_assertions) / nullIf(toFloat64(countIf(has_assertions)), 0), 0), 9) AS pass_rate,
+                sumIf(item_passed, has_assertions) AS passed_count,
+                countIf(has_assertions) AS total_count
             FROM items
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2275,7 +2277,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         Map<String, Double> usageAvg = row.get("usage_avg", Map.class);
 
         // pass_rate fields are non-nullable in experiment_aggregates (DEFAULT 0)
-        // Convert 0 defaults to null for non-evaluation-suite experiments
+        // Convert 0 defaults to null for non-test-suite experiments
         Long totalCount = row.get("total_count", Long.class);
         boolean hasPassRate = totalCount != null && totalCount > 0;
 

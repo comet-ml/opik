@@ -80,7 +80,7 @@ public interface DatasetService {
 
     List<Dataset> findByIds(Set<UUID> ids, String workspaceId);
 
-    Dataset findByName(DatasetIdentifier identifier, Visibility visibility);
+    Dataset findByNameDetailed(DatasetIdentifier identifier, Visibility visibility);
 
     Mono<Dataset> resolveDatasetByNameAsync(DatasetIdentifier identifier);
 
@@ -271,8 +271,7 @@ class DatasetServiceImpl implements DatasetService {
         String workspaceId = requestContext.get().getWorkspaceId();
         Visibility visibility = requestContext.get().getVisibility();
 
-        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId, visibility)))
-                .get(0);
+        return enrichDatasetWithAdditionalInformation(List.of(findById(id, workspaceId, visibility))).getFirst();
     }
 
     @Override
@@ -292,7 +291,7 @@ class DatasetServiceImpl implements DatasetService {
             var dao = handle.attach(DatasetDAO.class);
             dao.findById(id, workspaceId).ifPresentOrElse(
                     dataset -> verifyVisibility(dataset, visibility),
-                    // Dataset not found (e.g. deleted evaluation suite) — intentionally do not fail,
+                    // Dataset not found (e.g. deleted test suite) — intentionally do not fail,
                     // so callers can still retrieve experiment items after the dataset is gone.
                     () -> log.debug("Dataset '{}' not found in workspace '{}'; skipping visibility check", id,
                             workspaceId));
@@ -366,8 +365,7 @@ class DatasetServiceImpl implements DatasetService {
         return verifyVisibility(dataset, visibility);
     }
 
-    @Override
-    public Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+    private Dataset findByName(@NonNull DatasetIdentifier identifier, Visibility visibility) {
         var workspaceId = requestContext.get().getWorkspaceId();
         UUID projectId = null;
 
@@ -383,6 +381,11 @@ class DatasetServiceImpl implements DatasetService {
         }
 
         return verifyVisibility(dataset, visibility);
+    }
+
+    @Override
+    public Dataset findByNameDetailed(@NonNull DatasetIdentifier identifier, Visibility visibility) {
+        return enrichDatasetWithAdditionalInformation(List.of(findByName(identifier, visibility))).getFirst();
     }
 
     @Override

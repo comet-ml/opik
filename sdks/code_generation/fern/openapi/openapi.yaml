@@ -77,10 +77,10 @@ tags:
   description: Ollie pod state persistence
 - name: OpenTelemetry Ingestion
   description: Resource to ingest Traces and Spans via OpenTelemetry
-- name: Opik Connect
-  description: Pairing sessions for the `opik connect` CLI command
 - name: Optimizations
   description: Optimization resources
+- name: Pairing
+  description: Pairing sessions for the `opik connect` and `opik endpoint` CLI commands
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -3892,41 +3892,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/connections:
-    post:
-      tags:
-      - Runners
-      summary: Connect a local runner
-      description: Exchange a pairing code or API key for local runner credentials
-      operationId: connectRunner
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LocalRunnerConnectRequest"
-      responses:
-        "201":
-          description: Runner connected
-          headers:
-            Location:
-              description: URI of the runner
-              style: simple
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunnerConnectResponse"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/{runnerId}/bridge/commands:
     post:
       tags:
@@ -4006,35 +3971,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/pairs:
-    post:
+  /v1/private/local-runners/{runnerId}:
+    get:
       tags:
       - Runners
-      summary: Generate a pairing code
-      description: Generate a pairing code for a local runner in the current workspace
-      operationId: generatePairingCode
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LocalRunnerPairRequest"
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "201":
-          description: Pairing code generated
-          headers:
-            Location:
-              description: URI of the runner
-              style: simple
+        "200":
+          description: Runner details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerPairResponse"
+                $ref: "#/components/schemas/LocalRunner"
         "404":
           description: Not found
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Runners
+      summary: Disconnect local runner
+      description: "Disconnect a local runner, terminating its connection and failing\
+        \ any pending jobs"
+      operationId: disconnectRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
   /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}:
     get:
       tags:
@@ -4100,33 +4080,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LocalRunnerJob"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/{runnerId}:
-    get:
-      tags:
-      - Runners
-      summary: Get local runner
-      description: Get a single local runner with its registered agents
-      operationId: getRunner
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Runner details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunner"
         "404":
           description: Not found
           content:
@@ -4737,118 +4690,6 @@ paths:
           description: default response
           content:
             '*/*': {}
-  /v1/private/opik-connect/sessions/{sessionId}/activate:
-    post:
-      tags:
-      - Opik Connect
-      summary: Activate an opik-connect pairing session
-      description: Verify the activation HMAC and flip the runner row to CONNECTED
-      operationId: activateOpikConnectSession
-      parameters:
-      - name: sessionId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ActivateRequest"
-      responses:
-        "201":
-          description: Session activated
-          headers:
-            Location:
-              description: URI of the runner
-              style: simple
-        "403":
-          description: Invalid HMAC
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Session not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "409":
-          description: Session already activated
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "422":
-          description: Unprocessable entity
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "429":
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/opik-connect/sessions:
-    post:
-      tags:
-      - Opik Connect
-      summary: Create an opik-connect pairing session
-      description: Register a short-lived pairing session that a local daemon will
-        later activate via HMAC
-      operationId: createOpikConnectSession
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateSessionRequest"
-      responses:
-        "201":
-          description: Session created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CreateSessionResponse"
-        "400":
-          description: Bad request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Project not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "422":
-          description: Unprocessable entity
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "429":
-          description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/optimizations/studio/{id}/cancel:
     get:
       tags:
@@ -5057,6 +4898,118 @@ paths:
                 $ref: "#/components/schemas/OptimizationStudioLog"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/pairing/sessions/{sessionId}/activate:
+    post:
+      tags:
+      - Pairing
+      summary: Activate a pairing session
+      description: Verify the activation HMAC and flip the runner row to CONNECTED
+      operationId: activatePairingSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateRequest"
+      responses:
+        "201":
+          description: Session activated
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+        "403":
+          description: Invalid HMAC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Session already activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Feature disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/pairing/sessions:
+    post:
+      tags:
+      - Pairing
+      summary: Create a pairing session
+      description: Register a short-lived pairing session that a local daemon will
+        later activate via HMAC
+      operationId: createPairingSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateSessionResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Feature disabled
           content:
             application/json:
               schema:
@@ -8427,14 +8380,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8452,14 +8397,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:
@@ -8523,14 +8460,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8548,14 +8477,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     BlueprintPage_History:
       type: object
       properties:
@@ -12573,6 +12494,13 @@ components:
           type: string
           description: Custom prompt to use for generation instead of auto-generated
             one
+        max_completion_tokens:
+          minimum: 100
+          type: integer
+          description: "Maximum number of tokens for the LLM response. Required by\
+            \ Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults\
+            \ to 4000 for Anthropic models only."
+          format: int32
     DatasetExpansion_Write:
       required:
       - model
@@ -12608,6 +12536,13 @@ components:
           type: string
           description: Custom prompt to use for generation instead of auto-generated
             one
+        max_completion_tokens:
+          minimum: 100
+          type: integer
+          description: "Maximum number of tokens for the LLM response. Required by\
+            \ Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults\
+            \ to 4000 for Anthropic models only."
+          format: int32
     AssertionResult_Compare:
       type: object
       properties:
@@ -13699,8 +13634,8 @@ components:
           type: string
         value:
           type: number
-      description: Per-assertion average pass rates for evaluation suite experiments.
-        Null for regular experiments.
+      description: Per-assertion average pass rates for test suite experiments. Null
+        for regular experiments.
       readOnly: true
     Experiment:
       required:
@@ -13829,24 +13764,24 @@ components:
           $ref: "#/components/schemas/DatasetVersionSummary"
         pass_rate:
           type: number
-          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
-            for regular experiments.
+          description: Pass rate for test suite experiments (0.0-1.0). Null for regular
+            experiments.
           readOnly: true
         passed_count:
           type: integer
-          description: Number of items that passed for evaluation suite experiments.
-            Null for regular experiments.
+          description: Number of items that passed for test suite experiments. Null
+            for regular experiments.
           format: int64
           readOnly: true
         total_count:
           type: integer
-          description: Total number of items for evaluation suite experiments. Null
-            for regular experiments.
+          description: Total number of items for test suite experiments. Null for
+            regular experiments.
           format: int64
           readOnly: true
         assertion_scores:
           type: array
-          description: Per-assertion average pass rates for evaluation suite experiments.
+          description: Per-assertion average pass rates for test suite experiments.
             Null for regular experiments.
           readOnly: true
           items:
@@ -14704,8 +14639,8 @@ components:
           type: string
         value:
           type: number
-      description: Per-assertion average pass rates for evaluation suite experiments.
-        Null for regular experiments.
+      description: Per-assertion average pass rates for test suite experiments. Null
+        for regular experiments.
       readOnly: true
     Comment_Public:
       required:
@@ -14892,24 +14827,24 @@ components:
           $ref: "#/components/schemas/DatasetVersionSummary_Public"
         pass_rate:
           type: number
-          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
-            for regular experiments.
+          description: Pass rate for test suite experiments (0.0-1.0). Null for regular
+            experiments.
           readOnly: true
         passed_count:
           type: integer
-          description: Number of items that passed for evaluation suite experiments.
-            Null for regular experiments.
+          description: Number of items that passed for test suite experiments. Null
+            for regular experiments.
           format: int64
           readOnly: true
         total_count:
           type: integer
-          description: Total number of items for evaluation suite experiments. Null
-            for regular experiments.
+          description: Total number of items for test suite experiments. Null for
+            regular experiments.
           format: int64
           readOnly: true
         assertion_scores:
           type: array
-          description: Per-assertion average pass rates for evaluation suite experiments.
+          description: Per-assertion average pass rates for test suite experiments.
             Null for regular experiments.
           readOnly: true
           items:
@@ -16006,31 +15941,6 @@ components:
         text:
           minLength: 1
           type: string
-    LocalRunnerConnectResponse:
-      type: object
-      properties:
-        runner_id:
-          type: string
-          format: uuid
-        workspace_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-    LocalRunnerConnectRequest:
-      required:
-      - pairing_code
-      - runner_name
-      type: object
-      properties:
-        pairing_code:
-          minLength: 1
-          type: string
-        runner_name:
-          minLength: 1
-          type: string
     BridgeCommandSubmitResponse:
       type: object
       properties:
@@ -16092,25 +16002,6 @@ components:
           type: string
           format: uuid
         dataset_item_id:
-          type: string
-          format: uuid
-    LocalRunnerPairResponse:
-      type: object
-      properties:
-        pairing_code:
-          type: string
-        runner_id:
-          type: string
-          format: uuid
-        expires_in_seconds:
-          type: integer
-          format: int32
-    LocalRunnerPairRequest:
-      required:
-      - project_id
-      type: object
-      properties:
-        project_id:
           type: string
           format: uuid
     BridgeCommand:
@@ -16261,6 +16152,11 @@ components:
             type: string
         checklist:
           $ref: "#/components/schemas/JsonNode"
+        type:
+          type: string
+          enum:
+          - connect
+          - endpoint
     Param:
       required:
       - name
@@ -16507,47 +16403,6 @@ components:
       description: Response from Ollama connection test.
     ExportTraceServiceRequest:
       $ref: "#/components/schemas/JsonNode"
-    ActivateRequest:
-      required:
-      - hmac
-      - runner_name
-      type: object
-      properties:
-        runner_name:
-          maxLength: 128
-          minLength: 0
-          type: string
-        hmac:
-          maxLength: 44
-          minLength: 43
-          type: string
-    CreateSessionResponse:
-      type: object
-      properties:
-        session_id:
-          type: string
-          format: uuid
-        runner_id:
-          type: string
-          format: uuid
-    CreateSessionRequest:
-      required:
-      - activation_key
-      - project_id
-      type: object
-      properties:
-        project_id:
-          type: string
-          format: uuid
-        activation_key:
-          maxLength: 44
-          minLength: 43
-          type: string
-        ttl_seconds:
-          maximum: 600
-          minimum: 60
-          type: integer
-          format: int32
     Optimization:
       required:
       - dataset_name
@@ -17060,6 +16915,53 @@ components:
           - cancelled
           - initialized
           - error
+    ActivateRequest:
+      required:
+      - hmac
+      - runner_name
+      type: object
+      properties:
+        runner_name:
+          maxLength: 128
+          minLength: 0
+          type: string
+        hmac:
+          maxLength: 44
+          minLength: 43
+          type: string
+    CreateSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        runner_id:
+          type: string
+          format: uuid
+    CreateSessionRequest:
+      required:
+      - activation_key
+      - project_id
+      - type
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        activation_key:
+          maxLength: 44
+          minLength: 43
+          type: string
+        ttl_seconds:
+          maximum: 600
+          minimum: 60
+          type: integer
+          format: int32
+        type:
+          type: string
+          enum:
+          - connect
+          - endpoint
     PromptPage_Public:
       type: object
       properties:
@@ -17950,16 +17852,6 @@ components:
           enum:
           - text
           - chat
-        exclude_blueprint_update_for_projects:
-          uniqueItems: true
-          type: array
-          description: Optional set of project IDs to exclude from automatic blueprint
-            creation when this prompt version is committed.
-          items:
-            type: string
-            description: Optional set of project IDs to exclude from automatic blueprint
-              creation when this prompt version is committed.
-            format: uuid
         project_id:
           type: string
           description: Project ID. Takes precedence over project_name when both are

@@ -6,7 +6,7 @@ from unittest.mock import patch, MagicMock, Mock
 
 from opik.api_objects import opik_client
 from opik.api_objects.dataset import Dataset
-from opik.api_objects.dataset.evaluation_suite import EvaluationSuite
+from opik.api_objects.dataset.test_suite import TestSuite
 from opik.api_objects import prompt as prompt_module
 from opik.api_objects.prompt import client as prompt_client_module
 from opik.message_processing import messages
@@ -497,8 +497,8 @@ class TestOpikClientGetDataset:
         )
 
 
-class TestOpikClientCreateEvaluationSuite:
-    """Tests for Opik.create_evaluation_suite() method."""
+class TestOpikClientCreateTestSuite:
+    """Tests for Opik.create_test_suite() method."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -520,16 +520,16 @@ class TestOpikClientCreateEvaluationSuite:
         ):
             yield
 
-    def test_create_evaluation_suite__minimal__returns_suite(self):
-        """Verify create_evaluation_suite returns an EvaluationSuite with the given name."""
-        result = self.opik_client_.create_evaluation_suite(name="my-suite")
+    def test_create_test_suite__minimal__returns_suite(self):
+        """Verify create_test_suite returns a TestSuite with the given name."""
+        result = self.opik_client_.create_test_suite(name="my-suite")
 
-        assert isinstance(result, EvaluationSuite)
+        assert isinstance(result, TestSuite)
         assert result.name == "my-suite"
 
-    def test_create_evaluation_suite__no_project_name__uses_default_project(self):
-        """Verify create_evaluation_suite uses the client's default project when project_name is None."""
-        self.opik_client_.create_evaluation_suite(name="my-suite")
+    def test_create_test_suite__no_project_name__uses_default_project(self):
+        """Verify create_test_suite uses the client's default project when project_name is None."""
+        self.opik_client_.create_test_suite(name="my-suite")
 
         self.mock_create_dataset.assert_called_once()
         assert (
@@ -542,9 +542,9 @@ class TestOpikClientCreateEvaluationSuite:
             == "default-project"
         )
 
-    def test_create_evaluation_suite__explicit_project_name__uses_given_project(self):
-        """Verify create_evaluation_suite uses the provided project_name over the default."""
-        self.opik_client_.create_evaluation_suite(
+    def test_create_test_suite__explicit_project_name__uses_given_project(self):
+        """Verify create_test_suite uses the provided project_name over the default."""
+        self.opik_client_.create_test_suite(
             name="my-suite", project_name="custom-project"
         )
 
@@ -553,9 +553,9 @@ class TestOpikClientCreateEvaluationSuite:
             self.mock_get_by_identifier.call_args[1]["project_name"] == "custom-project"
         )
 
-    def test_create_evaluation_suite__with_description__passes_description_to_api(self):
-        """Verify create_evaluation_suite forwards the description to the REST layer."""
-        self.opik_client_.create_evaluation_suite(
+    def test_create_test_suite__with_description__passes_description_to_api(self):
+        """Verify create_test_suite forwards the description to the REST layer."""
+        self.opik_client_.create_test_suite(
             name="my-suite", description="A regression suite"
         )
 
@@ -563,19 +563,19 @@ class TestOpikClientCreateEvaluationSuite:
             self.mock_create_dataset.call_args[1]["description"] == "A regression suite"
         )
 
-    def test_create_evaluation_suite__with_tags__passes_tags_to_api(self):
-        """Verify create_evaluation_suite forwards tags to the REST layer."""
-        self.opik_client_.create_evaluation_suite(
+    def test_create_test_suite__with_tags__passes_tags_to_api(self):
+        """Verify create_test_suite forwards tags to the REST layer."""
+        self.opik_client_.create_test_suite(
             name="my-suite", tags=["smoke", "regression"]
         )
 
         assert self.mock_create_dataset.call_args[1]["tags"] == ["smoke", "regression"]
 
-    def test_create_evaluation_suite__with_assertions__resolves_evaluators(self):
+    def test_create_test_suite__with_assertions__resolves_evaluators(self):
         """Verify assertions are resolved into evaluators and forwarded via apply_dataset_item_changes."""
-        self.opik_client_.create_evaluation_suite(
+        self.opik_client_.create_test_suite(
             name="my-suite",
-            assertions=["Response is helpful", "No hallucinations"],
+            global_assertions=["Response is helpful", "No hallucinations"],
         )
 
         apply_request = self.mock_apply_changes.call_args[1]["request"]
@@ -584,18 +584,17 @@ class TestOpikClientCreateEvaluationSuite:
             len(apply_request["evaluators"]) == 1
         )  # single LLMJudge wrapping all assertions
 
-    def test_create_evaluation_suite__no_assertions__evaluators_not_in_request(self):
-        """Verify evaluators key is absent from the apply request when no assertions are provided."""
-        self.opik_client_.create_evaluation_suite(name="my-suite")
+    def test_create_test_suite__no_assertions__apply_changes_not_called(self):
+        """Verify apply_dataset_item_changes is not called when no assertions or policy are provided (OPIK-5815)."""
+        self.opik_client_.create_test_suite(name="my-suite")
 
-        apply_request = self.mock_apply_changes.call_args[1]["request"]
-        assert "evaluators" not in apply_request
+        self.mock_apply_changes.assert_not_called()
 
-    def test_create_evaluation_suite__with_execution_policy__passes_policy_to_api(self):
+    def test_create_test_suite__with_execution_policy__passes_policy_to_api(self):
         """Verify a valid execution policy is forwarded via apply_dataset_item_changes."""
         policy = {"runs_per_item": 3, "pass_threshold": 2}
-        self.opik_client_.create_evaluation_suite(
-            name="my-suite", execution_policy=policy
+        self.opik_client_.create_test_suite(
+            name="my-suite", global_execution_policy=policy
         )
 
         apply_request = self.mock_apply_changes.call_args[1]["request"]
@@ -604,14 +603,14 @@ class TestOpikClientCreateEvaluationSuite:
             "pass_threshold": 2,
         }
 
-    def test_create_evaluation_suite__invalid_execution_policy__raises_value_error(
+    def test_create_test_suite__invalid_execution_policy__raises_value_error(
         self,
     ):
         """Verify an invalid execution policy raises ValueError before any API call."""
         with pytest.raises(ValueError):
-            self.opik_client_.create_evaluation_suite(
+            self.opik_client_.create_test_suite(
                 name="my-suite",
-                execution_policy={"runs_per_item": 3},  # missing pass_threshold
+                global_execution_policy={"runs_per_item": 3},  # missing pass_threshold
             )
 
         self.mock_create_dataset.assert_not_called()
@@ -751,8 +750,8 @@ class TestOpikClientGetDatasets:
         assert len(result) == 3
 
 
-class TestOpikClientGetEvaluationSuite:
-    """Tests for Opik.get_evaluation_suite() method."""
+class TestOpikClientGetTestSuite:
+    """Tests for Opik.get_test_suite() method."""
 
     @pytest.fixture(autouse=True)
     def setup(self):
@@ -779,28 +778,25 @@ class TestOpikClientGetEvaluationSuite:
         ):
             yield
 
-    def test_get_evaluation_suite__returns_evaluation_suite(self):
-        """Verify get_evaluation_suite returns an EvaluationSuite with the correct name and dataset."""
-        result = self.opik_client_.get_evaluation_suite(name="my-suite")
+    def test_get_test_suite__returns_test_suite(self):
+        """Verify get_test_suite returns a TestSuite with the correct name."""
+        result = self.opik_client_.get_test_suite(name="my-suite")
 
-        assert isinstance(result, EvaluationSuite)
+        assert isinstance(result, TestSuite)
         assert result.name == "my-suite"
-        assert result.dataset is not None
 
-    def test_get_evaluation_suite__no_project_name__uses_default_project(self):
-        """Verify get_evaluation_suite passes the default project name to get_dataset_by_identifier."""
-        self.opik_client_.get_evaluation_suite(name="my-suite")
+    def test_get_test_suite__no_project_name__uses_default_project(self):
+        """Verify get_test_suite passes the default project name to get_dataset_by_identifier."""
+        self.opik_client_.get_test_suite(name="my-suite")
 
         self.mock_get_by_identifier.assert_called_once_with(
             dataset_name="my-suite",
             project_name="default-project",
         )
 
-    def test_get_evaluation_suite__explicit_project_name__uses_given_project(self):
-        """Verify get_evaluation_suite passes the explicit project_name to get_dataset_by_identifier."""
-        self.opik_client_.get_evaluation_suite(
-            name="my-suite", project_name="custom-project"
-        )
+    def test_get_test_suite__explicit_project_name__uses_given_project(self):
+        """Verify get_test_suite passes the explicit project_name to get_dataset_by_identifier."""
+        self.opik_client_.get_test_suite(name="my-suite", project_name="custom-project")
 
         self.mock_get_by_identifier.assert_called_once_with(
             dataset_name="my-suite",
@@ -960,8 +956,13 @@ class TestOpikClientCreateChatPrompt:
     def setup(self):
         self.opik_client_ = opik_client.Opik(project_name="default-project")
         self.messages = [{"role": "user", "content": "Hello"}]
+        self.mock_version = _make_chat_prompt_version()
 
-        with patch.object(prompt_module.ChatPrompt, "sync_with_backend"):
+        with patch.object(
+            prompt_client_module.PromptClient,
+            "create_prompt",
+            return_value=self.mock_version,
+        ) as self.mock_create:
             yield
 
     def test_create_chat_prompt__no_project_name__uses_default_project(self):

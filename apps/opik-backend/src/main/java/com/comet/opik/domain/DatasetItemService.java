@@ -280,11 +280,11 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     Map<String, JsonNode> filterDataForDatasetType(
             Map<String, JsonNode> data, DatasetType datasetType) {
-        if (datasetType != DatasetType.EVALUATION_SUITE) {
+        if (datasetType != DatasetType.TEST_SUITE) {
             return data;
         }
 
-        // For evaluation suites, use only the input value as top-level data
+        // For test suites, use only the input value as top-level data
         var inputNode = data.get("input");
         if (inputNode == null || inputNode.isNull()) {
             return Map.of();
@@ -1320,8 +1320,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             int page, int size, String workspaceId) {
         Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
 
-        // When the dataset no longer exists (e.g. evaluation suite deleted), version records are gone from MySQL.
-        // Use an empty string as a harmless placeholder: evaluation suite experiments always carry their own explicit
+        // When the dataset no longer exists (e.g. test suite deleted), version records are gone from MySQL.
+        // Use an empty string as a harmless placeholder: test suite experiments always carry their own explicit
         // dataset_version_id in ClickHouse, so the empty fallback is never used for matching, and assertion_results
         // are still returned correctly via the versioned query.
         String resolvedFallbackVersionId = fallbackVersionId.map(UUID::toString).orElseGet(() -> {

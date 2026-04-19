@@ -35,12 +35,12 @@ export interface ExperimentPublic {
     /** ID of the dataset version this experiment is linked to. If not provided at creation, experiment will be automatically linked to the latest version. */
     datasetVersionId?: string;
     datasetVersionSummary?: OpikApi.DatasetVersionSummaryPublic;
-    /** Pass rate for evaluation suite experiments (0.0-1.0). Null for regular experiments. */
+    /** Pass rate for test suite experiments (0.0-1.0). Null for regular experiments. */
     passRate?: number;
-    /** Number of items that passed for evaluation suite experiments. Null for regular experiments. */
+    /** Number of items that passed for test suite experiments. Null for regular experiments. */
     passedCount?: number;
-    /** Total number of items for evaluation suite experiments. Null for regular experiments. */
+    /** Total number of items for test suite experiments. Null for regular experiments. */
     totalCount?: number;
-    /** Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments. */
+    /** Per-assertion average pass rates for test suite experiments. Null for regular experiments. */
     assertionScores?: OpikApi.AssertionScoreAveragePublic[];
 }

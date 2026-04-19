@@ -12,13 +12,13 @@ By default, the Opik Python SDK batches create requests for traces and spans to 
 
 When batching is enabled, create requests are queued and sent to the server in batches. If you call `.end()` or `.update()` on a span or trace before its batched create request has been flushed, the update may arrive at the server first. Since the server has no record of that span or trace yet, the update is silently dropped and the data is lost.
 
-This only affects the low-level client API (`client.trace()`, `client.span()`, `client.update_trace()`, `client.update_span()`, `.end()`, `.update()`). The [`@track` decorator](/docs/opik/tracing/log-traces) and [`start_as_current_span` context manager](/docs/opik/tracing/log-traces) handle lifecycle automatically and are not affected.
+This only affects the low-level client API (`client.trace()`, `client.span()`, `client.update_trace()`, `client.update_span()`, `.end()`, `.update()`). The [`@track` decorator](/v1/tracing/log_traces) and [`start_as_current_span` context manager](/v1/tracing/log_traces) handle lifecycle automatically and are not affected.
 
 ## Recommended approaches
 
 ### Use decorators or context managers (recommended)
 
-The safest way to create and manage spans and traces is through the [`@track` decorator or `start_as_current_span` context manager](/docs/opik/tracing/log-traces). These handle the full lifecycle — creation, data capture, and finalization — in a single operation with no separate update step.
+The safest way to create and manage spans and traces is through the [`@track` decorator or `start_as_current_span` context manager](/v1/tracing/log_traces). These handle the full lifecycle — creation, data capture, and finalization — in a single operation with no separate update step.
 
 ```python
 import opik

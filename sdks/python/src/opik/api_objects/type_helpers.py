@@ -1,4 +1,3 @@
-import dataclasses
 import json
 import typing
 
@@ -151,30 +150,3 @@ def backend_value_to_python_value(
         return value
 
     raise TypeError(f"Unsupported type: {py_type}")
-
-
-def extract_dataclass_fields(
-    cls: type,
-) -> typing.List[typing.Tuple[str, typing.Any, typing.Optional[str]]]:
-    """Returns (field_name, field_type, description) for supported fields."""
-    if not dataclasses.is_dataclass(cls):
-        raise TypeError(f"{cls} is not a dataclass")
-
-    type_hints = typing.get_type_hints(cls, include_extras=True)
-    result = []
-    for f in dataclasses.fields(cls):
-        raw_hint = type_hints.get(f.name, f.type)
-        description: typing.Optional[str] = None
-        if typing.get_origin(raw_hint) is typing.Annotated:
-            args = typing.get_args(raw_hint)
-            py_type = args[0]
-            description = next((a for a in args[1:] if isinstance(a, str)), None)
-        else:
-            py_type = raw_hint
-        inner = unwrap_optional(py_type)
-        if inner is not None:
-            py_type = inner
-        if not is_supported_type(py_type):
-            continue
-        result.append((f.name, py_type, description))
-    return result

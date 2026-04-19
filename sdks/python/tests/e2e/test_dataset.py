@@ -357,3 +357,24 @@ def test_get_version_view__version_not_found__raises_exception(
     # Try to get a non-existent version
     with pytest.raises(opik.exceptions.DatasetVersionNotFound):
         dataset.get_version_view("v999")
+
+
+def test_dataset_items_count__returns_correct_count_after_insert(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that dataset_items_count returns the correct count after insert."""
+    dataset = opik_client.create_dataset(dataset_name, description="items_count test")
+
+    dataset.insert(
+        [
+            {"input": {"question": "What is 2+2?"}},
+            {"input": {"question": "What is 3+3?"}},
+            {"input": {"question": "What is 4+4?"}},
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: dataset.dataset_items_count == 3,
+        max_try_seconds=30,
+    )
+    assert success, f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"

@@ -22,6 +22,7 @@
 
     --muted-slate: 215 16%, 47%;
     --light-slate: 215 20% 65%;
+    --tree-line: 213 16% 88%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
     --breadcrumb-last: 216 20% 40%;
@@ -54,6 +55,7 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 32%;
+    --library-loaded: 78 75% 59%;
 
     /* Gray scale for utility classes */
     --gray-100: #f3f4f6;
@@ -97,8 +99,8 @@
     /* Trace thread colors */
     --thread-active: #ebf2f5;
     --thread-inactive: #e2effd;
-    --thread-icon-background: #dedefd;
-    --thread-icon-text: #1b1c7e;
+    --thread-icon-background: #3438d0;
+    --thread-icon-text: #ffffff;
     --message-input-background: #e7ecff;
 
     /* Action cards */
@@ -205,6 +207,28 @@
     --tag-lavender-bg: #e5e5fe;
     --tag-lavender-text: #3b3b8e;
 
+    /* Trace/span type colors */
+    --type-trace: #945fcf;
+    --type-trace-bg: #efe2fd80;
+    --type-thread: #3438d0;
+    --type-thread-bg: #e5e5fe80;
+    --type-span-general: #19a979;
+    --type-span-general-bg: #dafbf080;
+    --type-span-guardrail: #fb9341;
+    --type-span-guardrail-bg: #fee8d780;
+    --type-span-llm: #5899da;
+    --type-span-llm-bg: #e2effd80;
+    --type-span-tool: #bf399e;
+    --type-span-tool-bg: #fde2f680;
+    --type-span-system: #5899da;
+    --type-span-system-bg: #e2effd80;
+    --type-span-function: #bf399e;
+    --type-span-function-bg: #fde2f680;
+    --type-llm-user: #12a4b4;
+    --type-llm-user-bg: #cdf5f980;
+    --type-llm-assistant: #f4b400;
+    --type-llm-assistant-bg: #fef0c880;
+
     /* Separator light color */
     --separator-light: #f1f5f9;
 
@@ -250,6 +274,7 @@
 
     --muted-slate: 0, 0%, 64%;
     --light-slate: 0, 0%, 64%;
+    --tree-line: 0 0% 30%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
     --breadcrumb-last: 214, 32%, 91%;
@@ -283,6 +308,7 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 40%;
+    --library-loaded: 78 75% 65%;
 
     /* Gray scale for utility classes - Dark Mode */
     --gray-100: 217.2 32.6% 15%;
@@ -409,6 +435,28 @@
     --tag-blue-text: #6eabe7;
     --tag-lavender-bg: #2a2a3d;
     --tag-lavender-text: #a8a8e0;
+
+    /* Trace/span type colors - Dark Mode */
+    --type-trace: #945fcf;
+    --type-trace-bg: #2e293280;
+    --type-thread: #3438d0;
+    --type-thread-bg: #2a2a3d80;
+    --type-span-general: #19a979;
+    --type-span-general-bg: #29322f80;
+    --type-span-guardrail: #fb9341;
+    --type-span-guardrail-bg: #322d2980;
+    --type-span-llm: #5899da;
+    --type-span-llm-bg: #292e3280;
+    --type-span-tool: #bf399e;
+    --type-span-tool-bg: #2b222980;
+    --type-span-system: #5899da;
+    --type-span-system-bg: #292e3280;
+    --type-span-function: #bf399e;
+    --type-span-function-bg: #2b222980;
+    --type-llm-user: #12a4b4;
+    --type-llm-user-bg: #29323280;
+    --type-llm-assistant: #f4b400;
+    --type-llm-assistant-bg: #32302980;
 
     /* Separator light color - Dark Mode */
     --separator-light: #2a2a2a;

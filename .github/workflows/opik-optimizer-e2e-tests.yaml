@@ -8,6 +8,11 @@ on:
     pull_request:
         paths:
           - 'sdks/opik_optimizer/**'
+    push:
+        branches:
+          - 'main'
+        paths:
+          - 'sdks/opik_optimizer/**'
 
 permissions:
   contents: read
@@ -36,13 +41,7 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                python_version: [
-                  "3.10",
-                  "3.11",
-                  "3.12",
-                  "3.13",
-                  "3.14"
-                ]
+                python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
         steps:
         - name: Check out code

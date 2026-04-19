@@ -45,7 +45,7 @@ const LogsPage = () => {
         >
           <h1
             data-testid="traces-page-title"
-            className="comet-title-l truncate break-words"
+            className="comet-body-accented truncate break-words"
           >
             {projectName}
           </h1>
@@ -67,7 +67,9 @@ const LogsPage = () => {
             className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
             direction="horizontal"
           >
-            <div className="text-muted-slate">{project.description}</div>
+            <div className="comet-body-s text-muted-slate">
+              {project.description}
+            </div>
           </PageBodyStickyContainer>
         )}
         {needsDefaultResolution ? (
