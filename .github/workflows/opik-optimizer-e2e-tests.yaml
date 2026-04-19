@@ -115,6 +115,12 @@ jobs:
                 tests/**/*.log
               retention-days: 7
 
+        - name: Stop opik server
+          if: always()
+          run: |
+            cd ${{ github.workspace }}
+            ./opik.sh --stop
+
     dataset-source-check:
         name: Opik Optimizer Integration Smoke Tests
         runs-on: ubuntu-latest

@@ -64,76 +64,15 @@ jobs:
     name: "📢 Slack Notification"
     runs-on: ubuntu-latest
     needs: unit-tests
-    if: always() && needs.unit-tests.result == 'failure'
+    if: always() && needs.unit-tests.result == 'failure' && github.event_name != 'pull_request'
     steps:
-      - name: "🔍 Check Slack configuration"
-        id: check-slack
-        run: |
-          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::notice::SLACK_WEBHOOK_URL not configured - Slack notification will be skipped"
-          else
-            echo "configured=true" >> $GITHUB_OUTPUT
-          fi
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
 
-      - name: "📢 Send Slack notification"
-        if: steps.check-slack.outputs.configured == 'true'
+      - name: Send Slack failure notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          BRANCH="${{ github.ref_name }}"
-          COMMIT_SHA="${{ github.sha }}"
-          SHORT_SHA="${COMMIT_SHA:0:7}"
-          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TRIGGER="${{ github.event_name }}"
-          AUTHOR="${{ github.actor }}"
-
-          cat << EOF > payload.json
-          {
-            "attachments": [
-              {
-                "color": "danger",
-                "blocks": [
-                  {
-                    "type": "header",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "❌ Guardrails Backend Unit Tests Failed",
-                      "emoji": true
-                    }
-                  },
-                  {
-                    "type": "section",
-                    "fields": [
-                      {"type": "mrkdwn", "text": "*Branch:*\n\`$BRANCH\`"},
-                      {"type": "mrkdwn", "text": "*Trigger:*\n\`$TRIGGER\`"},
-                      {"type": "mrkdwn", "text": "*Author:*\n$AUTHOR"},
-                      {"type": "mrkdwn", "text": "*Commit:*\n<https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`>"}
-                    ]
-                  },
-                  {
-                    "type": "actions",
-                    "elements": [
-                      {
-                        "type": "button",
-                        "text": {"type": "plain_text", "text": "🔍 View Workflow", "emoji": true},
-                        "url": "$WORKFLOW_URL",
-                        "style": "primary"
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
-
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST -H 'Content-type: application/json' \
-            --data @payload.json "$SLACK_WEBHOOK_URL")
-
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Slack notification sent"
-          else
-            echo "⚠️ Slack notification failed with HTTP code: $HTTP_CODE"
-          fi
+        run: .github/scripts/notify-slack-test-failure.sh "Guardrails Backend Unit Tests"
