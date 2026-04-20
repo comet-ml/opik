@@ -19,7 +19,7 @@ This workflow will:
 ## Inputs
 
 - **Jira link (required)**: e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`
-- **Worktree (optional)**: Pass `worktree` to work in an isolated git worktree, or `no-worktree` to skip. If neither is specified, prompt the user when uncommitted changes are detected.
+- **Worktree (optional)**: Pass `worktree` to work in an isolated git worktree. Defaults to no worktree when the argument is omitted — the command never prompts about worktrees.
 
 ---
 
@@ -96,18 +96,12 @@ This workflow will:
 
 #### 6a. Worktree Decision
 
-If the `EnterWorktree` tool is not available (e.g., running in Cursor or another editor), skip steps 6a and 6b entirely and go straight to 6c (normal path).
+Worktree usage is strictly opt-in:
 
-Determine whether to use a git worktree for isolation:
+- **If `worktree` was passed as an argument**: Use a worktree (continue to 6b).
+- **Otherwise (default)**: Skip 6b and go straight to 6c (normal path). Do not prompt the user.
 
-- **If `worktree` was passed as an argument**: Use a worktree (skip prompt).
-- **If `no-worktree` was passed as an argument**: Do not use a worktree (skip prompt).
-- **If neither was passed**: Use the `AskUserQuestion` tool to prompt the user with clickable options:
-    - **question**: "Would you like to work in a worktree? Tip: pass `worktree` or `no-worktree` to skip this prompt. Learn more: https://code.claude.com/docs/en/common-workflows#run-parallel-claude-code-sessions-with-git-worktrees"
-    - **header**: "Worktree"
-    - **options**:
-      1. **Yes** — "Create a separate copy of the repo so your current branch stays untouched (Recommended)"
-      2. **No** — "Use normal stash/branch flow on the current repo"
+If the `EnterWorktree` tool is not available (e.g., running in Cursor or another editor) even when `worktree` was passed, fall back to 6c without prompting.
 
 #### 6b. Worktree Path (if using worktree)
 
