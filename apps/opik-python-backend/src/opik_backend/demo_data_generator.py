@@ -351,7 +351,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             # - other: likely API key not yet propagated on fresh signup, retry with backoff
             # We can't rely on implicit project creation via the SDK's batch trace endpoint because
             # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
-            max_retries = 5
+            max_retries = 6
             status_code = None
             for attempt in range(max_retries):
                 status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
@@ -360,7 +360,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 if attempt == max_retries - 1:
                     logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
                     return
-                time.sleep(0.5 * (2 ** attempt))
+                time.sleep(2 ** attempt)
 
             if status_code == 409:
                 logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
