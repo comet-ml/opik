@@ -49,7 +49,7 @@ def _load_real_opik() -> None:
     import opik  # noqa: F401,F811 — triggers the real init
 
 
-class _LazyOpikStub(types.ModuleType):
+class _FallbackModule(types.ModuleType):
     """Stub module that lazy-loads the real `opik` package on first use.
 
     Handles both fallback routes with one class:
@@ -79,7 +79,7 @@ class _LazyOpikStub(types.ModuleType):
 
 
 for _name in ["opik", "opik.evaluation", "opik.evaluation.metrics"]:
-    _stub = _LazyOpikStub(_name)
+    _stub = _FallbackModule(_name)
     _stub.__path__ = []  # type: ignore[attr-defined]
     sys.modules[_name] = _stub
     _stubs[_name] = _stub
