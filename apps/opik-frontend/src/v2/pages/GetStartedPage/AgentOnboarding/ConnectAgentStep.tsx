@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
 import { useUserApiKey } from "@/store/AppStore";
-import { useFeatureFlagVariantKey } from "posthog-js/react";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
