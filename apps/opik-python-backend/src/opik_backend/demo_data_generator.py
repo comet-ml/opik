@@ -9,6 +9,8 @@ import uuid
 import random
 
 import opik.rest_api
+from opik.rest_api.types.trace_write import TraceWrite
+from opik.rest_api.types.span_write import SpanWrite
 from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores
 from opentelemetry import trace
 from dataclasses import dataclass, field
@@ -166,23 +168,24 @@ def get_time_shift(context: DemoDataContext, trace_id):
         return time_shift
     return datetime.timedelta(0)
 
-def process_traces_with_time_shift(traces, context: DemoDataContext, client: opik.Opik):
+def process_traces_with_time_shift(traces, context: DemoDataContext, project_name: str):
     """
-    Process traces with proper time shifts and time-based UUIDs.
-    
+    Process traces with proper time shifts and time-based UUIDs, returning a list of
+    TraceWrite objects ready for a single synchronous POST /v1/private/traces/batch call.
+
     Shifts all trace timestamps to present time while preserving temporal relationships,
     and generates time-based UUIDs for consistent ordering.
-    
+
     Calculates time shift from the latest end_time across traces only
     to ensure all data is brought to present while preserving time distances.
-    
+
     Parameters:
     - traces: List of trace dictionaries to process
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging traces
-    
+    - project_name: Project name to attach to every TraceWrite
+
     Returns:
-    - datetime.timedelta: The time shift applied to all data (to be used for spans)
+    - tuple: (list[TraceWrite] ready to POST, datetime.timedelta time_shift applied)
     """
     # Calculate time shift from traces only to move latest trace end_time to now
     # This same shift will be applied to spans to preserve all time distances
@@ -194,6 +197,7 @@ def process_traces_with_time_shift(traces, context: DemoDataContext, client: opi
     # produce UUIDs that collide (or get silently deduplicated by the backend). Adding a
     # monotonic microsecond offset ensures each trace gets a distinct UUID7 prefix.
     ms_counter: dict = {}
+    trace_writes: list = []
 
     for idx, original_trace in enumerate(sorted(traces, key=lambda x: x["id"])):
         # Create a copy to avoid mutating the original demo_data
@@ -219,28 +223,34 @@ def process_traces_with_time_shift(traces, context: DemoDataContext, client: opi
         trace["end_time"] = shifted_end
         new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
         trace["id"] = new_id
-        # Remove fields that shouldn't be in the trace data
+        # Attach project_name directly so the TraceWrite targets the right project.
+        trace["project_name"] = project_name
+        # Remove fields that shouldn't be in the trace payload
         trace.pop("project_id", None)
         trace.pop("workspace_id", None)
         set_time_shift(context, new_id, time_shift)
-        client.trace(**trace)
-    
-    return time_shift
+        trace_writes.append(TraceWrite(**trace))
 
-def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, client: opik.Opik):
+    return trace_writes, time_shift
+
+def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, project_name: str):
     """
-    Process spans with the same time shift as their parent traces.
-    
+    Process spans with the same time shift as their parent traces, returning a list of
+    SpanWrite objects ready for a single synchronous POST /v1/private/spans/batch call.
+
     Spans use the time shift passed from trace processing to maintain relative timing.
-    
+
     First pass generates all time-based UUIDs and stores time shifts.
-    Second pass logs all spans with properly shifted times and parent_span_id mappings.
-    
+    Second pass builds all SpanWrite objects with properly shifted times and parent_span_id mappings.
+
     Parameters:
     - spans: List of span dictionaries to process
     - time_shift: The time shift to apply (from traces)
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging spans
+    - project_name: Project name to attach to every SpanWrite
+
+    Returns:
+    - list[SpanWrite]: Spans ready to POST
     """
     # First pass: Generate all time-based UUIDs and store time shifts for spans
     # This ensures all parent span IDs are mapped before we reference them
@@ -261,7 +271,8 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         # Store the time shift for use in second pass
         span_time_shifts[old_span_id] = (span["start_time"], span["end_time"], time_shift)
 
-    # Second pass: Log all spans with properly shifted times and parent_span_id mappings
+    # Second pass: build SpanWrite objects with properly shifted times and parent_span_id mappings
+    span_writes: list = []
     for original_span in sorted(spans, key=lambda x: x["id"]):
         # Create a copy to avoid mutating the original demo_data
         span = dict(original_span)
@@ -275,10 +286,14 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         if "parent_span_id" in span:
             new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
             span["parent_span_id"] = new_parent_span_id
-        # Remove fields that shouldn't be in the span data
+        # Attach project_name directly so the SpanWrite targets the right project.
+        span["project_name"] = project_name
+        # Remove fields that shouldn't be in the span payload
         span.pop("project_id", None)
         span.pop("workspace_id", None)
-        client.span(**span)
+        span_writes.append(SpanWrite(**span))
+
+    return span_writes
 
 def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
 
@@ -390,47 +405,23 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             logger.info("Creating %d threads, %d traces, %d spans for workspace %s",
                         len(threads), len(demo_traces), len(demo_spans), workspace_name)
 
-            time_shift = process_traces_with_time_shift(demo_traces, context, client)
-            process_spans_with_time_shift(demo_spans, time_shift, context, client)
-            flush_result = client.flush()
-            if not flush_result:
-                logger.error("Failed to flush demo traces for workspace %s project %s, aborting", workspace_name, project_name)
-                return
+            # Build the full TraceWrite / SpanWrite payloads up-front, then POST them
+            # synchronously via the REST client. This deliberately bypasses the SDK's
+            # batch queue because:
+            #   - batch queue silently swallows 401s via the unauthorized-message
+            #     registry (10s block), so client.flush() can return True even when
+            #     nothing landed on the backend;
+            #   - the raw REST call returns a real HTTP status and raises ApiError on
+            #     non-2xx, which propagates up to our outer except as a loud failure;
+            #   - no ClickHouse read is needed for verification, so we avoid false
+            #     positives from CH replica lag.
+            trace_writes, time_shift = process_traces_with_time_shift(demo_traces, context, project_name)
+            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
 
-            # Post-flush verification: confirm the server persisted every trace we sent.
-            # If the count or IDs don't match, log exactly which ones are missing — this
-            # is the diagnostic hook we need to track down silent data loss (SDK batch
-            # drops, backend dedup on colliding UUID7 prefixes, etc.).
-            original_to_new_id = {
-                orig: context.uuid_map[orig]
-                for orig in trace_ids
-                if orig in context.uuid_map
-            }
-            expected_new_ids = set(original_to_new_id.values())
-            try:
-                server_traces = client.search_traces(project_name=project_name)
-                saved_ids = {str(t.id) for t in server_traces}
-                logger.info("Server reports %d traces for project %s (expected %d)",
-                            len(server_traces), project_name, len(expected_new_ids))
-
-                missing_ids = expected_new_ids - saved_ids
-                extra_ids = saved_ids - expected_new_ids
-                if missing_ids:
-                    reverse_map = {v: k for k, v in original_to_new_id.items()}
-                    missing_with_original = {new_id: reverse_map.get(new_id, "?") for new_id in missing_ids}
-                    logger.warning(
-                        "%d traces missing from server for workspace %s (new_id -> original_id): %s",
-                        len(missing_ids), workspace_name, missing_with_original,
-                    )
-                else:
-                    logger.info("All %d expected traces are present on the server for workspace %s",
-                                len(expected_new_ids), workspace_name)
-                if extra_ids:
-                    logger.warning("%d unexpected trace IDs on server for workspace %s: %s",
-                                   len(extra_ids), workspace_name, extra_ids)
-            except Exception as verify_err:
-                logger.warning("Could not verify trace presence on server for workspace %s: %s",
-                               workspace_name, verify_err)
+            logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
+            client.rest_client.traces.create_traces(traces=trace_writes)
+            logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
+            client.rest_client.spans.create_spans(spans=span_writes)
 
             done = False
             max_attempts = 10
