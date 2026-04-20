@@ -10,6 +10,10 @@ on:
       - '**.md'
       - 'apps/opik-documentation/**'
 
+  pull_request:
+    paths:
+      - '.github/workflows/e2e_tests_post_merge.yml'
+
   workflow_dispatch:
     inputs:
       suite:
@@ -127,7 +131,7 @@ jobs:
         run: |
           echo "::group::Building Opik from branch: ${{ github.ref_name }}"
           cd ${{ github.workspace }}
-          TOGGLE_WELCOME_WIZARD_ENABLED="false" ./opik.sh --build
+          TOGGLE_WELCOME_WIZARD_ENABLED="false" TOGGLE_FORCE_WORKSPACE_VERSION="version_1" ./opik.sh --build
           echo "::endgroup::"
           echo "✅ Opik build complete"
 
