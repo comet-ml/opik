@@ -163,17 +163,29 @@ def _apply_key_mapping(
     }
 
 
+def _from_dicts(
+    item_dicts: List[Dict[str, Any]],
+    keys_mapping: Dict[str, str],
+    ignore_keys: List[str],
+) -> List[suite_types.TestSuiteItem]:
+    return [
+        _apply_key_mapping(d, keys_mapping, ignore_keys)  # type: ignore[misc]
+        for d in item_dicts
+    ]
+
+
 def from_json(
     value: str,
     keys_mapping: Dict[str, str],
     ignore_keys: List[str],
 ) -> List[suite_types.TestSuiteItem]:
     """Parse a JSON array string into a list of TestSuiteItem dicts."""
-    item_dicts: List[Dict[str, Any]] = json.loads(value)
-    return [
-        _apply_key_mapping(d, keys_mapping, ignore_keys)  # type: ignore[misc]
-        for d in item_dicts
-    ]
+    parsed = json.loads(value)
+    if not isinstance(parsed, list):
+        raise ValueError(
+            f"JSON input must be an array of objects, got {type(parsed).__name__}."
+        )
+    return _from_dicts(parsed, keys_mapping, ignore_keys)
 
 
 def from_pandas(
@@ -185,9 +197,9 @@ def from_pandas(
     helpers.raise_if_pandas_is_unavailable()
 
     items: List[suite_types.TestSuiteItem] = []
-    for _, row in dataframe.iterrows():
+    for record in dataframe.to_dict(orient="records"):
         mapped: Dict[str, Any] = {}
-        for key, value in row.items():
+        for key, value in record.items():
             if key in ignore_keys:
                 continue
             # pandas stores missing optional fields as float NaN
@@ -211,4 +223,4 @@ def from_jsonl_file(
             if line:
                 raw_items.append(json.loads(line))
 
-    return from_json(json.dumps(raw_items), keys_mapping, ignore_keys)
+    return _from_dicts(raw_items, keys_mapping, ignore_keys)

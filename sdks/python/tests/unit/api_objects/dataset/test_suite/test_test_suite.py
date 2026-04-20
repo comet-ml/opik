@@ -1013,6 +1013,11 @@ class TestImportExport:
         suite.insert_from_pandas(dataframe)
 
         mock_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted = mock_dataset.__internal_api__insert_items_as_dataclasses__.call_args[
+            0
+        ][0]
+        assert inserted[0].get_content()["question"] == "Hello"
+        assert inserted[0].evaluators is not None
 
     def test_insert_from_jsonl_file__delegates_to_converters_and_insert(self):
         mock_dataset = _create_mock_dataset()

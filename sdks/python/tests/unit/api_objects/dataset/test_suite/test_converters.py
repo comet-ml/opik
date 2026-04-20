@@ -6,6 +6,7 @@ import tempfile
 
 import pandas as pd
 import pandas.testing
+import pytest
 from unittest import mock
 
 from opik.api_objects.dataset import dataset_item
@@ -265,6 +266,13 @@ def test_from_json__with_ignore_keys():
     EXPECTED = [{"data": {"question": "Hello"}}]
 
     assert converters.from_json(json_str, {}, ["internal_note"]) == EXPECTED
+
+
+def test_from_json__non_array__raises_value_error():
+    json_str = json.dumps({"data": {"question": "Hello"}})
+
+    with pytest.raises(ValueError, match="must be an array"):
+        converters.from_json(json_str, {}, [])
 
 
 # ---------------------------------------------------------------------------
