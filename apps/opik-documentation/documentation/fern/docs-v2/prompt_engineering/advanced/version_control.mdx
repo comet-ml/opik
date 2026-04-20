@@ -18,11 +18,14 @@ You can create new versions from the Opik UI or from code using the SDK.
     To create a new version from the Opik platform:
 
     1. Navigate to the **Agent Configuration** page for your agent
-    2. Click **Create new version**
-    3. Update the configuration parameters (prompts, model settings, tool definitions, etc.)
-    4. Click **Save** to create the new version
+    2. Click **Edit configuration**
+    3. Update the existing configuration parameters (prompts, model settings, tool definitions, etc.)
+    4. Click **Save as new version** to create the new version
 
     The new version will be available immediately and can be assigned to an environment label.
+    <Note>
+    Update your code accordingly when adding or removing fields
+    </Note>
   </Tab>
   <Tab title="Python SDK">
     Use `create_config` to create a new version programmatically:
@@ -87,7 +90,7 @@ Once you have a version, you can tag it with an environment label to control whi
   <Tab title="Opik UI">
     1. Navigate to the **Agent Configuration** page for your agent
     2. Find the version you want to promote
-    3. Click the **environment label** dropdown and select or create a label (e.g., `prod`, `staging`)
+    3. Click the **Deploy to** dropdown and select or create a label (e.g., `prod`, `staging`)
   </Tab>
   <Tab title="Python SDK">
     Use `set_config_env` to assign an environment label to a specific version:
