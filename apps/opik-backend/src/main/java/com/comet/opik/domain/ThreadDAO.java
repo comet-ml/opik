@@ -116,11 +116,11 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
-                      AND id IN (SELECT id FROM traces_final_ids)
+                          AND id IN (SELECT id FROM traces_final_ids)
                       <else>
-                      <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                      <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                          <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                       <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -143,13 +143,13 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
                   <if(traces_final_ids)>
-                  AND trace_id IN (SELECT id FROM traces_final_ids)
+                      AND trace_id IN (SELECT id FROM traces_final_ids)
                   <else>
-                  <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
                   <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY (workspace_id, project_id, trace_id, parent_span_id, id)
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -177,9 +177,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
-                <if(traces_final_ids)>
-                AND thread_id IN (SELECT thread_id FROM traces_final_ids)
-                <endif>
+                    <if(traces_final_ids)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <endif>
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -464,11 +464,11 @@ class ThreadDAOImpl implements ThreadDAO {
                       AND project_id = :project_id
                       AND thread_id \\<> ''
                       <if(traces_final_ids)>
-                      AND id IN (SELECT id FROM traces_final_ids)
+                          AND id IN (SELECT id FROM traces_final_ids)
                       <else>
-                      <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                      <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                      <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                          <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                       <endif>
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
@@ -476,36 +476,6 @@ class ThreadDAOImpl implements ThreadDAO {
                 WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-            ), spans_deduped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    trace_id,
-                    parent_span_id,
-                    id,
-                    last_updated_at,
-                    usage,
-                    total_estimated_cost,
-                    provider
-                FROM spans
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  <if(traces_final_ids)>
-                  AND trace_id IN (SELECT id FROM traces_final_ids)
-                  <else>
-                  <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
-                  <endif>
-                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY (workspace_id, project_id, trace_id, parent_span_id, id)
-            ), spans_agg AS (
-                SELECT
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans_deduped
-                GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -525,9 +495,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
-                <if(traces_final_ids)>
-                AND thread_id IN (SELECT thread_id FROM traces_final_ids)
-                <endif>
+                    <if(traces_final_ids)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <endif>
                 <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY (workspace_id, project_id, thread_id, id)
@@ -604,27 +574,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
                     arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
                 FROM feedback_scores_grouped
-            ), feedback_scores_agg AS (
-                SELECT
-                    entity_id,
-                    mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
-                    ) AS feedback_scores,
-                    groupArray(tuple(
-                        name,
-                        category_name,
-                        value,
-                        reason,
-                        source,
-                        value_by_author,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
-                    )) AS feedback_scores_list
-                FROM feedback_scores_final
-                GROUP BY workspace_id, project_id, entity_id
             ), thread_annotation_queue_ids AS (
                  SELECT thread_id,
                         groupArray(id) AS annotation_queue_ids
@@ -665,17 +614,13 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.first_message as first_message,
                     t.last_message as last_message,
                     t.number_of_messages as number_of_messages,
-                    t.total_estimated_cost as total_estimated_cost,
-                    t.usage as usage,
                     if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
                     if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
                     if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
                     if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                     if(tt.status = 'unknown', 'active', tt.status) as status,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
-                    tt.tags as tags,
-                    fsagg.feedback_scores_list as feedback_scores_list,
-                    fsagg.feedback_scores as feedback_scores
+                    tt.tags as tags
                 FROM (
                     SELECT
                         t.thread_id as id,
@@ -690,21 +635,17 @@ class ThreadDAOImpl implements ThreadDAO {
                         argMin(t.input, t.start_time) as first_message,
                         argMax(t.output, t.end_time) as last_message,
                         count(DISTINCT t.id) * 2 as number_of_messages,
-                        sum(s.total_estimated_cost) as total_estimated_cost,
-                        sumMap(s.usage) as usage,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
                         min(t.created_at) as created_at
                     FROM traces_final AS t
-                        LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
                 <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
-                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
                 <if(annotation_queue_filters)>
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>

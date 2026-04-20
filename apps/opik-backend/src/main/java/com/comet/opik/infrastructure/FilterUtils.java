@@ -183,6 +183,10 @@ public class FilterUtils {
                 .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
     }
 
+    // EQUAL only: the pushdown SQL template is hardcoded to `thread_id = :thread_id_pushdown`,
+    // and EQUAL is the only operator that unlocks `idx_traces_thread_id_bf` (CONTAINS / STARTS_WITH
+    // / ENDS_WITH don't benefit from the bloom filter). Other operators keep using the outer
+    // `<trace_thread_filters>` path unchanged.
     private static Optional<? extends Filter> findTraceThreadIdPushdownFilter(List<? extends Filter> filters) {
         return filters.stream()
                 .filter(f -> f.field() == TraceThreadField.ID && f.operator() == Operator.EQUAL)
