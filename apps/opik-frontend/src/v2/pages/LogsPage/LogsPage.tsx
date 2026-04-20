@@ -44,10 +44,10 @@ const LogsPage = () => {
           direction="horizontal"
         >
           <h1
-            data-testid="traces-page-title"
+            data-testid="logs-page-title"
             className="comet-body-accented truncate break-words"
           >
-            {projectName}
+            Logs
           </h1>
           {isGuardrailsEnabled && (
             <div className="flex shrink-0 items-center gap-2">
@@ -62,16 +62,6 @@ const LogsPage = () => {
             </div>
           )}
         </PageBodyStickyContainer>
-        {project?.description && (
-          <PageBodyStickyContainer
-            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
-            direction="horizontal"
-          >
-            <div className="comet-body-s text-muted-slate">
-              {project.description}
-            </div>
-          </PageBodyStickyContainer>
-        )}
         {needsDefaultResolution ? (
           <Loader />
         ) : (
