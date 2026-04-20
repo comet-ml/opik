@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { AxiosError } from "axios";
+import axios, { AxiosError } from "axios";
 
 import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/tags";
@@ -15,6 +15,8 @@ const useQueryErrorToast = ({ isError, error }: UseQueryErrorToastParams) => {
 
   useEffect(() => {
     if (isError && error && !shownRef.current) {
+      if (axios.isCancel(error)) return;
+
       const status = (error as AxiosError)?.response?.status ?? 0;
       if (status >= 500 || status === 0) {
         shownRef.current = true;
