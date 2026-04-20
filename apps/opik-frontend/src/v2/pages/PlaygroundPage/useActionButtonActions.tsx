@@ -349,16 +349,18 @@ const useActionButtonActions = ({
             queryKey: [COMPARE_EXPERIMENTS_KEY],
           });
           setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
-        } catch {
+        } catch (error) {
           finishPollScope(scope);
           if (!isScoped) {
             resetProgress();
           }
-          toast({
-            title: "Error",
-            description: "Failed to poll assertion evaluation status",
-            variant: "destructive",
-          });
+          if ((error as Error)?.name !== "AbortError") {
+            toast({
+              title: "Error",
+              description: "Failed to poll assertion evaluation status",
+              variant: "destructive",
+            });
+          }
         }
       };
 
@@ -450,13 +452,15 @@ const useActionButtonActions = ({
 
           queryClient.invalidateQueries({ queryKey: ["experiments"] });
           setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
-        } catch {
+        } catch (error) {
           finishPollScope(scope);
-          toast({
-            title: "Error",
-            description: "Failed to poll experiment completion status",
-            variant: "destructive",
-          });
+          if ((error as Error)?.name !== "AbortError") {
+            toast({
+              title: "Error",
+              description: "Failed to poll experiment completion status",
+              variant: "destructive",
+            });
+          }
         }
       };
 
@@ -658,6 +662,10 @@ const useActionButtonActions = ({
         const experiment = response.experiments[0];
         if (!experiment) {
           setPromptRunning(promptId, false);
+          return;
+        }
+
+        if (!usePlaygroundStore.getState().isRunningMap[promptId]) {
           return;
         }
 
