@@ -153,6 +153,7 @@ class BiEventListenerTest {
         mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
         cacheManager.evict(Metadata.FIRST_TRACE_CREATED.getValue(), false).block();
+        cacheManager.evict(BiEventListener.firstTraceCreatedKey(workspaceId), false).block();
 
         var trace = factory.manufacturePojo(Trace.class);
         traceResourceClient.createTrace(trace, apiKey, workspaceName);

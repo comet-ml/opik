@@ -457,6 +457,9 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment: ${OPIK_ANALYTICS_ENVIRONMENT:-}
+  # Default: 30d
+  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
+  firstTraceCreatedDedupTtl: ${OPIK_ANALYTICS_FIRST_TRACE_CREATED_DEDUP_TTL:-30d}
 
 # Configuration for anonymous usage reporting
 usageReport:

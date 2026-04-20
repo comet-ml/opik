@@ -33,8 +33,8 @@ import java.util.Map;
  * <p><strong>Current limitations:</strong>
  * <ul>
  *   <li>Identity fallback ({@code usageReportService.getAnonymousId()}) performs a synchronous
- *       DB read. This only fires when there is no request scope and no explicit identity — not
- *       reachable from current request-scoped callers.</li>
+ *       DB read on the first call only — the anonymous ID is immutable and cached in memory
+ *       after that. Not reachable from current request-scoped callers.</li>
  *   <li>Requires {@code usageReport.enabled=true} at the transport level ({@link StatsClient}),
  *       in addition to {@code analytics.enabled=true}, for events to actually be sent.</li>
  * </ul>
@@ -70,6 +70,8 @@ class AnalyticsServiceImpl implements AnalyticsService {
     private final @NonNull UsageReportService usageReportService;
     private final @NonNull StatsClient statsClient;
     private final @NonNull Provider<RequestContext> requestContext;
+
+    private volatile String cachedAnonymousId;
 
     @Override
     public void trackEvent(String eventType, Map<String, String> properties) {
@@ -118,6 +120,13 @@ class AnalyticsServiceImpl implements AnalyticsService {
         } catch (ProvisionException e) {
             log.debug("No request scope available, falling back to installation anonymous ID");
         }
-        return usageReportService.getAnonymousId().orElse("unknown");
+        return getAnonymousId();
+    }
+
+    private String getAnonymousId() {
+        if (cachedAnonymousId == null) {
+            cachedAnonymousId = usageReportService.getAnonymousId().orElse("unknown");
+        }
+        return cachedAnonymousId;
     }
 }
