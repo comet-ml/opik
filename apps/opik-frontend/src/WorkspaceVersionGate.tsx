@@ -17,11 +17,14 @@
  *   1. Workspace is now fully resolved (auth, access, header set)
  *   2. Fetch version via React Query (reuses existing providers)
  *   3. Write the resolved version to the localStorage cache
- *   4. If it disagrees with what the gate picked → update the store so this
- *      gate re-renders and Suspense lazy-swaps V1App ↔ V2App in place.
+ *   4. If it disagrees with what the gate picked → hard reload so the next
+ *      module load picks the correct App synchronously from the cache.
  *
- * The gate's guess is optimistic; the Resolver self-corrects with an
- * in-place subtree swap — no page reload, no Loader flash on first paint.
+ * Reload is required because each App instantiates its own TanStack Router
+ * at module scope. Swapping apps in place leaves the inactive router's URL
+ * state stale and causes the two WorkspacePreloaders to disagree on the
+ * active workspace. A full reload re-evaluates modules with the current
+ * browser URL and resets both routers to a consistent initial state.
  */
 import React, { Suspense } from "react";
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
