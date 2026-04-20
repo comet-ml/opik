@@ -1,5 +1,5 @@
 import React from "react";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ChevronsRight, Loader2 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
 import { Button } from "@/ui/button";
@@ -13,11 +13,13 @@ const ShowDemoProjectButton: React.FC = () => {
   if (!demoProject) {
     return (
       <Button
+        variant="link"
         disabled
+        className="comet-body-s ml-auto px-0 text-muted-slate"
         id="onboarding-step2-show-demo"
         data-fs-element="onboarding-step2-show-demo"
       >
-        <Loader2 className="mr-2 size-4 animate-spin" />
+        <Loader2 className="mr-1.5 size-3.5 animate-spin" />
         Generating demo data…
       </Button>
     );
@@ -25,7 +27,9 @@ const ShowDemoProjectButton: React.FC = () => {
 
   return (
     <Button
+      variant="link"
       asChild
+      className="comet-body-s ml-auto px-0 text-muted-slate"
       id="onboarding-step2-show-demo"
       data-fs-element="onboarding-step2-show-demo"
     >
@@ -37,7 +41,7 @@ const ShowDemoProjectButton: React.FC = () => {
         }}
       >
         Show me a demo project
-        <ArrowRight className="ml-1 size-3.5" />
+        <ChevronsRight className="size-3.5" />
       </Link>
     </Button>
   );
