@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ArrowRight, ArrowUpRight, Loader2, Save } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Save } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -14,6 +14,7 @@ import useConfigHistoryListInfinite from "@/api/agent-configs/useConfigHistoryLi
 import useAgentConfigCreateMutation from "@/api/agent-configs/useAgentConfigCreateMutation";
 import { LocalRunner } from "@/types/agent-sandbox";
 import AgentRunnerInputForm from "./AgentRunnerInputForm";
+import AgentRunnerLoading from "./AgentRunnerLoading";
 import AgentConfigurationEditView, {
   AgentConfigurationEditViewHandle,
   AgentConfigurationEditViewState,
@@ -200,10 +201,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
               isRunning={isRunning}
             />
           ) : (
-            <div className="flex flex-col items-center gap-2 py-8 text-muted-slate">
-              <Loader2 className="size-5 animate-spin text-primary" />
-              <p className="comet-body-s">Loading agent...</p>
-            </div>
+            <AgentRunnerLoading runnerId={runner.id} />
           )}
         </TabsContent>
 
