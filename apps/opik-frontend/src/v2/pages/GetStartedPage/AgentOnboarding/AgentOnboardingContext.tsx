@@ -11,6 +11,9 @@ import { useActiveWorkspaceName } from "@/store/AppStore";
 
 export const AGENT_ONBOARDING_KEY = "agent-onboarding";
 
+export const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
+  "onboarding-integrations-3-options";
+
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
 export const AGENT_ONBOARDING_STEPS = {
