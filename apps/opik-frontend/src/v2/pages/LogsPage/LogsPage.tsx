@@ -43,12 +43,7 @@ const LogsPage = () => {
           className="mb-4 mt-6 flex items-center justify-between"
           direction="horizontal"
         >
-          <h1
-            data-testid="traces-page-title"
-            className="comet-body-accented truncate break-words"
-          >
-            {projectName}
-          </h1>
+          <h1 className="comet-body-accented truncate break-words">Logs</h1>
           {isGuardrailsEnabled && (
             <div className="flex shrink-0 items-center gap-2">
               <Button
@@ -62,16 +57,6 @@ const LogsPage = () => {
             </div>
           )}
         </PageBodyStickyContainer>
-        {project?.description && (
-          <PageBodyStickyContainer
-            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
-            direction="horizontal"
-          >
-            <div className="comet-body-s text-muted-slate">
-              {project.description}
-            </div>
-          </PageBodyStickyContainer>
-        )}
         {needsDefaultResolution ? (
           <Loader />
         ) : (
