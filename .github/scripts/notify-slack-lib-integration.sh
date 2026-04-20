@@ -31,8 +31,7 @@ SUCCESS_COUNT=0
 FAILURE_COUNT=0
 SKIPPED_COUNT=0
 
-for name in $(echo "$SUITE_RESULTS" | jq -r 'keys[]'); do
-  result=$(echo "$SUITE_RESULTS" | jq -r --arg k "$name" '.[$k]')
+while IFS=$'\t' read -r name result; do
   case "$result" in
     success)
       [ -n "$SUCCESS_SUITES" ] && SUCCESS_SUITES="${SUCCESS_SUITES}, "
@@ -50,7 +49,7 @@ for name in $(echo "$SUITE_RESULTS" | jq -r 'keys[]'); do
       SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
       ;;
   esac
-done
+done < <(echo "$SUITE_RESULTS" | jq -r 'to_entries[] | "\(.key)\t\(.value)"')
 
 if [ "$FAILURE_COUNT" -gt 0 ]; then
   COLOR="danger"
