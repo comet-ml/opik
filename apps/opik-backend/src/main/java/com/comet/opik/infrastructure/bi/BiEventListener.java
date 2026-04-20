@@ -72,7 +72,7 @@ public class BiEventListener {
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
-        if (!config.getUsageReport().isEnabled()) {
+        if (!config.getUsageReport().isEnabled() && !config.getAnalytics().isEnabled()) {
             return;
         }
 
@@ -87,7 +87,9 @@ public class BiEventListener {
             return;
         }
 
-        checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
+        if (config.getUsageReport().isEnabled()) {
+            checkIfItIsFirstTraceAndReport(event.workspaceId(), event, projectIds);
+        }
 
         trackFirstTraceViaAnalytics(event.workspaceId(), event);
     }
