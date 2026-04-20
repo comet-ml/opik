@@ -18,11 +18,11 @@ export const AGENT_ONBOARDING_STEPS = {
   DONE: "done",
 } as const;
 
-type AgentOnboardingStep =
+export type AgentOnboardingStep =
   | null
   | (typeof AGENT_ONBOARDING_STEPS)[keyof typeof AGENT_ONBOARDING_STEPS];
 
-interface AgentOnboardingState {
+export interface AgentOnboardingState {
   step: AgentOnboardingStep;
   agentName: string;
   traceId?: string;
