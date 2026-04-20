@@ -365,15 +365,15 @@ public class SpansResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Assertion results batch for spans, size {} on workspaceId '{}'", batch.assertionResults().size(),
-                workspaceId);
+        log.info("Assertion results batch for spans, size '{}' on workspaceId '{}'",
+                batch.assertionResults().size(), workspaceId);
 
         assertionResultService.saveBatchOfSpans(batch.assertionResults())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
-        log.info("Saved assertion results batch for spans, size {} on workspaceId '{}'",
+        log.info("Saved assertion results batch for spans, size '{}' on workspaceId '{}'",
                 batch.assertionResults().size(), workspaceId);
 
         return Response.noContent().build();

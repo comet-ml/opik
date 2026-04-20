@@ -514,15 +514,15 @@ public class TracesResource {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
-        log.info("Assertion results batch for traces, size {} on workspaceId '{}'", batch.assertionResults().size(),
-                workspaceId);
+        log.info("Assertion results batch for traces, size '{}' on workspaceId '{}'",
+                batch.assertionResults().size(), workspaceId);
 
         assertionResultService.saveBatchOfTraces(batch.assertionResults())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
 
-        log.info("Saved assertion results batch for traces, size {} on workspaceId '{}'",
+        log.info("Saved assertion results batch for traces, size '{}' on workspaceId '{}'",
                 batch.assertionResults().size(), workspaceId);
 
         return Response.noContent().build();

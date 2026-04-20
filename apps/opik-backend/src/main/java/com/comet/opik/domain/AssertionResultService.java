@@ -30,9 +30,9 @@ public interface AssertionResultService {
 
     Mono<Long> insertBatch(@NonNull EntityType entityType, @NonNull List<? extends FeedbackScoreItem> assertionScores);
 
-    Mono<Void> saveBatchOfTraces(@NonNull List<AssertionResultBatchItem> assertionResults);
+    Mono<Void> saveBatchOfTraces(List<AssertionResultBatchItem> assertionResults);
 
-    Mono<Void> saveBatchOfSpans(@NonNull List<AssertionResultBatchItem> assertionResults);
+    Mono<Void> saveBatchOfSpans(List<AssertionResultBatchItem> assertionResults);
 }
 
 @Slf4j

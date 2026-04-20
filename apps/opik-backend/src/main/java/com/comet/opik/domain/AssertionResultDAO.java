@@ -32,7 +32,7 @@ public interface AssertionResultDAO {
 
     Mono<Long> insertBatch(@NonNull EntityType entityType, @NonNull List<? extends FeedbackScoreItem> assertionScores);
 
-    Mono<Long> saveBatch(@NonNull EntityType entityType, @NonNull List<AssertionResultBatchItem> assertionResults);
+    Mono<Long> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults);
 }
 
 @Singleton

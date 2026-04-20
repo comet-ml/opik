@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.util.List;
 
@@ -15,7 +16,7 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResultBatch(
-        @NotNull @Size(min = 1, max = 1000) @Valid List<AssertionResultBatchItem> assertionResults)
+        @NonNull @NotNull @Size(min = 1, max = 1000) List<@NotNull @Valid AssertionResultBatchItem> assertionResults)
         implements
             RateEventContainer {
 
