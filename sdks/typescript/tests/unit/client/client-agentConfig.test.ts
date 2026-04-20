@@ -1,6 +1,7 @@
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
 import { ConfigManager, Blueprint } from "@/agent-config";
+import { getGlobalBlueprintRegistry } from "@/agent-config/blueprintCache";
 import { OpikApiError } from "@/rest_api";
 import * as OpikApi from "@/rest_api/api";
 import { trackStorage } from "@/decorators/track";
@@ -737,5 +738,123 @@ describe("getOrCreateConfig option exclusivity", () => {
     await expect(
       callInsideTrack({ fallback: { model: "gpt-4" }, version: "v1", env: "prod" })
     ).rejects.toThrow("Only one of 'version' or 'env'");
+  });
+});
+
+describe("getOrCreateConfig — prompt readiness before auto-create", () => {
+  let client: Opik;
+  const notFound = new OpikApiError({ message: "Not found", statusCode: 404, rawResponse: {} as Response, body: undefined });
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+    vi.spyOn(client.api.projects, "retrieveProject").mockResolvedValue(
+      { id: "project-id", name: "test-project" } as never
+    );
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    getGlobalBlueprintRegistry().clear();
+  });
+
+  function callInsideTrack<T extends Record<string, unknown>>(fallback: T) {
+    return trackStorage.run(
+      { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<typeof trackStorage.run>[0],
+      () => client.getOrCreateConfig({ fallback })
+    );
+  }
+
+  function makeSyncedPromptLike(): InstanceType<typeof Prompt> {
+    const obj = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(obj, "synced", { get: () => true, configurable: true });
+    Object.defineProperty(obj, "commit", { get: () => "commit-abc", configurable: true });
+    return obj;
+  }
+
+  function makeNeverSyncingPromptLike(): InstanceType<typeof Prompt> {
+    const obj = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(obj, "synced", { get: () => false, configurable: true });
+    Object.defineProperty(obj, "commit", { get: () => undefined, configurable: true });
+    Object.defineProperty(obj, "ready", { value: () => new Promise<void>(() => {}), configurable: true });
+    return obj;
+  }
+
+  it("returns backend config when all prompts are already synced", async () => {
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockImplementation(() =>
+      createMockHttpResponsePromise(mockBlueprintResponse)
+    );
+
+    const prompt = makeSyncedPromptLike();
+    const config = await callInsideTrack({ temperature: prompt });
+
+    expect(config.isFallback).toBe(false);
+    expect(config.blueprintId).toBe("blueprint-id-1");
+  });
+
+  it("returns backend config even when prompt is unsynced", async () => {
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockImplementation(() =>
+      createMockHttpResponsePromise(mockBlueprintResponse)
+    );
+
+    const prompt = makeNeverSyncingPromptLike();
+    const config = await callInsideTrack({ temperature: prompt });
+
+    expect(config.isFallback).toBe(false);
+    expect(config.blueprintId).toBe("blueprint-id-1");
+  });
+
+  it("returns fallback when prompt sync times out before auto-creating config", async () => {
+    vi.useFakeTimers();
+
+    try {
+      // Empty project: both env and latest return 404
+      vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockRejectedValue(notFound);
+      vi.spyOn(client.api.agentConfigs, "getLatestBlueprint").mockRejectedValue(notFound);
+      const createSpy = vi.spyOn(client.api.agentConfigs, "createAgentConfig").mockImplementation(mockAPIFunction);
+
+      // Prompt with ready() that never resolves (simulates sync hanging indefinitely)
+      const prompt = makeNeverSyncingPromptLike();
+
+      const promise = callInsideTrack({ system_prompt: prompt });
+
+      // Advance timers in chunks past AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS (5500ms).
+      // IMPORTANT: We use chunked advancement with vi.advanceTimersByTimeAsync() instead of a single
+      // large advance. This is necessary due to a Vitest fake timer edge case with Promise.allSettled():
+      // _allPromptsSynced() uses Promise.race([Promise.allSettled(prompts.map(v => v.ready())), timeout]).
+      // When advancing timers in one large chunk, the microtask queue (Promise.then callbacks) doesn't
+      // fully flush before the race evaluates, causing the promise chain to hang. Chunked advancement
+      // allows the event loop to fully process microtasks between each timer advance, avoiding the issue.
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const config = await promise;
+
+      // Unsynced prompts were not persisted to backend due to timeout
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(config.isFallback).toBe(true);
+      expect(config.system_prompt).toBe(prompt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns fallback when prompt sync failed (ready resolved but synced is false)", async () => {
+    // Empty project: both env and latest return 404
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockRejectedValue(notFound);
+    vi.spyOn(client.api.agentConfigs, "getLatestBlueprint").mockRejectedValue(notFound);
+    const createSpy = vi.spyOn(client.api.agentConfigs, "createAgentConfig").mockImplementation(mockAPIFunction);
+
+    // Prompt whose ready() resolves immediately but synced stays false (sync failed)
+    const prompt = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(prompt, "synced", { get: () => false, configurable: true });
+    Object.defineProperty(prompt, "commit", { get: () => undefined, configurable: true });
+    Object.defineProperty(prompt, "ready", { value: () => Promise.resolve(), configurable: true });
+
+    const config = await callInsideTrack({ system_prompt: prompt });
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(config.isFallback).toBe(true);
+    expect(config.system_prompt).toBe(prompt);
   });
 });

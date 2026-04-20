@@ -1,8 +1,11 @@
 import type { OpikClient } from "@/client/Client";
+import { getGlobalClient } from "@/client/globalClient";
 import type { PromptType, PromptTemplateStructure } from "./types";
 import type * as OpikApi from "@/rest_api/api";
 import { PromptVersion } from "./PromptVersion";
 import { logger } from "@/utils/logger";
+
+export const PROMPT_SYNC_TIMEOUT_MS = 5000;
 
 /**
  * Base data interface for all prompt types
@@ -27,16 +30,16 @@ export interface BasePromptData {
  * Provides common functionality for versioning, property updates, and deletion.
  */
 export abstract class BasePrompt {
-  public readonly id: string | undefined;
-  public readonly versionId: string | undefined;
-  public readonly commit: string | undefined;
-  public readonly type: PromptType;
-  public readonly changeDescription: string | undefined;
-  public readonly templateStructure: PromptTemplateStructure;
-  public readonly projectName: string | undefined;
+  private _id: string | undefined;
+  private _versionId: string | undefined;
+  private _commit: string | undefined;
+  private _synced: boolean;
+  private _changeDescription: string | undefined;
 
-  /** Whether the prompt has been successfully synced with the backend. */
-  public readonly synced: boolean;
+  private _projectName: string | undefined;
+
+  public readonly type: PromptType;
+  public readonly templateStructure: PromptTemplateStructure;
 
   // Mutable fields (can be updated via updateProperties)
   protected _name: string;
@@ -46,20 +49,129 @@ export abstract class BasePrompt {
   protected readonly _metadata: OpikApi.JsonNode | undefined;
   protected readonly opik: OpikClient;
 
-  constructor(data: BasePromptData, opik: OpikClient) {
-    this.id = data.promptId;
-    this.versionId = data.versionId;
-    this.commit = data.commit;
+  /** Pending background sync promise, set when constructed without synced:true. */
+  protected _pendingSync: Promise<void> | null = null;
+
+  get id(): string | undefined { return this._id; }
+  get versionId(): string | undefined { return this._versionId; }
+  get commit(): string | undefined { return this._commit; }
+  /** Whether the prompt has been successfully synced with the backend. */
+  get synced(): boolean { return this._synced; }
+  get changeDescription(): string | undefined { return this._changeDescription; }
+  get projectName(): string | undefined { return this._projectName; }
+
+
+  constructor(data: BasePromptData, opik?: OpikClient) {
+    this._id = data.promptId;
+    this._versionId = data.versionId;
+    this._commit = data.commit;
     this.type = data.type ?? "mustache";
-    this.changeDescription = data.changeDescription;
+    this._changeDescription = data.changeDescription;
     this.templateStructure = data.templateStructure ?? "text";
-    this.synced = data.synced ?? false;
+    this._synced = data.synced ?? false;
     this._name = data.name;
     this._description = data.description;
     this._tags = data.tags ? [...data.tags] : [];
     this._metadata = data.metadata;
-    this.opik = opik;
-    this.projectName = data.projectName;
+    this.opik = opik ?? getGlobalClient();
+    this._projectName = data.projectName;
+  }
+
+  /**
+   * Updates internal state after a successful background sync.
+   */
+  protected updateSyncState(result: {
+    promptId?: string;
+    versionId?: string;
+    commit?: string;
+    changeDescription?: string;
+    tags?: string[];
+    projectName?: string;
+  }): void {
+    this._id = result.promptId;
+    this._versionId = result.versionId;
+    this._commit = result.commit;
+    this._changeDescription = result.changeDescription;
+    if (result.tags) {
+      this._tags = result.tags;
+    }
+    if (result.projectName !== undefined) {
+      this._projectName = result.projectName;
+    }
+    this._synced = true;
+  }
+
+  /**
+   * Shared background-sync helper for subclass constructors.
+   * Calls the provided create function, then only updates sync state when the
+   * returned instance is truly synced (has id, versionId, and commit populated).
+   * If the create call throws, or returns an unsynced instance, _synced stays false.
+   */
+  protected async _syncViaCreate<T extends BasePrompt>(
+    create: () => Promise<T>,
+  ): Promise<void> {
+    const TIMED_OUT = Symbol();
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timerId = setTimeout(() => resolve(TIMED_OUT), PROMPT_SYNC_TIMEOUT_MS);
+    });
+    try {
+      const createPromise = create().catch((error) => {
+        // Swallow late rejection after timeout wins the race, so it does not become unhandled.
+        // The catch block below already logs the real failure.
+        logger.debug(`Prompt '${this._name}' sync rejected after timeout`, { error });
+        return undefined;
+      });
+      const result = await Promise.race([createPromise, timeout]);
+      if (result === TIMED_OUT) {
+        logger.warn(
+          `Prompt '${this._name}' sync timed out after ${PROMPT_SYNC_TIMEOUT_MS}ms. ` +
+            "The prompt will work locally but is not persisted on the server. " +
+            "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
+        );
+        return;
+      }
+      if (!result) {
+        logger.warn(
+          `Prompt '${this._name}' sync failed (rejected after timeout). ` +
+            "The prompt will work locally but is not persisted on the server. " +
+            "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
+        );
+        return;
+      }
+      if (result.synced && result.id && result.versionId && result.commit) {
+        this.updateSyncState({
+          promptId: result.id,
+          versionId: result.versionId,
+          commit: result.commit,
+          changeDescription: result.changeDescription,
+          tags: result.tags ? Array.from(result.tags) : undefined,
+          projectName: result.projectName,
+        });
+      } else {
+        logger.warn(
+          `Prompt '${this._name}' was not persisted on the server. ` +
+            "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
+        );
+      }
+    } catch (error) {
+      logger.warn(
+        `Failed to sync prompt '${this._name}' with the backend. ` +
+          "The prompt will work locally but is not persisted on the server. " +
+          "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
+        { error },
+      );
+    } finally {
+      clearTimeout(timerId);
+    }
+  }
+
+  /**
+   * Resolves when initialization completes.
+   * Returns immediately if the prompt was already persisted (e.g. retrieved from backend).
+   */
+  ready(): Promise<void> {
+    return this._pendingSync ?? Promise.resolve();
   }
 
   // Public getters for mutable fields
@@ -98,7 +210,8 @@ export abstract class BasePrompt {
     description?: string;
     tags?: string[];
   }): Promise<this> {
-    this.requireSynced("updateProperties");
+    await this.ready();
+    this.ensureSynced("updateProperties");
     await this.opik.api.prompts.updatePrompt(
       this.id!,
       {
@@ -122,7 +235,8 @@ export abstract class BasePrompt {
    * Performs immediate deletion (no batching).
    */
   async delete(): Promise<void> {
-    this.requireSynced("delete");
+    await this.ready();
+    this.ensureSynced("delete");
     await this.opik.deletePrompts([this.id!]);
   }
 
@@ -139,7 +253,8 @@ export abstract class BasePrompt {
     sorting?: string;
     filters?: string;
   }): Promise<PromptVersion[]> {
-    this.requireSynced("getVersions");
+    await this.ready();
+    this.ensureSynced("getVersions");
     logger.debug("Getting versions for prompt", {
       promptId: this.id,
       name: this.name,
@@ -201,7 +316,8 @@ export abstract class BasePrompt {
   protected async restoreVersion(
     version: PromptVersion,
   ): Promise<OpikApi.PromptVersionDetail> {
-    this.requireSynced("restoreVersion");
+    await this.ready();
+    this.ensureSynced("restoreVersion");
     logger.debug("Restoring prompt version", {
       promptId: this.id,
       name: this.name,
@@ -274,14 +390,14 @@ export abstract class BasePrompt {
   }
 
   /**
-   * Throws an error if the prompt has not been synced with the backend.
-   * Call syncWithBackend() first to sync.
+   * Throws an error if the prompt has not been successfully synced with the backend.
+   * Used internally before backend operations to ensure we have a valid prompt ID.
    */
-  protected requireSynced(operation: string): void {
+  protected ensureSynced(operation: string): void {
     if (!this.synced) {
       throw new Error(
-        `Cannot call ${operation}() on an unsynced prompt. ` +
-          "Call syncWithBackend() first to sync the prompt with the backend.",
+        `Cannot call ${operation}() on a prompt that failed to persist. ` +
+          "Call .syncWithBackend() to retry persisting the prompt.",
       );
     }
   }
