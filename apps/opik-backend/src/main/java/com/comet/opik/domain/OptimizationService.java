@@ -404,23 +404,23 @@ class OptimizationServiceImpl implements OptimizationService {
     }
 
     private void trackOptimizationCreated(Optimization optimization, String workspaceId, String userName) {
-        analyticsService.trackEvent("opik_optimization_created", Map.of(
+        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent("opik_optimization_created", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "dataset_name", String.valueOf(optimization.datasetName()),
                 "objective_name", String.valueOf(optimization.objectiveName()),
                 "project_id", String.valueOf(optimization.projectId()),
-                "workspace_id", workspaceId), userName);
+                "workspace_id", workspaceId), userName));
     }
 
     private void trackOptimizationCompleted(Optimization optimization, OptimizationStatus status,
             String workspaceId, String userName) {
-        analyticsService.trackEvent("opik_optimization_completed", Map.of(
+        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent("opik_optimization_completed", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "status", status.getValue(),
                 "workspace_id", workspaceId,
                 "num_trials", String.valueOf(optimization.numTrials()),
                 "baseline_objective_score", String.valueOf(optimization.baselineObjectiveScore()),
-                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())), userName);
+                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())), userName));
     }
 
     private void postOptimizationCreatedEvent(Optimization newOptimization, String workspaceId, String userName) {
