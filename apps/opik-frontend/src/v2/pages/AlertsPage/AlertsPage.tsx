@@ -329,7 +329,7 @@ const AlertsPage: React.FunctionComponent = () => {
     });
   }, [navigate, workspaceName, activeProjectId]);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && alerts.length === 0)) {
     return <Loader />;
   }
 

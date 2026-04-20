@@ -348,7 +348,7 @@ const DashboardsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && dashboards.length === 0)) {
     return <Loader />;
   }
 

@@ -382,7 +382,7 @@ export const AnnotationQueuesPage: React.FC = () => {
     [columnsWidth, setColumnsWidth],
   );
 
-  if (isLoading) {
+  if (isLoading || (isPlaceholderData && rows.length === 0)) {
     return <Loader />;
   }
 
