@@ -184,7 +184,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY (workspace_id, project_id, thread_id, id)
+                LIMIT 1 BY id
             ), feedback_scores_deduped AS (
                 SELECT *
                 FROM (
@@ -502,7 +502,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     <endif>
                 <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY (workspace_id, project_id, thread_id, id)
+                LIMIT 1 BY id
             ), feedback_scores_deduped AS (
                 SELECT *
                 FROM (
