@@ -10,6 +10,10 @@ on:
       - '**.md'
       - 'apps/opik-documentation/**'
 
+  pull_request:
+    paths:
+      - '.github/workflows/e2e_tests_post_merge.yml'
+
   workflow_dispatch:
     inputs:
       suite:
