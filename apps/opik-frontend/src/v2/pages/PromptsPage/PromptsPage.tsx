@@ -336,7 +336,7 @@ const PromptsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && prompts.length === 0)) {
     return <Loader />;
   }
 
