@@ -45,11 +45,16 @@ const AgentNameStep: React.FC = () => {
       });
     } catch (err) {
       const axiosError = err as AxiosError;
+      // Project with this name already exists — treat as success and reuse it.
+      // This is the common case when a user returns via the demo banner and
+      // submits the same name they entered before.
       if (axiosError.response?.status === HttpStatusCode.Conflict) {
-        setError("A project with this name already exists");
-      } else {
-        setError("Failed to create project. Please try again.");
+        goToStep(AGENT_ONBOARDING_STEPS.CONNECT_AGENT, {
+          agentName: trimmedName,
+        });
+        return;
       }
+      setError("Failed to create project. Please try again.");
     }
   };
 

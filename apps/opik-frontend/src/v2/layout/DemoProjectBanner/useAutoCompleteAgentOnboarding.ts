@@ -10,19 +10,19 @@ import {
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
 
 interface UseAutoCompleteAgentOnboardingParams {
-  activeProjectId: string | null;
+  projectId: string | null;
   enabled: boolean;
 }
 
-// Auto-complete onboarding when the user lands on their own agent project that
-// already has traces. This covers the case where a user connected their agent
-// and logged traces in a previous session but never clicked "Explore Opik" to
-// finalize the flow — without this, they'd keep seeing the banner forever.
-// The `enabled` flag (caller's isOnboardingProject && isOnboardingActive) stops
-// the effect from re-firing after DONE is written — the localStorage hook
-// returns a new object reference on every render, so we can't rely on identity.
+// Auto-complete onboarding when the user's agent project already has traces.
+// Covers the case where a user connected their agent and logged traces in a
+// previous session but never clicked "Explore Opik" to finalize the flow —
+// without this, they'd keep seeing the demo-project banner forever.
+// The `enabled` flag stops the effect from re-firing after DONE is written —
+// the localStorage hook returns a new object reference on every render, so
+// we can't rely on identity.
 const useAutoCompleteAgentOnboarding = ({
-  activeProjectId,
+  projectId,
   enabled,
 }: UseAutoCompleteAgentOnboardingParams) => {
   const workspaceName = useActiveWorkspaceName();
@@ -32,12 +32,12 @@ const useAutoCompleteAgentOnboarding = ({
 
   const { data: tracesData } = useTracesList(
     {
-      projectId: activeProjectId ?? "",
+      projectId: projectId ?? "",
       page: 1,
       size: 1,
     },
     {
-      enabled: !!activeProjectId && enabled,
+      enabled: !!projectId && enabled,
     },
   );
   const hasTraces = (tracesData?.total ?? 0) > 0;
