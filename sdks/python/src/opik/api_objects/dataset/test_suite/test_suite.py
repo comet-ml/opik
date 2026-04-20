@@ -176,7 +176,7 @@ class TestSuiteVersion:
         return self._dataset_version.project_name
 
     @property
-    def __internal_api__dataset__(self) -> dataset.DatasetVersion:
+    def __internal_api__dataset_version__(self) -> dataset.DatasetVersion:
         """Internal access to the underlying dataset version. Not part of the public API."""
         return self._dataset_version
 

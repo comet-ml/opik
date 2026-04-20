@@ -560,7 +560,11 @@ def run_tests(
         ... )
         >>> print(f"Pass rate: {result.pass_rate:.0%}")
     """
-    suite_dataset = test_suite.__internal_api__dataset__
+    suite_dataset: Union[dataset.Dataset, dataset.DatasetVersion]
+    if isinstance(test_suite, test_suite_module.TestSuiteVersion):
+        suite_dataset = test_suite.__internal_api__dataset_version__
+    else:
+        suite_dataset = test_suite.__internal_api__dataset__
     client = suite_dataset.client
 
     return __internal_api__run_test_suite__(
