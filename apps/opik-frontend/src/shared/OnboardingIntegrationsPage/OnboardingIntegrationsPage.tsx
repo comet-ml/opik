@@ -1,8 +1,21 @@
 import React from "react";
-import type { IntegrationExplorer as V2IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
+
+type IntegrationExplorerComponent = React.FC<{
+  source?: string;
+  children: React.ReactNode;
+}> & {
+  Search: React.ComponentType;
+  QuickInstall: React.ComponentType;
+  TypeScriptSDK: React.ComponentType;
+  GetHelp: React.ComponentType;
+  CopyApiKey: React.ComponentType;
+  Skip: React.ComponentType;
+  Tabs: React.FC<{ children: React.ReactNode }>;
+  Grid: React.ComponentType;
+};
 
 type OnboardingIntegrationsPageProps = {
-  IntegrationExplorer: typeof V2IntegrationExplorer;
+  IntegrationExplorer: IntegrationExplorerComponent;
   source: string;
 };
 

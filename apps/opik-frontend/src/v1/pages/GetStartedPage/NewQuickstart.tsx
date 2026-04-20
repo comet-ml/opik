@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { IntegrationExplorer } from "@/v1/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingOverlay from "@/v1/pages-shared/OnboardingOverlay/OnboardingOverlay";
-import OnboardingIntegrationsPage from "@/v2/pages-shared/onboarding/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
+import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
 import {
   ONBOARDING_STEP_FINISHED,
   ONBOARDING_STEP_KEY,

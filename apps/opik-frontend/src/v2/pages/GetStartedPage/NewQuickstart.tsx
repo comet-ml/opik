@@ -11,7 +11,7 @@ import {
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
-import OnboardingIntegrationsPage from "@/v2/pages-shared/onboarding/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
+import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
