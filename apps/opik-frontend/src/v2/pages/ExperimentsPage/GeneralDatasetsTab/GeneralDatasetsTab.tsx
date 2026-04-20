@@ -637,7 +637,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     groupFieldNames,
   ]);
 
-  if (isPending || isFeedbackScoresPending) {
+  if (
+    isPending ||
+    isFeedbackScoresPending ||
+    (isPlaceholderData && experiments.length === 0)
+  ) {
     return <Loader />;
   }
 
