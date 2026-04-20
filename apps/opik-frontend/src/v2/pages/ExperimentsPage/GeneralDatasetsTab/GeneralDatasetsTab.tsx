@@ -101,7 +101,7 @@ const withRunningSkeleton = <TValue,>(
     ) {
       return (
         <div className="flex size-full items-center p-2">
-          <Skeleton className="h-4 w-full max-w-[120px]" />
+          <Skeleton className="size-full" />
         </div>
       );
     }
