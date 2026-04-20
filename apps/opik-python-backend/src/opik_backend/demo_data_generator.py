@@ -94,9 +94,9 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
 
-def project_exists(base_url, workspace_name, comet_api_key, project_name):
+def create_project(base_url, workspace_name, comet_api_key, project_name):
     request = {
-        "url": "/v1/private/projects/retrieve",
+        "url": "/v1/private/projects",
         "method": "POST",
         "payload": {
             "name": project_name,
@@ -104,15 +104,7 @@ def project_exists(base_url, workspace_name, comet_api_key, project_name):
     }
 
     _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-    return status_code == 200
-
-def api_key_ready(base_url, workspace_name, comet_api_key):
-    request = {
-        "url": "/v1/private/projects",
-        "method": "GET",
-    }
-    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-    return status_code == 200
+    return status_code
 
 def calculate_time_shift_to_now(traces):
     """
@@ -195,15 +187,33 @@ def process_traces_with_time_shift(traces, context: DemoDataContext, client: opi
     # Calculate time shift from traces only to move latest trace end_time to now
     # This same shift will be applied to spans to preserve all time distances
     time_shift = calculate_time_shift_to_now(traces)
-    
+
+    # Track per-millisecond counters to break ties when multiple traces share the same
+    # start_time down to the millisecond. uuid7_from_datetime derives the UUID's temporal
+    # prefix from the ms-resolution timestamp, so two traces landing on the same ms can
+    # produce UUIDs that collide (or get silently deduplicated by the backend). Adding a
+    # monotonic microsecond offset ensures each trace gets a distinct UUID7 prefix.
+    ms_counter: dict = {}
+
     for idx, original_trace in enumerate(sorted(traces, key=lambda x: x["id"])):
         # Create a copy to avoid mutating the original demo_data
         trace = dict(original_trace)
         # Store the old ID before modification
         old_trace_id = trace["id"]
         # Apply time shift to maintain time differences
-        trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
-        trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
+        shifted_start = apply_time_shift(trace["start_time"], time_shift)
+        shifted_end = apply_time_shift(trace["end_time"], time_shift)
+
+        # Deduplicate sub-millisecond timestamps: if multiple traces land on the same
+        # millisecond after the shift, offset each by 1 µs so their UUID7s are distinct.
+        ms_key = int(shifted_start.timestamp() * 1000)
+        offset_us = ms_counter.get(ms_key, 0)
+        ms_counter[ms_key] = offset_us + 1
+        if offset_us > 0:
+            shifted_start = shifted_start + datetime.timedelta(microseconds=offset_us)
+
+        trace["start_time"] = shifted_start
+        trace["end_time"] = shifted_end
         new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
         trace["id"] = new_id
         # Remove fields that shouldn't be in the trace data
@@ -331,21 +341,27 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
         try:
             project_name = "Opik Demo Agent Observability"
 
-            # Short-circuit if project already exists (also implicitly validates the API key)
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            # If project doesn't exist, it could be because the API key isn't ready yet.
-            # Wait for API key to be ready (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
+            # Create the project explicitly before sending traces.
+            # This is the single source of truth for whether demo data creation proceeds:
+            # - 201: project created, continue
+            # - 409: project already exists (signup hook re-run), skip entirely — idempotent
+            # - other: likely API key not yet propagated on fresh signup, retry with backoff
+            # We can't rely on implicit project creation via the SDK's batch trace endpoint because
+            # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
             max_retries = 5
+            status_code = None
             for attempt in range(max_retries):
-                if api_key_ready(base_url, workspace_name, comet_api_key):
+                status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
+                if status_code == 201 or status_code == 409:
                     break
                 if attempt == max_retries - 1:
-                    logger.error("API key not ready for workspace %s after %d retries, aborting demo data creation", workspace_name, max_retries)
+                    logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
                     return
                 time.sleep(0.5 * (2 ** attempt))
+
+            if status_code == 409:
+                logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
+                return
 
             client = opik.Opik(
                 project_name=project_name,
@@ -355,9 +371,22 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 _use_batching=True,
             )
 
+            # Sanity check: warn if the demo dataset itself contains duplicate trace IDs
+            # (these would collapse to a single row on ingest).
+            trace_ids = [t["id"] for t in demo_traces]
+            seen_trace_ids: set = set()
+            for tid in trace_ids:
+                if tid in seen_trace_ids:
+                    logger.warning("Duplicate trace id found in demo data: %s", tid)
+                seen_trace_ids.add(tid)
+            logger.info("Found %d unique trace IDs in demo data", len(seen_trace_ids))
+
             # Extract unique thread IDs before processing traces
             threads = list({trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None})
-            
+
+            logger.info("Creating %d threads, %d traces, %d spans for workspace %s",
+                        len(threads), len(demo_traces), len(demo_spans), workspace_name)
+
             time_shift = process_traces_with_time_shift(demo_traces, context, client)
             process_spans_with_time_shift(demo_spans, time_shift, context, client)
             flush_result = client.flush()
@@ -365,14 +394,40 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 logger.error("Failed to flush demo traces for workspace %s project %s, aborting", workspace_name, project_name)
                 return
 
-            # Wait for project to be queryable (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
-            for attempt in range(max_retries):
-                if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                    break
-                if attempt == max_retries - 1:
-                    logger.error("Project %s not found for workspace %s after %d retries, skipping thread/feedback operations", project_name, workspace_name, max_retries)
-                    return
-                time.sleep(0.5 * (2 ** attempt))
+            # Post-flush verification: confirm the server persisted every trace we sent.
+            # If the count or IDs don't match, log exactly which ones are missing — this
+            # is the diagnostic hook we need to track down silent data loss (SDK batch
+            # drops, backend dedup on colliding UUID7 prefixes, etc.).
+            original_to_new_id = {
+                orig: context.uuid_map[orig]
+                for orig in trace_ids
+                if orig in context.uuid_map
+            }
+            expected_new_ids = set(original_to_new_id.values())
+            try:
+                server_traces = client.search_traces(project_name=project_name)
+                saved_ids = {str(t.id) for t in server_traces}
+                logger.info("Server reports %d traces for project %s (expected %d)",
+                            len(server_traces), project_name, len(expected_new_ids))
+
+                missing_ids = expected_new_ids - saved_ids
+                extra_ids = saved_ids - expected_new_ids
+                if missing_ids:
+                    reverse_map = {v: k for k, v in original_to_new_id.items()}
+                    missing_with_original = {new_id: reverse_map.get(new_id, "?") for new_id in missing_ids}
+                    logger.warning(
+                        "%d traces missing from server for workspace %s (new_id -> original_id): %s",
+                        len(missing_ids), workspace_name, missing_with_original,
+                    )
+                else:
+                    logger.info("All %d expected traces are present on the server for workspace %s",
+                                len(expected_new_ids), workspace_name)
+                if extra_ids:
+                    logger.warning("%d unexpected trace IDs on server for workspace %s: %s",
+                                   len(extra_ids), workspace_name, extra_ids)
+            except Exception as verify_err:
+                logger.warning("Could not verify trace presence on server for workspace %s: %s",
+                               workspace_name, verify_err)
 
             done = False
             max_attempts = 10
@@ -424,7 +479,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 if not done:
                     logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
         except Exception as e:
-            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e)
+            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e, exc_info=True)
         finally:
             # Close the client
             if client:
