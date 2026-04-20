@@ -76,13 +76,17 @@ class ThreadDAOImpl implements ThreadDAO {
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
                 SELECT DISTINCT id, thread_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id \\<> ''
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND thread_id \\<> ''
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                )
+                WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif>traces_final AS (
@@ -125,9 +129,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
-                WHERE 1 = 1
-                <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
             ), spans_deduped AS (
                 SELECT
                     workspace_id,
@@ -434,13 +435,17 @@ class ThreadDAOImpl implements ThreadDAO {
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
             WITH <if(traces_final_ids)>traces_final_ids AS (
                 SELECT DISTINCT id, thread_id
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND thread_id \\<> ''
-                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND thread_id \\<> ''
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                )
+                WHERE 1 = 1
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif>traces_final AS (
@@ -473,9 +478,6 @@ class ThreadDAOImpl implements ThreadDAO {
                     ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 )
-                WHERE 1 = 1
-                <if(filters)> AND <filters> <endif>
-                <if(search_text)> AND <search_text> <endif>
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -962,13 +964,17 @@ class ThreadDAOImpl implements ThreadDAO {
             FROM (
                 WITH <if(traces_final_ids)>traces_final_ids AS (
                     SELECT DISTINCT id, thread_id
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    FROM (
+                        SELECT *
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        AND thread_id \\<> ''
+                        <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                        <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    )
+                    WHERE 1 = 1
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                 ), <endif>traces_final AS (
@@ -1001,9 +1007,6 @@ class ThreadDAOImpl implements ThreadDAO {
                         ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
                         LIMIT 1 BY id
                     )
-                    WHERE 1 = 1
-                    <if(filters)> AND <filters> <endif>
-                    <if(search_text)> AND <search_text> <endif>
                 ), spans_deduped AS (
                     SELECT
                         workspace_id,
@@ -1059,7 +1062,7 @@ class ThreadDAOImpl implements ThreadDAO {
                     <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY (workspace_id, project_id, thread_id, id)
+                    LIMIT 1 BY id
                 ), feedback_scores_deduped AS (
                     SELECT *
                     FROM (
