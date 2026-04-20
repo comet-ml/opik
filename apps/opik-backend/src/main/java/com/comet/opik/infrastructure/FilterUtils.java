@@ -1,6 +1,9 @@
 package com.comet.opik.infrastructure;
 
 import com.comet.opik.api.DatasetVersionCreate;
+import com.comet.opik.api.filter.Filter;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceThreadField;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
@@ -24,7 +27,7 @@ import java.util.stream.IntStream;
 
 @UtilityClass
 @Slf4j
-public class DatabaseUtils {
+public class FilterUtils {
 
     public static final int ANALYTICS_DELETE_BATCH_SIZE = 10000;
     public static final int UUID_POOL_MULTIPLIER = 2;
@@ -126,11 +129,15 @@ public class DatabaseUtils {
                     FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
-                    FilterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY)
+                    FilterQueryBuilder.toAnalyticsDbFilters(filters,
+                            FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY)
                             .ifPresent(feedbackScoreIsEmptyFilters -> template.add("span_feedback_scores_empty_filters",
                                     feedbackScoreIsEmptyFilters));
                     FilterQueryBuilder.hasGuardrailsFilter(filters)
                             .ifPresent(hasGuardrailsFilter -> template.add("guardrails_filters", true));
+
+                    findTraceThreadIdPushdownFilter(filters)
+                            .ifPresent(idFilter -> template.add("traces_pushdown_filter", true));
                 });
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> template.add("last_received_id", lastReceivedTraceId));
@@ -149,6 +156,7 @@ public class DatabaseUtils {
     public static void bindTraceThreadSearchCriteria(TraceSearchCriteria traceSearchCriteria, Statement statement) {
         Optional.ofNullable(traceSearchCriteria.filters())
                 .ifPresent(filters -> {
+
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_AGGREGATION);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES);
@@ -158,7 +166,11 @@ public class DatabaseUtils {
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_THREAD);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.FEEDBACK_SCORES_IS_EMPTY);
                     FilterQueryBuilder.bind(statement, filters, FilterStrategy.TRACE_SPAN_FEEDBACK_SCORES_IS_EMPTY);
+
+                    findTraceThreadIdPushdownFilter(filters)
+                            .ifPresent(idFilter -> statement.bind("thread_id_pushdown", idFilter.value()));
                 });
+
         Optional.ofNullable(traceSearchCriteria.lastReceivedId())
                 .ifPresent(lastReceivedTraceId -> statement.bind("last_received_id", lastReceivedTraceId));
         // Bind UUID BETWEEN bounds for time-based filtering
@@ -169,6 +181,16 @@ public class DatabaseUtils {
 
         Optional.ofNullable(traceSearchCriteria.searchText())
                 .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));
+    }
+
+    // EQUAL only: the pushdown SQL template is hardcoded to `thread_id = :thread_id_pushdown`,
+    // and EQUAL is the only operator that unlocks `idx_traces_thread_id_bf` (CONTAINS / STARTS_WITH
+    // / ENDS_WITH don't benefit from the bloom filter). Other operators keep using the outer
+    // `<trace_thread_filters>` path unchanged.
+    private static Optional<? extends Filter> findTraceThreadIdPushdownFilter(List<? extends Filter> filters) {
+        return filters.stream()
+                .filter(f -> f.field() == TraceThreadField.ID && f.operator() == Operator.EQUAL)
+                .findFirst();
     }
 
     public static ST getSTWithLogComment(String query, String queryName, String workspaceId, String userName,
