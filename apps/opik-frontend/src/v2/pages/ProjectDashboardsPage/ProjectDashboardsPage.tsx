@@ -109,7 +109,13 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
   return (
     <PageBodyScrollContainer>
       <PageBodyStickyContainer
-        className="mt-6 flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3 pt-2"
+        className="mb-4 mt-6 flex items-center justify-between"
+        direction="horizontal"
+      >
+        <h1 className="comet-body-accented truncate break-words">Dashboards</h1>
+      </PageBodyStickyContainer>
+      <PageBodyStickyContainer
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3"
         direction="bidirectional"
         limitWidth
       >
