@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List
 from unittest import mock
@@ -3579,3 +3580,324 @@ class TestMergeBlueprintIntoConfig:
         )
 
         assert result["agent_configuration"] == {"_blueprint_id": "bp-456"}
+
+
+class TestResolveProjectName:
+    def test_dataset_has_no_project__caller_value_used(self, capture_log):
+        mock_dataset = mock.MagicMock()
+        mock_dataset.project_name = None
+
+        resolved = evaluator_module._resolve_project_name(
+            dataset_=mock_dataset,
+            project_name="caller-project",
+            caller_name="evaluate",
+        )
+
+        assert resolved == "caller-project"
+        assert capture_log.records == []
+
+    def test_dataset_has_no_project__caller_none__returns_none(self, capture_log):
+        mock_dataset = mock.MagicMock()
+        mock_dataset.project_name = None
+
+        resolved = evaluator_module._resolve_project_name(
+            dataset_=mock_dataset, project_name=None, caller_name="evaluate"
+        )
+
+        assert resolved is None
+        assert capture_log.records == []
+
+    def test_dataset_has_project__caller_none__returns_dataset_project__no_warning(
+        self, capture_log
+    ):
+        mock_dataset = mock.MagicMock()
+        mock_dataset.project_name = "dataset-project"
+
+        resolved = evaluator_module._resolve_project_name(
+            dataset_=mock_dataset, project_name=None, caller_name="evaluate"
+        )
+
+        assert resolved == "dataset-project"
+        assert capture_log.records == []
+
+    def test_dataset_has_project__caller_override__dataset_wins_and_warning_logged(
+        self, capture_log
+    ):
+        mock_dataset = mock.MagicMock()
+        mock_dataset.project_name = "dataset-project"
+
+        resolved = evaluator_module._resolve_project_name(
+            dataset_=mock_dataset,
+            project_name="caller-project",
+            caller_name="evaluate_prompt",
+        )
+
+        assert resolved == "dataset-project"
+        warning_records = [
+            record
+            for record in capture_log.records
+            if record.levelno == logging.WARNING
+        ]
+        assert len(warning_records) == 1
+        message = warning_records[0].getMessage()
+        assert "deprecated" in message
+        assert "evaluate_prompt()" in message
+        assert "dataset-project" in message
+        assert "caller-project" in message
+
+
+def test_evaluate__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="project-override-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="project-override-test",
+        experiment_config=None,
+        prompts=None,
+        tags=None,
+        dataset_version_id=None,
+        project_name="dataset-project",
+    )
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "project_name" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate__dataset_has_no_project_name__caller_value_preserved(fake_backend):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="project-fallback-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="project-fallback-test",
+        experiment_config=None,
+        prompts=None,
+        tags=None,
+        dataset_version_id=None,
+        project_name="caller-project",
+    )
+
+
+def test_evaluate_prompt__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    MODEL_NAME = "gpt-3.5-turbo"
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(id="item-1", input="hello", reference="hello"),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+    mock_models_factory_get, _mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "Say: {{input}}"}],
+            experiment_name="prompt-project-override-test",
+            project_name="caller-project",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "dataset-project"
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "evaluate_prompt()" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate_prompt__dataset_has_no_project_name__caller_value_preserved(
+    fake_backend,
+):
+    MODEL_NAME = "gpt-3.5-turbo"
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(id="item-1", input="hello", reference="hello"),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+    mock_models_factory_get, _mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "Say: {{input}}"}],
+            experiment_name="prompt-project-fallback-test",
+            project_name="caller-project",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "caller-project"
+
+
+def test_evaluate_optimization_trial__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="trial-project-override-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "dataset-project"
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "evaluate_optimization_trial()" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate_optimization_trial__dataset_has_no_project_name__caller_value_preserved(
+    fake_backend,
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="trial-project-fallback-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "caller-project"

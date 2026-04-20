@@ -142,6 +142,39 @@ def _try_notifying_about_experiment_completion(
         )
 
 
+def _resolve_project_name(
+    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
+    project_name: Optional[str],
+    caller_name: str,
+) -> Optional[str]:
+    """
+    Resolve which project name to use for evaluation.
+
+    Prefers the dataset's ``project_name`` when set. If the caller also passed
+    a ``project_name``, log a deprecation warning and ignore the override so
+    traces land in the dataset's project.
+
+    Falls back to the caller's ``project_name`` when the dataset has none, to
+    preserve backward compatibility during the deprecation period.
+    """
+    dataset_project_name = getattr(dataset_, "project_name", None)
+
+    if dataset_project_name is None:
+        return project_name
+
+    if project_name is not None:
+        LOGGER.warning(
+            "The `project_name` parameter of `%s()` is deprecated and will be "
+            "removed in a future version. The dataset's project ('%s') will "
+            "be used instead of the provided value ('%s').",
+            caller_name,
+            dataset_project_name,
+            project_name,
+        )
+
+    return dataset_project_name
+
+
 def _compute_experiment_scores(
     experiment_scoring_functions: List[ExperimentScoreFunction],
     test_results: List[test_result.TestResult],
@@ -210,7 +243,10 @@ def evaluate(
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
 
-        project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`
+        project_name: Deprecated. If the dataset has a ``project_name`` set, it
+            is always used and this override is ignored (with a warning). If
+            the dataset has no ``project_name``, traces and spans are logged to
+            this project (or to ``Default Project`` when omitted).
 
         experiment_config: The dictionary with parameters that describe experiment
 
@@ -302,6 +338,10 @@ def evaluate(
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
         experiment_name_prefix=experiment_name_prefix,
+    )
+
+    project_name = _resolve_project_name(
+        dataset_=dataset, project_name=project_name, caller_name="evaluate"
     )
 
     experiment = client.create_experiment(
@@ -967,7 +1007,10 @@ def evaluate_prompt(
 
         experiment_name: name of the experiment.
 
-        project_name: The name of the project to log data
+        project_name: Deprecated. If the dataset has a ``project_name`` set, it
+            is always used and this override is ignored (with a warning). If
+            the dataset has no ``project_name``, traces and spans are logged to
+            this project (or to ``Default Project`` when omitted).
 
         experiment_config: configuration of the experiment.
 
@@ -1041,6 +1084,10 @@ def evaluate_prompt(
     experiment_name = _use_or_create_experiment_name(
         experiment_name=experiment_name,
         experiment_name_prefix=experiment_name_prefix,
+    )
+
+    project_name = _resolve_project_name(
+        dataset_=dataset, project_name=project_name, caller_name="evaluate_prompt"
     )
 
     experiment = client.create_experiment(
@@ -1189,7 +1236,10 @@ def evaluate_optimization_trial(
         experiment_name: The name of the experiment associated with evaluation run.
             If None, a generated name will be used.
 
-        project_name: The name of the project. If not provided, traces and spans will be logged to the `Default Project`
+        project_name: Deprecated. If the dataset has a ``project_name`` set, it
+            is always used and this override is ignored (with a warning). If
+            the dataset has no ``project_name``, traces and spans are logged to
+            this project (or to ``Default Project`` when omitted).
 
         experiment_config: The dictionary with parameters that describe experiment
 
@@ -1262,6 +1312,12 @@ def evaluate_optimization_trial(
     checked_prompts = experiment_helpers.handle_prompt_args(
         prompt=prompt,
         prompts=prompts,
+    )
+
+    project_name = _resolve_project_name(
+        dataset_=dataset,
+        project_name=project_name,
+        caller_name="evaluate_optimization_trial",
     )
 
     # wrap scoring functions if any
