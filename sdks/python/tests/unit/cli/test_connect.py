@@ -100,3 +100,118 @@ class TestConnect:
 
         tui_instance = mock_tui_cls.return_value
         tui_instance.stop.assert_called_once()
+
+    @patch("opik.cli._run.RunnerTUI")
+    @patch("opik.cli._run.launch_supervisor")
+    @patch("opik.cli._run.run_pairing")
+    @patch("opik.cli._run.Opik")
+    def test_connect__workspace_and_api_key_passed__forwarded_to_opik_constructor(
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+    ):
+        client = MagicMock()
+        client.config.url_override = "https://api.test/"
+        client.config.config_file_exists = True
+        mock_opik_cls.return_value = client
+
+        mock_run_pairing.return_value = PairingResult(
+            runner_id="r-abc",
+            project_name="my-proj",
+            project_id="p-123",
+            bridge_key=b"\x00" * 32,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "connect",
+                "--project",
+                "my-proj",
+                "--workspace",
+                "my-ws",
+                "--api-key",
+                "my-key",
+            ],
+        )
+        assert result.exit_code == 0
+
+        mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
+            api_key="my-key",
+            workspace="my-ws",
+            _show_misconfiguration_message=False,
+        )
+
+    @patch("opik.cli._run.RunnerTUI")
+    @patch("opik.cli._run.launch_supervisor")
+    @patch("opik.cli._run.run_pairing")
+    @patch("opik.cli._run.Opik")
+    def test_connect__local_api_key_overrides_global(
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+    ):
+        client = MagicMock()
+        client.config.url_override = "https://api.test/"
+        client.config.config_file_exists = True
+        mock_opik_cls.return_value = client
+
+        mock_run_pairing.return_value = PairingResult(
+            runner_id="r-abc",
+            project_name="my-proj",
+            project_id="p-123",
+            bridge_key=b"\x00" * 32,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            [
+                "--api-key",
+                "global-key",
+                "connect",
+                "--project",
+                "my-proj",
+                "--api-key",
+                "local-key",
+            ],
+        )
+        assert result.exit_code == 0
+
+        mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
+            api_key="local-key",
+            workspace=None,
+            _show_misconfiguration_message=False,
+        )
+
+    @patch("opik.cli._run.RunnerTUI")
+    @patch("opik.cli._run.launch_supervisor")
+    @patch("opik.cli._run.run_pairing")
+    @patch("opik.cli._run.Opik")
+    def test_connect__no_local_api_key__falls_back_to_global(
+        self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls
+    ):
+        client = MagicMock()
+        client.config.url_override = "https://api.test/"
+        client.config.config_file_exists = True
+        mock_opik_cls.return_value = client
+
+        mock_run_pairing.return_value = PairingResult(
+            runner_id="r-abc",
+            project_name="my-proj",
+            project_id="p-123",
+            bridge_key=b"\x00" * 32,
+        )
+
+        runner = CliRunner()
+        result = runner.invoke(
+            cli,
+            ["--api-key", "global-key", "connect", "--project", "my-proj"],
+        )
+        assert result.exit_code == 0
+
+        mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
+            api_key="global-key",
+            workspace=None,
+            _show_misconfiguration_message=False,
+        )

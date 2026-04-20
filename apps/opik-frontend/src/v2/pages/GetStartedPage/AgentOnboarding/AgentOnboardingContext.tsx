@@ -7,6 +7,7 @@ import React, {
 import useLocalStorageState from "use-local-storage-state";
 import posthog from "posthog-js";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 
 export const AGENT_ONBOARDING_KEY = "agent-onboarding";
 
@@ -18,11 +19,11 @@ export const AGENT_ONBOARDING_STEPS = {
   DONE: "done",
 } as const;
 
-type AgentOnboardingStep =
+export type AgentOnboardingStep =
   | null
   | (typeof AGENT_ONBOARDING_STEPS)[keyof typeof AGENT_ONBOARDING_STEPS];
 
-interface AgentOnboardingState {
+export interface AgentOnboardingState {
   step: AgentOnboardingStep;
   agentName: string;
   traceId?: string;
@@ -62,8 +63,9 @@ interface AgentOnboardingProviderProps {
 const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
   children,
 }) => {
+  const workspaceName = useActiveWorkspaceName();
   const [state, setState] = useLocalStorageState<AgentOnboardingState>(
-    AGENT_ONBOARDING_KEY,
+    `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
     { defaultValue: DEFAULT_STATE },
   );
 

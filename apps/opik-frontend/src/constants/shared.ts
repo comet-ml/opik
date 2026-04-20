@@ -6,7 +6,7 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 
-export const DEMO_PROJECT_NAME = "Demo Project";
+export const DEMO_PROJECT_NAME = "Opik Demo Agent Observability";
 export const SNIPPET_PROJECT_NAME = "my-ai-project";
 export const PROJECT_NAME_PLACEHOLDER = "PROJECT_NAME_PLACEHOLDER";
 export const PLAYGROUND_PROJECT_NAME = "playground";

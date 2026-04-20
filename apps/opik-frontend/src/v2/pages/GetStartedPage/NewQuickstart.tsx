@@ -6,16 +6,15 @@ import {
   AGENT_ONBOARDING_STEPS,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import useLocalStorageState from "use-local-storage-state";
-import useAppStore from "@/store/AppStore";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 
 const NewQuickstart: React.FunctionComponent = () => {
+  const workspaceName = useActiveWorkspaceName();
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
-  }>(AGENT_ONBOARDING_KEY);
-
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  }>(`${AGENT_ONBOARDING_KEY}-${workspaceName}`);
 
   const isOnboardingDone =
     agentOnboardingState?.step === AGENT_ONBOARDING_STEPS.DONE;

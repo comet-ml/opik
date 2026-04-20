@@ -6,6 +6,7 @@ export const OpikEvent = {
   ONBOARDING_SKIPPED: "opik_onboarding_skipped",
   EVAL_SUITE_UI_CONFIGURED: "opik_eval_suite_ui_configured",
   AGENT_CONFIG_UI_DEPLOYED: "opik_agent_config_ui_deployed",
+  OPTIMIZATION_WIZARD_STARTED: "opik_optimization_wizard_started",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];
