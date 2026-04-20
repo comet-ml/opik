@@ -7,7 +7,7 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.DatabaseUtils;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -875,7 +875,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     @Override
     public Mono<Boolean> hasVersion1Optimizations(@NonNull String workspaceId) {
-        var template = DatabaseUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
+        var template = FilterUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
                 "has_version1_optimizations", workspaceId, "", "");
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
