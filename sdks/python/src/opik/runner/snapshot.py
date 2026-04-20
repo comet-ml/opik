@@ -71,6 +71,7 @@ def build_checklist(
         "runner_type": runner_type,
         "command": " ".join(command) if command else None,
         "platform": platform.system().lower(),
+        "project_root": str(repo_root),
         "python_executable": sys.executable,
         "file_tree": file_tree,
         "instrumentation": {
