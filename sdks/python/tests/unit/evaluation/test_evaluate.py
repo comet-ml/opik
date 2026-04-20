@@ -11,6 +11,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
     evaluator as evaluator_module,
+    helpers as helpers_module,
     metrics,
     samplers,
     score_statistics,
@@ -1238,7 +1239,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=10,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2838,7 +2839,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2904,7 +2905,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=["dataset-item-id-1"],
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2977,7 +2978,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -3052,7 +3053,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -3098,7 +3099,7 @@ def test_evaluate_prompt__with_filter_string__passes_to_streaming(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3152,7 +3153,7 @@ def test_evaluate_prompt__with_filter_string_and_nb_samples__passes_both_paramet
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3207,7 +3208,7 @@ def test_evaluate_prompt__with_filter_string_and_dataset_sampler__passes_filter_
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3254,7 +3255,7 @@ def test_evaluate__with_filter_string__passes_to_streaming(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3304,7 +3305,7 @@ def test_evaluate__with_filter_string_and_nb_samples__passes_both_parameters(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3355,7 +3356,7 @@ def test_evaluate__with_filter_string_and_dataset_sampler__passes_filter_string(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3405,7 +3406,7 @@ def test_evaluate_optimization_trial__with_filter_string__passes_to_streaming(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3579,47 +3580,6 @@ def test_evaluate__verbose_zero__progress_bar_disabled(fake_backend):
         desc=mock.ANY,
         total=mock.ANY,
     )
-
-
-class TestMergeBlueprintIntoConfig:
-    @staticmethod
-    def _make_blueprint(id, name):
-        bp = mock.MagicMock()
-        bp.id = id
-        bp.name = name
-        return bp
-
-    def test_blueprint_fetched_and_version_stored(self):
-        mock_client = mock.Mock()
-        mock_client._rest_client.agent_configs.get_blueprint_by_id.return_value = (
-            self._make_blueprint("bp-123", "v9")
-        )
-
-        result = evaluator_module._merge_blueprint_into_config(
-            mock_client,
-            "bp-123",
-            {"model": "gpt-4o"},
-        )
-
-        assert result["model"] == "gpt-4o"
-        assert result["agent_configuration"] == {
-            "_blueprint_id": "bp-123",
-            "blueprint_version": "v9",
-        }
-
-    def test_blueprint_fetch_fails_still_stores_id(self):
-        mock_client = mock.Mock()
-        mock_client._rest_client.agent_configs.get_blueprint_by_id.side_effect = (
-            Exception("not found")
-        )
-
-        result = evaluator_module._merge_blueprint_into_config(
-            mock_client,
-            "bp-456",
-            None,
-        )
-
-        assert result["agent_configuration"] == {"_blueprint_id": "bp-456"}
 
 
 def test_evaluate__dataset_has_project_name__caller_override_ignored_and_warning_logged(

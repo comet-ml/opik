@@ -4,7 +4,6 @@ from typing import (
     Any,
     Callable,
     Dict,
-    Iterator,
     List,
     Optional,
     Tuple,
@@ -47,87 +46,6 @@ LOGGER = logging.getLogger(__name__)
 MODALITY_SUPPORT_DOC_URL = (
     "https://www.comet.com/docs/opik/evaluation/evaluate_multimodal"
 )
-
-EVALUATION_STREAM_DATASET_BATCH_SIZE = 200
-
-
-def _merge_blueprint_into_config(
-    client: "opik_client.Opik",
-    blueprint_id: str,
-    experiment_config: Optional[Dict[str, Any]],
-) -> Dict[str, Any]:
-    """Add blueprint reference to experiment_config under ``agent_configuration``."""
-    experiment_config = dict(experiment_config) if experiment_config else {}
-    agent_config: Dict[str, str] = {"_blueprint_id": blueprint_id}
-    try:
-        blueprint = client._rest_client.agent_configs.get_blueprint_by_id(
-            blueprint_id=blueprint_id,
-        )
-        if blueprint.name:
-            agent_config["blueprint_version"] = blueprint.name
-    except Exception:
-        LOGGER.debug("Failed to fetch blueprint %s", blueprint_id, exc_info=True)
-    experiment_config["agent_configuration"] = agent_config
-    return experiment_config
-
-
-def _calculate_total_items(
-    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
-    nb_samples: Optional[int],
-    dataset_item_ids: Optional[List[str]],
-) -> Optional[int]:
-    """Calculate the total number of items that will be evaluated."""
-    if dataset_item_ids is not None:
-        return len(dataset_item_ids)
-
-    if nb_samples is not None:
-        if dataset_.dataset_items_count is not None:
-            return min(nb_samples, dataset_.dataset_items_count)
-        return nb_samples
-
-    return dataset_.dataset_items_count
-
-
-def _resolve_dataset_items(
-    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
-    nb_samples: Optional[int],
-    dataset_item_ids: Optional[List[str]],
-    dataset_sampler: Optional[samplers.BaseDatasetSampler],
-    dataset_filter_string: Optional[str],
-) -> Tuple[Iterator[dataset_item.DatasetItem], Optional[int]]:
-    """
-    Resolve dataset items for evaluation.
-
-    Handles streaming vs sampling, and calculates total item count.
-
-    Returns:
-        Tuple of (items iterator, total item count or None).
-    """
-    if dataset_sampler is None:
-        items_iter = dataset_.__internal_api__stream_items_as_dataclasses__(
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=dataset_filter_string,
-        )
-        total = _calculate_total_items(
-            dataset_=dataset_,
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-        )
-        return items_iter, total
-
-    LOGGER.info("Dataset streaming disabled due to sampler")
-    items_list = list(
-        dataset_.__internal_api__stream_items_as_dataclasses__(
-            nb_samples=nb_samples,
-            dataset_item_ids=dataset_item_ids,
-            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=dataset_filter_string,
-        )
-    )
-    items_list = dataset_sampler.sample(items_list)
-    return iter(items_list), len(items_list)
 
 
 def _try_notifying_about_experiment_completion(
@@ -297,7 +215,7 @@ def evaluate(
     client = opik_client.get_global_client()
 
     if blueprint_id:
-        experiment_config = _merge_blueprint_into_config(
+        experiment_config = helpers.merge_blueprint_into_config(
             client,
             blueprint_id,
             experiment_config,
@@ -392,7 +310,7 @@ def __internal_api__run_test_suite__(
         client = opik_client.get_global_client()
 
     if blueprint_id:
-        experiment_config = _merge_blueprint_into_config(
+        experiment_config = helpers.merge_blueprint_into_config(
             client,
             blueprint_id,
             experiment_config,
@@ -578,7 +496,7 @@ def _evaluate_task(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        items_iter, total = _resolve_dataset_items(
+        items_iter, total = helpers.resolve_dataset_items_generator(
             dataset_=dataset,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
@@ -678,7 +596,7 @@ def _evaluate_test_suite_task(
         items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
             nb_samples=None,
             dataset_item_ids=dataset_item_ids,
-            batch_size=EVALUATION_STREAM_DATASET_BATCH_SIZE,
+            batch_size=helpers.EVALUATION_STREAM_DATASET_BATCH_SIZE,
             filter_string=dataset_filter_string,
         )
         total = dataset.dataset_items_count
@@ -1082,7 +1000,7 @@ def evaluate_prompt(
     start_time = time.time()
 
     with asyncio_support.async_http_connections_expire_immediately():
-        items_iter, total = _resolve_dataset_items(
+        items_iter, total = helpers.resolve_dataset_items_generator(
             dataset_=dataset,
             nb_samples=nb_samples,
             dataset_item_ids=dataset_item_ids,
