@@ -12,15 +12,16 @@ import logging
 from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
+    import pandas as pd
+
     from opik.api_objects import opik_client as opik_client_module
     from opik.evaluation.suite_evaluators.llm_judge import LLMJudge
 
 import datetime
 
-from opik import id_helpers
 from opik import exceptions as opik_exceptions
 from opik.api_objects.prompt import base_prompt
-from opik.api_objects.dataset import dataset, dataset_item
+from opik.api_objects.dataset import dataset
 from opik.rest_api.types import dataset_version_public
 from . import types as suite_types, converters
 from .. import validators, execution_policy, rest_operations
@@ -396,6 +397,117 @@ class TestSuite:
             )
         ]
 
+    def to_pandas(self) -> "pd.DataFrame":
+        """
+        Convert the test suite items to a pandas DataFrame.
+
+        Requires the ``pandas`` library to be installed.
+
+        Returns:
+            A pandas DataFrame containing all items with columns
+            such as ``id``, ``data``, ``assertions``, ``description``,
+            and ``execution_policy``.
+        """
+        return converters.to_pandas(self.get_items())
+
+    def to_json(self) -> str:
+        """
+        Convert the test suite items to a JSON string.
+
+        Returns:
+            A JSON string representation of all items.
+        """
+        return converters.to_json(self.get_items())
+
+    def insert_from_json(
+        self,
+        json_array: str,
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Insert test suite items from a JSON string.
+
+        Each JSON object must map to valid test suite item keys after
+        applying ``keys_mapping``:
+
+        - ``data`` (required) — dict of test case inputs
+        - ``assertions`` — list of assertion strings
+        - ``description`` — item description
+        - ``execution_policy`` — dict with ``runs_per_item`` and ``pass_threshold``
+        - ``id`` — item identifier (auto-generated if omitted)
+
+        Args:
+            json_array: JSON string of format ``[{...}, {...}]``.
+            keys_mapping: Maps JSON keys to the target keys listed above.
+                Example: ``{"test_data": "data", "checks": "assertions"}``
+            ignore_keys: Keys in the JSON dicts to skip during import.
+        """
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+
+        self.insert(converters.from_json(json_array, keys_mapping, ignore_keys))
+
+    def insert_from_pandas(
+        self,
+        dataframe: "pd.DataFrame",
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Insert test suite items from a pandas DataFrame.
+
+        Requires the ``pandas`` library to be installed.
+
+        Each DataFrame row must map to valid test suite item keys after
+        applying ``keys_mapping``:
+
+        - ``data`` (required) — dict of test case inputs
+        - ``assertions`` — list of assertion strings
+        - ``description`` — item description
+        - ``execution_policy`` — dict with ``runs_per_item`` and ``pass_threshold``
+        - ``id`` — item identifier (auto-generated if omitted)
+
+        Args:
+            dataframe: pandas DataFrame.
+            keys_mapping: Maps column names to the target keys listed above.
+                Example: ``{"test_data": "data", "checks": "assertions"}``
+            ignore_keys: Column names in the DataFrame to skip during import.
+        """
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+
+        self.insert(converters.from_pandas(dataframe, keys_mapping, ignore_keys))
+
+    def insert_from_jsonl_file(
+        self,
+        file_path: str,
+        keys_mapping: Optional[Dict[str, str]] = None,
+        ignore_keys: Optional[List[str]] = None,
+    ) -> None:
+        """
+        Read JSONL from a file and insert items into the test suite.
+
+        Each line must be a JSON object that maps to valid test suite item
+        keys after applying ``keys_mapping``:
+
+        - ``data`` (required) — dict of test case inputs
+        - ``assertions`` — list of assertion strings
+        - ``description`` — item description
+        - ``execution_policy`` — dict with ``runs_per_item`` and ``pass_threshold``
+        - ``id`` — item identifier (auto-generated if omitted)
+
+        Args:
+            file_path: Path to the JSONL file.
+            keys_mapping: Maps JSON keys to the target keys listed above.
+                Example: ``{"test_data": "data", "checks": "assertions"}``
+            ignore_keys: Keys in the JSON objects to skip during import.
+        """
+        keys_mapping = {} if keys_mapping is None else keys_mapping
+        ignore_keys = [] if ignore_keys is None else ignore_keys
+
+        self.insert(converters.from_jsonl_file(file_path, keys_mapping, ignore_keys))
+
     def update_test_settings(
         self,
         *,
@@ -566,41 +678,7 @@ class TestSuite:
         """
         validators.validate_suite_items(items)
 
-        ds_items: List[dataset_item.DatasetItem] = []
-        for item in items:
-            evaluators = validators.resolve_evaluators(
-                item.get("assertions"), None, "item-level assertions"
-            )
-
-            evaluator_items = None
-            if evaluators:
-                evaluator_items = [
-                    dataset_item.EvaluatorItem(
-                        name=e.name,
-                        type="llm_judge",
-                        config=e.to_config().model_dump(by_alias=True),
-                    )
-                    for e in evaluators
-                ]
-
-            ep = item.get("execution_policy")
-            execution_policy_item = None
-            if ep:
-                execution_policy_item = dataset_item.ExecutionPolicyItem(
-                    runs_per_item=ep.get("runs_per_item"),
-                    pass_threshold=ep.get("pass_threshold"),
-                )
-
-            ds_items.append(
-                dataset_item.DatasetItem(
-                    id=item.get("id", id_helpers.generate_id()),
-                    description=item.get("description"),
-                    evaluators=evaluator_items,
-                    execution_policy=execution_policy_item,
-                    **item["data"],
-                )
-            )
-
+        ds_items = [converters.suite_item_dict_to_dataset_item(item) for item in items]
         self._dataset.__internal_api__insert_items_as_dataclasses__(ds_items)
 
     def __internal_api__run_optimization_suite__(
