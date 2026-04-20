@@ -93,7 +93,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
                   Connect your agent to Opik for observability, evaluation and
                   optimization.{" "}
                   <a
-                    href={buildDocsUrl("/faq#troubleshooting")}
+                    href={buildDocsUrl("/faq", "#troubleshooting")}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline hover:text-foreground"
