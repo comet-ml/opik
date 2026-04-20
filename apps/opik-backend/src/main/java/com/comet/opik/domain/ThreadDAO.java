@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -73,24 +74,18 @@ class ThreadDAOImpl implements ThreadDAO {
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH traces_final_ids AS (
-                SELECT id, thread_id
-                FROM (
-                    SELECT *
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                WHERE 1 = 1
+            WITH <if(traces_final_ids)>traces_final_ids AS (
+                SELECT DISTINCT id, thread_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-            ), traces_final AS (
+            ), <endif>traces_final AS (
                 SELECT
                     id,
                     workspace_id,
@@ -109,12 +104,30 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_by,
                     created_at
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND id IN (SELECT id FROM traces_final_ids)
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                FROM (
+                    SELECT
+                        *,
+                        truncated_input,
+                        truncated_output,
+                        input_length,
+                        output_length
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND thread_id \\<> ''
+                      <if(traces_final_ids)>
+                      AND id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                      <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                      <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
             ), spans_deduped AS (
                 SELECT
                     workspace_id,
@@ -129,7 +142,12 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(traces_final_ids)>
                   AND trace_id IN (SELECT id FROM traces_final_ids)
+                  <else>
+                  <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                  <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY (workspace_id, project_id, trace_id, parent_span_id, id)
             ), spans_agg AS (
@@ -159,7 +177,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
+                <if(traces_final_ids)>
                 AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <endif>
                 <endif>
                 <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
@@ -412,24 +432,18 @@ class ThreadDAOImpl implements ThreadDAO {
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH traces_final_ids AS (
-                SELECT id, thread_id
-                FROM (
-                    SELECT *
-                    FROM traces
-                    WHERE workspace_id = :workspace_id
-                    AND project_id = :project_id
-                    AND thread_id \\<> ''
-                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
-                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
-                )
-                WHERE 1 = 1
+            WITH <if(traces_final_ids)>traces_final_ids AS (
+                SELECT DISTINCT id, thread_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id \\<> ''
+                <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
-            ), traces_final AS (
+            ), <endif>traces_final AS (
                 SELECT
                     id,
                     workspace_id,
@@ -443,12 +457,25 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_by,
                     created_at
-                FROM traces
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND id IN (SELECT id FROM traces_final_ids)
-                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND thread_id \\<> ''
+                      <if(traces_final_ids)>
+                      AND id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                      <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                      <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
             ), spans_deduped AS (
                 SELECT
                     workspace_id,
@@ -463,7 +490,12 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
+                  <if(traces_final_ids)>
                   AND trace_id IN (SELECT id FROM traces_final_ids)
+                  <else>
+                  <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                  <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                  <endif>
                 ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY (workspace_id, project_id, trace_id, parent_span_id, id)
             ), spans_agg AS (
@@ -493,7 +525,9 @@ class ThreadDAOImpl implements ThreadDAO {
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
+                <if(traces_final_ids)>
                 AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                <endif>
                 <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY (workspace_id, project_id, thread_id, id)
@@ -1219,6 +1253,18 @@ class ThreadDAOImpl implements ThreadDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
 
+    /**
+     * Determines whether to activate the traces_final_ids CTE for narrowing the raw traces / spans scans
+     * in the thread list and count queries. Mirrors {@code TraceDAO#shouldUseTraceIdPrefilter}.
+     *
+     * <p>Only activates when there are narrowing predicates beyond the workspace/project/uuid-range filters:
+     * either a free-text search or a TRACE-strategy filter ({@code <filters>}). When neither is present,
+     * the downstream CTEs apply the uuid range directly, skipping the prefilter scan.
+     */
+    private static boolean shouldUseTracesFinalIdsPrefilter(TraceSearchCriteria criteria, ST template) {
+        return criteria.searchText() != null || template.getAttribute("filters") != null;
+    }
+
     @Override
     @WithSpan
     public Mono<TraceThread.TraceThreadPage> find(int size, int page, @NonNull TraceSearchCriteria criteria) {
@@ -1237,6 +1283,10 @@ class ThreadDAOImpl implements ThreadDAO {
                             template = template.add("offset", offset)
                                     .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
                                             "page:" + page + ":size:" + size));
+
+                            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                                template.add("traces_final_ids", true);
+                            }
 
                             var finalTemplate = template;
                             Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
@@ -1308,6 +1358,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     .add("log_comment", getLogComment("search_threads", workspaceId, userName,
                             "limit:" + limit));
 
+            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
+
             var statement = connection.createStatement(template.render())
                     .bind("project_id", criteria.projectId())
                     .bind("limit", limit)
@@ -1356,6 +1410,10 @@ class ThreadDAOImpl implements ThreadDAO {
         var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria,
                 THREAD_SEARCH_CLAUSE);
         template.add("log_comment", getLogComment("count_threads_by_project", workspaceId, userName, ""));
+
+        if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
+            template.add("traces_final_ids", true);
+        }
 
         var statement = connection.createStatement(template.render())
                 .bind("project_id", traceSearchCriteria.projectId())
