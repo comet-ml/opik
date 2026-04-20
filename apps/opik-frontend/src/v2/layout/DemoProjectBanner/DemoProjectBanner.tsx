@@ -79,8 +79,9 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
           onClick={handleCreateYourOwn}
           className="text-foreground underline underline-offset-2"
         >
-          create your own
+          click here to create your own
         </Link>
+        .
       </span>
     </div>
   );
