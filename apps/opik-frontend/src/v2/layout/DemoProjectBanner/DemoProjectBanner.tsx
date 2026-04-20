@@ -72,9 +72,9 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   return (
     <div
       ref={ref}
-      className="z-10 flex h-8 items-center gap-1.5 bg-primary px-4"
+      className="z-10 flex h-8 items-center justify-center gap-1.5 bg-primary px-4"
     >
-      <span className="comet-body-xs text-white">
+      <span className="comet-body-xs text-center text-white">
         You are viewing a demo project,{" "}
         <Link
           to="/$workspaceName/get-started"
