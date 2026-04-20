@@ -18,7 +18,6 @@ import com.comet.opik.podam.PodamFactoryUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.redis.testcontainers.RedisContainer;
-import org.assertj.core.api.Assertions;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -43,7 +42,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
 import static com.comet.opik.infrastructure.bi.DailyUsageReportJobTest.SUCCESS_RESPONSE;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.matching;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
@@ -51,7 +49,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class BiEventListenerTest {
+class BiEventListenerAnalyticsOnlyTest {
 
     private static final String USER = UUID.randomUUID().toString();
     private static final String VERSION = "%s.%s.%s".formatted(PodamUtils.getIntegerInRange(1, 99),
@@ -81,21 +79,24 @@ class BiEventListenerTest {
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
 
-        mockBiEventResponse(wireMock.server());
-        mockAnalyticsEventResponse(wireMock.server());
+        mockAnyEventResponse(wireMock.server());
 
+        // analytics.enabled=true, usageReport.enabled=false (default in config-test.yml).
+        // The StatsClient transport permits sending when either flag is true, so the
+        // analytics event should flow; the opik_os_* BI event must remain gated off.
         app = newTestDropwizardAppExtension(
                 TestDropwizardAppExtensionUtils.AppContextConfig.builder()
                         .jdbcUrl(MYSQL.getJdbcUrl())
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
-                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
-                        .usageReportEnabled(true)
                         .metadataVersion(VERSION)
                         .customConfigs(List.of(
                                 new TestDropwizardAppExtensionUtils.CustomConfig(
-                                        "analytics.enabled", "true")))
+                                        "analytics.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig(
+                                        "usageReport.url",
+                                        "%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))))
                         .build());
     }
 
@@ -125,27 +126,13 @@ class BiEventListenerTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
-    private void mockBiEventResponse(WireMockServer server) {
-        server.stubFor(
-                post(urlPathEqualTo("/v1/notify/event"))
-                        .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
-                                "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")))
-                        .withRequestBody(matchingJsonPath("$.event_type",
-                                matching(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT)))
-                        .withRequestBody(matchingJsonPath("$.event_properties.opik_app_version", matching(VERSION)))
-                        .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
-    }
-
-    private void mockAnalyticsEventResponse(WireMockServer server) {
-        server.stubFor(
-                post(urlPathEqualTo("/v1/notify/event"))
-                        .withRequestBody(matchingJsonPath("$.event_type",
-                                matching(AnalyticsService.EVENT_PREFIX + "first_trace_created")))
-                        .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
+    private void mockAnyEventResponse(WireMockServer server) {
+        server.stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(WireMock.okJson(SUCCESS_RESPONSE)));
     }
 
     @Test
-    void shouldReportFirstTraceEvents(UsageReportService usageReportService, CacheManager cacheManager) {
+    void shouldSendAnalyticsEventButNotBiEventWhenOnlyAnalyticsEnabled(CacheManager cacheManager) {
         var workspaceId = UUID.randomUUID().toString();
         var workspaceName = UUID.randomUUID().toString();
         var apiKey = UUID.randomUUID().toString();
@@ -162,48 +149,14 @@ class BiEventListenerTest {
         Awaitility
                 .await()
                 .atMost(60, TimeUnit.SECONDS)
-                .untilAsserted(() -> {
-                    verifyBiEventSent();
-                    verifyAnalyticsEventSent(workspaceId, analyticsEventType);
-                });
+                .untilAsserted(() -> wireMock.server().verify(
+                        postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                                .withRequestBody(matchingJsonPath("$.event_type", equalTo(analyticsEventType)))
+                                .withRequestBody(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(workspaceId)))));
 
-        Assertions.assertThat(usageReportService.isFirstTraceReport()).isTrue();
-
-        // second trace in the same workspace — neither event should fire again
-        trace = factory.manufacturePojo(Trace.class);
-        traceResourceClient.createTrace(trace, apiKey, workspaceName);
-
-        Awaitility
-                .await()
-                .during(1, TimeUnit.SECONDS)
-                .untilAsserted(() -> {
-                    wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type",
-                                    equalTo(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT))));
-                    wireMock.server().verify(1, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                            .withRequestBody(matchingJsonPath("$.event_type",
-                                    equalTo(analyticsEventType))));
-                });
-    }
-
-    private void verifyBiEventSent() {
-        wireMock.server().verify(
-                postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                        .withRequestBody(matchingJsonPath("$.anonymous_id", matching(
-                                "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"))
-                                .and(matchingJsonPath("$.event_type",
-                                        equalTo(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT)))
-                                .and(matchingJsonPath("$.event_properties.opik_app_version", equalTo(VERSION)))));
-    }
-
-    private void verifyAnalyticsEventSent(String workspaceId, String eventType) {
-        wireMock.server().verify(
-                postRequestedFor(urlPathEqualTo("/v1/notify/event"))
-                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(eventType))
-                                .and(matchingJsonPath("$.anonymous_id", equalTo(USER)))
-                                .and(matchingJsonPath("$.event_properties.workspace_id",
-                                        equalTo(workspaceId)))
-                                .and(matchingJsonPath("$.event_properties.user_name",
-                                        equalTo(USER)))));
+        wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                .withRequestBody(matchingJsonPath("$.event_type",
+                        equalTo(BiEventListener.FIRST_TRACE_REPORT_BI_EVENT))));
     }
 }

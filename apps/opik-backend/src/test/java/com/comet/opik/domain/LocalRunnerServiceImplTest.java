@@ -18,6 +18,7 @@ import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -112,7 +113,7 @@ class LocalRunnerServiceImplTest {
         runnerService = new RunnerServiceImpl(stringRedis, idGenerator, projectService, runnerConfig,
                 () -> endpointJobService, () -> connectBridgeService, () -> requestContext);
         endpointJobService = new EndpointJobServiceImpl(stringRedis, redisClient.reactive(), idGenerator,
-                runnerService, runnerConfig);
+                runnerService, runnerConfig, Mockito.mock(AnalyticsService.class));
         connectBridgeService = new ConnectBridgeServiceImpl(stringRedis, idGenerator, runnerService, runnerConfig);
     }
 

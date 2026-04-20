@@ -702,10 +702,10 @@ public class ExperimentService {
             try {
                 datasetService.getById(experiment.datasetId(), workspaceId)
                         .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
-                        .ifPresent(dataset -> analyticsService.trackEvent(userName, "opik_eval_suite_run", Map.of(
+                        .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
                                 "eval_suite_id", dataset.id().toString(),
                                 "experiment_id", experiment.id().toString(),
-                                "project_id", String.valueOf(experiment.projectId()))));
+                                "project_id", String.valueOf(experiment.projectId())), userName));
             } catch (Exception e) {
                 log.warn("Failed to track eval_suite_run analytics event for experiment '{}'",
                         experiment.id(), e);

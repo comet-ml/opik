@@ -466,6 +466,12 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: ${OPIK_USAGE_REPORT_CONNECT_TIMEOUT:-5s}
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: ${OPIK_USAGE_REPORT_READ_TIMEOUT:-10s}
   # Description: Configuration for anonymous ID used to identify the installation
   # Default: empty
   anonymousId: ${OPIK_ANONYMOUS_ID:-}

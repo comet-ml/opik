@@ -435,6 +435,28 @@ describe("TestSuite", () => {
 
       expect(items).toEqual([]);
     });
+
+    it("should forward lastRetrievedId to dataset.getRawItems", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(10, "cursor-xyz");
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(10, "cursor-xyz");
+    });
+
+    it("should pass undefined lastRetrievedId when not provided", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(5);
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
   });
 
   describe("delete", () => {

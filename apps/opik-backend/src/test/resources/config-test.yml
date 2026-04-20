@@ -217,6 +217,12 @@ usageReport:
   # Default: false
   # Description: Whether or not to send anonymous usage reports
   enabled: false
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: 5s
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: 10s
 
 # Configuration for application metadata
 metadata:

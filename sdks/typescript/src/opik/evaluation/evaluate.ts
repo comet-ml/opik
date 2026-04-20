@@ -75,6 +75,11 @@ export async function evaluate<T = Record<string, unknown>>(
     throw new Error("Task function is required for evaluation");
   }
 
+  // Wait for all prompts to be ready
+  if (options.prompts) {
+    await Promise.all(options.prompts.map((prompt) => prompt.ready()));
+  }
+
   // Get Opik client
   const client = options.client ?? OpikSingleton.getInstance();
 

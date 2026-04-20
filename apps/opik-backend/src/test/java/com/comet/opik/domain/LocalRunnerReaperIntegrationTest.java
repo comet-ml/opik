@@ -9,6 +9,7 @@ import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.redis.testcontainers.RedisContainer;
 import io.dropwizard.util.Duration;
@@ -95,7 +96,7 @@ class LocalRunnerReaperIntegrationTest {
         runnerService = new RunnerServiceImpl(stringRedis, idGenerator, projectService, runnerConfig,
                 () -> endpointJobService, () -> connectBridgeService, () -> requestContext);
         endpointJobService = new EndpointJobServiceImpl(stringRedis, redisClient.reactive(), idGenerator,
-                runnerService, runnerConfig);
+                runnerService, runnerConfig, Mockito.mock(AnalyticsService.class));
     }
 
     @BeforeEach
