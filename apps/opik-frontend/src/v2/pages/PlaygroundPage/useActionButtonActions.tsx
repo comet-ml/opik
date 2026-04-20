@@ -265,6 +265,29 @@ const useActionButtonActions = ({
     [clearRunningMap, setPromptRunning],
   );
 
+  const handlePollError = useCallback(
+    (
+      error: unknown,
+      scope: PollScope | undefined,
+      description: string,
+      onUnscopedCleanup?: () => void,
+    ) => {
+      const isScoped = !!scope?.scopedPromptIds;
+      finishPollScope(scope);
+      if (!isScoped) {
+        onUnscopedCleanup?.();
+      }
+      if ((error as Error)?.name !== "AbortError") {
+        toast({
+          title: "Error",
+          description,
+          variant: "destructive",
+        });
+      }
+    },
+    [finishPollScope, toast],
+  );
+
   // TODO: OPIK-5724 — for datasets >20k items, replace with a dedicated BE count endpoint
   const pollAssertionEvaluation = useCallback(
     async (
@@ -350,17 +373,12 @@ const useActionButtonActions = ({
           });
           setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
         } catch (error) {
-          finishPollScope(scope);
-          if (!isScoped) {
-            resetProgress();
-          }
-          if ((error as Error)?.name !== "AbortError") {
-            toast({
-              title: "Error",
-              description: "Failed to poll assertion evaluation status",
-              variant: "destructive",
-            });
-          }
+          handlePollError(
+            error,
+            scope,
+            "Failed to poll assertion evaluation status",
+            resetProgress,
+          );
         }
       };
 
@@ -374,6 +392,7 @@ const useActionButtonActions = ({
       finishPollScope,
       queryClient,
       toast,
+      handlePollError,
     ],
   );
 
@@ -453,14 +472,11 @@ const useActionButtonActions = ({
           queryClient.invalidateQueries({ queryKey: ["experiments"] });
           setTimeout(poll, EXPERIMENT_POLL_INTERVAL_MS);
         } catch (error) {
-          finishPollScope(scope);
-          if ((error as Error)?.name !== "AbortError") {
-            toast({
-              title: "Error",
-              description: "Failed to poll experiment completion status",
-              variant: "destructive",
-            });
-          }
+          handlePollError(
+            error,
+            scope,
+            "Failed to poll experiment completion status",
+          );
         }
       };
 
@@ -474,6 +490,7 @@ const useActionButtonActions = ({
       queryClient,
       pollAssertionEvaluation,
       toast,
+      handlePollError,
     ],
   );
 
