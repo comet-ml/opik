@@ -8,7 +8,7 @@ import {
   ExperimentsCompare,
   DATASET_ITEM_SOURCE,
 } from "@/types/datasets";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 import { AggregatedExperimentItem } from "@/lib/trials";
 
 const makeItem = (
@@ -39,7 +39,7 @@ describe("getStatusFromExperimentItems", () => {
   describe("no items", () => {
     it("returns SKIPPED with 'no experiment item' reason when experiment_items is empty", () => {
       const result = getStatusFromExperimentItems(makeRow());
-      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.status).toBe(RunStatus.SKIPPED);
       expect(result.skippedReason).toBe("No experiment item defined");
     });
   });
@@ -50,7 +50,7 @@ describe("getStatusFromExperimentItems", () => {
         experiment_items: [makeItem({ id: "i1" })],
       });
       const result = getStatusFromExperimentItems(row);
-      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.status).toBe(RunStatus.SKIPPED);
       expect(result.skippedReason).toBe("No assertions defined");
     });
   });
@@ -63,18 +63,16 @@ describe("getStatusFromExperimentItems", () => {
           "exp-1": {
             passed_runs: 2,
             total_runs: 2,
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
           },
           "exp-2": {
             passed_runs: 3,
             total_runs: 3,
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
           },
         },
       });
-      expect(getStatusFromExperimentItems(row).status).toBe(
-        ExperimentItemStatus.PASSED,
-      );
+      expect(getStatusFromExperimentItems(row).status).toBe(RunStatus.PASSED);
     });
 
     it("returns FAILED when any summary is not PASSED", () => {
@@ -84,24 +82,18 @@ describe("getStatusFromExperimentItems", () => {
           "exp-1": {
             passed_runs: 2,
             total_runs: 3,
-            status: ExperimentItemStatus.FAILED,
+            status: RunStatus.FAILED,
           },
         },
       });
-      expect(getStatusFromExperimentItems(row).status).toBe(
-        ExperimentItemStatus.FAILED,
-      );
+      expect(getStatusFromExperimentItems(row).status).toBe(RunStatus.FAILED);
     });
 
     it("falls back to first item status when no summaries", () => {
       const row = makeRow({
-        experiment_items: [
-          makeItem({ id: "i1", status: ExperimentItemStatus.SKIPPED }),
-        ],
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.SKIPPED })],
       });
-      expect(getStatusFromExperimentItems(row).status).toBe(
-        ExperimentItemStatus.SKIPPED,
-      );
+      expect(getStatusFromExperimentItems(row).status).toBe(RunStatus.SKIPPED);
     });
   });
 
@@ -118,14 +110,31 @@ describe("getStatusFromExperimentItems", () => {
 
     it("returns not evaluating when status is resolved", () => {
       const row = makeRow({
-        experiment_items: [
-          makeItem({ id: "i1", status: ExperimentItemStatus.PASSED }),
-        ],
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.PASSED })],
         evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.evaluating).toBe(false);
-      expect(result.status).toBe(ExperimentItemStatus.PASSED);
+      expect(result.status).toBe(RunStatus.PASSED);
+    });
+
+    it("treats SKIPPED as evaluating when evaluators exist", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.SKIPPED })],
+        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
+      });
+      const result = getStatusFromExperimentItems(row);
+      expect(result.evaluating).toBe(true);
+      expect(result.status).toBeUndefined();
+    });
+
+    it("keeps SKIPPED when no evaluators exist", () => {
+      const row = makeRow({
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.SKIPPED })],
+      });
+      const result = getStatusFromExperimentItems(row);
+      expect(result.status).toBe(RunStatus.SKIPPED);
+      expect(result.skippedReason).toBe("No assertions defined");
     });
   });
 
@@ -133,9 +142,7 @@ describe("getStatusFromExperimentItems", () => {
     it("uses dataset-level execution_policy when items have none", () => {
       const row = makeRow({
         execution_policy: { runs_per_item: 5, pass_threshold: 3 },
-        experiment_items: [
-          makeItem({ id: "i1", status: ExperimentItemStatus.PASSED }),
-        ],
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.PASSED })],
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.passThreshold).toBe(3);
@@ -148,7 +155,7 @@ describe("getStatusFromExperimentItems", () => {
         experiment_items: [
           makeItem({
             id: "i1",
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
             execution_policy: { runs_per_item: 2, pass_threshold: 1 },
           }),
         ],
@@ -160,9 +167,7 @@ describe("getStatusFromExperimentItems", () => {
 
     it("returns undefined when no execution_policy exists", () => {
       const row = makeRow({
-        experiment_items: [
-          makeItem({ id: "i1", status: ExperimentItemStatus.PASSED }),
-        ],
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.PASSED })],
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.passThreshold).toBeUndefined();
@@ -176,12 +181,12 @@ describe("getStatusFromExperimentItems", () => {
         experiment_items: [
           makeItem({
             id: "i1",
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
             assertion_results: [{ value: "a", passed: true }],
           }),
           makeItem({
             id: "i2",
-            status: ExperimentItemStatus.FAILED,
+            status: RunStatus.FAILED,
             assertion_results: [{ value: "a", passed: false }],
           }),
         ],
@@ -194,9 +199,7 @@ describe("getStatusFromExperimentItems", () => {
 
     it("defaults to empty array for items without assertion_results", () => {
       const row = makeRow({
-        experiment_items: [
-          makeItem({ id: "i1", status: ExperimentItemStatus.PASSED }),
-        ],
+        experiment_items: [makeItem({ id: "i1", status: RunStatus.PASSED })],
       });
       const result = getStatusFromExperimentItems(row);
       expect(result.assertionsByRun).toEqual([[]]);
@@ -208,7 +211,7 @@ describe("getStatusInfoForExperiment", () => {
   describe("no item", () => {
     it("returns SKIPPED with 'no experiment item' reason when item is undefined", () => {
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", undefined);
-      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.status).toBe(RunStatus.SKIPPED);
       expect(result.skippedReason).toBe("No experiment item defined");
     });
   });
@@ -217,7 +220,7 @@ describe("getStatusInfoForExperiment", () => {
     it("returns SKIPPED with 'no assertions' reason when item has no status", () => {
       const item = makeItem({ id: "i1" });
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", item);
-      expect(result.status).toBe(ExperimentItemStatus.SKIPPED);
+      expect(result.status).toBe(RunStatus.SKIPPED);
       expect(result.skippedReason).toBe("No assertions defined");
     });
   });
@@ -229,13 +232,13 @@ describe("getStatusInfoForExperiment", () => {
           "exp-1": {
             passed_runs: 3,
             total_runs: 5,
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
           },
         },
       });
-      const item = makeItem({ id: "i1", status: ExperimentItemStatus.FAILED });
+      const item = makeItem({ id: "i1", status: RunStatus.FAILED });
       const result = getStatusInfoForExperiment(row, "exp-1", item);
-      expect(result.status).toBe(ExperimentItemStatus.PASSED);
+      expect(result.status).toBe(RunStatus.PASSED);
     });
 
     it("falls back to item status when no summary for that experimentId", () => {
@@ -244,14 +247,14 @@ describe("getStatusInfoForExperiment", () => {
           "exp-other": {
             passed_runs: 99,
             total_runs: 99,
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
           },
         },
         execution_policy: { runs_per_item: 3, pass_threshold: 2 },
       });
-      const item = makeItem({ id: "i1", status: ExperimentItemStatus.PASSED });
+      const item = makeItem({ id: "i1", status: RunStatus.PASSED });
       const result = getStatusInfoForExperiment(row, "exp-1", item);
-      expect(result.status).toBe(ExperimentItemStatus.PASSED);
+      expect(result.status).toBe(RunStatus.PASSED);
       expect(result.runsPerItem).toBe(3);
     });
   });
@@ -274,14 +277,14 @@ describe("getStatusInfoForExperiment", () => {
           "exp-1": {
             passed_runs: 1,
             total_runs: 1,
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
           },
         },
       });
       const item = makeItem({ id: "i1" });
       const result = getStatusInfoForExperiment(row, "exp-1", item);
       expect(result.evaluating).toBe(false);
-      expect(result.status).toBe(ExperimentItemStatus.PASSED);
+      expect(result.status).toBe(RunStatus.PASSED);
     });
   });
 
@@ -290,7 +293,7 @@ describe("getStatusInfoForExperiment", () => {
       const row = makeRow({
         execution_policy: { runs_per_item: 4, pass_threshold: 3 },
       });
-      const item = makeItem({ id: "i1", status: ExperimentItemStatus.PASSED });
+      const item = makeItem({ id: "i1", status: RunStatus.PASSED });
       const result = getStatusInfoForExperiment(row, "exp-1", item);
       expect(result.passThreshold).toBe(3);
       expect(result.runsPerItem).toBe(4);
@@ -302,7 +305,7 @@ describe("getStatusInfoForExperiment", () => {
       });
       const item = makeItem({
         id: "i1",
-        status: ExperimentItemStatus.PASSED,
+        status: RunStatus.PASSED,
         execution_policy: { runs_per_item: 2, pass_threshold: 1 },
       });
       const result = getStatusInfoForExperiment(row, "exp-1", item);
@@ -311,7 +314,7 @@ describe("getStatusInfoForExperiment", () => {
     });
 
     it("returns undefined when no execution_policy exists", () => {
-      const item = makeItem({ id: "i1", status: ExperimentItemStatus.PASSED });
+      const item = makeItem({ id: "i1", status: RunStatus.PASSED });
       const result = getStatusInfoForExperiment(makeRow(), "exp-1", item);
       expect(result.passThreshold).toBeUndefined();
       expect(result.runsPerItem).toBeUndefined();
@@ -322,17 +325,17 @@ describe("getStatusInfoForExperiment", () => {
     it("expands trialItems for assertionsByRun", () => {
       const row = makeRow();
       const aggregated = {
-        ...makeItem({ id: "agg", status: ExperimentItemStatus.FAILED }),
+        ...makeItem({ id: "agg", status: RunStatus.FAILED }),
         trialCount: 2,
         trialItems: [
           makeItem({
             id: "t1",
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
             assertion_results: [{ value: "check", passed: true }],
           }),
           makeItem({
             id: "t2",
-            status: ExperimentItemStatus.FAILED,
+            status: RunStatus.FAILED,
             assertion_results: [{ value: "check", passed: false }],
           }),
         ],
@@ -348,15 +351,15 @@ describe("getStatusInfoForExperiment", () => {
         execution_policy: { runs_per_item: 10, pass_threshold: 5 },
       });
       const aggregated = {
-        ...makeItem({ id: "agg", status: ExperimentItemStatus.PASSED }),
+        ...makeItem({ id: "agg", status: RunStatus.PASSED }),
         trialCount: 2,
         trialItems: [
           makeItem({
             id: "t1",
-            status: ExperimentItemStatus.PASSED,
+            status: RunStatus.PASSED,
             execution_policy: { runs_per_item: 3, pass_threshold: 2 },
           }),
-          makeItem({ id: "t2", status: ExperimentItemStatus.PASSED }),
+          makeItem({ id: "t2", status: RunStatus.PASSED }),
         ],
       } as AggregatedExperimentItem;
       const result = getStatusInfoForExperiment(row, "exp-1", aggregated);

@@ -11,28 +11,21 @@ import {
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { DATASET_TYPE, Experiment, ExperimentsCompare } from "@/types/datasets";
-import { extractAssertions } from "@/lib/assertion-converters";
 
 const REFETCH_INTERVAL = 5000;
 
-export const isItemScored = (
-  ei: { assertion_results?: unknown[]; status?: string | null },
-  evaluators: ExperimentsCompare["evaluators"],
-): boolean => {
-  const expectedCount = extractAssertions(evaluators ?? []).length;
-
-  if (expectedCount === 0) {
-    if (evaluators && evaluators.length === 0) return true;
-    return ei.status != null;
-  }
-
-  return (ei.assertion_results?.length ?? 0) >= expectedCount;
+export const isItemScored = (ei: { status?: string | null }): boolean => {
+  return ei.status != null;
 };
 
 export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
   const items = row.experiment_items ?? [];
   if (items.length === 0) return false;
-  return items.every((ei) => isItemScored(ei, row.evaluators));
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
+  return items.every((ei) => {
+    if (ei.status === "skipped") return !hasEvaluators;
+    return ei.status != null;
+  });
 };
 
 export type PromptResult = {
