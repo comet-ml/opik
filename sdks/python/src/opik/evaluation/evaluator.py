@@ -313,7 +313,7 @@ def evaluate(
     """
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
-        dataset = dataset.dataset
+        dataset = dataset.__internal_api__dataset__
 
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -560,11 +560,7 @@ def run_tests(
         ... )
         >>> print(f"Pass rate: {result.pass_rate:.0%}")
     """
-    suite_dataset: Union[dataset.Dataset, dataset.DatasetVersion]
-    if isinstance(test_suite, test_suite_module.TestSuiteVersion):
-        suite_dataset = test_suite._dataset_version
-    else:
-        suite_dataset = test_suite._dataset
+    suite_dataset = test_suite.__internal_api__dataset__
     client = suite_dataset.client
 
     return __internal_api__run_test_suite__(
@@ -1053,7 +1049,7 @@ def evaluate_prompt(
     """
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
-        dataset = dataset.dataset
+        dataset = dataset.__internal_api__dataset__
 
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
@@ -1302,7 +1298,7 @@ def evaluate_optimization_trial(
     """
     if isinstance(dataset, test_suite_module.TestSuite):
         # backwards compatibility for transition period
-        dataset = dataset.dataset
+        dataset = dataset.__internal_api__dataset__
 
     experiment_scoring_functions = (
         [] if experiment_scoring_functions is None else experiment_scoring_functions
