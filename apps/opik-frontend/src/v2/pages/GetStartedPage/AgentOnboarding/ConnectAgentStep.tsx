@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
@@ -30,15 +31,25 @@ import {
 
 const TRACE_POLL_INTERVAL = 5000;
 const FIRST_TRACE_TRACKED_KEY = "agent-onboarding-first-trace-tracked";
+const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
+  "onboarding-skills-for-ai-assisted-setup";
 
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
-  const showOllieTab = !!apiKey;
+  const aiAssistedOpikSkillsVariant = useFeatureFlagVariantKey(
+    AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
+  );
+  // it's 95% "test" and 5% "control" in production, but we want to be sure to handle the case where it's undefined
+  const aiAssistedUsesOpikSkills =
+    (aiAssistedOpikSkillsVariant ?? "test") === "test";
+  const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
+
   const [activeTab, setActiveTab] = useState(
     showOllieTab ? "connect-to-ollie" : "install-with-ai",
   );
+
   const [manualCategory, setManualCategory] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<
     string | null
@@ -70,6 +81,18 @@ const ConnectAgentStep: React.FC = () => {
   const [trackedTraceId, setTrackedTraceId] = useLocalStorageState<
     string | null
   >(FIRST_TRACE_TRACKED_KEY, { defaultValue: null });
+
+  useEffect(() => {
+    setActiveTab((current) => {
+      if (showOllieTab && current === "install-with-ai") {
+        return "connect-to-ollie";
+      }
+      if (!showOllieTab && current === "connect-to-ollie") {
+        return "install-with-ai";
+      }
+      return current;
+    });
+  }, [showOllieTab]);
 
   useEffect(() => {
     if (firstTraceId && firstTraceId !== trackedTraceId) {
@@ -220,7 +243,7 @@ const ConnectAgentStep: React.FC = () => {
           )}
           {!showOllieTab && (
             <TabsTrigger value="install-with-ai" variant="underline">
-              Use Opik skills
+              AI-assisted setup
             </TabsTrigger>
           )}
           <TabsTrigger value="manual-integration" variant="underline">
