@@ -8,7 +8,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum RunStatus {
     PASSED("passed"),
-    FAILED("failed");
+    FAILED("failed"),
+    SKIPPED("skipped");
 
     @JsonValue
     private final String value;

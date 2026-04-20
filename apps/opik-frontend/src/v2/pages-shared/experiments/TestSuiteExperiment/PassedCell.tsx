@@ -18,11 +18,11 @@ import {
   ExperimentItem,
   ExperimentsCompare,
 } from "@/types/datasets";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 import { isAggregatedItem } from "@/lib/trials";
 
 type StatusInfo = {
-  status: ExperimentItemStatus | undefined;
+  status: RunStatus | undefined;
   evaluating: boolean;
   assertionsByRun: AssertionResult[][];
   skippedReason: string | undefined;
@@ -34,7 +34,7 @@ const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
 const NO_ASSERTIONS_REASON = "No assertions defined";
 
 const SKIPPED_RESULT = (reason: string): StatusInfo => ({
-  status: ExperimentItemStatus.SKIPPED,
+  status: RunStatus.SKIPPED,
   evaluating: false,
   assertionsByRun: [],
   skippedReason: reason,
@@ -51,17 +51,26 @@ export function getStatusFromExperimentItems(
   const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
 
   const summaryValues = Object.values(row.run_summaries_by_experiment ?? {});
-  let status: ExperimentItemStatus | undefined;
+  let status: RunStatus | undefined;
 
   if (summaryValues.length > 0) {
-    const allPassed = summaryValues.every(
-      (s) => s.status === ExperimentItemStatus.PASSED,
+    const allSkipped = summaryValues.every(
+      (s) => s.status === RunStatus.SKIPPED,
     );
-    status = allPassed
-      ? ExperimentItemStatus.PASSED
-      : ExperimentItemStatus.FAILED;
+    if (allSkipped) {
+      status = RunStatus.SKIPPED;
+    } else {
+      const allPassed = summaryValues.every(
+        (s) => s.status === RunStatus.PASSED,
+      );
+      status = allPassed ? RunStatus.PASSED : RunStatus.FAILED;
+    }
   } else {
     status = items[0].status;
+  }
+
+  if (status === RunStatus.SKIPPED && hasEvaluators) {
+    status = undefined;
   }
 
   if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
@@ -99,7 +108,13 @@ export function getStatusInfoForExperiment(
 
   const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
   const summary = row.run_summaries_by_experiment?.[experimentId];
-  const status = summary ? summary.status : expItems[0].status;
+  let status: RunStatus | undefined = summary
+    ? summary.status
+    : expItems[0].status;
+
+  if (status === RunStatus.SKIPPED && hasEvaluators) {
+    status = undefined;
+  }
 
   if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
 
@@ -145,8 +160,8 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
     return null;
   }
 
-  const isSkipped = status === ExperimentItemStatus.SKIPPED;
-  const isPassed = status === ExperimentItemStatus.PASSED;
+  const isSkipped = status === RunStatus.SKIPPED;
+  const isPassed = status === RunStatus.PASSED;
   const Icon = isPassed ? CircleCheck : CircleX;
 
   const tag = (

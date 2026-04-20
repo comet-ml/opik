@@ -345,10 +345,11 @@ const useActionButtonActions = ({
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
+            const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
 
             for (const ei of experimentItems) {
               totalExperimentItems++;
-              if (isItemScored(ei, row.evaluators)) {
+              if (ei.status === "skipped" ? !hasEvaluators : isItemScored(ei)) {
                 scoredItems++;
               }
             }

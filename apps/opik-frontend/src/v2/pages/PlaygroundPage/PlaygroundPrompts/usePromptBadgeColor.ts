@@ -1,7 +1,9 @@
 import { useMemo } from "react";
 import { DATASET_TYPE } from "@/types/datasets";
 import { useDatasetType } from "@/store/PlaygroundStore";
-import usePromptResultStatus from "@/v2/pages/PlaygroundPage/usePromptResultStatus";
+import usePromptResultStatus, {
+  PromptResultStatus,
+} from "@/v2/pages/PlaygroundPage/usePromptResultStatus";
 
 type BadgeColor = { bg: string; text: string };
 
@@ -9,7 +11,7 @@ const DEFAULT_COLOR: BadgeColor = { bg: "var(--click-blue)", text: "#ffffff" };
 const WINNER_COLOR: BadgeColor = { bg: "var(--chart-green)", text: "#ffffff" };
 const LOSER_COLOR: BadgeColor = { bg: "var(--chart-red)", text: "#ffffff" };
 
-const STATUS_TO_BADGE: Record<string, BadgeColor> = {
+const STATUS_TO_BADGE: Record<PromptResultStatus, BadgeColor> = {
   default: DEFAULT_COLOR,
   winner: WINNER_COLOR,
   loser: LOSER_COLOR,

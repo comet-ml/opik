@@ -11,7 +11,6 @@ import uk.co.jemos.podam.common.ManufacturingContext;
 import uk.co.jemos.podam.typeManufacturers.AbstractTypeManufacturer;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
@@ -57,7 +56,6 @@ public class DatasetItemTypeManufacturer extends AbstractTypeManufacturer<Datase
                 .spanId(spanId)
                 .id(strategy.getTypeValue(metadata, context, UUID.class))
                 .data(data)
-                .evaluators(List.of())
                 .createdAt(Instant.now())
                 .lastUpdatedAt(Instant.now())
                 .build();

@@ -4,7 +4,6 @@ import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList"
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
 import { ExperimentsCompare } from "@/types/datasets";
-import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -23,10 +22,12 @@ const areAllExperimentItemsScored = (
     matchingRow.experiment_items?.filter(
       (ei) => ei.dataset_item_id === datasetItemId,
     ) ?? [];
-  return (
-    relatedItems.length > 0 &&
-    relatedItems.every((ei) => isItemScored(ei, matchingRow.evaluators))
-  );
+  if (relatedItems.length === 0) return false;
+  const hasEvaluators = (matchingRow.evaluators?.length ?? 0) > 0;
+  return relatedItems.every((ei) => {
+    if (ei.status === "skipped") return !hasEvaluators;
+    return ei.status != null;
+  });
 };
 
 interface PlaygroundOutputAssertionStatusProps {
