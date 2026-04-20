@@ -23,4 +23,5 @@ export enum FeatureToggleKeys {
   OLLAMA_PROVIDER_ENABLED = "ollama_provider_enabled",
   COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
   TOGGLE_RUNNERS_ENABLED = "runners_enabled",
+  AI_ASSISTED_OPIK_SKILLS_ENABLED = "ai_assisted_opik_skills_enabled",
 }

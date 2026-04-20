@@ -1,7 +1,7 @@
 import React from "react";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
-import { buildDocsUrl, maskAPIKey } from "@/lib/utils";
+import { buildDocsUrl } from "@/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import claudeCodeLogo from "/images/integrations/claude_code.svg";
@@ -20,15 +20,9 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const buildPrompt = (shouldMaskAPIKey: boolean) =>
-    `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}"${
-      apiKey
-        ? ` and API key "${shouldMaskAPIKey ? maskAPIKey(apiKey) : apiKey}"`
-        : ""
-    }. Once you are ready with the instrumentation of your agent, run it with a couple of interactions so that we make sure that the observability is correctly instrumented and the right traces are flowing to the Opik dashboard.`;
-
-  const promptText = buildPrompt(false);
-  const displayPromptText = buildPrompt(true);
+  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}"${
+    apiKey ? ` and API key "${apiKey}"` : ""
+  }. Once you are ready with the instrumentation of your agent, run it with a couple of interactions so that we make sure that the observability is correctly instrumented and the right traces are flowing to the Opik dashboard.`;
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -70,11 +64,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
               Navigate to the repo you want to instrument and paste this prompt.
               It will instrument your agent with Opik tracing automatically.
             </p>
-            <CodeSnippet
-              title="Prompt"
-              code={displayPromptText}
-              copyText={promptText}
-            />
+            <CodeSnippet title="Prompt" code={promptText} />
           </div>
         </TimelineStep>
 
