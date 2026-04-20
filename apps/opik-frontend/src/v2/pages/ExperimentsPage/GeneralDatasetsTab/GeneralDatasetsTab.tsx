@@ -1,6 +1,11 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { ChartLine, RotateCw } from "lucide-react";
-import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
+import {
+  CellContext,
+  ColumnSort,
+  Row,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -80,7 +85,30 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { Skeleton } from "@/ui/skeleton";
+
 const PASS_RATE_LABEL = "Pass rate";
+
+const withRunningSkeleton = <TValue,>(
+  Cell: React.ComponentType<CellContext<GroupedExperiment, TValue>>,
+) => {
+  const WrappedCell = (context: CellContext<GroupedExperiment, TValue>) => {
+    const { row } = context;
+    if (
+      !getIsGroupRow(row) &&
+      row.original?.status === EXPERIMENT_STATUS.RUNNING
+    ) {
+      return (
+        <div className="flex size-full items-center p-2">
+          <Skeleton className="size-full" />
+        </div>
+      );
+    }
+    return <Cell {...context} />;
+  };
+  return WrappedCell;
+};
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -220,7 +248,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p50",
@@ -231,7 +259,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (p90)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p90",
@@ -242,7 +270,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Duration (p99)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p99",
@@ -268,7 +296,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TextCell as never,
+        cell: withRunningSkeleton(TextCell) as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
@@ -278,7 +306,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "total_estimated_cost",
         label: "Total estimated cost",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost",
@@ -288,7 +316,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         id: "total_estimated_cost_avg",
         label: "Cost per trace (avg.)",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost_avg",
@@ -300,7 +328,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         type: COLUMN_TYPE.number,
         iconType: "pass_rate",
         accessorFn: (row) => row.pass_rate,
-        cell: PassRateCell as never,
+        cell: withRunningSkeleton(PassRateCell) as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
           aggregationKey: "pass_rate",
@@ -311,7 +339,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
         label: "Feedback Scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
-        cell: FeedbackScoreListCell as never,
+        cell: withRunningSkeleton(FeedbackScoreListCell) as never,
         aggregatedCell: FeedbackScoreListCell.Aggregation as never,
         customMeta: {
           getHoverCardName: (row: GroupedExperiment) => row.name,

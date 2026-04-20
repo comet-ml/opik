@@ -63,6 +63,8 @@ const PROJECTS_SORTING: Sorting = [
 
 const MAX_ENTITIES_FOR_SORTING = 1000;
 
+const EXPERIMENTS_LIST_POLLING_INTERVAL_MS = 10_000;
+
 const buildOrderMap = <T extends { id: string }>(
   data: T[] | undefined,
 ): Record<string, number> | undefined => {
@@ -331,7 +333,9 @@ const useExperimentsCache = () => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ): UseGroupedExperimentsListResponse {
-  const refetchInterval = params.polling ? 30000 : undefined;
+  const refetchInterval = params.polling
+    ? EXPERIMENTS_LIST_POLLING_INTERVAL_MS
+    : undefined;
   const experimentsCache = useExperimentsCache();
   const groups = useMemo(() => params.groups ?? [], [params.groups]);
   const hasGroups = Boolean(groups?.length);
