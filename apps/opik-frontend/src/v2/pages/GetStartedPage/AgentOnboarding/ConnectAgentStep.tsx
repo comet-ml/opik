@@ -6,6 +6,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
 import { useUserApiKey } from "@/store/AppStore";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
@@ -34,10 +36,15 @@ const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
-  const showOllieTab = !!apiKey;
+  const aiAssistedUsesOpikSkills = useIsFeatureEnabled(
+    FeatureToggleKeys.AI_ASSISTED_OPIK_SKILLS_ENABLED,
+  );
+  const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
+
   const [activeTab, setActiveTab] = useState(
     showOllieTab ? "connect-to-ollie" : "install-with-ai",
   );
+
   const [manualCategory, setManualCategory] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<
     string | null
@@ -69,6 +76,18 @@ const ConnectAgentStep: React.FC = () => {
   const [trackedTraceId, setTrackedTraceId] = useLocalStorageState<
     string | null
   >(FIRST_TRACE_TRACKED_KEY, { defaultValue: null });
+
+  useEffect(() => {
+    setActiveTab((current) => {
+      if (showOllieTab && current === "install-with-ai") {
+        return "connect-to-ollie";
+      }
+      if (!showOllieTab && current === "connect-to-ollie") {
+        return "install-with-ai";
+      }
+      return current;
+    });
+  }, [showOllieTab]);
 
   useEffect(() => {
     if (firstTraceId && firstTraceId !== trackedTraceId) {
@@ -216,7 +235,7 @@ const ConnectAgentStep: React.FC = () => {
           )}
           {!showOllieTab && (
             <TabsTrigger value="install-with-ai" variant="underline">
-              Use Opik skills
+              AI-assisted setup
             </TabsTrigger>
           )}
           <TabsTrigger value="manual-integration" variant="underline">

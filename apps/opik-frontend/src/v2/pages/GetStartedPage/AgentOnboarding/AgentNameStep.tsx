@@ -62,19 +62,18 @@ const AgentNameStep: React.FC = () => {
     <div className="mx-auto flex min-h-full max-w-[1200px] items-center justify-center gap-14 px-10 py-16">
       <form onSubmit={handleSubmit} className="w-full max-w-[480px]">
         <div className="flex flex-col gap-1.5">
-          <h2 className="comet-title-m">Tell us about your agent</h2>
+          <h2 className="comet-title-m">Name your project</h2>
           <p className="comet-body-s text-muted-slate">
-            We&apos;ll use this to name your project and set up tracing
-            automatically.
+            This creates a project where your traces and experiments will live.
           </p>
         </div>
 
         <div className="flex flex-col gap-2 pt-4">
-          <Label htmlFor="agent-name">Agent name</Label>
+          <Label htmlFor="agent-name">Project name</Label>
           <Input
             id="agent-name"
             dimension="sm"
-            placeholder="e.g. RAG Pipeline, Customer Support Bot, Code Review Agent..."
+            placeholder="My project"
             value={name}
             onChange={(e) => {
               setName(e.target.value);

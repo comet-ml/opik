@@ -37,6 +37,7 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_RUNNERS_ENABLED]: false,
+  [FeatureToggleKeys.AI_ASSISTED_OPIK_SKILLS_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {
