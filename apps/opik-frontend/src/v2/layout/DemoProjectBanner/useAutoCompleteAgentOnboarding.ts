@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
+import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
 
 interface UseAutoCompleteAgentOnboardingParams {
-  projectId: string | null;
+  agentName: string | undefined;
   enabled: boolean;
 }
 
@@ -22,13 +23,19 @@ interface UseAutoCompleteAgentOnboardingParams {
 // the localStorage hook returns a new object reference on every render, so
 // we can't rely on identity.
 const useAutoCompleteAgentOnboarding = ({
-  projectId,
+  agentName,
   enabled,
 }: UseAutoCompleteAgentOnboardingParams) => {
   const workspaceName = useActiveWorkspaceName();
   const [, setOnboardingState] = useLocalStorageState<AgentOnboardingState>(
     `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
   );
+
+  const { data: agentProject } = useProjectByName(
+    { projectName: agentName ?? "" },
+    { enabled: enabled && !!agentName },
+  );
+  const projectId = agentProject?.id;
 
   const { data: tracesData } = useTracesList(
     {
@@ -37,7 +44,7 @@ const useAutoCompleteAgentOnboarding = ({
       size: 1,
     },
     {
-      enabled: !!projectId && enabled,
+      enabled: enabled && !!projectId,
     },
   );
   const hasTraces = (tracesData?.total ?? 0) > 0;

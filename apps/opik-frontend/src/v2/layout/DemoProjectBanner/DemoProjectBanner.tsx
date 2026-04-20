@@ -11,6 +11,7 @@ import {
   AGENT_ONBOARDING_STEPS,
   AgentOnboardingState,
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
   onChangeHeight: (height: number) => void;
@@ -42,6 +43,11 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   const isOnboardingActive =
     !!onboardingState?.step &&
     onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
+
+  useAutoCompleteAgentOnboarding({
+    agentName: onboardingState?.agentName,
+    enabled: isDemoProject && isOnboardingActive,
+  });
 
   const hideBanner = !isDemoProject || !isOnboardingActive;
 

@@ -23,7 +23,6 @@ import InstallWithAITab from "./InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
 import ShowDemoProjectButton from "./ShowDemoProjectButton";
-import useAutoCompleteAgentOnboarding from "@/v2/layout/DemoProjectBanner/useAutoCompleteAgentOnboarding";
 import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,
@@ -113,11 +112,6 @@ const ConnectAgentStep: React.FC = () => {
 
   const isOllieTab = activeTab === "connect-to-ollie";
   const primaryReady = isOllieTab ? connected : traceReceived;
-
-  useAutoCompleteAgentOnboarding({
-    projectId: projectId ?? null,
-    enabled: !!projectId,
-  });
 
   const handleViewTraces = () => {
     goToStep(AGENT_ONBOARDING_STEPS.DONE, {
