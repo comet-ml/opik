@@ -7,6 +7,7 @@ import React, {
 import useLocalStorageState from "use-local-storage-state";
 import posthog from "posthog-js";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
+import { useUserScopedStorageKey } from "@/lib/userScopedStorageKey";
 
 export const AGENT_ONBOARDING_KEY = "agent-onboarding";
 
@@ -62,8 +63,9 @@ interface AgentOnboardingProviderProps {
 const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
   children,
 }) => {
+  const storageKey = useUserScopedStorageKey(AGENT_ONBOARDING_KEY);
   const [state, setState] = useLocalStorageState<AgentOnboardingState>(
-    AGENT_ONBOARDING_KEY,
+    storageKey,
     { defaultValue: DEFAULT_STATE },
   );
 

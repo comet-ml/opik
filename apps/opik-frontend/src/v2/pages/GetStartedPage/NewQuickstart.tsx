@@ -8,12 +8,14 @@ import {
 import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
+import { useUserScopedStorageKey } from "@/lib/userScopedStorageKey";
 
 const NewQuickstart: React.FunctionComponent = () => {
+  const storageKey = useUserScopedStorageKey(AGENT_ONBOARDING_KEY);
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
-  }>(AGENT_ONBOARDING_KEY);
+  }>(storageKey);
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
