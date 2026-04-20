@@ -503,7 +503,9 @@ class ThreadDAOImpl implements ThreadDAO {
                 <endif>
                 ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ), feedback_scores_deduped AS (
+            )
+            <if(feedback_scores_needed)>
+            , feedback_scores_deduped AS (
                 SELECT *
                 FROM (
                     SELECT
@@ -576,7 +578,10 @@ class ThreadDAOImpl implements ThreadDAO {
                     arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
                     arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
                 FROM feedback_scores_grouped
-            ), thread_annotation_queue_ids AS (
+            )
+            <endif>
+            <if(annotation_queue_filters)>
+            , thread_annotation_queue_ids AS (
                  SELECT thread_id,
                         groupArray(id) AS annotation_queue_ids
                  FROM (
@@ -591,6 +596,7 @@ class ThreadDAOImpl implements ThreadDAO {
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             )
+            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -1422,6 +1428,11 @@ class ThreadDAOImpl implements ThreadDAO {
 
         if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
             template.add("traces_final_ids", true);
+        }
+
+        if (template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null) {
+            template.add("feedback_scores_needed", true);
         }
 
         var statement = connection.createStatement(template.render())
