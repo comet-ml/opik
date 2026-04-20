@@ -960,28 +960,79 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS guardrails_failed_count,
                 toInt64(0) AS error_count
             FROM (
-                WITH traces_final AS (
-                    SELECT
-                        *
-                    FROM traces final
+                WITH <if(traces_final_ids)>traces_final_ids AS (
+                    SELECT DISTINCT id, thread_id
+                    FROM traces
                     WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      AND thread_id \\<> ''
-                    <if(search_text)> AND <search_text> <endif>
-                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    AND project_id = :project_id
+                    AND thread_id \\<> ''
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
                     <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
                     <if(filters)> AND <filters> <endif>
+                    <if(search_text)> AND <search_text> <endif>
+                ), <endif>traces_final AS (
+                    SELECT
+                        id,
+                        workspace_id,
+                        project_id,
+                        thread_id,
+                        start_time,
+                        end_time,
+                        input,
+                        output,
+                        last_updated_at,
+                        last_updated_by,
+                        created_by,
+                        created_at
+                    FROM (
+                        SELECT *
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND thread_id \\<> ''
+                          <if(traces_final_ids)>
+                              AND id IN (SELECT id FROM traces_final_ids)
+                          <else>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                              <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <endif>
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                    WHERE 1 = 1
+                    <if(filters)> AND <filters> <endif>
+                    <if(search_text)> AND <search_text> <endif>
+                ), spans_deduped AS (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        parent_span_id,
+                        id,
+                        last_updated_at,
+                        usage,
+                        total_estimated_cost,
+                        provider
+                    FROM spans
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      <if(traces_final_ids)>
+                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                          <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 ), spans_agg AS (
                     SELECT
                         trace_id,
                         sumMap(usage) as usage,
                         sum(total_estimated_cost) as total_estimated_cost,
                         arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                    FROM spans final
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                    FROM spans_deduped
                     GROUP BY workspace_id, project_id, trace_id
                 ), trace_threads_final AS (
                     SELECT
@@ -995,10 +1046,20 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at
-                    FROM trace_threads FINAL
+                    FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND thread_id IN (SELECT thread_id FROM traces_final)
+                    <if(uuid_from_time)>
+                        AND id >= :uuid_from_time
+                        <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    <else>
+                        <if(traces_final_ids)>
+                            AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                        <endif>
+                    <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY (workspace_id, project_id, thread_id, id)
                 ), feedback_scores_deduped AS (
                     SELECT *
                     FROM (
@@ -1328,6 +1389,10 @@ class ThreadDAOImpl implements ThreadDAO {
 
             var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS, criteria, THREAD_SEARCH_CLAUSE);
             statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
+
+            if (shouldUseTracesFinalIdsPrefilter(criteria, statsSQL)) {
+                statsSQL.add("traces_final_ids", true);
+            }
 
             var statement = connection.createStatement(statsSQL.render())
                     .bind("project_id", criteria.projectId())
