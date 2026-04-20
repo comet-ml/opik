@@ -255,6 +255,8 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  runSingle={runSingle}
+                  stopSingle={stopSingle}
                 />
               </div>
 
