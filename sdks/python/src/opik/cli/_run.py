@@ -86,7 +86,7 @@ def run_cli_session(
             try:
                 client.config.save_to_file()
             except OSError:
-                LOGGER.debug("Failed to save config file", exc_info=True)
+                LOGGER.warning("Failed to save config file", exc_info=True)
 
         launch_supervisor(
             result, api, tui, runner_type=runner_type, command=command, watch=watch
