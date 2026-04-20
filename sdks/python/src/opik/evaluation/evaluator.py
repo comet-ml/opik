@@ -157,7 +157,7 @@ def _resolve_project_name(
     Falls back to the caller's ``project_name`` when the dataset has none, to
     preserve backward compatibility during the deprecation period.
     """
-    dataset_project_name = getattr(dataset_, "project_name", None)
+    dataset_project_name = dataset_.project_name
 
     if dataset_project_name is None:
         return project_name

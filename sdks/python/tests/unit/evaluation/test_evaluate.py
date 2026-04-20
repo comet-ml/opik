@@ -35,11 +35,13 @@ def create_mock_dataset(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = name
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     if items is not None:
         mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
             items
@@ -123,12 +125,14 @@ def test_evaluate__happyflow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -376,12 +380,14 @@ def test_evaluate_with_scoring_key_mapping(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -639,12 +645,14 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -702,12 +710,14 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -823,12 +833,14 @@ def test_evaluate__with_random_sampler__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -956,12 +968,14 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 10  # Original dataset has 10 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1046,12 +1060,14 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 5
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1141,12 +1157,14 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 100  # Original dataset has 100 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1265,12 +1283,14 @@ def test_evaluate_prompt_happyflow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1488,12 +1508,14 @@ def test_evaluate__aggregated_metric__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1845,12 +1867,14 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1984,12 +2008,14 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 2,
         "pass_threshold": 1,
@@ -2146,12 +2172,14 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 2,
         "pass_threshold": 1,
@@ -2323,11 +2351,13 @@ def test_evaluate__with_experiment_scores(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2426,11 +2456,13 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2753,12 +2785,14 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2818,12 +2852,14 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2882,12 +2918,14 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2955,10 +2993,12 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
