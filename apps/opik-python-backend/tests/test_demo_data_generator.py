@@ -19,6 +19,12 @@ def test_create_demo_data_structure(httpserver):
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/spans/batch", method="POST").respond_with_data(status=204)
     httpserver.expect_request("/v1/private/traces/feedback-scores", method="PUT").respond_with_data(status=204)
+    # Post-flush verification hook streams traces from /traces/search to confirm persistence.
+    httpserver.expect_request("/v1/private/traces/search", method="POST").respond_with_data(
+        status=200,
+        headers={"Content-Type": "application/octet-stream"},
+        response_data=b"",
+    )
 
     httpserver.expect_request("/v1/private/feedback-definitions", method="GET", query_string="name=User+feedback").respond_with_json({
         "content": [],
@@ -109,6 +115,9 @@ def test_create_demo_data_idempotence(httpserver):
     baseUrl = httpserver.url_for("/")
 
     httpserver.expect_request("/is-alive/ping", method="GET").respond_with_data("pong", status=200)
+    # Project-creation gate: POST /projects returning 409 signals "project already exists",
+    # which is the canonical idempotent short-circuit — we must not proceed to log traces.
+    httpserver.expect_request("/v1/private/projects", method="POST").respond_with_data(status=409)
     httpserver.expect_request("/v1/private/projects/retrieve", method="POST").respond_with_json({ "id": str(uuid6.uuid7()) })
 
     httpserver.expect_request("/v1/private/traces/batch", method="POST").respond_with_handler(fail_on_request)

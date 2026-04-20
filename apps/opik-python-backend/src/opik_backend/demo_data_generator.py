@@ -211,6 +211,9 @@ def process_traces_with_time_shift(traces, context: DemoDataContext, client: opi
         ms_counter[ms_key] = offset_us + 1
         if offset_us > 0:
             shifted_start = shifted_start + datetime.timedelta(microseconds=offset_us)
+            # Shift end_time by the same amount so duration is preserved and we never
+            # end up with end_time < start_time (would violate ordering invariants).
+            shifted_end = shifted_end + datetime.timedelta(microseconds=offset_us)
 
         trace["start_time"] = shifted_start
         trace["end_time"] = shifted_end
