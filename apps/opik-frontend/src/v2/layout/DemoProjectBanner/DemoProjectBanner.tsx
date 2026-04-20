@@ -10,15 +10,12 @@ import { DEMO_PROJECT_NAME } from "@/constants/shared";
 import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
+  AgentOnboardingState,
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
+import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
 interface DemoProjectBannerProps {
   onChangeHeight: (height: number) => void;
-}
-
-interface AgentOnboardingState {
-  step: string | null;
-  agentName: string;
 }
 
 const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
@@ -42,11 +39,20 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   });
 
   const isDemoProject = project?.name === DEMO_PROJECT_NAME;
+  const isOnboardingProject =
+    !!onboardingState?.agentName && project?.name === onboardingState.agentName;
+  const isRelevantProject = isDemoProject || isOnboardingProject;
+
   const isOnboardingActive =
     !!onboardingState?.step &&
     onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
 
-  const hideBanner = !isDemoProject || !isOnboardingActive;
+  useAutoCompleteAgentOnboarding({
+    activeProjectId,
+    enabled: isOnboardingProject && isOnboardingActive,
+  });
+
+  const hideBanner = !isRelevantProject || !isOnboardingActive;
 
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
