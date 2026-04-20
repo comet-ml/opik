@@ -143,8 +143,8 @@ def _try_notifying_about_experiment_completion(
 
 
 def _resolve_project_name(
-    dataset_: Union[dataset.Dataset, dataset.DatasetVersion],
-    project_name: Optional[str],
+    value_from_dataset: Optional[str],
+    value_from_user: Optional[str],
     caller_name: str,
 ) -> Optional[str]:
     """
@@ -157,22 +157,20 @@ def _resolve_project_name(
     Falls back to the caller's ``project_name`` when the dataset has none, to
     preserve backward compatibility during the deprecation period.
     """
-    dataset_project_name = dataset_.project_name
+    if value_from_dataset is None:
+        return value_from_user
 
-    if dataset_project_name is None:
-        return project_name
-
-    if project_name is not None:
+    if value_from_user is not None:
         LOGGER.warning(
             "The `project_name` parameter of `%s()` is deprecated and will be "
             "removed in a future version. The dataset's project ('%s') will "
             "be used instead of the provided value ('%s').",
             caller_name,
-            dataset_project_name,
-            project_name,
+            value_from_dataset,
+            value_from_user,
         )
 
-    return dataset_project_name
+    return value_from_dataset
 
 
 def _compute_experiment_scores(
@@ -341,7 +339,9 @@ def evaluate(
     )
 
     project_name = _resolve_project_name(
-        dataset_=dataset, project_name=project_name, caller_name="evaluate"
+        value_from_dataset=dataset.project_name,
+        value_from_user=project_name,
+        caller_name="evaluate",
     )
 
     experiment = client.create_experiment(
@@ -1087,7 +1087,9 @@ def evaluate_prompt(
     )
 
     project_name = _resolve_project_name(
-        dataset_=dataset, project_name=project_name, caller_name="evaluate_prompt"
+        value_from_dataset=dataset.project_name,
+        value_from_user=project_name,
+        caller_name="evaluate_prompt",
     )
 
     experiment = client.create_experiment(
@@ -1315,8 +1317,8 @@ def evaluate_optimization_trial(
     )
 
     project_name = _resolve_project_name(
-        dataset_=dataset,
-        project_name=project_name,
+        value_from_dataset=dataset.project_name,
+        value_from_user=project_name,
         caller_name="evaluate_optimization_trial",
     )
 

@@ -3623,52 +3623,44 @@ class TestMergeBlueprintIntoConfig:
 
 
 class TestResolveProjectName:
-    def test_dataset_has_no_project__caller_value_used(self, capture_log):
-        mock_dataset = mock.MagicMock()
-        mock_dataset.project_name = None
-
+    def test_dataset_has_no_project__user_value_used(self, capture_log):
         resolved = evaluator_module._resolve_project_name(
-            dataset_=mock_dataset,
-            project_name="caller-project",
+            value_from_dataset=None,
+            value_from_user="caller-project",
             caller_name="evaluate",
         )
 
         assert resolved == "caller-project"
         assert capture_log.records == []
 
-    def test_dataset_has_no_project__caller_none__returns_none(self, capture_log):
-        mock_dataset = mock.MagicMock()
-        mock_dataset.project_name = None
-
+    def test_dataset_has_no_project__user_none__returns_none(self, capture_log):
         resolved = evaluator_module._resolve_project_name(
-            dataset_=mock_dataset, project_name=None, caller_name="evaluate"
+            value_from_dataset=None,
+            value_from_user=None,
+            caller_name="evaluate",
         )
 
         assert resolved is None
         assert capture_log.records == []
 
-    def test_dataset_has_project__caller_none__returns_dataset_project__no_warning(
+    def test_dataset_has_project__user_none__returns_dataset_project__no_warning(
         self, capture_log
     ):
-        mock_dataset = mock.MagicMock()
-        mock_dataset.project_name = "dataset-project"
-
         resolved = evaluator_module._resolve_project_name(
-            dataset_=mock_dataset, project_name=None, caller_name="evaluate"
+            value_from_dataset="dataset-project",
+            value_from_user=None,
+            caller_name="evaluate",
         )
 
         assert resolved == "dataset-project"
         assert capture_log.records == []
 
-    def test_dataset_has_project__caller_override__dataset_wins_and_warning_logged(
+    def test_dataset_has_project__user_override__dataset_wins_and_warning_logged(
         self, capture_log
     ):
-        mock_dataset = mock.MagicMock()
-        mock_dataset.project_name = "dataset-project"
-
         resolved = evaluator_module._resolve_project_name(
-            dataset_=mock_dataset,
-            project_name="caller-project",
+            value_from_dataset="dataset-project",
+            value_from_user="caller-project",
             caller_name="evaluate_prompt",
         )
 
