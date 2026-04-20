@@ -167,6 +167,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
             size="icon-sm"
             onClick={handleExpand}
             disabled={disabled}
+            tabIndex={isExpanded ? -1 : undefined}
             className={cn(
               "transition-opacity duration-100",
               isExpanded && "pointer-events-none opacity-0",
