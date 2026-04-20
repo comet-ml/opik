@@ -64,12 +64,13 @@ export function getWorkspaceNameFromUrl(): string | null {
   return segments[0] || null;
 }
 
-// Returns null only when the workspace is in the URL, has no cached version,
-// and needs an API fetch — the one case that requires a Loader fallback.
-export function resolveSyncWorkspaceVersion(): WorkspaceVersion | null {
+// Always returns a version synchronously: override > per-workspace cache >
+// default. WorkspaceVersionResolver verifies via API after mount and swaps
+// the App in place if the guess was wrong.
+export function resolveSyncWorkspaceVersion(): WorkspaceVersion {
   const override = getVersionOverride();
   if (override) return override;
   const workspaceName = getWorkspaceNameFromUrl();
   if (!workspaceName) return DEFAULT_WORKSPACE_VERSION;
-  return getCachedWorkspaceVersion(workspaceName);
+  return getCachedWorkspaceVersion(workspaceName) ?? DEFAULT_WORKSPACE_VERSION;
 }
