@@ -155,7 +155,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     setRunsPerItem(suiteExecutionPolicy.runs_per_item);
     setPassThreshold(suiteExecutionPolicy.pass_threshold);
     setUseGlobalPolicy(true);
-  }, [isTestSuiteMode, selectedDataset?.id, suiteExecutionPolicy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isTestSuiteMode, selectedDataset?.id]);
 
   const { data, isPending } = useProjectDatasetsList(
     {
