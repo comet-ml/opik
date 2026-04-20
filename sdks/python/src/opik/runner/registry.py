@@ -4,6 +4,7 @@ import dataclasses
 import inspect
 import logging
 import threading
+import typing
 from typing import Any, Callable, Dict, List
 
 from opik.api_objects import type_helpers
@@ -54,13 +55,20 @@ def get_all() -> Dict[str, Dict[str, Any]]:
 
 def extract_params(fn: Callable) -> List[Param]:
     sig = inspect.signature(fn)
+
+    # Resolve string annotations (e.g. from `from __future__ import annotations`)
+    try:
+        hints = typing.get_type_hints(fn)
+    except Exception:
+        hints = {}
+
     params: List[Param] = []
     unresolved: List[str] = []
     for param_name, param in sig.parameters.items():
-        if param.annotation is inspect.Parameter.empty:
+        ann = hints.get(param_name, param.annotation)
+        if ann is inspect.Parameter.empty:
             type_name = "string"
         else:
-            ann = param.annotation
             inner = type_helpers.unwrap_optional(ann)
             if inner is not None:
                 ann = inner
