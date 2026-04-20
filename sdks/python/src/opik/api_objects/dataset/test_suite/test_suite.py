@@ -176,6 +176,11 @@ class TestSuiteVersion:
         """The project name associated with the test suite."""
         return self._dataset_version.project_name
 
+    @property
+    def __internal_api__dataset_version__(self) -> dataset.DatasetVersion:
+        """Internal access to the underlying dataset version. Not part of the public API."""
+        return self._dataset_version
+
     def get_items(
         self,
         nb_samples: Optional[int] = None,
@@ -294,6 +299,11 @@ class TestSuite:
     def project_name(self) -> Optional[str]:
         """The project name associated with the test suite."""
         return self._dataset.project_name
+
+    @property
+    def __internal_api__dataset__(self) -> dataset.Dataset:
+        """Internal access to the underlying dataset. Not part of the public API."""
+        return self._dataset
 
     @property
     def items_count(self) -> Optional[int]:
