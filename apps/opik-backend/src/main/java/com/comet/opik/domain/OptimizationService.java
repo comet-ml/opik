@@ -303,6 +303,9 @@ class OptimizationServiceImpl implements OptimizationService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    // USER_NAME is absent on the internal cancelOptimization() path, where only
+                    // WORKSPACE_ID is seeded — fall back and let AnalyticsService resolve identity.
+                    String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
                     boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
@@ -323,7 +326,11 @@ class OptimizationServiceImpl implements OptimizationService {
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
-                                    trackOptimizationCompleted(optimization, update.status(), workspaceId);
+                                    // Only emit completion event on the transition into a terminal state
+                                    if (!optimization.status().isTerminal()) {
+                                        trackOptimizationCompleted(optimization, update.status(), workspaceId,
+                                                userName);
+                                    }
                                 }
                             });
                 }));
@@ -387,23 +394,23 @@ class OptimizationServiceImpl implements OptimizationService {
     }
 
     private void trackOptimizationCreated(Optimization optimization, String workspaceId, String userName) {
-        analyticsService.trackEvent(userName, "opik_optimization_created", Map.of(
+        analyticsService.trackEvent("opik_optimization_created", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "dataset_name", String.valueOf(optimization.datasetName()),
                 "objective_name", String.valueOf(optimization.objectiveName()),
                 "project_id", String.valueOf(optimization.projectId()),
-                "workspace_id", workspaceId));
+                "workspace_id", workspaceId), userName);
     }
 
     private void trackOptimizationCompleted(Optimization optimization, OptimizationStatus status,
-            String workspaceId) {
+            String workspaceId, String userName) {
         analyticsService.trackEvent("opik_optimization_completed", Map.of(
                 "optimization_id", optimization.id().toString(),
                 "status", status.getValue(),
                 "workspace_id", workspaceId,
                 "num_trials", String.valueOf(optimization.numTrials()),
                 "baseline_objective_score", String.valueOf(optimization.baselineObjectiveScore()),
-                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())));
+                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())), userName);
     }
 
     private void postOptimizationCreatedEvent(Optimization newOptimization, String workspaceId, String userName) {
