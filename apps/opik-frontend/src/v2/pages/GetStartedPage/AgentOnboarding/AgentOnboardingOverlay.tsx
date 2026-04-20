@@ -1,9 +1,9 @@
 import React from "react";
-import Logo from "@/shared/Logo/Logo";
 import AgentOnboardingProvider, {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
 } from "./AgentOnboardingContext";
+import AgentOnboardingShell from "./AgentOnboardingShell";
 import AgentNameStep from "./AgentNameStep";
 import ConnectAgentStep from "./ConnectAgentStep";
 
@@ -20,17 +20,12 @@ const AgentOnboardingSteps: React.FC = () => {
   }
 };
 
-const AgentOnboardingOverlay: React.FC = () => {
-  return (
-    <AgentOnboardingProvider>
-      <div className="fixed inset-0 z-50 overflow-auto bg-soft-background">
-        <div className="absolute left-[18px] top-[14.5px]">
-          <Logo expanded />
-        </div>
-        <AgentOnboardingSteps />
-      </div>
-    </AgentOnboardingProvider>
-  );
-};
+const AgentOnboardingOverlay: React.FC = () => (
+  <AgentOnboardingProvider>
+    <AgentOnboardingShell>
+      <AgentOnboardingSteps />
+    </AgentOnboardingShell>
+  </AgentOnboardingProvider>
+);
 
 export default AgentOnboardingOverlay;

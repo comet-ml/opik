@@ -7,6 +7,8 @@ import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import useProjectCreateMutation from "@/api/projects/useProjectCreateMutation";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -18,6 +20,7 @@ const MIN_AGENT_NAME_LENGTH = 3;
 
 const AgentNameStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
+  const workspaceName = useActiveWorkspaceName();
   const { themeMode } = useTheme();
   const [name, setName] = useState(agentName);
   const [error, setError] = useState("");
@@ -34,7 +37,13 @@ const AgentNameStep: React.FC = () => {
     if (!isValid || isPending || error) return;
 
     try {
-      await createProject({ project: { name: trimmedName } });
+      const { id: projectId } = await createProject({
+        project: { name: trimmedName },
+      });
+
+      if (projectId) {
+        setActiveProject(workspaceName, projectId);
+      }
 
       trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
         agent_name: trimmedName,

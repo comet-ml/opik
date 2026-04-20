@@ -1,10 +1,12 @@
 import React from "react";
 import { Navigate } from "@tanstack/react-router";
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import useLocalStorageState from "use-local-storage-state";
 import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
-import {
+import AgentOnboardingShell from "./AgentOnboarding/AgentOnboardingShell";
+import AgentNameStep from "./AgentOnboarding/AgentNameStep";
+import AgentOnboardingProvider, {
+  useAgentOnboarding,
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
@@ -50,19 +52,39 @@ const AgentOnboardingQuickstart: React.FC = () => {
   return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
 };
 
+const ManualOnboardingSteps: React.FC = () => {
+  const { currentStep } = useAgentOnboarding();
+
+  if (currentStep === AGENT_ONBOARDING_STEPS.AGENT_NAME) {
+    return (
+      <AgentOnboardingShell>
+        <AgentNameStep />
+      </AgentOnboardingShell>
+    );
+  }
+
+  return (
+    <OnboardingIntegrationsPage
+      IntegrationExplorer={IntegrationExplorer}
+      source="get-started"
+    />
+  );
+};
+
+const ManualOnboardingQuickstart: React.FC = () => (
+  <AgentOnboardingProvider>
+    <ManualOnboardingSteps />
+  </AgentOnboardingProvider>
+);
+
 const NewQuickstart: React.FC = () => {
-  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "manual".
+  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = ask for project name, then render the full integrations page. Undefined (PostHog unavailable) falls back to "manual".
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
     "manual";
 
   if (variant === "manual") {
-    return (
-      <OnboardingIntegrationsPage
-        IntegrationExplorer={IntegrationExplorer}
-        source="get-started"
-      />
-    );
+    return <ManualOnboardingQuickstart />;
   }
 
   return <AgentOnboardingQuickstart />;
