@@ -1,3 +1,5 @@
+import importlib.abc
+import importlib.util
 import inspect
 import json
 import sys
@@ -5,7 +7,7 @@ import traceback
 import types
 import uuid
 from sys import argv
-from typing import Type, Union, List, Any
+from typing import Type, Union, List, Any, Optional
 
 # ---------------------------------------------------------------------------
 # Lightweight import patching
@@ -19,7 +21,11 @@ from typing import Type, Union, List, Any
 #   `from opik.evaluation.metrics import BaseMetric`
 # resolves to the lightweight versions without triggering the real `opik`
 # init.  If user code accesses anything else on these modules, the
-# __getattr__ fallback loads the real `opik` package transparently.
+# __getattr__ fallback loads the real `opik` package transparently.  A
+# meta-path finder covers the case where user code imports an `opik.*`
+# submodule that we did not stub (e.g. `opik.evaluation.metrics.conversation`)
+# — Python's import machinery does not consult `__getattr__` when resolving
+# submodule paths, so we need an explicit finder to trigger the fallback.
 # ---------------------------------------------------------------------------
 
 import _opik._base_metric
@@ -34,7 +40,7 @@ def _load_real_opik() -> None:
         if sys.modules.get(name) is _stubs[name]:
             del sys.modules[name]
     _stubs.clear()
-    import opik  # noqa: F811 — triggers the real init
+    import opik  # noqa: F401,F811 — triggers the real init
 
 
 class _FallbackModule(types.ModuleType):
@@ -45,11 +51,33 @@ class _FallbackModule(types.ModuleType):
         return getattr(sys.modules[self.__name__], name)
 
 
+class _OpikFallbackFinder(importlib.abc.MetaPathFinder):
+    """Load the real `opik` when user code imports a non-stubbed `opik.*` submodule.
+
+    Python's import system resolves `from opik.x.y import z` via the parent
+    module's `__path__`, not via `__getattr__`. Our stubs have `__path__ = []`
+    so submodule lookups fail before `_FallbackModule.__getattr__` ever runs.
+    This finder detects such imports, swaps the stubs out for the real opik
+    package, then defers to the standard finders to resolve the requested name.
+    """
+
+    def find_spec(self, fullname: str, path: Optional[List[str]], target: Optional[types.ModuleType] = None):
+        if not (fullname == "opik" or fullname.startswith("opik.")):
+            return None
+        if not _stubs:
+            return None
+        sys.meta_path.remove(self)
+        _load_real_opik()
+        return importlib.util.find_spec(fullname)
+
+
 for _name in ["opik", "opik.evaluation", "opik.evaluation.metrics"]:
     _stub = _FallbackModule(_name)
     _stub.__path__ = []  # type: ignore[attr-defined]
     sys.modules[_name] = _stub
     _stubs[_name] = _stub
+
+sys.meta_path.insert(0, _OpikFallbackFinder())
 
 sys.modules["opik.evaluation.metrics.base_metric"] = _opik._base_metric
 sys.modules["opik.evaluation.metrics.score_result"] = _opik._score_result
