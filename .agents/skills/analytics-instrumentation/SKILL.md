@@ -50,25 +50,71 @@ trackEvent(OpikEvent.ONBOARDING_AGENT_NAME_SUBMITTED, {
 - **Config**: `apps/opik-backend/src/main/java/com/comet/opik/infrastructure/AnalyticsConfig.java`
 - **YAML config**: `apps/opik-backend/config.yml` (under `analytics:`)
 
-### Adding a new event
+### API
+`AnalyticsService` exposes two overloads:
 
-1. Inject `AnalyticsService` into your service or listener:
 ```java
-private final @NonNull AnalyticsService analyticsService;
+void trackEvent(String eventType, Map<String, String> properties);
+void trackEvent(String eventType, Map<String, String> properties, String identity);
 ```
 
-2. Call `trackEvent`:
-```java
-analyticsService.trackEvent("opik_onboarding_first_trace",
-    Map.of("trace_id", traceId, "project_id", projectId));
-```
+- 2-arg resolves identity from the current request scope via `RequestContext`.
+- 3-arg takes an explicit identity — use it any time the call executes outside a request scope (reactive schedulers, background threads, event listeners).
 
 ### How it works
-- `trackEvent()` no-ops when `OPIK_ANALYTICS_ENABLED` is `false` (default)
-- `opik_` prefix is auto-prepended if missing
-- `environment` property is auto-injected from `OPIK_ANALYTICS_ENVIRONMENT`
-- Events flow: Backend → comet-stats → Segment → PostHog
-- Uses the same comet-stats endpoint as existing usage reporting (`usageReport.url`)
+- `trackEvent()` no-ops when `OPIK_ANALYTICS_ENABLED` is `false` (default).
+- `opik_` prefix is auto-prepended if missing — but keep the prefix in code for grep-ability.
+- `environment` property is auto-injected from `OPIK_ANALYTICS_ENVIRONMENT`.
+- Events flow: Backend → comet-stats → Segment → PostHog.
+- `AnalyticsService.sendEvent` wraps the body in `catch (RuntimeException)` — callers must not add their own try/catch.
+
+### From a synchronous request handler
+
+Inject and call inline. The 2-arg overload resolves identity from `RequestContext`.
+
+```java
+private final @NonNull AnalyticsService analyticsService;
+
+analyticsService.trackEvent("opik_onboarding_first_trace",
+        Map.of("trace_id", traceId, "project_id", projectId));
+```
+
+### From a reactive chain (`doOnSuccess`, `doOnNext`, etc.)
+
+Two things are required: **offload with `Schedulers.boundedElastic()`** and **pass identity explicitly**.
+
+**Why offload**: when identity is absent `AnalyticsService.resolveIdentity()` falls back to `UsageReportService.getAnonymousId()`, which is a synchronous JDBC read. Inside a `doOnSuccess` lambda that runs on the reactor event loop, that read blocks a scheduler-critical thread.
+
+**Why explicit identity**: `RequestContext` is bound to the request thread via a Guice scope — inside the scheduler's lambda it throws `ProvisionException`, and you silently degrade to the anonymous-ID fallback, losing user attribution.
+
+Capture `userName` up front from the reactor context alongside `workspaceId`, then pass both into the scheduled call:
+
+```java
+return Mono.deferContextual(ctx -> {
+    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+    // Use getOrDefault on paths that internal/system callers reach without seeding USER_NAME
+    // (e.g. a self-triggered cancellation written only with WORKSPACE_ID in the context).
+    String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
+
+    return someDao.write(...)
+            .doOnSuccess(__ -> Schedulers.boundedElastic().schedule(
+                    () -> analyticsService.trackEvent("opik_thing_happened",
+                            Map.of(
+                                    "thing_id", thing.id().toString(),
+                                    "workspace_id", workspaceId),
+                            userName)));
+});
+```
+
+If you already depend on a `Schedulers.boundedElastic().schedule(() -> { ... })` block that does other non-reactive work (e.g. a blocking `datasetService.getById` like `ExperimentService.trackEvalSuiteRunIfApplicable`), add the `trackEvent` call inside that existing lambda instead of nesting another.
+
+### Don'ts
+
+- **Don't add try/catch around `trackEvent`** — `sendEvent` catches `RuntimeException` internally. Extra catches are noise and diverge from the codebase pattern.
+- **Don't add helper methods that only delegate to `trackEvent`** — inline the call at the entry point. Wrap in a helper only when it encapsulates real logic (e.g. applicability check + enrichment + tracking).
+- **Don't re-fetch ClickHouse rows to get "fresh" values for analytics payloads** — a write and a read-after-write can land on different replicas, so you may see a stale snapshot or even a spurious `NotFound`. Use the pre-write snapshot; some analytics drift is acceptable, a failed user-facing request is not.
+- **Don't add unit tests that `verify(analyticsService)...`** — the codebase convention is for existing integration tests to exercise these paths organically. Sister analytics PRs (#6326 eval suite, #6333 onboarding, #6338 agent config) ship without emission assertions.
+- **Don't assume `trackEvent` is fully non-blocking** — the Javadoc contract is aspirational; the identity-fallback path is synchronous JDBC today. Offload from reactive chains as shown above.
 
 ## Environment Variables
 
