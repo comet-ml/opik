@@ -46,13 +46,12 @@ def run_cli_session(
     api_key: Optional[str] = None,
     workspace: Optional[str] = None,
 ) -> None:
-    client = Opik(api_key=api_key, workspace=workspace, _show_misconfiguration_message=False)
-
-    if not client.config.config_file_exists:
-        try:
-            client.config.save_to_file()
-        except OSError:
-            LOGGER.debug("Failed to save config file", exc_info=True)
+    client = Opik(
+        project_name=project_name,
+        api_key=api_key,
+        workspace=workspace,
+        _show_misconfiguration_message=False,
+    )
     api = client.rest_client
     tui = RunnerTUI()
 
@@ -82,6 +81,12 @@ def run_cli_session(
                 workspace=client.config.workspace,
                 tui=tui,
             )
+
+        if not client.config.config_file_exists:
+            try:
+                client.config.save_to_file()
+            except OSError:
+                LOGGER.debug("Failed to save config file", exc_info=True)
 
         launch_supervisor(
             result, api, tui, runner_type=runner_type, command=command, watch=watch

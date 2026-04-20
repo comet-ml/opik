@@ -136,6 +136,7 @@ class TestConnect:
         assert result.exit_code == 0
 
         mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
             api_key="my-key",
             workspace="my-ws",
             _show_misconfiguration_message=False,
@@ -176,6 +177,7 @@ class TestConnect:
         assert result.exit_code == 0
 
         mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
             api_key="local-key",
             workspace=None,
             _show_misconfiguration_message=False,
@@ -208,6 +210,7 @@ class TestConnect:
         assert result.exit_code == 0
 
         mock_opik_cls.assert_called_once_with(
+            project_name="my-proj",
             api_key="global-key",
             workspace=None,
             _show_misconfiguration_message=False,

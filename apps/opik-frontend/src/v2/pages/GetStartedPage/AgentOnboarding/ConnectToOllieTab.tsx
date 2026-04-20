@@ -52,11 +52,7 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
               creates a local connection between Opik and your machine so Ollie
               can help with setup.
             </p>
-            <CodeSnippet
-              title="Terminal"
-              code={connectCommandText}
-              copyText={connectCommandText}
-            />
+            <CodeSnippet title="Terminal" code={connectCommandText} />
           </div>
         </TimelineStep>
 
