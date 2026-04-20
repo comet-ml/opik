@@ -41,7 +41,7 @@ import {
   createMockHttpResponsePromise,
   mockAPIFunction,
   mockAPIFunctionWithStream,
-} from "../../../mockUtils";
+} from "@tests/mockUtils";
 
 describe("evaluateTestSuite", () => {
   let opikClient: OpikClient;
@@ -419,6 +419,7 @@ describe("evaluateTestSuite", () => {
     expect(result).toEqual({
       experimentId: expect.any(String),
       experimentName: "suite-experiment",
+      resultUrl: expect.any(String),
       testResults: [
         expect.objectContaining({
           testCase: expect.objectContaining({
@@ -711,6 +712,52 @@ describe("evaluateTestSuite", () => {
 
     // Both items were attempted
     expect(callCount).toBe(2);
+  });
+
+  test("nbSamples limits the number of dataset items fetched and evaluated", async () => {
+    // Stream 3 items but only request 2
+    streamDatasetItemsSpy.mockImplementation(() =>
+      mockAPIFunctionWithStream(
+        JSON.stringify({
+          id: "item-1",
+          data: { input: "test input 1" },
+          source: "sdk",
+        }) +
+          "\n" +
+          JSON.stringify({
+            id: "item-2",
+            data: { input: "test input 2" },
+            source: "sdk",
+          }) +
+          "\n" +
+          JSON.stringify({
+            id: "item-3",
+            data: { input: "test input 3" },
+            source: "sdk",
+          }) +
+          "\n"
+      )
+    );
+
+    const result = await evaluateTestSuite({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "suite-experiment",
+      nbSamples: 2,
+      client: opikClient,
+    });
+
+    // streamDatasetItems must receive steamLimit=2 so the API honours the cap
+    expect(streamDatasetItemsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ steamLimit: 2 })
+    );
+
+    // Only 2 items evaluated (runsPerItem=1 from default policy)
+    expect(result.testResults).toHaveLength(2);
+    const evaluatedIds = new Set(
+      result.testResults.map((r) => r.testCase.datasetItemId)
+    );
+    expect(evaluatedIds.size).toBe(2);
   });
 
   test("per-item executionPolicy — different runsPerItem per item", async () => {

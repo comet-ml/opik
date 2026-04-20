@@ -17,6 +17,7 @@ import {
   isProdTag,
   isStageTag,
 } from "@/utils/agent-configurations";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 
 type DeployToPopoverProps = {
   item: ConfigHistoryItem;
@@ -92,6 +93,14 @@ const DeployToPopover: React.FC<DeployToPopoverProps> = ({
         },
       });
     }
+
+    trackEvent(OpikEvent.AGENT_CONFIG_UI_DEPLOYED, {
+      project_id: projectId,
+      blueprint_id: item.id,
+      environments: selectedStages,
+      deployed_to_prod: String(prodSelected),
+      is_new_prod: isNewProd,
+    });
 
     setOpen(false);
   };

@@ -4,6 +4,8 @@ export const OpikEvent = {
   ONBOARDING_AGENT_NAME_SUBMITTED: "opik_onboarding_agent_name_submitted",
   ONBOARDING_FIRST_TRACE_RECEIVED: "opik_onboarding_first_trace_received",
   ONBOARDING_SKIPPED: "opik_onboarding_skipped",
+  EVAL_SUITE_UI_CONFIGURED: "opik_eval_suite_ui_configured",
+  AGENT_CONFIG_UI_DEPLOYED: "opik_agent_config_ui_deployed",
 } as const;
 
 type OpikEventValues = (typeof OpikEvent)[keyof typeof OpikEvent];

@@ -105,7 +105,7 @@ jobs:
       # Run expensive tests on weekly schedule (Sunday) or when manually requested
       run_expensive_tests: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 0 * * 0') || github.event.inputs.run_expensive_tests == 'true' }}
     secrets: inherit
-  
+
   langchain_tests:
     needs: [init_environment]
     if: contains(fromJSON('["langchain", "all"]'), needs.init_environment.outputs.LIBS)

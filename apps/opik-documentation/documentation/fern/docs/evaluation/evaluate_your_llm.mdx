@@ -371,13 +371,11 @@ When creating an Experiment, you can link the Experiment to a specific prompt ve
 
 <CodeBlocks>
     ```typescript title="TypeScript" language="typescript"
-    import { Opik, evaluate, evaluatePrompt } from 'opik';
+    import { Opik, Prompt, evaluate, evaluatePrompt } from 'opik';
     import { Hallucination } from 'opik';
 
-    const client = new Opik();
-
     // Create a prompt
-    const prompt = await client.createPrompt({
+    const prompt = new Prompt({
         name: "My prompt",
         prompt: "Translate to French: {{input}}",
         projectName: "my-project",

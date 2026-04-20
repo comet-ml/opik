@@ -70,7 +70,8 @@ function groupByTrialId(
  * - passRate = itemsPassed / itemsWithAssertions (undefined if none have assertions)
  */
 export function buildSuiteResult(
-  evalResult: EvaluationResult
+  evalResult: EvaluationResult,
+  options: { suiteName?: string; totalTime?: number } = {}
 ): TestSuiteResult {
   const itemGroups = groupByDatasetItemId(evalResult.testResults);
 
@@ -94,6 +95,7 @@ export function buildSuiteResult(
     const policy =
       firstResult.resolvedExecutionPolicy ?? DEFAULT_EXECUTION_POLICY;
     const passThreshold = policy.passThreshold;
+    const configuredRunsPerItem = policy.runsPerItem;
     const passed = runsPassed >= passThreshold;
     const hasAssertions = testResults.some((tr) => tr.scoreResults.length > 0);
 
@@ -103,6 +105,7 @@ export function buildSuiteResult(
       hasAssertions,
       runsPassed,
       runsTotal,
+      configuredRunsPerItem,
       passThreshold,
       testResults,
     });
@@ -124,7 +127,7 @@ export function buildSuiteResult(
       : itemsWithAssertions.filter((r) => r.passed).length /
         itemsWithAssertions.length;
 
-  return {
+  return new TestSuiteResult({
     allItemsPassed,
     itemsPassed,
     itemsTotal,
@@ -133,5 +136,7 @@ export function buildSuiteResult(
     experimentId: evalResult.experimentId,
     experimentName: evalResult.experimentName,
     experimentUrl: evalResult.resultUrl,
-  };
+    suiteName: options.suiteName,
+    totalTime: options.totalTime,
+  });
 }

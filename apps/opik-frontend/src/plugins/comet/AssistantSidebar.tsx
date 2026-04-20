@@ -20,22 +20,24 @@ import { useTheme } from "@/contexts/theme-provider";
 import { useToast } from "@/ui/use-toast";
 import useWorkspace from "@/plugins/comet/useWorkspace";
 import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
-import type { AssistantBackendPhase } from "@/plugins/comet/useAssistantBackend";
 import useProjectById from "@/api/projects/useProjectById";
 import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
-import { Spinner } from "@/ui/spinner";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
+import OllieLoader, { OllieLoaderVariant } from "@/plugins/comet/OllieLoader";
 import {
   ASSISTANT_DEV_BASE_URL,
   IS_ASSISTANT_DEV,
 } from "@/plugins/comet/constants/assistant";
+import {
+  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  getStoredAssistantSidebarWidth,
+  isAssistantSidebarOpen,
+  setAssistantSidebarOpen,
+} from "@/constants/assistantSidebar";
 
 const BRIDGE_PROTOCOL_VERSION = 1;
-
-const LOADER_DEFAULT_WIDTH = 400;
-const LOADER_COLLAPSED_WIDTH = 33;
 
 // Pod may serve /console/manifest.json before /health/ready flips — retry
 // with backoff so transient 404/503 during warmup don't permanently fail.
@@ -45,54 +47,26 @@ const MANIFEST_RETRY_COUNT = 30;
 const MANIFEST_RETRY_BASE_DELAY_MS = 500;
 const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
 
-function getStoredSidebarWidth(): number {
-  try {
-    const parsed = parseInt(
-      localStorage.getItem("assistant-sidebar-width") ?? "",
-      10,
-    );
-    if (parsed > 0) return parsed;
-  } catch {
-    /* localStorage unavailable */
-  }
-  return LOADER_DEFAULT_WIDTH;
-}
-
-function getStoredSidebarOpen(): boolean {
-  try {
-    const stored = localStorage.getItem("assistant-sidebar-open");
-    return stored === null ? true : stored === "true";
-  } catch {
-    return true;
-  }
-}
-
-const PHASE_MESSAGES: Partial<
-  Record<AssistantBackendPhase | "manifest", string>
-> = {
-  compute: "Starting assistant\u2026",
-  health: "Connecting\u2026",
-  manifest: "Loading interface\u2026",
-};
-
 interface AssistantSidebarLoaderProps {
-  phase: AssistantBackendPhase | "manifest";
   error: string | null;
   onWidthChange: (width: number) => void;
   onRetry?: () => void;
   retryCount?: number;
+  surface: BridgeSurface;
 }
 
 const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
-  phase,
   error,
   onWidthChange,
   onRetry,
   retryCount = 0,
+  surface,
 }) => {
-  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
+  const [isOpen, setIsOpen] = useState(isAssistantSidebarOpen);
   const initialWidth = useRef(
-    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+    isAssistantSidebarOpen()
+      ? getStoredAssistantSidebarWidth()
+      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   );
 
   useEffect(() => {
@@ -102,8 +76,12 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   const handleToggle = useCallback(() => {
     setIsOpen((prev) => {
       const next = !prev;
-      localStorage.setItem("assistant-sidebar-open", String(next));
-      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      setAssistantSidebarOpen(next);
+      onWidthChange(
+        next
+          ? getStoredAssistantSidebarWidth()
+          : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+      );
       return next;
     });
   }, [onWidthChange]);
@@ -121,19 +99,13 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
     );
   }
 
-  const message = PHASE_MESSAGES[phase] ?? "Loading\u2026";
-
-  return (
-    <div className="relative size-full border-l">
-      <div className="absolute inset-0 animate-pulse bg-muted" />
-      <div className="relative flex size-full items-center justify-center">
-        <Spinner size={collapsed ? "xs" : "small"} />
-        {!collapsed && (
-          <span className="ml-2 text-sm text-light-slate">{message}</span>
-        )}
-      </div>
-    </div>
-  );
+  let variant: OllieLoaderVariant = "sidebar";
+  if (collapsed) {
+    variant = "collapsed";
+  } else if (surface === "page") {
+    variant = "page";
+  }
+  return <OllieLoader variant={variant} />;
 };
 
 const stopPropagation = (e: Event) => e.stopPropagation();
@@ -527,14 +499,13 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
 
   if (!meta || !isBackendReady) {
     if (phase === "disabled") return null;
-    const effectivePhase = isBackendReady && !meta ? "manifest" : phase;
     return (
       <AssistantSidebarLoader
-        phase={effectivePhase}
         error={error}
         onWidthChange={onWidthChange}
         onRetry={retry}
         retryCount={retryCount}
+        surface={surface}
       />
     );
   }

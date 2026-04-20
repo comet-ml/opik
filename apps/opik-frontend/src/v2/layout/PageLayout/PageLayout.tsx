@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Outlet, useMatchRoute } from "@tanstack/react-router";
 import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
@@ -12,6 +12,12 @@ import LayoutDialogs from "@/v2/layout/LayoutDialogs";
 import { PortalContainerProvider } from "@/lib/portal-container";
 import SilentErrorBoundary from "@/shared/SilentErrorBoundary/SilentErrorBoundary";
 import { useMediaQuery } from "@/hooks/useMediaQuery";
+import { useIsPhone } from "@/hooks/useIsPhone";
+import {
+  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  getStoredAssistantSidebarWidth,
+  isAssistantSidebarOpen,
+} from "@/constants/assistantSidebar";
 
 const PageLayout = () => {
   const [hostContainer, setHostContainer] = useState<HTMLDivElement | null>(
@@ -19,10 +25,14 @@ const PageLayout = () => {
   );
   const [storedExpanded = true, setStoredExpanded] =
     useLocalStorageState<boolean>("sidebar-expanded");
+  const [smallScreenExpanded, setSmallScreenExpanded] = useState(false);
   const [bannerHeight, setBannerHeight] = useState(0);
   const [showWelcomeWizard, setShowWelcomeWizard] = useState(false);
-  const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(0);
-  const sidebarWrapperRef = useRef<HTMLDivElement>(null);
+  const [assistantSidebarWidth, setAssistantSidebarWidth] = useState(() =>
+    isAssistantSidebarOpen()
+      ? getStoredAssistantSidebarWidth()
+      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  );
 
   const welcomeWizardEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.WELCOME_WIZARD_ENABLED,
@@ -43,15 +53,33 @@ const PageLayout = () => {
   const showAssistantSidebar = !!AssistantSidebar && !isProjectHome;
 
   const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
-  const isMobile = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
-  const expanded = isMobile ? false : storedExpanded;
+  const { isPhone } = useIsPhone();
+  const isSmall = useMediaQuery(`(max-width: ${1023 + assistantWidth}px)`);
 
-  const handleSidebarWidthChange = useCallback((width: number) => {
-    if (sidebarWrapperRef.current) {
-      sidebarWrapperRef.current.style.width = `${width}px`;
+  const isAssistantOpen =
+    assistantSidebarWidth > ASSISTANT_SIDEBAR_COLLAPSED_WIDTH;
+  // On phones when the assistant is open, render it as a fixed overlay so it
+  // doesn't consume flex-row width and collapse main content. The layout var
+  // stays 0px so `.comet-content-inset`'s calc resolves correctly.
+  const isPhoneAssistantOverlay = isPhone && isAssistantOpen;
+  const layoutAssistantWidth =
+    showAssistantSidebar && !isPhoneAssistantOverlay
+      ? `${assistantSidebarWidth}px`
+      : "0px";
+
+  const expanded = isPhone
+    ? false
+    : isSmall
+      ? smallScreenExpanded
+      : storedExpanded;
+
+  const toggleExpanded = useCallback(() => {
+    if (isSmall) {
+      setSmallScreenExpanded((s) => !s);
+    } else {
+      setStoredExpanded((s) => !s);
     }
-    setAssistantSidebarWidth(width);
-  }, []);
+  }, [isSmall, setStoredExpanded]);
 
   useEffect(() => {
     if (
@@ -79,9 +107,7 @@ const PageLayout = () => {
         {
           "--banner-height": `${bannerHeight}px`,
           "--sidebar-width": expanded ? "240px" : "54px",
-          "--assistant-sidebar-width": `${
-            showAssistantSidebar ? assistantSidebarWidth : 0
-          }px`,
+          "--assistant-sidebar-width": layoutAssistantWidth,
         } as React.CSSProperties
       }
     >
@@ -97,8 +123,8 @@ const PageLayout = () => {
 
             <SideBar
               expanded={expanded}
-              setExpanded={setStoredExpanded}
-              locked={isMobile}
+              canToggle={!isPhone}
+              onToggle={toggleExpanded}
             />
             <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
               <TopBar />
@@ -117,9 +143,20 @@ const PageLayout = () => {
         </PortalContainerProvider>
 
         {showAssistantSidebar ? (
-          <div ref={sidebarWrapperRef} className="relative z-[1] w-0 shrink-0">
+          <div
+            className={
+              isPhoneAssistantOverlay
+                ? "fixed inset-0 z-40"
+                : "relative z-[1] shrink-0"
+            }
+            style={
+              isPhoneAssistantOverlay
+                ? undefined
+                : { width: `${assistantSidebarWidth}px` }
+            }
+          >
             <SilentErrorBoundary>
-              <AssistantSidebar onWidthChange={handleSidebarWidthChange} />
+              <AssistantSidebar onWidthChange={setAssistantSidebarWidth} />
             </SilentErrorBoundary>
           </div>
         ) : null}

@@ -34,14 +34,12 @@ This section covers text prompts. For chat prompts with structured messages, see
 
 ### Creating Your First Prompt
 
-Create a text prompt with the `createPrompt` method:
+Create and automatically sync a text prompt using direct instantiation:
 
 ```typescript
-import { Opik, PromptType } from "opik";
+import { Prompt, PromptType } from "opik";
 
-const client = new Opik();
-
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "greeting-prompt",
   prompt: "Hello {{name}}, your score is {{score}}",
   type: PromptType.MUSTACHE,
@@ -55,9 +53,13 @@ console.log(`Created prompt with commit: ${prompt.commit}`);
 
 ### Retrieving Prompts
 
-Get prompts by name or specific version:
+Get persisted prompts from the backend by name or specific version:
 
 ```typescript
+import { Opik } from "opik";
+
+const client = new Opik({ projectName: "my-project" });
+
 // Get latest version
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
@@ -66,7 +68,7 @@ if (prompt) {
   console.log(`Commit: ${prompt.commit}`);
 }
 
-// Get specific version
+// Get specific version by commit
 const oldVersion = await client.getPrompt({
   name: "greeting-prompt",
   commit: "abc123de",
@@ -99,7 +101,7 @@ const oldText = previousVersion.format({ name: "Alice", score: 95 });
 
 ```typescript
 // Mustache syntax (default)
-await client.createPrompt({
+const mustachePrompt = new Prompt({
   name: "mustache-prompt",
   prompt: "Hello {{name}}, your score is {{score}}",
   type: PromptType.MUSTACHE,
@@ -107,7 +109,7 @@ await client.createPrompt({
 });
 
 // Jinja2 syntax for advanced templating
-await client.createPrompt({
+const jinja2Prompt = new Prompt({
   name: "jinja2-prompt",
   prompt: "Hello {{ name }}! {% if premium %}Premium user{% endif %}",
   type: PromptType.JINJA2,
@@ -121,7 +123,7 @@ await client.createPrompt({
 
 #### Understanding Version Creation
 
-The `createPrompt` method intelligently handles versioning based on content changes:
+Prompts automatically create new versions when content changes:
 
 **New version is created when:**
 
@@ -129,14 +131,14 @@ The `createPrompt` method intelligently handles versioning based on content chan
 - Metadata changes (deep equality check)
 - Template type (`type`) changes
 
-**No new version (returns existing) when:**
+**No new version (reuses existing) when:**
 
 - Template, metadata, and type are all identical
 - Only `tags` or `description` differ
 
 ```typescript
-// First call - creates new prompt with version 1
-const prompt1 = await client.createPrompt({
+// First prompt - creates version 1
+const prompt1 = new Prompt({
   name: "greeting-prompt",
   prompt: "Hello {{name}}, your score is {{score}}",
   type: PromptType.MUSTACHE,
@@ -145,8 +147,8 @@ const prompt1 = await client.createPrompt({
   projectName: "my-project",
 });
 
-// Same template, metadata, and type - returns existing version
-const prompt2 = await client.createPrompt({
+// Same template, metadata, and type - reuses version 1
+const prompt2 = new Prompt({
   name: "greeting-prompt",
   prompt: "Hello {{name}}, your score is {{score}}", // Same
   metadata: { version: "1.0" }, // Same
@@ -154,18 +156,20 @@ const prompt2 = await client.createPrompt({
   tags: ["updated-tags"], // Different tags don't trigger new version
   projectName: "my-project",
 });
+
+// Verify they have the same commit
 console.log(prompt2.commit === prompt1.commit); // true
 
-// Changed template - creates new version 2
-const prompt3 = await client.createPrompt({
+// Changed template - creates version 2
+const prompt3 = new Prompt({
   name: "greeting-prompt",
   prompt: "Hi {{name}}, score: {{score}}", // Different template
   changeDescription: "Simplified greeting message",
   projectName: "my-project",
 });
 
-// Changed metadata - creates new version 3
-const prompt4 = await client.createPrompt({
+// Changed metadata - creates version 3
+const prompt4 = new Prompt({
   name: "greeting-prompt",
   prompt: "Hi {{name}}, score: {{score}}", // Same as version 2
   metadata: { version: "2.0" }, // Different metadata triggers new version
@@ -185,16 +189,21 @@ const prompt4 = await client.createPrompt({
 Update prompt metadata without creating new versions:
 
 ```typescript
+import { Opik } from "opik";
+
+const client = new Opik({ projectName: "my-project" });
 const prompt = await client.getPrompt({ name: "greeting-prompt" });
 
-// Update name, description, or tags
-await prompt.updateProperties({
-  name: "welcome-prompt",
-  description: "Updated greeting template",
-  tags: ["welcome", "production", "v2"],
-});
+if (prompt) {
+  // Update name, description, or tags
+  await prompt.updateProperties({
+    name: "welcome-prompt",
+    description: "Updated greeting template",
+    tags: ["welcome", "production", "v2"],
+  });
 
-console.log(`Updated prompt name: ${prompt.name}`);
+  console.log(`Updated prompt name: ${prompt.name}`);
+}
 ```
 
 <Note>
@@ -416,9 +425,10 @@ Keep your prompts versioned alongside your code:
 export const GREETING_TEMPLATE = "Hello {{name}}, your score is {{score}}";
 
 // In your application
+import { Prompt } from "opik";
 import { GREETING_TEMPLATE } from "./prompts/greeting";
 
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "greeting",
   prompt: GREETING_TEMPLATE,
   metadata: { version: "1.0" },
@@ -429,7 +439,7 @@ const prompt = await client.createPrompt({
 #### Use Meaningful Version Descriptions
 
 ```typescript
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "summary-prompt",
   prompt: updatedTemplate,
   changeDescription: "Added support for multi-language summaries",
@@ -441,14 +451,16 @@ const prompt = await client.createPrompt({
 #### Tag Your Prompts
 
 ```typescript
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "production-greeting",
   prompt: template,
   tags: ["production", "customer-facing", "v2"],
   projectName: "my-project",
 });
 
-// Later, search by tags
+// Later, search by tags using client
+import { Opik } from "opik";
+const client = new Opik({ projectName: "my-project" });
 const prodPrompts = await client.searchPrompts('tags contains "production"');
 ```
 
@@ -466,12 +478,10 @@ Chat prompts are structured message-based templates designed for conversational 
 
 ### Creating Chat Prompts
 
-Create chat prompts using the `createChatPrompt` method:
+Create and automatically sync a chat prompt using direct instantiation:
 
 ```typescript
-import { Opik, PromptType } from "opik";
-
-const client = new Opik();
+import { ChatPrompt, PromptType } from "opik";
 
 // Define chat messages with variables
 const messages = [
@@ -486,7 +496,7 @@ const messages = [
 ];
 
 // Create a chat prompt
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "educational-assistant",
   messages: messages,
   type: PromptType.MUSTACHE,
@@ -503,6 +513,11 @@ console.log(`Created chat prompt with commit: ${chatPrompt.commit}`);
 Format chat prompts with variables to get ready-to-use message arrays:
 
 ```typescript
+import { Opik } from "opik";
+
+const client = new Opik({ projectName: "my-project" });
+
+// Retrieve a persisted chat prompt
 const chatPrompt = await client.getChatPrompt({
   name: "educational-assistant",
 });
@@ -547,7 +562,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "customer-support-flow",
   messages: messages,
   projectName: "my-project",
@@ -589,7 +604,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "image-analyzer",
   messages: messages,
   projectName: "my-project",
@@ -629,7 +644,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "video-analyzer",
   messages: messages,
   projectName: "my-project",
@@ -668,7 +683,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "image-comparison",
   messages: messages,
   projectName: "my-project",
@@ -696,9 +711,13 @@ This allows you to use the same prompt template with different models that may o
 
 ### Retrieving Chat Prompts
 
-Get chat prompts by name or specific version:
+Get persisted chat prompts from the backend by name or specific version:
 
 ```typescript
+import { Opik } from "opik";
+
+const client = new Opik({ projectName: "my-project" });
+
 // Get latest version
 const chatPrompt = await client.getChatPrompt({
   name: "educational-assistant",
@@ -743,7 +762,7 @@ Chat prompts support two template types:
 #### Mustache (Default)
 
 ```typescript
-import { PromptType } from "opik";
+import { ChatPrompt, PromptType } from "opik";
 
 const messages = [
   {
@@ -752,7 +771,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "mustache-example",
   messages: messages,
   type: PromptType.MUSTACHE, // Default
@@ -769,7 +788,7 @@ const formatted = chatPrompt.format({
 #### Jinja2
 
 ```typescript
-import { PromptType } from "opik";
+import { ChatPrompt, PromptType } from "opik";
 
 const messages = [
   {
@@ -784,7 +803,7 @@ const messages = [
   },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "jinja-example",
   messages: messages,
   type: PromptType.JINJA2,
@@ -823,7 +842,7 @@ const messagesV1 = [
   { role: "user", content: "Hi!" },
 ];
 
-const chatPrompt = await client.createChatPrompt({
+const chatPrompt = new ChatPrompt({
   name: "greeting-prompt",
   messages: messagesV1,
   projectName: "my-project",
@@ -837,7 +856,7 @@ const messagesV2 = [
   { role: "user", content: "Hello {{name}}!" },
 ];
 
-const chatPromptV2 = await client.createChatPrompt({
+const chatPromptV2 = new ChatPrompt({
   name: "greeting-prompt",
   messages: messagesV2,
   changeDescription: "Added personalization with name variable",

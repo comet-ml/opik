@@ -53,6 +53,36 @@ class TestExtractParams:
 
         assert extract_params(fn) == []
 
+    def test_extract_params__string_annotations__resolved_correctly(self, capture_log):
+        """Functions defined with `from __future__ import annotations` have string
+        annotations in their __annotations__ dict. extract_params must resolve them
+        to actual types so supported primitives don't trigger spurious warnings."""
+
+        # Simulate what `from __future__ import annotations` produces: all annotations
+        # are stored as strings rather than live type objects. Mix string-annotated
+        # and live-type-annotated params to verify both paths work.
+        async def handle_message(
+            session_id: str, user_message: str, max_tokens: int
+        ) -> str:
+            return ""
+
+        handle_message.__annotations__ = {
+            "session_id": "str",
+            "user_message": "str",
+            "max_tokens": "int",
+            "return": "str",
+        }
+
+        params = extract_params(handle_message)
+
+        assert [(p.name, p.type) for p in params] == [
+            ("session_id", "string"),
+            ("user_message", "string"),
+            ("max_tokens", "integer"),
+        ]
+        warnings = [r for r in capture_log.records if r.levelno == logging.WARNING]
+        assert warnings == [], "No warning expected for standard primitive annotations"
+
     def test_extract_params__unknown_type__defaults_to_string_and_warns(
         self, capture_log
     ):

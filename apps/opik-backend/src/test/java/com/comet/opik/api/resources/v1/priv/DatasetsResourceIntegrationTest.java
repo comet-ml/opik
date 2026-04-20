@@ -19,6 +19,7 @@ import com.comet.opik.domain.Streamer;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.db.IdGeneratorImpl;
 import com.comet.opik.infrastructure.json.JsonNodeMessageBodyWriter;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -70,6 +71,7 @@ class DatasetsResourceIntegrationTest {
     private static final FeatureFlags featureFlags = mock(FeatureFlags.class);
     public static final SortingFactoryDatasets sortingFactory = new SortingFactoryDatasets();
     private static final CsvDatasetExportService csvExportService = mock(CsvDatasetExportService.class);
+    private static final AnalyticsService analyticsService = mock(AnalyticsService.class);
     private static final ResourceExtension EXT;
 
     static {
@@ -79,7 +81,7 @@ class DatasetsResourceIntegrationTest {
                         service, itemService, expansionService, versionService, () -> requestContext,
                         new FiltersFactory(new FilterQueryBuilder()),
                         new IdGeneratorImpl(), new Streamer(), sortingFactory, csvProcessor,
-                        featureFlags, csvExportService))
+                        featureFlags, csvExportService, analyticsService))
                 .addProvider(JsonNodeMessageBodyWriter.class)
                 .addProvider(MultiPartFeature.class)
                 .setTestContainerFactory(new GrizzlyWebTestContainerFactory())

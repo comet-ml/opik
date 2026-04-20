@@ -1,7 +1,7 @@
 import React from "react";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
-import { buildDocsUrl, maskAPIKey } from "@/lib/utils";
+import { buildDocsUrl } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
@@ -17,21 +17,15 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const buildEnvVars = (shouldMaskAPIKey: boolean) => {
+  const buildEnvVars = () => {
     if (apiKey) {
-      const displayedKey = shouldMaskAPIKey ? maskAPIKey(apiKey) : apiKey;
-      return `export OPIK_API_KEY="${displayedKey}"\nexport OPIK_WORKSPACE="${workspaceName}"`;
+      return `export OPIK_API_KEY="${apiKey}"\nexport OPIK_WORKSPACE="${workspaceName}"`;
     }
     const url = new URL(BASE_API_URL, window.location.origin).toString();
     return `export OPIK_URL_OVERRIDE="${url}"`;
   };
 
-  const connectCommandText = `${buildEnvVars(
-    false,
-  )}\nopik connect --project "${agentName}"`;
-  const displayConnectCommandText = `${buildEnvVars(
-    true,
-  )}\nopik connect --project "${agentName}"`;
+  const connectCommandText = `${buildEnvVars()}\nopik connect --project "${agentName}"`;
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -58,11 +52,7 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
               creates a local connection between Opik and your machine so Ollie
               can help with setup.
             </p>
-            <CodeSnippet
-              title="Terminal"
-              code={displayConnectCommandText}
-              copyText={connectCommandText}
-            />
+            <CodeSnippet title="Terminal" code={connectCommandText} />
           </div>
         </TimelineStep>
 

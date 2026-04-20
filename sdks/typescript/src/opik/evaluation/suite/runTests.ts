@@ -23,6 +23,10 @@ export interface RunTestsOptions {
   experimentTags?: string[];
   /** Optional model name override for LLMJudge evaluators */
   model?: string;
+  /** Number of concurrent task executions (default: 16, matching Python SDK) */
+  taskThreads?: number;
+  /** Limit the number of dataset items to evaluate. If not set, all items are evaluated. */
+  nbSamples?: number;
 }
 
 /**
@@ -57,6 +61,7 @@ export async function runTests(
     return validateTaskResult(result);
   };
 
+  const startTime = performance.now();
   const evalResult = await evaluateTestSuite({
     dataset: testSuite.dataset,
     task: validatedTask,
@@ -64,7 +69,12 @@ export async function runTests(
     evaluatorModel: model,
     tags: experimentTags,
     ...rest,
+    projectName: rest.projectName ?? testSuite.projectName,
   });
+  const totalTime = (performance.now() - startTime) / 1000;
 
-  return buildSuiteResult(evalResult);
+  return buildSuiteResult(evalResult, {
+    suiteName: testSuite.name,
+    totalTime: totalTime,
+  });
 }

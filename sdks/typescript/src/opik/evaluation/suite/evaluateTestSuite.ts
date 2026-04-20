@@ -43,6 +43,12 @@ export interface EvaluateTestSuiteOptions<T = Record<string, unknown>> {
 
   /** Optional list of tags to associate with the experiment */
   tags?: string[];
+
+  /** Number of concurrent task executions (default: 16, matching Python SDK) */
+  taskThreads?: number;
+
+  /** Limit the number of dataset items to evaluate. If not set, all items are evaluated. */
+  nbSamples?: number;
 }
 
 /**
@@ -71,7 +77,7 @@ export async function evaluateTestSuite<T = Record<string, unknown>>(
   const suitePolicy = resolveExecutionPolicy(versionInfo?.executionPolicy);
 
   // Fetch raw items with full metadata (evaluators, executionPolicy preserved)
-  const rawItems = await options.dataset.getRawItems();
+  const rawItems = await options.dataset.getRawItems(options.nbSamples);
 
   // Build per-item metrics and policy maps
   const itemMetricsMap = new Map<string, BaseMetric[]>();
@@ -126,6 +132,7 @@ export async function evaluateTestSuite<T = Record<string, unknown>>(
       prefetchedItems,
       itemMetricsMap,
       itemPolicyMap,
+      taskThreads: options.taskThreads,
     };
 
     const engine = new EvaluationEngine<T>(engineOptions, client, experiment);

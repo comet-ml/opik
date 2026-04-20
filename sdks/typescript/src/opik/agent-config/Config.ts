@@ -1,10 +1,15 @@
 import { getTrackContext } from "@/decorators/track";
+import { BasePrompt } from "@/prompt/BasePrompt";
 import type { SupportedValue } from "@/typeHelpers";
 import { inferBackendType, serializeValue } from "@/typeHelpers";
 
 function toMetadataValue(value: unknown, backendType: string): unknown {
   if (value === null || value === undefined) return undefined;
-  if (backendType === "prompt" || backendType === "prompt_commit") {
+  if (backendType === "prompt") {
+    // If the prompt hasn't synced yet (no commit), use undefined as fallback
+    return (value as BasePrompt).commit ?? undefined;
+  }
+  if (backendType === "prompt_commit") {
     return serializeValue(value as SupportedValue, backendType);
   }
   return value;

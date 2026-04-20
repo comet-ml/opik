@@ -20,8 +20,8 @@ const AgentRunnerEmptyState: React.FC = () => {
           <h2 className="comet-title-m">Connect your agent</h2>
         </div>
         <p className="comet-body-s mb-8 text-muted-slate">
-          Link your agent to Opik to start using the Agent sandbox and improve
-          performance.
+          Link your agent to Opik to start using the Agent playground and
+          improve performance.
         </p>
 
         <div className="flex flex-col">

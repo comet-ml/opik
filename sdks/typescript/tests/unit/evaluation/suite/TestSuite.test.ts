@@ -435,6 +435,28 @@ describe("TestSuite", () => {
 
       expect(items).toEqual([]);
     });
+
+    it("should forward lastRetrievedId to dataset.getRawItems", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(10, "cursor-xyz");
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(10, "cursor-xyz");
+    });
+
+    it("should pass undefined lastRetrievedId when not provided", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(5);
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
   });
 
   describe("delete", () => {
@@ -786,41 +808,9 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial updateTestSettings with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
-      const updateDatasetSpy = vi
-        .spyOn(opikClient.api.datasets, "updateDataset")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      const applyChangesSpy = vi
-        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      await suite.updateTestSettings({ tags: ["ci", "nightly"] });
-
-      expect(updateDatasetSpy).toHaveBeenCalledWith("suite-ds-id", {
-        name: "test-suite",
-        tags: ["ci", "nightly"],
-      });
-      expect(applyChangesSpy).not.toHaveBeenCalled();
-    });
-
-    it("should throw when none of globalAssertions, globalExecutionPolicy, or tags are provided", async () => {
+    it("should throw when none of globalAssertions or globalExecutionPolicy are provided", async () => {
       await expect(suite.updateTestSettings({})).rejects.toThrow(
-        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions' or 'globalExecutionPolicy' must be provided."
       );
     });
 

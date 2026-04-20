@@ -256,7 +256,7 @@ describe("OpikClient - Chat Prompts", () => {
         { role: "user", content: "Hello {{name}}" },
       ];
 
-      // Create unsynced prompt
+      // Create unsynced prompt via API error
       vi.spyOn(client.api.prompts, "retrievePromptVersion").mockRejectedValueOnce(
         new OpikApiError({ message: "Server error", statusCode: 500 })
       );

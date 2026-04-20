@@ -31,7 +31,7 @@ import {
   PromptType,
 } from "@/prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
-import { BasePrompt } from "@/prompt/BasePrompt";
+import { BasePrompt, PROMPT_SYNC_TIMEOUT_MS } from "@/prompt/BasePrompt";
 import { PromptTemplateStructure, type CreateChatPromptOptions, type CommonPromptOptions } from "@/prompt/types";
 import { PromptTemplateStructureMismatch } from "@/prompt/errors";
 import {
@@ -88,6 +88,8 @@ let defaultProjectWarningEmitted = false;
 export function resetDefaultProjectWarning() {
   defaultProjectWarningEmitted = false;
 }
+
+const AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS = PROMPT_SYNC_TIMEOUT_MS + 500;
 
 export class OpikClient {
   public api: OpikApiClientTemp;
@@ -1148,10 +1150,7 @@ export class OpikClient {
 
       return promptInstance;
     } catch (error) {
-      if (
-        error instanceof OpikApiError ||
-        error instanceof OpikApiTimeoutError
-      ) {
+      if (error instanceof OpikApiError || error instanceof OpikApiTimeoutError) {
         logger.warn(
           `Failed to sync ${logContext} '${name}' with the backend. ` +
             "The prompt will work locally but is not persisted on the server. " +
@@ -1202,8 +1201,8 @@ export class OpikClient {
             type: options.type ?? PromptType.MUSTACHE,
             description: options.description,
             tags: options.tags,
-            synced: false,
             projectName: resolvedProjectName,
+            synced: false,
           },
           this
         ),
@@ -1270,8 +1269,8 @@ export class OpikClient {
             type: options.type ?? PromptType.MUSTACHE,
             description: options.description,
             tags: options.tags,
-            synced: false,
             projectName: resolvedProjectName,
+            synced: false,
           },
           this
         ),
@@ -1970,6 +1969,37 @@ export class OpikClient {
     }
   }
 
+  /**
+   * Waits for all unsynced BasePrompt values in `values` to finish syncing,
+   * with a timeout. Returns true only when every prompt is synced.
+   */
+  private async _allPromptsSynced(values: Record<string, unknown>): Promise<boolean> {
+    const prompts = Object.values(values).filter(
+      (v): v is BasePrompt => v instanceof BasePrompt && !v.synced
+    );
+    if (prompts.length === 0) return true;
+
+    const TIMED_OUT = Symbol();
+    let timerId: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        Promise.allSettled(prompts.map((v) => v.ready())).then(() => undefined),
+        new Promise<typeof TIMED_OUT>((resolve) => {
+          timerId = setTimeout(() => resolve(TIMED_OUT), AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS);
+        }),
+      ]);
+      if (result === TIMED_OUT) {
+        logger.debug("Timed out waiting for prompt sync before creating config.");
+        return false;
+      }
+    } finally {
+      clearTimeout(timerId);
+    }
+
+    // ready() resolved, but some prompts may have failed to sync.
+    return prompts.every((v) => v.synced);
+  }
+
   private _makeFallbackConfig<T extends Record<string, unknown>>(
     fallback: T,
     maskId: string | undefined
@@ -2110,6 +2140,13 @@ export class OpikClient {
     // Validate that all Prompt/ChatPrompt values in the fallback belong to this project.
     this._validatePromptProjects(fallback as Record<string, unknown>, projectName);
 
+    // Before auto-creating from fallback, wait for any unsynced prompts to finish syncing.
+    // Unsynced prompts lack commit/id, which would produce broken blueprint values.
+    const allSynced = await this._allPromptsSynced(fallback as Record<string, unknown>);
+    if (!allSynced) {
+      return this._makeFallbackConfig(fallback, maskId);
+    }
+
     // Auto-create from fallback (handle 409 race: another caller created it concurrently)
     let blueprint: Blueprint;
     try {
@@ -2189,6 +2226,7 @@ export class OpikClient {
     const fallback = options?.fallback;
     const projectName = options?.projectName ?? this.config.projectName;
     const maskId = getActiveConfigMask() ?? undefined;
+
     const blueprintName = getActiveConfigBlueprintName() ?? undefined;
     // A runner context that pins a blueprint name is an explicit request — no auto-create.
     const isExplicitBlueprintFromContext = blueprintName !== undefined;

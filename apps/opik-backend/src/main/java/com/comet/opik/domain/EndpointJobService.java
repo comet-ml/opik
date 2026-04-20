@@ -10,6 +10,7 @@ import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.infrastructure.LocalRunnerConfig;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -130,16 +131,18 @@ class EndpointJobServiceImpl implements EndpointJobService {
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull RunnerService runnerService;
     private final @NonNull LocalRunnerConfig runnerConfig;
+    private final @NonNull AnalyticsService analyticsService;
 
     @Inject
     EndpointJobServiceImpl(@NonNull StringRedisClient redisClient, @NonNull RedissonReactiveClient reactiveRedisClient,
             @NonNull IdGenerator idGenerator, @NonNull RunnerService runnerService,
-            @NonNull LocalRunnerConfig runnerConfig) {
+            @NonNull LocalRunnerConfig runnerConfig, @NonNull AnalyticsService analyticsService) {
         this.redisClient = redisClient;
         this.reactiveRedisClient = reactiveRedisClient;
         this.idGenerator = idGenerator;
         this.runnerService = runnerService;
         this.runnerConfig = runnerConfig;
+        this.analyticsService = analyticsService;
     }
 
     @Override
@@ -238,6 +241,12 @@ class EndpointJobServiceImpl implements EndpointJobService {
         pendingJobs.add(jobId.toString());
         RScoredSortedSet<String> runnerJobs = redisClient.getScoredSortedSet(runnerJobsKey(runnerId));
         runnerJobs.add(Instant.now().toEpochMilli(), jobId.toString());
+
+        analyticsService.trackEvent("opik_sandbox_job_created", Map.of(
+                "workspace_id", workspaceId,
+                "project_id", request.projectId().toString(),
+                "job_id", jobId.toString(),
+                "agent_name", request.agentName()));
 
         return jobId;
     }

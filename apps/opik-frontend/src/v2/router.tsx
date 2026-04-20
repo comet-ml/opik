@@ -404,7 +404,7 @@ const agentRunnerRoute = createRoute({
   path: "/agent-runner",
   getParentRoute: () => projectScopedRoute,
   staticData: {
-    title: "Agent sandbox",
+    title: "Agent playground",
   },
   component: AgentRunnerPage,
 });
