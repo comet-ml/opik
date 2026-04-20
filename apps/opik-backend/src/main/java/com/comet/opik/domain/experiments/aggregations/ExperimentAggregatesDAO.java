@@ -231,6 +231,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             FROM experiments
             WHERE workspace_id = :workspace_id
             AND id = :experiment_id
+            ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -310,10 +312,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     trace_id,
                     usage,
                     total_estimated_cost
-                FROM spans FINAL
+                FROM spans
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND trace_id IN (SELECT trace_id FROM experiment_items)
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 by id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -436,15 +440,19 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String GET_PASS_RATE_AGGREGATION = """
             WITH experiment_items_scope AS (
                 SELECT DISTINCT dataset_item_id, trace_id, execution_policy, id, experiment_id
-                FROM experiment_items FINAL
+                FROM experiment_items
                 WHERE workspace_id = :workspace_id
                 AND experiment_id = :experiment_id
+                ORDER BY (workspace_id, experiment_id, dataset_item_id, trace_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), experiment_data AS (
                 SELECT execution_policy, id
-                FROM experiments FINAL
+                FROM experiments
                 WHERE workspace_id = :workspace_id
                 AND id = :experiment_id
                 AND evaluation_method = 'evaluation_suite'
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), assertion_results_final AS (
                 SELECT
                     entity_id,
@@ -460,8 +468,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
                     AND entity_id IN (SELECT trace_id FROM experiment_items_scope)
-                    ORDER BY last_updated_at DESC
-                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) ASC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, author, name
                 )
                 GROUP BY entity_id, name
             ), runs AS (
@@ -518,12 +526,17 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         ),
                         9
                     ) AS avg_value
-                FROM assertion_results FINAL
-                WHERE entity_type = 'trace'
-                AND workspace_id = :workspace_id
-                AND project_id = :project_id
-                AND entity_id IN (SELECT trace_id FROM experiment_items)
-                AND length(name) > 0
+                FROM (
+                    SELECT *
+                    FROM assertion_results
+                    WHERE entity_type = 'trace'
+                    AND workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND entity_id IN (SELECT trace_id FROM experiment_items)
+                    AND length(name) > 0
+                    ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) ASC, last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, author, name
+                )
                 GROUP BY name
             )
             SELECT
@@ -626,11 +639,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 created_by,
                 last_updated_by,
                 execution_policy
-            FROM experiment_items FINAL
+            FROM experiment_items
             WHERE workspace_id = :workspace_id
             AND experiment_id = :experiment_id
             <if(cursor)>AND id > :cursor<endif>
-            ORDER BY id ASC
+            ORDER BY (workspace_id, experiment_id, id) ASC, last_updated_at ASC
+            LIMIT 1 BY id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -650,10 +664,12 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 input_slim,
                 output_slim,
                 visibility_mode
-            FROM traces FINAL
+            FROM traces
             WHERE workspace_id = :workspace_id
             AND project_id = :project_id
             AND id IN :trace_ids
+            ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+            LIMIT 1 BY id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -666,10 +682,16 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 trace_id,
                 sumMap(usage) as usage,
                 sum(total_estimated_cost) as total_estimated_cost
-            FROM spans FINAL
-            WHERE workspace_id = :workspace_id
-            AND project_id = :project_id
-            AND trace_id IN :trace_ids
+            FROM (
+                SELECT
+                    trace_id, usage, total_estimated_cost
+                FROM spans
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND trace_id IN :trace_ids
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
             GROUP BY trace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -733,7 +755,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     WHERE entity_type = 'trace'
                     AND workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND entity_id IN ::trace_ids
+                    AND entity_id IN :trace_ids
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
@@ -849,11 +871,20 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                         )
                     )
                 ) AS assertions_array
-            FROM assertion_results FINAL
-            WHERE entity_type = 'trace'
-              AND workspace_id = :workspace_id
-              AND project_id = :project_id
-              AND entity_id IN :trace_ids
+            FROM (
+                SELECT
+                    entity_id,
+                    name,
+                    passed,
+                    reason
+                FROM assertion_results
+                WHERE entity_type = 'trace'
+                  AND workspace_id = :workspace_id
+                  AND project_id = :project_id
+                  AND entity_id IN :trace_ids
+                ORDER BY (workspace_id, project_id, entity_type, entity_id, author, name) ASC, last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_type, entity_id, author, name
+            )
             GROUP BY entity_id
             SETTINGS log_comment = '<log_comment>'
             ;
