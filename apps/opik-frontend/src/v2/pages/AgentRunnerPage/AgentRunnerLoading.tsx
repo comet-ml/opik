@@ -28,10 +28,22 @@ const AgentRunnerLoading: React.FC<AgentRunnerLoadingProps> = ({
         <p className="comet-body-s font-medium text-foreground">
           No agents registered
         </p>
-        <p className="comet-body-xs mt-1 max-w-sm text-center">
-          The runner is connected but has not registered any agents. Check your{" "}
-          <code>opik endpoint</code> terminal for startup errors.
-        </p>
+        <div className="comet-body-xs mt-1 max-w-sm text-center">
+          <p>
+            The runner is connected but has not registered any agents. Common
+            causes:
+          </p>
+          <ul className="mt-1 inline-block list-inside list-disc text-left">
+            <li>
+              Missing <code>@opik.track(entrypoint=True)</code> decorator
+            </li>
+            <li>Process exited or crashed before registration</li>
+            <li>Script didn&apos;t import the entrypoint module</li>
+          </ul>
+          <p className="mt-2">
+            Check your <code>opik endpoint</code> terminal for details.
+          </p>
+        </div>
       </div>
     );
   }
