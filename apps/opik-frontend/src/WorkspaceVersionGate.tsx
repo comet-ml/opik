@@ -11,12 +11,15 @@
  *   1. Check localStorage override ("opik-version-override") → use immediately
  *   2. Else parse the workspace name from window.location
  *      (path segment for normal URLs, ?workspace= query for pair links)
- *   3. If found → fetch version from API with per-request Comet-Workspace header
- *   4. If not found (e.g. root "/") → default to v1 optimistically
+ *   3. If found → check the localStorage cache ("opik-workspace-versions");
+ *      on cache miss, fetch the version from the API with a per-request
+ *      Comet-Workspace header
+ *   4. If not found (e.g. root "/") → default to v2 optimistically
  *
- * Steps 1 and 4 are synchronous and run at module load, so the first paint
- * already knows which App to render — no Loader flash in the common cases.
- * Only step 3 (workspace in URL, version unknown) falls back to a Loader.
+ * Steps 1, 4, and the cache-hit branch of 3 are synchronous and run at module
+ * load, so the first paint already knows which App to render — no Loader
+ * flash in the common cases. Only step 3 with a cache miss falls back to a
+ * Loader while the API resolves.
  *
  * Level 2 — WorkspaceVersionResolver (INSIDE the router, after WorkspacePreloader):
  *   1. Workspace is now fully resolved (auth, access, header set)
@@ -33,6 +36,7 @@ import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
 import {
   getWorkspaceNameFromUrl,
   resolveSyncWorkspaceVersion,
+  setCachedWorkspaceVersion,
 } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
@@ -54,9 +58,9 @@ const WorkspaceVersionGate = () => {
 
     let cancelled = false;
     fetchWorkspaceVersion({ workspaceName }).then((resolved) => {
-      if (!cancelled) {
-        useAppStore.getState().setWorkspaceVersion(resolved);
-      }
+      if (cancelled) return;
+      useAppStore.getState().setWorkspaceVersion(resolved);
+      setCachedWorkspaceVersion(workspaceName, resolved);
     });
     return () => {
       cancelled = true;
