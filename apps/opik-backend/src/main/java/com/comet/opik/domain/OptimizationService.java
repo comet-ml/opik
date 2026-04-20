@@ -230,8 +230,23 @@ class OptimizationServiceImpl implements OptimizationService {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId,
                                                     userName);
                                             if (existingOpt.isEmpty()) {
-                                                trackOptimizationCreated(newOptimization, workspaceId,
-                                                        userName);
+                                                Schedulers.boundedElastic().schedule(
+                                                        () -> analyticsService.trackEvent(
+                                                                "opik_optimization_created",
+                                                                Map.of(
+                                                                        "optimization_id",
+                                                                        newOptimization.id().toString(),
+                                                                        "dataset_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.datasetName()),
+                                                                        "objective_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.objectiveName()),
+                                                                        "project_id",
+                                                                        String.valueOf(
+                                                                                newOptimization.projectId()),
+                                                                        "workspace_id", workspaceId),
+                                                                userName));
                                             }
 
                                             // Only enqueue job for NEW Studio optimizations
@@ -326,22 +341,22 @@ class OptimizationServiceImpl implements OptimizationService {
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
+                                    // Only emit completion event on the transition into a terminal state
+                                    if (!optimization.status().isTerminal()) {
+                                        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent(
+                                                "opik_optimization_completed",
+                                                Map.of(
+                                                        "optimization_id", optimization.id().toString(),
+                                                        "status", update.status().getValue(),
+                                                        "workspace_id", workspaceId,
+                                                        "num_trials", String.valueOf(optimization.numTrials()),
+                                                        "baseline_objective_score",
+                                                        String.valueOf(optimization.baselineObjectiveScore()),
+                                                        "best_objective_score",
+                                                        String.valueOf(optimization.bestObjectiveScore())),
+                                                userName));
+                                    }
                                 }
-                            })
-                            .flatMap(count -> {
-                                // Only emit completion event on the transition into a terminal state.
-                                // Re-fetch so numTrials / baseline / best score reflect the final state
-                                // rather than the pre-update snapshot.
-                                boolean isTransitionIntoTerminal = update.status() != null
-                                        && update.status().isTerminal()
-                                        && !optimization.status().isTerminal();
-                                if (!isTransitionIntoTerminal) {
-                                    return Mono.just(count);
-                                }
-                                return optimizationDAO.getById(id)
-                                        .doOnNext(fresh -> trackOptimizationCompleted(fresh, update.status(),
-                                                workspaceId, userName))
-                                        .thenReturn(count);
                             });
                 }));
     }
@@ -401,26 +416,6 @@ class OptimizationServiceImpl implements OptimizationService {
         }
         log.error("Unexpected exception creating optimization with id '{}'", id);
         return Mono.error(throwable);
-    }
-
-    private void trackOptimizationCreated(Optimization optimization, String workspaceId, String userName) {
-        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent("opik_optimization_created", Map.of(
-                "optimization_id", optimization.id().toString(),
-                "dataset_name", String.valueOf(optimization.datasetName()),
-                "objective_name", String.valueOf(optimization.objectiveName()),
-                "project_id", String.valueOf(optimization.projectId()),
-                "workspace_id", workspaceId), userName));
-    }
-
-    private void trackOptimizationCompleted(Optimization optimization, OptimizationStatus status,
-            String workspaceId, String userName) {
-        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent("opik_optimization_completed", Map.of(
-                "optimization_id", optimization.id().toString(),
-                "status", status.getValue(),
-                "workspace_id", workspaceId,
-                "num_trials", String.valueOf(optimization.numTrials()),
-                "baseline_objective_score", String.valueOf(optimization.baselineObjectiveScore()),
-                "best_objective_score", String.valueOf(optimization.bestObjectiveScore())), userName));
     }
 
     private void postOptimizationCreatedEvent(Optimization newOptimization, String workspaceId, String userName) {
