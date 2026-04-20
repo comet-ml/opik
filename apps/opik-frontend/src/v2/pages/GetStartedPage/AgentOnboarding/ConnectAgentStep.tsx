@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import { ArrowRight, MonitorPlay, Undo2 } from "lucide-react";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
@@ -22,7 +22,7 @@ import ConnectToOllieTab from "./ConnectToOllieTab";
 import InstallWithAITab from "./InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
-import ViewDemoProjectButton from "./ViewDemoProjectButton";
+import ShowDemoProjectButton from "./ShowDemoProjectButton";
 import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,
@@ -129,11 +129,6 @@ const ConnectAgentStep: React.FC = () => {
     setSelectedIntegrationId(null);
   };
 
-  const handleSkip = () => {
-    trackEvent(OpikEvent.ONBOARDING_SKIPPED, { agent_name: agentName });
-    goToStep(AGENT_ONBOARDING_STEPS.DONE, { agentName });
-  };
-
   if (selectedIntegration) {
     return (
       <AgentOnboardingCard
@@ -218,19 +213,7 @@ const ConnectAgentStep: React.FC = () => {
             <ArrowRight className="size-3.5" />
           </Button>
         ) : (
-          <div className="flex w-full items-center justify-between">
-            <ViewDemoProjectButton />
-            <Button
-              variant="link"
-              onClick={handleSkip}
-              className="comet-body-s ml-auto px-0 text-muted-slate"
-              id="onboarding-step2-skip"
-              data-fs-element="onboarding-step2-skip"
-            >
-              Skip for now
-              <ChevronsRight className="size-3.5" />
-            </Button>
-          </div>
+          <ShowDemoProjectButton />
         )
       }
     >

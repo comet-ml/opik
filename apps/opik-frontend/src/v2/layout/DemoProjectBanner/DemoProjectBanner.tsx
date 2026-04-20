@@ -1,7 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
-import { PlugZap } from "lucide-react";
 
 import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -30,9 +29,10 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     { enabled: !!activeProjectId },
   );
 
-  const [onboardingState] = useLocalStorageState<AgentOnboardingState>(
-    `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
-  );
+  const [onboardingState, setOnboardingState] =
+    useLocalStorageState<AgentOnboardingState>(
+      `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
+    );
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
@@ -40,20 +40,16 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   });
 
   const isDemoProject = project?.name === DEMO_PROJECT_NAME;
-  const isOnboardingProject =
-    !!onboardingState?.agentName && project?.name === onboardingState.agentName;
-  const isRelevantProject = isDemoProject || isOnboardingProject;
-
   const isOnboardingActive =
     !!onboardingState?.step &&
     onboardingState.step !== AGENT_ONBOARDING_STEPS.DONE;
 
   useAutoCompleteAgentOnboarding({
-    activeProjectId,
-    enabled: isOnboardingProject && isOnboardingActive,
+    agentName: onboardingState?.agentName,
+    enabled: isDemoProject && isOnboardingActive,
   });
 
-  const hideBanner = !isRelevantProject || !isOnboardingActive;
+  const hideBanner = !isDemoProject || !isOnboardingActive;
 
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
@@ -63,20 +59,33 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     return null;
   }
 
+  // Send the user back to Step 1 (project naming) instead of resuming whichever
+  // onboarding step they were on. Pre-fill is preserved by keeping agentName —
+  // AgentNameStep initializes its input from it and the create-project mutation
+  // auto-advances on 409 when the name still belongs to their existing project.
+  const handleCreateYourOwn = () => {
+    setOnboardingState((prev) =>
+      prev ? { ...prev, step: AGENT_ONBOARDING_STEPS.AGENT_NAME } : prev,
+    );
+  };
+
   return (
-    <div ref={ref} className="z-10 flex h-8 items-center gap-1.5 bg-muted px-4">
-      <span className="comet-body-xs text-foreground">
-        Connect your repo so Opik can help set up tracing, or instrument your
-        code manually.
+    <div
+      ref={ref}
+      className="z-10 flex h-8 items-center justify-center gap-1.5 bg-primary px-4"
+    >
+      <span className="comet-body-xs text-center text-white">
+        You are viewing a demo project,{" "}
+        <Link
+          to="/$workspaceName/get-started"
+          params={{ workspaceName }}
+          onClick={handleCreateYourOwn}
+          className="text-white underline underline-offset-2"
+        >
+          click here to create your own
+        </Link>
+        .
       </span>
-      <Link
-        to="/$workspaceName/get-started"
-        params={{ workspaceName }}
-        className="comet-body-xs inline-flex items-center gap-0.5 text-foreground underline underline-offset-2"
-      >
-        <PlugZap className="size-3" />
-        Connect your agent
-      </Link>
     </div>
   );
 };
