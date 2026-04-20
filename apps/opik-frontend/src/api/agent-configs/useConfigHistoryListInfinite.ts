@@ -3,6 +3,7 @@ import { AxiosError } from "axios";
 
 import api, { AGENT_CONFIGS_KEY, AGENT_CONFIGS_REST_ENDPOINT } from "@/api/api";
 import { ConfigHistoryItem } from "@/types/agent-configs";
+import useQueryErrorToast from "@/hooks/useQueryErrorToast";
 
 const PAGE_SIZE = 50;
 
@@ -65,6 +66,8 @@ export default function useConfigHistoryListInfinite({
       return isEmpty ? 5000 : false;
     },
   });
+
+  useQueryErrorToast({ isError: query.isError, error: query.error });
 
   return query;
 }
