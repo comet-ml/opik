@@ -2,7 +2,7 @@ import React from "react";
 import { Navigate } from "@tanstack/react-router";
 import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
 import {
-  AGENT_ONBOARDING_KEY,
+  getAgentOnboardingKey,
   AGENT_ONBOARDING_STEPS,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import useLocalStorageState from "use-local-storage-state";
@@ -10,10 +10,11 @@ import useAppStore from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 
 const NewQuickstart: React.FunctionComponent = () => {
+  const userName = useAppStore((s) => s.user.userName);
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
-  }>(AGENT_ONBOARDING_KEY);
+  }>(getAgentOnboardingKey(userName));
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 

@@ -7,8 +7,14 @@ import React, {
 import useLocalStorageState from "use-local-storage-state";
 import posthog from "posthog-js";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
+import useAppStore from "@/store/AppStore";
 
-export const AGENT_ONBOARDING_KEY = "agent-onboarding";
+const AGENT_ONBOARDING_KEY_PREFIX = "agent-onboarding";
+
+export const getAgentOnboardingKey = (userName: string) =>
+  userName
+    ? `${AGENT_ONBOARDING_KEY_PREFIX}-${userName}`
+    : AGENT_ONBOARDING_KEY_PREFIX;
 
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
@@ -62,8 +68,9 @@ interface AgentOnboardingProviderProps {
 const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
   children,
 }) => {
+  const userName = useAppStore((s) => s.user.userName);
   const [state, setState] = useLocalStorageState<AgentOnboardingState>(
-    AGENT_ONBOARDING_KEY,
+    getAgentOnboardingKey(userName),
     { defaultValue: DEFAULT_STATE },
   );
 
