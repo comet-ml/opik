@@ -52,7 +52,10 @@ const calculateLeftPosition = (
   minWidth?: number,
 ) => {
   if (minWidth) {
-    return Math.min(containerWidth * percentage, containerWidth - minWidth);
+    return Math.max(
+      0,
+      Math.min(containerWidth * percentage, containerWidth - minWidth),
+    );
   } else {
     return containerWidth * percentage;
   }
