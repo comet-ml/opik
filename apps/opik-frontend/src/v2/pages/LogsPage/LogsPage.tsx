@@ -43,12 +43,7 @@ const LogsPage = () => {
           className="mb-4 mt-6 flex items-center justify-between"
           direction="horizontal"
         >
-          <h1
-            data-testid="logs-page-title"
-            className="comet-body-accented truncate break-words"
-          >
-            Logs
-          </h1>
+          <h1 className="comet-body-accented truncate break-words">Logs</h1>
           {isGuardrailsEnabled && (
             <div className="flex shrink-0 items-center gap-2">
               <Button
