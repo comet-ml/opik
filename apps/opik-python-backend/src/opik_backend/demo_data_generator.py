@@ -416,10 +416,10 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             #   - no ClickHouse read is needed for verification, so we avoid false
             #     positives from CH replica lag.
             trace_writes, time_shift = process_traces_with_time_shift(demo_traces, context, project_name)
-            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
-
             logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
             client.rest_client.traces.create_traces(traces=trace_writes)
+
+            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
             logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
             client.rest_client.spans.create_spans(spans=span_writes)
 
