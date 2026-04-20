@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import useLocalStorageState from "use-local-storage-state";
 
 import useTracesList from "@/api/traces/useTracesList";
+import { useActiveWorkspaceName } from "@/store/AppStore";
 import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
@@ -24,8 +25,10 @@ const useAutoCompleteAgentOnboarding = ({
   activeProjectId,
   enabled,
 }: UseAutoCompleteAgentOnboardingParams) => {
-  const [, setOnboardingState] =
-    useLocalStorageState<AgentOnboardingState>(AGENT_ONBOARDING_KEY);
+  const workspaceName = useActiveWorkspaceName();
+  const [, setOnboardingState] = useLocalStorageState<AgentOnboardingState>(
+    `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
+  );
 
   const { data: tracesData } = useTracesList(
     {

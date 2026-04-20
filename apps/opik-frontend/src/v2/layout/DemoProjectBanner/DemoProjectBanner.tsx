@@ -30,8 +30,9 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     { enabled: !!activeProjectId },
   );
 
-  const [onboardingState] =
-    useLocalStorageState<AgentOnboardingState>(AGENT_ONBOARDING_KEY);
+  const [onboardingState] = useLocalStorageState<AgentOnboardingState>(
+    `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
+  );
 
   const { ref } = useObserveResizeNode<HTMLDivElement>((node) => {
     heightRef.current = node.clientHeight;
