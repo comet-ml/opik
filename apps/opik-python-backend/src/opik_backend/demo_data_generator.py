@@ -351,7 +351,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
             # - other: likely API key not yet propagated on fresh signup, retry with backoff
             # We can't rely on implicit project creation via the SDK's batch trace endpoint because
             # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
-            max_retries = 6
+            max_retries = 5
             status_code = None
             for attempt in range(max_retries):
                 status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
