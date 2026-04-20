@@ -84,7 +84,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     }
     itemElement = (
       <li className="flex">
-        <Link to={item.path} params={params} className={linkClasses}>
+        <Link
+          to={item.path}
+          params={params}
+          activeOptions={{ exact: true }}
+          className={linkClasses}
+        >
           {content}
         </Link>
       </li>
