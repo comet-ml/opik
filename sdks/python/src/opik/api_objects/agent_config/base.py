@@ -340,8 +340,8 @@ class Config:
         fallback: typing.Optional[T] = None,
         env: typing.Optional[str],
         version: typing.Optional[str],
-        auto_create_if_empty: bool = False,
-        timeout_in_seconds: typing.Optional[int] = None,
+        auto_create_if_empty: bool,
+        timeout_in_seconds: typing.Optional[int],
     ) -> T:
         _require_track_context()
         version, mask_id = _apply_context_overrides(version)
@@ -436,7 +436,7 @@ class Config:
         project_name: str,
         mask_id: typing.Optional[str],
         field_types: typing.Dict[str, typing.Any],
-        timeout_in_seconds: typing.Optional[int] = None,
+        timeout_in_seconds: typing.Optional[int],
     ) -> T:
         _validate_prompt_project_names(fallback, project_name)
 
