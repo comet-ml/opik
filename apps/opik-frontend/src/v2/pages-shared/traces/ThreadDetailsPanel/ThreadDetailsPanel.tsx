@@ -732,6 +732,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       onClose={onClose}
       hideDefaultControls
       initialWidth={0.5}
+      minWidth={700}
       horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}
