@@ -1,5 +1,7 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.AssertionResultBatch;
+import com.comet.opik.api.AssertionResultBatchItem;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreBatchContainer;
@@ -129,6 +131,23 @@ public class SpanResourceClient extends BaseCommentResourceClient {
 
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
+    }
+
+    public void assertionResults(List<AssertionResultBatchItem> assertionResults, String apiKey,
+            String workspaceName) {
+        try (var response = callAssertionResults(assertionResults, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
+        }
+    }
+
+    public Response callAssertionResults(List<AssertionResultBatchItem> assertionResults, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("assertion-results")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(AssertionResultBatch.builder().assertionResults(assertionResults).build()));
     }
 
     public Response callFeedbackScoresWithContainer(FeedbackScoreBatchContainer request, String apiKey,
