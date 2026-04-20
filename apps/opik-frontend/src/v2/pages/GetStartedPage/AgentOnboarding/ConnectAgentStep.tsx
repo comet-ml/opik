@@ -40,7 +40,9 @@ const ConnectAgentStep: React.FC = () => {
   const aiAssistedOpikSkillsVariant = useFeatureFlagVariantKey(
     AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
   );
-  const aiAssistedUsesOpikSkills = aiAssistedOpikSkillsVariant === "test";
+  // it's 95% "test" and 5% "control" in production, but we want to be sure to handle the case where it's undefined
+  const aiAssistedUsesOpikSkills =
+    (aiAssistedOpikSkillsVariant ?? "test") === "test";
   const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
 
   const [activeTab, setActiveTab] = useState(
