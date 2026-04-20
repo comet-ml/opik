@@ -1,7 +1,6 @@
 import React from "react";
-import { Clock, Coins, Pause, Play } from "lucide-react";
+import { Clock, Coins } from "lucide-react";
 
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
@@ -9,15 +8,13 @@ import {
   useOutputLoadingByPromptDatasetItemId,
   useOutputStaleStatusByPromptDatasetItemId,
   useOutputValueByPromptDatasetItemId,
-  useIsPromptRunning,
-  usePromptById,
   useOutputByPromptDatasetItemId,
 } from "@/store/PlaygroundStore";
-import { Button } from "@/ui/button";
 import { getAlphabetLetter } from "@/lib/utils";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import usePromptModelDisplay from "@/v2/pages/PlaygroundPage/usePromptModelDisplay";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
+import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptOutputProps {
   promptId: string;
@@ -35,8 +32,6 @@ const PlaygroundPromptOutput = ({
   const value = useOutputValueByPromptDatasetItemId(promptId);
   const isLoading = useOutputLoadingByPromptDatasetItemId(promptId);
   const stale = useOutputStaleStatusByPromptDatasetItemId(promptId);
-  const isPromptRunning = useIsPromptRunning(promptId);
-  const prompt = usePromptById(promptId);
   const output = useOutputByPromptDatasetItemId(promptId);
 
   const usage = output?.usage;
@@ -68,48 +63,15 @@ const PlaygroundPromptOutput = ({
     PLAYGROUND_PROMPT_COLORS[promptIndex % PLAYGROUND_PROMPT_COLORS.length];
   const letter = getAlphabetLetter(promptIndex);
 
-  const hasEmptyMessages = prompt?.messages.some(
-    (m) => !m.content || m.content.length === 0,
-  );
-  const isPromptRunDisabled = !prompt?.model || !!hasEmptyMessages;
-  const promptRunDisabledReason = !prompt?.model
-    ? "Please select an LLM model for this prompt"
-    : hasEmptyMessages
-      ? "Message is empty. Please add some text to proceed"
-      : null;
-
-  const renderRunHeader = () => {
-    if (!onRun || !onStop) return null;
-    return (
-      <div className="flex items-center justify-end border-b px-4 py-2">
-        {isPromptRunning ? (
-          <Button size="2xs" variant="outline" onClick={onStop}>
-            <Pause className="mr-1 size-3.5" />
-            Stop
-          </Button>
-        ) : (
-          <TooltipWrapper
-            content={promptRunDisabledReason ?? "Run this prompt"}
-          >
-            <Button
-              size="2xs"
-              variant="outline"
-              onClick={onRun}
-              disabled={isPromptRunDisabled}
-              style={isPromptRunDisabled ? { pointerEvents: "auto" } : {}}
-            >
-              <Play className="mr-1 size-3.5" />
-              Run
-            </Button>
-          </TooltipWrapper>
-        )}
-      </div>
-    );
-  };
-
   return (
     <div className="flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col border-r">
-      {renderRunHeader()}
+      {onRun && onStop && (
+        <PlaygroundRunButton
+          promptId={promptId}
+          onRun={onRun}
+          onStop={onStop}
+        />
+      )}
       {hasOutput ? (
         <div className="flex-1 bg-background p-4">
           <div className="mb-3 flex items-center gap-5">
