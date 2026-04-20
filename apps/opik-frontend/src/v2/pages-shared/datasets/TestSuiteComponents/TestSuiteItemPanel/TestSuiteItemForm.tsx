@@ -1,28 +1,18 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Controller, useFieldArray, useFormContext } from "react-hook-form";
 import TextareaAutosize from "react-textarea-autosize";
 import CodeMirror from "@uiw/react-codemirror";
 import { EditorView } from "@codemirror/view";
 import { jsonLanguage } from "@codemirror/lang-json";
-import { RotateCcw, Settings2 } from "lucide-react";
 
-import { Input } from "@/ui/input";
-import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { TEXT_AREA_CLASSES } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
-import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
-import AssertionsField from "@/shared/AssertionField/AssertionsField";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Description } from "@/ui/description";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/test-suites";
-import {
-  ASSERTIONS_DESCRIPTION,
-  PASS_CRITERIA_TITLE,
-  PASS_CRITERIA_DESCRIPTION,
-} from "@/constants/test-suites";
+import { ExecutionPolicy } from "@/types/test-suites";
+import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
 import { TestSuiteItemFormValues } from "./testSuiteItemFormSchema";
 
 const EDITOR_EXTENSIONS = [jsonLanguage, EditorView.lineWrapping];
@@ -115,31 +105,34 @@ const DataSection: React.FC = () => {
   );
 };
 
-interface EvaluationCriteriaSectionProps {
+interface FormEvaluationCriteriaSectionProps {
   suiteAssertions: string[];
   suitePolicy: ExecutionPolicy;
   onOpenSettings: () => void;
 }
 
-const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
-  suiteAssertions,
-  suitePolicy,
-  onOpenSettings,
-}) => {
+const FormEvaluationCriteriaSection: React.FC<
+  FormEvaluationCriteriaSectionProps
+> = ({ suiteAssertions, suitePolicy, onOpenSettings }) => {
   const form = useFormContext<TestSuiteItemFormValues>();
   const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "assertions",
   });
 
-  const runsPerItem = form.watch("runsPerItem");
+  const rawRunsPerItem = form.watch("runsPerItem");
+  const rawPassThreshold = form.watch("passThreshold");
   const useGlobalPolicy = form.watch("useGlobalPolicy");
 
-  const runsInput = useClampedIntegerInput({
-    value: runsPerItem,
-    min: 1,
-    max: MAX_RUNS_PER_ITEM,
-    onCommit: (v) => {
+  const runsPerItem = useGlobalPolicy
+    ? suitePolicy.runs_per_item
+    : rawRunsPerItem;
+  const passThreshold = useGlobalPolicy
+    ? suitePolicy.pass_threshold
+    : rawPassThreshold;
+
+  const handleRunsChange = useCallback(
+    (v: number) => {
       form.setValue("useGlobalPolicy", false);
       form.setValue("runsPerItem", v, { shouldDirty: true });
       const currentThreshold = form.getValues("passThreshold");
@@ -147,120 +140,38 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
         form.setValue("passThreshold", v, { shouldDirty: true });
       }
     },
-  });
+    [form],
+  );
 
-  const thresholdInput = useClampedIntegerInput({
-    value: form.watch("passThreshold"),
-    min: 1,
-    max: runsPerItem,
-    onCommit: (v) => {
+  const handleThresholdChange = useCallback(
+    (v: number) => {
       form.setValue("useGlobalPolicy", false);
       form.setValue("passThreshold", v, { shouldDirty: true });
     },
-  });
+    [form],
+  );
 
-  const handleRevertPolicy = () => {
+  const handleRevertPolicy = useCallback(() => {
     form.setValue("useGlobalPolicy", true, { shouldDirty: true });
     form.setValue("runsPerItem", suitePolicy.runs_per_item);
     form.setValue("passThreshold", suitePolicy.pass_threshold);
-  };
+  }, [form, suitePolicy]);
 
   return (
-    <div>
-      <div className="flex flex-col gap-1">
-        <span className="comet-body-s-accented">Assertions</span>
-        <div className="flex items-center justify-between">
-          <span className="comet-body-xs text-light-slate">
-            {ASSERTIONS_DESCRIPTION}
-          </span>
-          <button
-            type="button"
-            className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
-            onClick={onOpenSettings}
-          >
-            <Settings2 className="size-3.5 shrink-0" />
-            Manage global assertions
-          </button>
-        </div>
-
-        <AssertionsField
-          readOnlyAssertions={suiteAssertions}
-          editableAssertions={fields.map((f) => f.value)}
-          onChangeEditable={(index, value) => update(index, { value })}
-          onRemoveEditable={(index) => remove(index)}
-          onAdd={() => append({ value: "" })}
-        />
-      </div>
-
-      <h3 className="comet-body-s-accented mb-1 mt-6">{PASS_CRITERIA_TITLE}</h3>
-      <p className="comet-body-xs mb-4 text-light-slate">
-        {PASS_CRITERIA_DESCRIPTION}
-      </p>
-
-      <div className="flex items-start overflow-hidden rounded-md border">
-        <div className="flex flex-1 gap-4 p-3">
-          <div className="flex flex-1 flex-col gap-1">
-            <Label className="comet-body-xs-accented">Runs for this item</Label>
-            <Input
-              dimension="sm"
-              className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
-                "border-destructive": runsInput.isInvalid,
-              })}
-              type="number"
-              min={1}
-              max={MAX_RUNS_PER_ITEM}
-              value={runsInput.displayValue}
-              onChange={runsInput.onChange}
-              onFocus={runsInput.onFocus}
-              onBlur={runsInput.onBlur}
-              onKeyDown={runsInput.onKeyDown}
-            />
-            <span className="comet-body-xs text-light-slate">
-              Sets how many times this item runs.
-            </span>
-          </div>
-          <div className="flex flex-1 flex-col gap-1">
-            <Label className="comet-body-xs-accented">Pass threshold</Label>
-            <Input
-              dimension="sm"
-              className={cn("[&::-webkit-inner-spin-button]:appearance-none", {
-                "border-destructive": thresholdInput.isInvalid,
-              })}
-              type="number"
-              min={1}
-              max={runsPerItem}
-              value={thresholdInput.displayValue}
-              onChange={thresholdInput.onChange}
-              onFocus={thresholdInput.onFocus}
-              onBlur={thresholdInput.onBlur}
-              onKeyDown={thresholdInput.onKeyDown}
-            />
-            <span className="comet-body-xs text-light-slate">
-              Define how many runs must succeed.
-            </span>
-          </div>
-        </div>
-        <TooltipWrapper
-          content={
-            useGlobalPolicy
-              ? "Already using the suite's defaults"
-              : "Revert to the default values for this test suite"
-          }
-        >
-          <button
-            type="button"
-            className={cn(
-              "flex items-center justify-center self-stretch border-l px-2",
-              useGlobalPolicy && "cursor-default opacity-50",
-            )}
-            onClick={useGlobalPolicy ? undefined : handleRevertPolicy}
-            aria-disabled={useGlobalPolicy}
-          >
-            <RotateCcw className="size-3.5 text-muted-slate" />
-          </button>
-        </TooltipWrapper>
-      </div>
-    </div>
+    <EvaluationCriteriaSection
+      suiteAssertions={suiteAssertions}
+      editableAssertions={fields.map((f) => f.value)}
+      onChangeAssertion={(index, value) => update(index, { value })}
+      onRemoveAssertion={(index) => remove(index)}
+      onAddAssertion={() => append({ value: "" })}
+      runsPerItem={runsPerItem}
+      passThreshold={passThreshold}
+      onRunsPerItemChange={handleRunsChange}
+      onPassThresholdChange={handleThresholdChange}
+      useGlobalPolicy={useGlobalPolicy}
+      onRevertToDefaults={handleRevertPolicy}
+      onOpenSettings={onOpenSettings}
+    />
   );
 };
 
@@ -274,7 +185,7 @@ const TestSuiteItemForm: React.FC<TestSuiteItemFormProps> = ({
       <DescriptionSection />
       <DataSection />
       <Separator />
-      <EvaluationCriteriaSection
+      <FormEvaluationCriteriaSection
         suiteAssertions={suiteAssertions}
         suitePolicy={suitePolicy}
         onOpenSettings={onOpenSettings}
