@@ -354,7 +354,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               size="xs"
               disabled={!horizontalNavigation.hasPrevious}
               onClick={() => horizontalNavigation.onChange(-1)}
-              className="gap-2"
+              className="gap-1"
             >
               Previous
               <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
@@ -366,7 +366,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               size="xs"
               disabled={!horizontalNavigation.hasNext}
               onClick={() => horizontalNavigation.onChange(1)}
-              className="gap-2"
+              className="gap-1"
             >
               Next
               <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
