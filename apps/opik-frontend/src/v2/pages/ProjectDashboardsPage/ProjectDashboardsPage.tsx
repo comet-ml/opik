@@ -115,7 +115,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
         <h1 className="comet-body-accented truncate break-words">Dashboards</h1>
       </PageBodyStickyContainer>
       <PageBodyStickyContainer
-        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3 pt-2"
+        className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 pb-3"
         direction="bidirectional"
         limitWidth
       >
