@@ -1,30 +1,105 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AssertionResultBatchItem;
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.Project;
+import com.comet.opik.api.events.AssertionResultsCreated;
+import com.comet.opik.api.events.FeedbackScoresCreated;
+import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.WorkspaceUtils;
+import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+import static java.util.stream.Collectors.groupingBy;
 
 @ImplementedBy(AssertionResultServiceImpl.class)
 public interface AssertionResultService {
 
     Mono<Long> insertBatch(@NonNull EntityType entityType, @NonNull List<? extends FeedbackScoreItem> assertionScores);
+
+    Mono<Void> saveBatchOfTraces(List<AssertionResultBatchItem> assertionResults);
+
+    Mono<Void> saveBatchOfSpans(List<AssertionResultBatchItem> assertionResults);
 }
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AssertionResultServiceImpl implements AssertionResultService {
 
     private final @NonNull AssertionResultDAO assertionResultDAO;
+    private final @NonNull ProjectService projectService;
+    private final @NonNull EventBus eventBus;
 
     @Override
     public Mono<Long> insertBatch(@NonNull EntityType entityType,
             @NonNull List<? extends FeedbackScoreItem> assertionScores) {
         return assertionResultDAO.insertBatch(entityType, assertionScores);
+    }
+
+    @Override
+    public Mono<Void> saveBatchOfTraces(@NonNull List<AssertionResultBatchItem> assertionResults) {
+        return saveBatch(EntityType.TRACE, assertionResults);
+    }
+
+    @Override
+    public Mono<Void> saveBatchOfSpans(@NonNull List<AssertionResultBatchItem> assertionResults) {
+        return saveBatch(EntityType.SPAN, assertionResults);
+    }
+
+    private Mono<Void> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults) {
+        if (assertionResults.isEmpty()) {
+            return Mono.empty();
+        }
+
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
+            Set<UUID> entityIds = assertionResults.stream()
+                    .map(AssertionResultBatchItem::id)
+                    .collect(Collectors.toSet());
+
+            Map<String, List<AssertionResultBatchItem>> itemsPerProject = assertionResults.stream()
+                    .map(item -> {
+                        IdGenerator.validateVersion(item.id(), entityType.getType());
+
+                        return item.toBuilder()
+                                .projectName(WorkspaceUtils.getProjectName(item.projectName()))
+                                .build();
+                    })
+                    .collect(groupingBy(AssertionResultBatchItem::projectName));
+
+            return projectService.retrieveByNamesOrCreate(itemsPerProject.keySet())
+                    .map(ProjectService::groupByName)
+                    .flatMap(projectsByName -> Flux.fromIterable(itemsPerProject.entrySet())
+                            .flatMap(entry -> {
+                                Project project = projectsByName.get(entry.getKey());
+                                List<AssertionResultBatchItem> projectItems = entry.getValue().stream()
+                                        .map(item -> item.toBuilder().projectId(project.id()).build())
+                                        .toList();
+                                return assertionResultDAO.saveBatch(entityType, projectItems);
+                            })
+                            .reduce(0L, Long::sum))
+                    .doOnSuccess(__ -> {
+                        if (!entityIds.isEmpty()) {
+                            eventBus.post(new AssertionResultsCreated(entityIds, entityType, workspaceId, userName));
+                            eventBus.post(new FeedbackScoresCreated(entityIds, entityType, workspaceId, userName));
+                        }
+                    })
+                    .then();
+        });
     }
 }

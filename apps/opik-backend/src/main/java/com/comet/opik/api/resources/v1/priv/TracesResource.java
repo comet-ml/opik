@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
+import com.comet.opik.api.AssertionResultBatch;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
@@ -32,6 +33,7 @@ import com.comet.opik.api.filter.TraceThreadFilter;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.TraceSortingFactory;
 import com.comet.opik.api.sorting.TraceThreadSortingFactory;
+import com.comet.opik.domain.AssertionResultService;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -111,6 +113,7 @@ public class TracesResource {
     private final @NonNull TraceService service;
     private final @NonNull TraceThreadQueryService traceThreadQueryService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
+    private final @NonNull AssertionResultService assertionResultService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
@@ -497,6 +500,30 @@ public class TracesResource {
 
         log.info("Feedback scores batch for traces, size {} on  workspaceId '{}'", feedbackScoreBatch.scores().size(),
                 workspaceId);
+
+        return Response.noContent().build();
+    }
+
+    @PUT
+    @Path("/assertion-results")
+    @Operation(operationId = "saveBatchOfTraceAssertionResults", summary = "Batch assertion results for traces", description = "Batch assertion results for traces", responses = {
+            @ApiResponse(responseCode = "204", description = "No Content")})
+    @RateLimited
+    public Response saveBatchOfTraceAssertionResults(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AssertionResultBatch.class))) @NotNull @Valid AssertionResultBatch batch) {
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        log.info("Assertion results batch for traces, size '{}' on workspaceId '{}'",
+                batch.assertionResults().size(), workspaceId);
+
+        assertionResultService.saveBatchOfTraces(batch.assertionResults())
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .retryWhen(RetryUtils.handleConnectionError())
+                .block();
+
+        log.info("Saved assertion results batch for traces, size '{}' on workspaceId '{}'",
+                batch.assertionResults().size(), workspaceId);
 
         return Response.noContent().build();
     }
