@@ -355,7 +355,7 @@ public class SpansResource {
         return Response.noContent().build();
     }
 
-    @PUT
+    @POST
     @Path("/assertion-results")
     @Operation(operationId = "saveBatchOfSpanAssertionResults", summary = "Batch assertion results for spans", description = "Batch assertion results for spans", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})

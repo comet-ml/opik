@@ -147,7 +147,7 @@ public class SpanResourceClient extends BaseCommentResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(AssertionResultBatch.builder().assertionResults(assertionResults).build()));
+                .post(Entity.json(AssertionResultBatch.builder().assertionResults(assertionResults).build()));
     }
 
     public Response callFeedbackScoresWithContainer(FeedbackScoreBatchContainer request, String apiKey,

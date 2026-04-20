@@ -504,7 +504,7 @@ public class TracesResource {
         return Response.noContent().build();
     }
 
-    @PUT
+    @POST
     @Path("/assertion-results")
     @Operation(operationId = "saveBatchOfTraceAssertionResults", summary = "Batch assertion results for traces", description = "Batch assertion results for traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
