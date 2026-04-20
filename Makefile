@@ -4,7 +4,8 @@ AI_DIR := .agents
 CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
-HOOKS_DEST := .git/hooks
+# Resolve via git-common-dir so `make hooks` works from both the main clone and worktrees.
+HOOKS_DEST := $(shell git rev-parse --git-common-dir 2>/dev/null)/hooks
 SDK_DIFF_BASE ?= origin/main
 
 define link_agent_config
