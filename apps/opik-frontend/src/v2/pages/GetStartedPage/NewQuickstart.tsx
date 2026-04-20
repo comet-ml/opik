@@ -7,10 +7,12 @@ import {
 } from "./AgentOnboarding/AgentOnboardingContext";
 import useLocalStorageState from "use-local-storage-state";
 import useAppStore from "@/store/AppStore";
+import { isDefaultUser } from "@/constants/user";
 import useProjectByName from "@/api/projects/useProjectByName";
 
 const NewQuickstart: React.FunctionComponent = () => {
   const userName = useAppStore((s) => s.user.userName);
+  const isUserResolved = !isDefaultUser(userName);
   const [agentOnboardingState] = useLocalStorageState<{
     step: unknown;
     agentName?: string;
@@ -25,8 +27,12 @@ const NewQuickstart: React.FunctionComponent = () => {
 
   const { data: project, isPending } = useProjectByName(
     { projectName: agentName },
-    { enabled: isOnboardingDone && !!agentName },
+    { enabled: isUserResolved && isOnboardingDone && !!agentName },
   );
+
+  if (!isUserResolved) {
+    return null;
+  }
 
   if (!isOnboardingDone) {
     return <AgentOnboardingOverlay />;

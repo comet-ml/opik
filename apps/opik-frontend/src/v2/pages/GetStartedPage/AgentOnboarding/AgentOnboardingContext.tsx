@@ -8,13 +8,32 @@ import useLocalStorageState from "use-local-storage-state";
 import posthog from "posthog-js";
 import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardingAnswerMutation";
 import useAppStore from "@/store/AppStore";
+import { isDefaultUser } from "@/constants/user";
 
-const AGENT_ONBOARDING_KEY_PREFIX = "agent-onboarding";
+const AGENT_ONBOARDING_LEGACY_KEY = "agent-onboarding";
 
 export const getAgentOnboardingKey = (userName: string) =>
   userName
-    ? `${AGENT_ONBOARDING_KEY_PREFIX}-${userName}`
-    : AGENT_ONBOARDING_KEY_PREFIX;
+    ? `${AGENT_ONBOARDING_LEGACY_KEY}-${userName}`
+    : AGENT_ONBOARDING_LEGACY_KEY;
+
+/**
+ * Migrate the global "agent-onboarding" localStorage entry to the
+ * per-user key so returning users are not forced through onboarding again.
+ * Runs once per user; the legacy key is removed after migration.
+ */
+const migrateLegacyOnboardingState = (userName: string) => {
+  if (!userName) return;
+
+  const userKey = getAgentOnboardingKey(userName);
+  if (localStorage.getItem(userKey) !== null) return;
+
+  const legacyKey = localStorage.getItem(AGENT_ONBOARDING_LEGACY_KEY);
+  if (legacyKey === null) return;
+
+  localStorage.setItem(userKey, legacyKey);
+  localStorage.removeItem(AGENT_ONBOARDING_LEGACY_KEY);
+};
 
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
@@ -69,6 +88,12 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
   children,
 }) => {
   const userName = useAppStore((s) => s.user.userName);
+  const isUserResolved = !isDefaultUser(userName);
+
+  if (isUserResolved) {
+    migrateLegacyOnboardingState(userName);
+  }
+
   const [state, setState] = useLocalStorageState<AgentOnboardingState>(
     getAgentOnboardingKey(userName),
     { defaultValue: DEFAULT_STATE },
@@ -112,7 +137,7 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
     [state.step, submitAnswer, setState],
   );
 
-  if (state.step === AGENT_ONBOARDING_STEPS.DONE) {
+  if (!isUserResolved || state.step === AGENT_ONBOARDING_STEPS.DONE) {
     return null;
   }
 
