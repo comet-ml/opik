@@ -27,6 +27,7 @@ from . import (
     asyncio_support,
     engine,
     evaluation_result,
+    helpers,
     report,
     rest_operations,
     samplers,
@@ -140,37 +141,6 @@ def _try_notifying_about_experiment_completion(
             experiment.id,
             exc_info=True,
         )
-
-
-def _resolve_project_name(
-    value_from_dataset: Optional[str],
-    value_from_user: Optional[str],
-    caller_name: str,
-) -> Optional[str]:
-    """
-    Resolve which project name to use for evaluation.
-
-    Prefers the dataset's ``project_name`` when set. If the caller also passed
-    a ``project_name``, log a deprecation warning and ignore the override so
-    traces land in the dataset's project.
-
-    Falls back to the caller's ``project_name`` when the dataset has none, to
-    preserve backward compatibility during the deprecation period.
-    """
-    if value_from_dataset is None:
-        return value_from_user
-
-    if value_from_user is not None:
-        LOGGER.warning(
-            "The `project_name` parameter of `%s()` is deprecated and will be "
-            "removed in a future version. The dataset's project ('%s') will "
-            "be used instead of the provided value ('%s').",
-            caller_name,
-            value_from_dataset,
-            value_from_user,
-        )
-
-    return value_from_dataset
 
 
 def _compute_experiment_scores(
@@ -338,7 +308,7 @@ def evaluate(
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    project_name = _resolve_project_name(
+    project_name = helpers.resolve_project_name(
         value_from_dataset=dataset.project_name,
         value_from_user=project_name,
         caller_name="evaluate",
@@ -1086,7 +1056,7 @@ def evaluate_prompt(
         experiment_name_prefix=experiment_name_prefix,
     )
 
-    project_name = _resolve_project_name(
+    project_name = helpers.resolve_project_name(
         value_from_dataset=dataset.project_name,
         value_from_user=project_name,
         caller_name="evaluate_prompt",
@@ -1316,7 +1286,7 @@ def evaluate_optimization_trial(
         prompts=prompts,
     )
 
-    project_name = _resolve_project_name(
+    project_name = helpers.resolve_project_name(
         value_from_dataset=dataset.project_name,
         value_from_user=project_name,
         caller_name="evaluate_optimization_trial",
