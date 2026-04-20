@@ -6,8 +6,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
 import { useUserApiKey } from "@/store/AppStore";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
 import useProjectByName from "@/api/projects/useProjectByName";
 import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
@@ -31,14 +30,17 @@ import {
 
 const TRACE_POLL_INTERVAL = 5000;
 const FIRST_TRACE_TRACKED_KEY = "agent-onboarding-first-trace-tracked";
+const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
+  "onboarding-skills-for-ai-assisted-setup";
 
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
-  const aiAssistedUsesOpikSkills = useIsFeatureEnabled(
-    FeatureToggleKeys.AI_ASSISTED_OPIK_SKILLS_ENABLED,
+  const aiAssistedOpikSkillsVariant = useFeatureFlagVariantKey(
+    AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
   );
+  const aiAssistedUsesOpikSkills = aiAssistedOpikSkillsVariant === "test";
   const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
 
   const [activeTab, setActiveTab] = useState(
