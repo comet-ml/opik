@@ -8,7 +8,7 @@ import useDemoProject from "@/api/projects/useDemoProject";
 
 const ViewDemoProjectButton: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
-  const { data: demoProject } = useDemoProject({ workspaceName });
+  const { data: demoProject } = useDemoProject({ workspaceName, poll: true });
 
   if (!demoProject) {
     return null;
