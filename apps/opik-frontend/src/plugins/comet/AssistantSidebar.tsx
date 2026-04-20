@@ -30,11 +30,14 @@ import {
   ASSISTANT_DEV_BASE_URL,
   IS_ASSISTANT_DEV,
 } from "@/plugins/comet/constants/assistant";
+import {
+  ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+  getStoredAssistantSidebarWidth,
+  isAssistantSidebarOpen,
+  setAssistantSidebarOpen,
+} from "@/constants/assistantSidebar";
 
 const BRIDGE_PROTOCOL_VERSION = 1;
-
-const LOADER_DEFAULT_WIDTH = 400;
-const LOADER_COLLAPSED_WIDTH = 33;
 
 // Pod may serve /console/manifest.json before /health/ready flips — retry
 // with backoff so transient 404/503 during warmup don't permanently fail.
@@ -43,28 +46,6 @@ const LOADER_COLLAPSED_WIDTH = 33;
 const MANIFEST_RETRY_COUNT = 30;
 const MANIFEST_RETRY_BASE_DELAY_MS = 500;
 const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
-
-function getStoredSidebarWidth(): number {
-  try {
-    const parsed = parseInt(
-      localStorage.getItem("assistant-sidebar-width") ?? "",
-      10,
-    );
-    if (parsed > 0) return parsed;
-  } catch {
-    /* localStorage unavailable */
-  }
-  return LOADER_DEFAULT_WIDTH;
-}
-
-function getStoredSidebarOpen(): boolean {
-  try {
-    const stored = localStorage.getItem("assistant-sidebar-open");
-    return stored === null ? true : stored === "true";
-  } catch {
-    return true;
-  }
-}
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -81,9 +62,11 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   retryCount = 0,
   surface,
 }) => {
-  const [isOpen, setIsOpen] = useState(getStoredSidebarOpen);
+  const [isOpen, setIsOpen] = useState(isAssistantSidebarOpen);
   const initialWidth = useRef(
-    getStoredSidebarOpen() ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH,
+    isAssistantSidebarOpen()
+      ? getStoredAssistantSidebarWidth()
+      : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   );
 
   useEffect(() => {
@@ -93,8 +76,12 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
   const handleToggle = useCallback(() => {
     setIsOpen((prev) => {
       const next = !prev;
-      localStorage.setItem("assistant-sidebar-open", String(next));
-      onWidthChange(next ? getStoredSidebarWidth() : LOADER_COLLAPSED_WIDTH);
+      setAssistantSidebarOpen(next);
+      onWidthChange(
+        next
+          ? getStoredAssistantSidebarWidth()
+          : ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
+      );
       return next;
     });
   }, [onWidthChange]);

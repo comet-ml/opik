@@ -2,9 +2,7 @@ import React from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
-import { cn } from "@/lib/utils";
 import Logo from "@/shared/Logo/Logo";
 import { useActiveProjectInitializer } from "@/hooks/useActiveProjectInitializer";
 import ProjectSidebarContent from "@/v2/layout/SideBar/ProjectSidebarContent";
@@ -14,14 +12,14 @@ const HOME_PATH = "/$workspaceName/home";
 
 type SideBarProps = {
   expanded: boolean;
-  setExpanded: OnChangeFn<boolean | undefined>;
-  locked?: boolean;
+  canToggle: boolean;
+  onToggle: () => void;
 };
 
 const SideBar: React.FunctionComponent<SideBarProps> = ({
   expanded,
-  setExpanded,
-  locked = false,
+  canToggle,
+  onToggle,
 }) => {
   useActiveProjectInitializer();
   const workspaceName = useActiveWorkspaceName();
@@ -45,17 +43,16 @@ const SideBar: React.FunctionComponent<SideBarProps> = ({
         </Link>
       </div>
       <div className="relative flex h-[calc(100%-var(--header-height))]">
-        <Button
-          variant="outline"
-          size="icon-2xs"
-          onClick={() => setExpanded((s) => !s)}
-          className={cn(
-            "absolute -right-3 top-2 hidden rounded-full z-50",
-            !locked && "lg:group-hover:flex",
-          )}
-        >
-          {expanded ? <ChevronLeft /> : <ChevronRight />}
-        </Button>
+        {canToggle && (
+          <Button
+            variant="outline"
+            size="icon-2xs"
+            onClick={onToggle}
+            className="absolute -right-3 top-2 z-50 hidden rounded-full max-lg:flex lg:group-hover:flex"
+          >
+            {expanded ? <ChevronLeft /> : <ChevronRight />}
+          </Button>
+        )}
         <div className="flex min-h-0 grow flex-col justify-between overflow-auto p-3">
           {isProjectRoute ? (
             <ProjectSidebarContent expanded={expanded} />
