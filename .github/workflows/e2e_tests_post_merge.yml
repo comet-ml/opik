@@ -385,223 +385,52 @@ jobs:
       (needs.e2e-tests.result == 'failure' || github.event.inputs.notify_on_success == 'true')
 
     steps:
-      - name: "🔍 Check Slack configuration"
-        id: check-slack
-        run: |
-          if [ -z "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
-            echo "configured=false" >> $GITHUB_OUTPUT
-            echo "::notice::SLACK_WEBHOOK_URL not configured - Slack notification will be skipped"
-          else
-            echo "configured=true" >> $GITHUB_OUTPUT
-          fi
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
 
-      - name: "🔍 Resolve Slack mentions"
+      - name: Resolve Slack mentions
         id: resolve-slack-mentions
-        if: steps.check-slack.outputs.configured == 'true'
         env:
           SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
           SLACK_QA_LEAD_ID: ${{ secrets.SLACK_QA_LEAD_ID }}
         run: |
           AUTHOR="${{ needs.e2e-tests.outputs.pr_author }}"
           IS_FAILURE="${{ needs.e2e-tests.result == 'failure' }}"
-          
-          # Only resolve mentions for failures
+
           if [ "$IS_FAILURE" == "true" ]; then
-            # Build QA lead mention
             if [ -n "$SLACK_QA_LEAD_ID" ]; then
               QA_MENTION="<@$SLACK_QA_LEAD_ID>"
             else
               QA_MENTION=""
             fi
-            
-            # Look up author's Slack ID from the mapping
+
             AUTHOR_MENTION=""
             if [ -n "$SLACK_USER_MAPPING" ]; then
               AUTHOR_SLACK_ID=$(echo "$SLACK_USER_MAPPING" | jq -r --arg user "$AUTHOR" '.[$user] // empty' 2>/dev/null || echo "")
-              if [ -n "$AUTHOR_SLACK_ID" ]; then
-                # Don't duplicate mention if author IS the QA lead
-                if [ "$AUTHOR_SLACK_ID" != "$SLACK_QA_LEAD_ID" ]; then
-                  AUTHOR_MENTION="<@$AUTHOR_SLACK_ID>"
-                fi
+              if [ -n "$AUTHOR_SLACK_ID" ] && [ "$AUTHOR_SLACK_ID" != "$SLACK_QA_LEAD_ID" ]; then
+                AUTHOR_MENTION="<@$AUTHOR_SLACK_ID>"
               fi
             fi
-            
-            # Build combined mention string
-            if [ -n "$QA_MENTION" ] && [ -n "$AUTHOR_MENTION" ]; then
-              MENTIONS="$QA_MENTION $AUTHOR_MENTION"
-            elif [ -n "$QA_MENTION" ]; then
-              MENTIONS="$QA_MENTION"
-            elif [ -n "$AUTHOR_MENTION" ]; then
-              MENTIONS="$AUTHOR_MENTION"
-            else
-              MENTIONS=""
-            fi
-            
-            echo "mentions=$MENTIONS" >> $GITHUB_OUTPUT
-            echo "has_mentions=true" >> $GITHUB_OUTPUT
+
+            MENTIONS="${QA_MENTION:+$QA_MENTION }${AUTHOR_MENTION}"
+            echo "mentions=${MENTIONS% }" >> $GITHUB_OUTPUT
           else
             echo "mentions=" >> $GITHUB_OUTPUT
-            echo "has_mentions=false" >> $GITHUB_OUTPUT
           fi
-          
-          # Always output author for display
+
           echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
 
-      - name: "📢 Send Slack notification"
-        if: steps.check-slack.outputs.configured == 'true'
+      - name: Send Slack notification
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-        run: |
-          # Gather information
-          SUITE="${{ github.event.inputs.suite || 'happypaths' }}"
-          BRANCH="${{ github.ref_name }}"
-          COMMIT_SHA="${{ github.sha }}"
-          SHORT_SHA="${COMMIT_SHA:0:7}"
-          WORKFLOW_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          TESTOPS_URL="${{ needs.e2e-tests.outputs.testops_url }}"
-          AUTHOR="${{ steps.resolve-slack-mentions.outputs.author_display }}"
-          MENTIONS="${{ steps.resolve-slack-mentions.outputs.mentions }}"
-          
-          PASSED="${{ needs.e2e-tests.outputs.passed_tests }}"
-          FAILED="${{ needs.e2e-tests.outputs.failed_tests }}"
-          
-          # Determine status
-          if [ "${{ needs.e2e-tests.result }}" == "success" ]; then
-            STATUS_EMOJI="✅"
-            STATUS_TEXT="Passed"
-            COLOR="good"
-          else
-            STATUS_EMOJI="❌"
-            STATUS_TEXT="Failed"
-            COLOR="danger"
-          fi
-          
-          # Build the mention block (only for failures with mentions)
-          if [ "${{ needs.e2e-tests.result }}" == "failure" ] && [ -n "$MENTIONS" ]; then
-            MENTION_BLOCK=',
-                  {
-                    "type": "section",
-                    "text": {
-                      "type": "mrkdwn",
-                      "text": "🚨 '"$MENTIONS"' - Tests need attention!"
-                    }
-                  }'
-          else
-            MENTION_BLOCK=""
-          fi
-          
-          # Build payload
-          cat << EOF > payload.json
-          {
-            "attachments": [
-              {
-                "color": "$COLOR",
-                "blocks": [
-                  {
-                    "type": "header",
-                    "text": {
-                      "type": "plain_text",
-                      "text": "$STATUS_EMOJI E2E Tests $STATUS_TEXT - Post Merge",
-                      "emoji": true
-                    }
-                  }$MENTION_BLOCK,
-                  {
-                    "type": "section",
-                    "fields": [
-                      {
-                        "type": "mrkdwn",
-                        "text": "*Suite:*\n\`$SUITE\`"
-                      },
-                      {
-                        "type": "mrkdwn",
-                        "text": "*Branch:*\n\`$BRANCH\`"
-                      },
-                      {
-                        "type": "mrkdwn",
-                        "text": "*Results:*\n✅ $PASSED passed, ❌ $FAILED failed"
-                      },
-                      {
-                        "type": "mrkdwn",
-                        "text": "*Commit:*\n<https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`>"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "context",
-                    "elements": [
-                      {
-                        "type": "mrkdwn",
-                        "text": "👤 *Author:* $AUTHOR"
-                      }
-                    ]
-                  },
-                  {
-                    "type": "actions",
-                    "elements": [
-                      {
-                        "type": "button",
-                        "text": {
-                          "type": "plain_text",
-                          "text": "📊 TestOps",
-                          "emoji": true
-                        },
-                        "url": "$TESTOPS_URL",
-                        "style": "primary"
-                      },
-                      {
-                        "type": "button",
-                        "text": {
-                          "type": "plain_text",
-                          "text": "🔍 Workflow",
-                          "emoji": true
-                        },
-                        "url": "$WORKFLOW_URL"
-                      }
-                    ]
-                  }
-                ]
-              }
-            ]
-          }
-          EOF
-          
-          # Send notification
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST \
-            -H 'Content-type: application/json' \
-            --data @payload.json \
-            "$SLACK_WEBHOOK_URL")
-          
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "✅ Slack notification sent successfully"
-          else
-            echo "⚠️ Slack notification failed with HTTP code: $HTTP_CODE"
-          fi
-
-      - name: "ℹ️ Slack not configured"
-        if: steps.check-slack.outputs.configured != 'true'
-        run: |
-          echo "## 📢 Slack Notification Skipped" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Slack notifications are not configured. To enable them:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Required: Create a Slack Incoming Webhook" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "1. Go to your Slack workspace's App Directory" >> $GITHUB_STEP_SUMMARY
-          echo "2. Search for 'Incoming Webhooks' and create a new app" >> $GITHUB_STEP_SUMMARY
-          echo "3. Create a new webhook for your desired channel" >> $GITHUB_STEP_SUMMARY
-          echo "4. Add the webhook URL as a repository secret named \`SLACK_WEBHOOK_URL\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Optional: Enable @mentions on failures" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "To ping users when tests fail, add these additional secrets:" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- \`SLACK_QA_LEAD_ID\`: Your Slack user ID (always notified on failures)" >> $GITHUB_STEP_SUMMARY
-          echo "- \`SLACK_USER_MAPPING\`: JSON mapping of GitHub usernames to Slack IDs" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Example SLACK_USER_MAPPING format:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`json" >> $GITHUB_STEP_SUMMARY
-          echo '{"github-user": "USLACKID1", "another-user": "USLACKID2"}' >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "See: scripts/slack-user-mapping/README.md for detailed setup instructions." >> $GITHUB_STEP_SUMMARY
+          TEST_RESULT: ${{ needs.e2e-tests.result }}
+          SUITE_NAME: ${{ github.event.inputs.suite || 'happypaths' }}
+          PASSED_TESTS: ${{ needs.e2e-tests.outputs.passed_tests }}
+          FAILED_TESTS: ${{ needs.e2e-tests.outputs.failed_tests }}
+          TESTOPS_URL: ${{ needs.e2e-tests.outputs.testops_url }}
+          AUTHOR_DISPLAY: ${{ steps.resolve-slack-mentions.outputs.author_display }}
+          MENTIONS: ${{ steps.resolve-slack-mentions.outputs.mentions }}
+        run: .github/scripts/notify-slack-e2e-post-merge.sh
