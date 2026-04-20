@@ -66,8 +66,6 @@ class TestExtractParams:
         ) -> str:
             return ""
 
-        # Patch two params as strings; leave max_tokens as a live type to verify
-        # that non-string annotations are also resolved correctly.
         handle_message.__annotations__ = {
             "session_id": "str",
             "user_message": "str",
