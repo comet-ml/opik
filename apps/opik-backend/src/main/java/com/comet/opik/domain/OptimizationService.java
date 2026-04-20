@@ -321,17 +321,27 @@ class OptimizationServiceImpl implements OptimizationService {
 
                     return signalCancellationIfNeeded(id, optimization, update)
                             .then(optimizationDAO.update(id, update))
-                            .doOnSuccess(result -> {
+                            .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
-                                    // Only emit completion event on the transition into a terminal state
-                                    if (!optimization.status().isTerminal()) {
-                                        trackOptimizationCompleted(optimization, update.status(), workspaceId,
-                                                userName);
-                                    }
                                 }
+                            })
+                            .flatMap(count -> {
+                                // Only emit completion event on the transition into a terminal state.
+                                // Re-fetch so numTrials / baseline / best score reflect the final state
+                                // rather than the pre-update snapshot.
+                                boolean isTransitionIntoTerminal = update.status() != null
+                                        && update.status().isTerminal()
+                                        && !optimization.status().isTerminal();
+                                if (!isTransitionIntoTerminal) {
+                                    return Mono.just(count);
+                                }
+                                return optimizationDAO.getById(id)
+                                        .doOnNext(fresh -> trackOptimizationCompleted(fresh, update.status(),
+                                                workspaceId, userName))
+                                        .thenReturn(count);
                             });
                 }));
     }
