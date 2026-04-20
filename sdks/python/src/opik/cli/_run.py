@@ -37,15 +37,16 @@ def _capture_cli_error(
 
 
 def run_cli_session(
+    ctx: click.Context,
     project_name: str,
     name: Optional[str],
     runner_type: RunnerType,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
     headless: bool = False,
-    api_key: Optional[str] = None,
     workspace: Optional[str] = None,
 ) -> None:
+    api_key = ctx.obj.get("api_key") if ctx.obj else None
     client = Opik(
         project_name=project_name,
         api_key=api_key,
