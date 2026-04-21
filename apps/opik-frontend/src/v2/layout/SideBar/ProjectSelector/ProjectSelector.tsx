@@ -8,7 +8,7 @@ import {
   Plus,
   Trash,
 } from "lucide-react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -35,6 +35,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AddEditProjectDialog from "@/v2/pages/ProjectsPage/AddEditProjectDialog";
 import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
 import useProjectIconIndices from "@/hooks/useProjectIconIndex";
+import { resolveProjectSwitchTarget } from "./resolveProjectSwitchTarget";
 
 interface ProjectSelectorProps {
   expanded?: boolean;
@@ -49,6 +50,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const activeProjectId = useActiveProjectId();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
+  const router = useRouter();
 
   const {
     permissions: { canCreateProjects },
@@ -80,12 +82,15 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
     (projectId: string) => {
       setOpen(false);
       setSearch("");
-      navigate({
-        to: "/$workspaceName/projects/$projectId/home",
-        params: { workspaceName, projectId },
-      });
+      const target = resolveProjectSwitchTarget(
+        router.state.matches,
+        router.state.location.search as Record<string, unknown>,
+        workspaceName,
+        projectId,
+      );
+      navigate(target);
     },
-    [navigate, workspaceName],
+    [navigate, router, workspaceName],
   );
 
   const renderExpandedLoading = () => (
