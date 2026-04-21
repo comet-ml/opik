@@ -21,6 +21,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.time.Instant;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
 import static com.comet.opik.infrastructure.lock.LockService.Lock;
@@ -80,15 +81,24 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
 
         lockService.bestEffortLock(
                 SCAN_LOCK_KEY,
-                Mono.defer(() -> getExperimentsReadyToProcess()
-                        .flatMap(this::processExperiment)
-                        .onErrorContinue((throwable, experimentId) -> log.error(
-                                "Failed to process pending experiment '{}'",
-                                experimentId, throwable))
-                        .doOnComplete(
-                                () -> log.info(
-                                        "Experiment denormalization job finished processing all ready experiments"))
-                        .then()),
+                Mono.defer(() -> {
+                    var processedCount = new AtomicInteger();
+                    return getExperimentsReadyToProcess()
+                            .doOnNext(__ -> processedCount.incrementAndGet())
+                            .flatMap(this::processExperiment)
+                            .onErrorContinue((throwable, experimentId) -> log.error(
+                                    "Failed to process pending experiment '{}'",
+                                    experimentId, throwable))
+                            .doOnComplete(() -> {
+                                int count = processedCount.get();
+                                if (count > 0) {
+                                    log.info(
+                                            "Experiment denormalization job finished, processedExperiments='{}'",
+                                            count);
+                                }
+                            })
+                            .then();
+                }),
                 Mono.defer(() -> {
                     log.info(
                             "Could not acquire lock for scanning pending experiments, another job instance is running");
