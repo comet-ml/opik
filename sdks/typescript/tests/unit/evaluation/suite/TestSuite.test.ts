@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { MockInstance } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { DatasetItem } from "@/dataset/DatasetItem";
+import { DatasetItem, DatasetItemData } from "@/dataset/DatasetItem";
 import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
@@ -456,6 +456,132 @@ describe("TestSuite", () => {
       await suite.getItems(5);
 
       expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
+  });
+
+  describe("getRawItems", () => {
+    it("should return raw suite items preserving raw evaluators and item-level executionPolicy", async () => {
+      const rawEvaluators = [
+        {
+          name: "item-judge",
+          type: "llm_judge" as const,
+          config: {
+            schema: [{ name: "is quality", type: "BOOLEAN" }],
+          },
+        },
+      ];
+      const rawItem1 = new DatasetItem({
+        id: "item-1",
+        input: "hello",
+        expected: "world",
+        description: "first item",
+        evaluators: rawEvaluators,
+        executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+      });
+      const rawItem2 = new DatasetItem({
+        id: "item-2",
+        input: "foo",
+        expected: "bar",
+      });
+
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([
+        rawItem1,
+        rawItem2,
+      ]);
+
+      const items = await suite.getRawItems();
+
+      expect(items).toHaveLength(2);
+
+      // Item 1: suite-level view with raw evaluators + raw (un-merged) executionPolicy
+      expect(items[0].id).toBe("item-1");
+      expect(items[0].data).toEqual({ input: "hello", expected: "world" });
+      // description is lifted to the top-level field and excluded from data
+      expect(items[0].data).not.toHaveProperty("description");
+      expect(items[0].description).toBe("first item");
+      expect(items[0].evaluators).toEqual(rawEvaluators);
+      expect(items[0].executionPolicy).toEqual({
+        runsPerItem: 5,
+        passThreshold: 3,
+      });
+
+      // Item 2: no evaluators, no executionPolicy — raw means NOT merged with suite default
+      expect(items[1].id).toBe("item-2");
+      expect(items[1].data).toEqual({ input: "foo", expected: "bar" });
+      expect(items[1].evaluators).toBeUndefined();
+      expect(items[1].executionPolicy).toBeUndefined();
+    });
+
+    it("should forward nbSamples and lastRetrievedId to dataset.getRawItems", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      await suite.getRawItems(10, "cursor-xyz");
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(10, "cursor-xyz");
+    });
+
+    it("should be callable with no arguments", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      const items = await suite.getRawItems();
+
+      expect(items).toEqual([]);
+      expect(getRawItemsSpy).toHaveBeenCalledWith(undefined, undefined);
+    });
+
+    it("should be callable with only nbSamples", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      await suite.getRawItems(5);
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
+
+    it("should not fetch the suite-level execution policy", async () => {
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([]);
+      const getVersionInfoSpy = vi
+        .spyOn(testDataset, "getVersionInfo")
+        .mockResolvedValue({ id: "v1" });
+
+      await suite.getRawItems();
+
+      expect(getVersionInfoSpy).not.toHaveBeenCalled();
+    });
+
+    it("should not return DatasetItem instances — returns plain suite item objects", async () => {
+      const rawItem = new DatasetItem({ id: "item-1", input: "x" });
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([rawItem]);
+
+      const items = await suite.getRawItems();
+
+      expect(items[0]).not.toBeInstanceOf(DatasetItem);
+    });
+
+    it("should propagate the generic data type to RawTestSuiteItem", async () => {
+      type MyData = DatasetItemData & {
+        input: string;
+        expected: string;
+      };
+      const rawItem = new DatasetItem<MyData>({
+        id: "item-1",
+        input: "hello",
+        expected: "world",
+      });
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([rawItem]);
+
+      const items = await suite.getRawItems<MyData>();
+
+      // Compile-time check: .input and .expected are typed as string
+      const first: string = items[0].data.input;
+      const second: string = items[0].data.expected;
+      expect(first).toBe("hello");
+      expect(second).toBe("world");
     });
   });
 

@@ -9,6 +9,7 @@ import type {
   TestSuiteItem,
   UpdateTestSuiteItem,
   ExecutionPolicy,
+  RawTestSuiteItem,
 } from "./types";
 import {
   serializeEvaluators,
@@ -282,6 +283,48 @@ export class TestSuite {
           suitePolicy,
         ),
       };
+    });
+  }
+
+  /**
+   * Retrieve items with full suite-specific metadata preserved verbatim.
+   *
+   * Unlike {@link getItems}, this does NOT:
+   * - Decode `evaluators` into assertion strings (you get raw {@link EvaluatorItemWrite}[])
+   * - Merge the item-level `executionPolicy` with the suite-level default
+   *
+   * `description` is exposed as a top-level field and excluded from `data`.
+   *
+   * Use this when you need to inspect or forward the stored evaluator
+   * config or per-item execution policy as-is.
+   *
+   * @param nbSamples Max items to retrieve. Omit to return all items.
+   * @param lastRetrievedId Opaque cursor for pagination (last `id` from a previous call).
+   * @returns Array of {@link RawTestSuiteItem} objects.
+   */
+  async getRawItems<T extends DatasetItemData = DatasetItemData>(
+    nbSamples?: number,
+    lastRetrievedId?: string,
+  ): Promise<RawTestSuiteItem<T>[]> {
+    const rawItems = await this.dataset.getRawItems(
+      nbSamples,
+      lastRetrievedId,
+    );
+
+    return rawItems.map((item) => {
+      const { description: _description, ...rest } = item.getContent() as T & {
+        description?: string;
+      };
+      const result: RawTestSuiteItem<T> = {
+        id: item.id,
+        data: rest as T,
+      };
+      if (item.description !== undefined) result.description = item.description;
+      if (item.evaluators !== undefined) result.evaluators = item.evaluators;
+      if (item.executionPolicy !== undefined) {
+        result.executionPolicy = item.executionPolicy;
+      }
+      return result;
     });
   }
 
