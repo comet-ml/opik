@@ -62,12 +62,6 @@ def resolve_project_id(api: "OpikApi", project_name: str) -> str:
         ) from e
 
 
-# --- Project-retrieval error messaging -------------------------------------
-# The helpers below translate an ApiError raised by
-# `resolve_project_id_by_name` into a user-facing CLI message. They are
-# intentionally scoped to this one call site — they assume the failing
-# operation is a project lookup and phrase every message accordingly.
-
 _CONFIGURE_DOCS_URL = "https://www.comet.com/docs/opik/tracing/sdk_configuration"
 
 _PROJECT_RETRIEVAL_NOT_FOUND_HINT = "check the project name and try again"
@@ -79,10 +73,8 @@ _PROJECT_RETRIEVAL_GENERIC_HINT = (
     f"verify your Opik configuration and connectivity (see {_CONFIGURE_DOCS_URL})"
 )
 
-# Per-status action hint for project retrieval failures. The hint is joined
-# to the server's own message inside a single sentence, so it must read as a
-# lowercase verb phrase. The server message is always the source of truth for
-# *what* went wrong; the SDK only contributes guidance on *what to do next*.
+# Hints read as lowercase verb phrases because they are joined to the
+# server's message in one sentence.
 _PROJECT_RETRIEVAL_STATUS_HINTS: "dict[int, str]" = {
     404: _PROJECT_RETRIEVAL_NOT_FOUND_HINT,
     401: _PROJECT_RETRIEVAL_AUTH_HINT,
@@ -91,15 +83,8 @@ _PROJECT_RETRIEVAL_STATUS_HINTS: "dict[int, str]" = {
 
 
 def _extract_server_error_message(error: ApiError) -> Optional[str]:
-    """Return a human-readable server message from an ApiError body, if any.
-
-    Opik uses two response shapes:
-      - Dropwizard ``ErrorMessage``: ``{"code": ..., "message": ...}``
-      - Opik's custom ``ErrorMessage``: ``{"errors": ["..."]}`` (e.g. project
-        retrieve 404)
-    A ``"msg"``/``"error"`` fallback is kept for defence. Bodies may also
-    arrive as a plain string when the response is not JSON.
-    """
+    # Opik backends use two shapes: Dropwizard {"code", "message"} and Opik's
+    # custom {"errors": [...]} (e.g. project-retrieve 404).
     body = error.body
     if isinstance(body, dict):
         for key in ("message", "msg", "error"):
@@ -121,7 +106,6 @@ def _extract_server_error_message(error: ApiError) -> Optional[str]:
 
 
 def _format_project_retrieval_error(project_name: str, error: ApiError) -> str:
-    """Format an ApiError raised while looking up a project by name."""
     hint = _PROJECT_RETRIEVAL_STATUS_HINTS.get(
         error.status_code or -1, _PROJECT_RETRIEVAL_GENERIC_HINT
     )
