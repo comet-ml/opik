@@ -60,7 +60,8 @@ export default function useConfigHistoryListInfinite({
       page * size < total ? page + 1 : undefined,
     initialPageParam: 1,
     refetchInterval: (query) => {
-      const isEmpty = !query.state.data?.pages?.some(
+      if (query.state.status !== "success" || !query.state.data) return false;
+      const isEmpty = !query.state.data.pages.some(
         (p) => p.content.length > 0,
       );
       return isEmpty ? 5000 : false;
