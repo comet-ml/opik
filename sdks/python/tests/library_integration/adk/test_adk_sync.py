@@ -134,6 +134,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -149,6 +150,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -164,8 +166,10 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -262,6 +266,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -276,6 +281,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                     "status": "success",
                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -290,8 +296,10 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     EXPECTED_TIME_QUESTION_TRACE_TREE = TraceModel(
@@ -329,6 +337,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -345,6 +354,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                         "The current time in New York is"
                     ),
                 },
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -359,8 +369,10 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 2
@@ -444,8 +456,10 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -471,10 +485,13 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -577,6 +594,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -601,8 +619,10 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                         type="tool",
                         input={"city": "New York"},
                         output={"output": True},
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -617,8 +637,10 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -872,8 +894,10 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -899,10 +923,13 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
                         usage=ANY_DICT,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -981,6 +1008,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
             SpanModel(  # from tool callback
                 id=ANY_BUT_NONE,
@@ -1017,10 +1045,13 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
                                 usage=ANY_DICT,
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1035,8 +1066,10 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -1199,6 +1232,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1214,6 +1248,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                     "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
                 },
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1229,8 +1264,10 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -1307,8 +1344,10 @@ def test_adk__agent_with_response_schema__happyflow(
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
                 usage=ANY_DICT,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -1411,8 +1450,10 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
                     "message": ANY_STRING,
                     "traceback": ANY_STRING,
                 },
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -1513,6 +1554,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
                 model=MODEL_NAME,
                 usage=ANY_DICT,
                 project_name="adk-test",
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1530,8 +1572,10 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
                     "traceback": ANY_STRING,
                 },
                 project_name="adk-test",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -1608,6 +1652,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                 model=MODEL_NAME,
                 provider=provider,
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1617,6 +1662,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -1646,13 +1692,16 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                         model=MODEL_NAME,
                         provider=provider,
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             ),
         ],
         thread_id=ANY_BUT_NONE,
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) > 0

@@ -1,11 +1,11 @@
 import React, {
-  useRef,
   useEffect,
+  useRef,
   useState,
   useMemo,
   ReactElement,
 } from "react";
-import { map } from "lodash";
+import map from "lodash/map";
 import { cn } from "@/lib/utils";
 
 type ChildrenWidthMeasurerProps = {
@@ -14,47 +14,67 @@ type ChildrenWidthMeasurerProps = {
   className?: string;
 };
 
+const measureChildren = (node: HTMLElement): number[] =>
+  map(node.children, (tag) => tag.getBoundingClientRect().width);
+
+const hasValidWidths = (widths: number[]) =>
+  widths.length > 0 && widths.some((w) => w > 0);
+
 const ChildrenWidthMeasurer: React.FC<ChildrenWidthMeasurerProps> = ({
   children,
   onMeasure,
   className,
 }) => {
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [node, setNode] = useState<HTMLDivElement | null>(null);
   const [hasMeasured, setHasMeasured] = useState(false);
-  const prevChildrenSignatureRef = useRef<string>("");
 
-  // compute a stable signature based on children keys/content
   const childrenSignature = useMemo(() => {
     return React.Children.toArray(children)
       .map((c) => (c as ReactElement)?.key ?? "")
       .join("|");
   }, [children]);
 
-  // reset measurement state when children signature changes
+  const prevSignatureRef = useRef(childrenSignature);
+
+  // reset only when children actually change, not on initial mount
   useEffect(() => {
-    if (prevChildrenSignatureRef.current !== childrenSignature) {
-      prevChildrenSignatureRef.current = childrenSignature;
+    if (prevSignatureRef.current !== childrenSignature) {
+      prevSignatureRef.current = childrenSignature;
       setHasMeasured(false);
-      containerRef.current = null;
+      setNode(null);
     }
   }, [childrenSignature]);
 
-  const onContainerRef = (node: HTMLDivElement | null) => {
-    if (node && node !== containerRef.current) {
-      containerRef.current = node;
-      onMeasure(map(node.children, (tag) => tag.getBoundingClientRect().width));
-      setHasMeasured(true);
-    }
-  };
+  // measure immediately or observe until visible
+  useEffect(() => {
+    if (!node || hasMeasured) return;
 
-  // after measurement, remove the invisible container from DOM to avoid extra nodes
+    const widths = measureChildren(node);
+    if (hasValidWidths(widths)) {
+      onMeasure(widths);
+      setHasMeasured(true);
+      return;
+    }
+
+    // element is inside display:none — retry when it becomes visible
+    const observer = new ResizeObserver(() => {
+      const retryWidths = measureChildren(node);
+      if (hasValidWidths(retryWidths)) {
+        onMeasure(retryWidths);
+        setHasMeasured(true);
+      }
+    });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node, hasMeasured, onMeasure]);
+
   if (hasMeasured) {
     return null;
   }
 
   return (
     <div
-      ref={onContainerRef}
+      ref={setNode}
       aria-hidden="true"
       className={cn(
         "invisible absolute flex size-full items-center justify-start gap-1.5 p-0 py-1",

@@ -47,7 +47,8 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
     enableUserFeedbackEditing;
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
-  const isSmall = rowHeight === ROW_HEIGHT.small;
+  const isCompact =
+    rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
 
   const renderContent = (item: ExperimentItem | undefined) => {
     const feedbackScore = item?.feedback_scores?.find(
@@ -61,6 +62,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
             <FeedbackScoreEditDropdown
               feedbackScore={feedbackScore}
               onValueChange={handleValueChange}
+              size={isCompact ? "sm" : "md"}
             />
           )}
           <span>-</span>
@@ -88,7 +90,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
       <div
         className={cn(
           "flex w-full justify-end gap-1",
-          isSmall
+          isCompact
             ? "h-4 items-center"
             : "flex-col items-end justify-start overflow-hidden",
           isUserFeedbackColumn && "group",
@@ -99,6 +101,7 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
           color={color}
           isUserFeedbackColumn={isUserFeedbackColumn}
           onValueChange={handleValueChange}
+          size={isCompact ? "sm" : "md"}
           tooltipSuffix={
             isAggregatedScore(feedbackScore)
               ? getTrialAvgTooltip(
@@ -108,23 +111,16 @@ const CompareExperimentsFeedbackScoreCell: React.FC<
               : undefined
           }
         />
-        {reasons.length > 0 && (
-          <FeedbackScoreReasonTooltip reasons={reasons}>
-            {!isSmall ? (
-              <span
-                className={cn(
-                  "break-words text-xs text-muted-foreground",
-                  rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
-                  rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
-                )}
-              >
-                {reasons.map((r) => r.reason).join(", ")}
-              </span>
-            ) : (
+        {reasons.length > 0 &&
+          (isCompact ? (
+            <FeedbackScoreReasonTooltip reasons={reasons}>
               <MessageSquareMore className="size-3.5 shrink-0 text-light-slate" />
-            )}
-          </FeedbackScoreReasonTooltip>
-        )}
+            </FeedbackScoreReasonTooltip>
+          ) : (
+            <span className="w-full min-w-0 overflow-y-auto break-words text-xs text-muted-foreground">
+              {reasons.map((r) => r.reason).join(", ")}
+            </span>
+          ))}
       </div>
     );
   };

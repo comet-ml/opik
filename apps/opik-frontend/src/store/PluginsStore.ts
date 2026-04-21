@@ -6,9 +6,9 @@ import { GoogleColabCardCoreProps } from "@/types/shared";
 import { InviteDevButtonProps } from "@/plugins/comet/InviteDevButton";
 import { SidebarInviteDevButtonProps } from "@/plugins/comet/SidebarInviteDevButton";
 import { CollaboratorsTabTriggerProps } from "@/plugins/comet/CollaboratorsTabTrigger";
+import { BridgeSurface } from "@/types/assistant-sidebar";
 
 type PluginStore = {
-  Logo: React.ComponentType<{ expanded: boolean }> | null;
   UserMenu: React.ComponentType | null;
   InviteUsersForm: React.ComponentType | null;
   GetStartedPage: React.ComponentType | null;
@@ -25,13 +25,19 @@ type PluginStore = {
   CollaboratorsTab: React.ComponentType | null;
   CollaboratorsTabTrigger: React.ComponentType<CollaboratorsTabTriggerProps> | null;
   WorkspaceSelector: React.ComponentType | null;
+  SidebarWorkspaceSelector: React.ComponentType<{ expanded?: boolean }> | null;
+  AssistantSidebar: React.ComponentType<{
+    surface?: BridgeSurface;
+    onWidthChange: (width: number) => void;
+  }> | null;
+  AssistantPrewarmer: React.ComponentType | null;
+  UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
 };
 
-const VALID_PLUGIN_FOLDER_NAMES = ["comet"];
+const VALID_PLUGIN_FOLDER_NAMES = ["comet", "development"];
 const PLUGIN_NAMES = [
-  "Logo",
   "UserMenu",
   "InviteUsersForm",
   "GetStartedPage",
@@ -44,11 +50,14 @@ const PLUGIN_NAMES = [
   "CollaboratorsTab",
   "CollaboratorsTabTrigger",
   "WorkspaceSelector",
+  "SidebarWorkspaceSelector",
+  "AssistantSidebar",
+  "AssistantPrewarmer",
+  "UpgradeButton",
   "init",
 ];
 
 const usePluginsStore = create<PluginStore>((set) => ({
-  Logo: null,
   UserMenu: null,
   InviteUsersForm: null,
   GetStartedPage: null,
@@ -61,6 +70,10 @@ const usePluginsStore = create<PluginStore>((set) => ({
   CollaboratorsTab: null,
   CollaboratorsTabTrigger: null,
   WorkspaceSelector: null,
+  SidebarWorkspaceSelector: null,
+  AssistantSidebar: null,
+  AssistantPrewarmer: null,
+  UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {
     if (!VALID_PLUGIN_FOLDER_NAMES.includes(folderName)) {
@@ -80,6 +93,11 @@ const usePluginsStore = create<PluginStore>((set) => ({
       } catch (error) {
         continue;
       }
+    }
+
+    // Ensure WorkspacePreloader is always set (fallback to default)
+    if (!usePluginsStore.getState().WorkspacePreloader) {
+      set({ WorkspacePreloader });
     }
   },
 }));

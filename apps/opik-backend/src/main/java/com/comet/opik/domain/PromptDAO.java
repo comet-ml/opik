@@ -31,7 +31,10 @@ import java.util.UUID;
 @RegisterArgumentFactory(UUIDArgumentFactory.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
-interface PromptDAO {
+public interface PromptDAO {
+
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM prompts WHERE workspace_id = :workspaceId AND project_id IS NULL)")
+    boolean hasVersion1Prompts(@Bind("workspaceId") String workspaceId);
 
     @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, project_id, tags, template_structure) "
             +

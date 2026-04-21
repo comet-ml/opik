@@ -23,11 +23,8 @@ import {
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/shared/Loader/Loader";
-import {
-  JsonTreePopover,
-  JsonObject,
-  JsonValue,
-} from "@/shared/JsonTreePopover";
+import { JsonTreePopover } from "@/shared/JsonTreePopover";
+import { JsonObject, JsonValue } from "@/types/shared";
 import LLMPromptMessageActions, {
   ImprovePromptConfig,
 } from "@/v1/pages-shared/llm/LLMPromptMessages/LLMPromptMessageActions";

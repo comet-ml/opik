@@ -1,8 +1,9 @@
-import React, { useMemo } from "react";
+import { useMemo } from "react";
 import { CellContext } from "@tanstack/react-table";
 
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import { Tag } from "@/ui/tag";
+import { getCellTagSize, TAG_SIZE_MAP } from "@/constants/shared";
 import { AggregatedCandidate } from "@/types/optimizations";
 import {
   computeCandidateStatuses,
@@ -10,55 +11,54 @@ import {
   type InProgressInfo,
 } from "@/v1/pages-shared/experiments/OptimizationProgressChart/optimizationChartUtils";
 
+interface TrialStatusCustomMeta {
+  candidates: AggregatedCandidate[];
+  bestCandidateId?: string;
+  isTestSuite?: boolean;
+  isInProgress?: boolean;
+  inProgressInfo?: InProgressInfo;
+}
+
 const TrialStatusCell = (context: CellContext<unknown, unknown>) => {
   const row = context.row.original as AggregatedCandidate;
   const { custom } = context.column.columnDef.meta ?? {};
   const {
     candidates,
     bestCandidateId,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
-  } = (custom ?? {}) as {
-    candidates: AggregatedCandidate[];
-    bestCandidateId?: string;
-    isEvaluationSuite?: boolean;
-    isInProgress?: boolean;
-    inProgressInfo?: InProgressInfo;
-  };
-
-  const isBest = bestCandidateId === row.candidateId;
+  } = (custom ?? {}) as TrialStatusCustomMeta;
 
   const statusMap = useMemo(
     () =>
       computeCandidateStatuses(
         candidates ?? [],
-        isEvaluationSuite,
+        isTestSuite,
         isInProgress,
         inProgressInfo,
       ),
-    [candidates, isEvaluationSuite, isInProgress, inProgressInfo],
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
+
+  const isBest = bestCandidateId === row.candidateId;
   const status = statusMap.get(row.candidateId) ?? "pruned";
+  const variant = isBest ? "green" : STATUS_VARIANT_MAP[status];
+  const label = isBest ? "Best" : status;
+  const tagSize = getCellTagSize(context, TAG_SIZE_MAP);
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {isBest ? (
-        <Tag variant="green" size="md">
-          Best
-        </Tag>
-      ) : (
-        <Tag
-          variant={STATUS_VARIANT_MAP[status]}
-          size="md"
-          className="capitalize"
-        >
-          {status}
-        </Tag>
-      )}
+      <Tag
+        variant={variant}
+        size={tagSize}
+        className={isBest ? undefined : "capitalize"}
+      >
+        {label}
+      </Tag>
     </CellWrapper>
   );
 };

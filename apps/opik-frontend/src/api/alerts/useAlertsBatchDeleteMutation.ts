@@ -32,6 +32,7 @@ const useAlertsBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-alerts"] });
       return queryClient.invalidateQueries({
         queryKey: [ALERTS_KEY],
       });

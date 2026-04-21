@@ -34,6 +34,7 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.alerts.AlertAssertions;
 import com.comet.opik.api.resources.utils.resources.AlertResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
@@ -45,11 +46,11 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayload;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackBlock;
 import com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayload;
+import com.comet.opik.api.resources.v1.jobs.MetricsAlertJob;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.GuardrailResult;
-import com.comet.opik.domain.alerts.MetricsAlertJob;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -92,6 +93,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -115,8 +117,6 @@ import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABA
 import static com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient.BEARER_PREFIX;
 import static com.comet.opik.api.resources.v1.events.webhooks.pagerduty.PagerDutyWebhookPayloadMapper.ROUTING_KEY_METADATA_KEY;
 import static com.comet.opik.api.resources.v1.events.webhooks.slack.SlackWebhookPayloadMapper.BASE_URL_METADATA_KEY;
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 import static com.comet.opik.utils.NumberUtils.formatDecimal;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -137,20 +137,6 @@ class AlertResourceTest {
     private static final String USER = UUID.randomUUID().toString();
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String TEST_WORKSPACE = UUID.randomUUID().toString();
-
-    private static final String[] ALERT_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "workspaceId", "webhook.name", "webhook.secretToken", "webhook.createdAt",
-            "webhook.lastUpdatedAt",
-            "webhook.createdBy", "webhook.lastUpdatedBy", "triggers"};
-
-    private static final String[] TRIGGER_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "triggerConfigs"};
-
-    private static final String[] TRIGGER_CONFIG_IGNORED_FIELDS = new String[]{
-            "createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy"};
 
     public static final String[] PROMPT_TRIGGER_PAYLOAD_IGNORED_FIELDS = {"latestVersion", "requestedVersion",
             "template", "metadata", "changeDescription", "type", "createdAt", "lastUpdatedAt", "versionCount"};
@@ -443,6 +429,119 @@ class AlertResourceTest {
             alertResourceClient.updateAlert(nonExistentId, alert, mock.getLeft(), mock.getRight(),
                     HttpStatus.SC_NOT_FOUND);
         }
+
+        @Test
+        @DisplayName("when update has no SCOPE_PROJECT trigger configs, then project_id is updated")
+        void updateAlert__whenNoScopeProjectTriggers__thenProjectIdIsUpdated() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID projectBId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var updateBase = generateAlertUpdate(actualAlert);
+            var updatedTriggers = updateBase.triggers().stream()
+                    .map(t -> stripScopeProjectConfigs(t))
+                    .toList();
+            var updated = updateBase.toBuilder().projectId(projectBId).triggers(updatedTriggers).build();
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            var result = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(updated, result, true);
+        }
+
+        @Test
+        @DisplayName("when update has SCOPE_PROJECT trigger configs and no project_id, then project_id is null")
+        void updateAlert__whenScopeProjectTriggersAndNoProjectId__thenProjectIdIsNull() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID scopedProjectId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var scopeProjectConfig = AlertTriggerConfig.builder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(scopedProjectId))))
+                    .build();
+
+            var triggerWithScope = actualAlert.triggers().getFirst().toBuilder()
+                    .triggerConfigs(List.of(scopeProjectConfig))
+                    .createdBy(null)
+                    .createdAt(null)
+                    .build();
+
+            var updated = generateAlertUpdate(actualAlert).toBuilder()
+                    .projectId(null)
+                    .triggers(List.of(triggerWithScope))
+                    .build();
+
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_NO_CONTENT);
+
+            var result = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            compareAlerts(updated, result, true);
+        }
+
+        @Test
+        @DisplayName("when update has both project_id and SCOPE_PROJECT trigger configs, then return bad request")
+        void updateAlert__whenProjectIdAndScopeProjectTriggersBothPresent__thenReturnBadRequest() {
+            var mock = prepareMockWorkspace();
+
+            UUID projectAId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+            UUID projectBId = projectResourceClient.createProject(RandomStringUtils.randomAlphabetic(10),
+                    mock.getLeft(), mock.getRight());
+
+            var original = generateAlertForProject(projectAId);
+            var createdAlertId = alertResourceClient.createAlert(original, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_CREATED);
+
+            var actualAlert = alertResourceClient.getAlertById(createdAlertId, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_OK);
+
+            var scopeProjectConfig = AlertTriggerConfig.builder()
+                    .id(factory.manufacturePojo(UUID.class))
+                    .type(AlertTriggerConfigType.SCOPE_PROJECT)
+                    .configValue(Map.of(PROJECT_IDS_CONFIG_KEY, JsonUtils.writeValueAsString(Set.of(projectBId))))
+                    .build();
+
+            var triggerWithScope = actualAlert.triggers().getFirst().toBuilder()
+                    .triggerConfigs(List.of(scopeProjectConfig))
+                    .createdBy(null)
+                    .createdAt(null)
+                    .build();
+
+            var updated = generateAlertUpdate(actualAlert).toBuilder()
+                    .projectId(projectBId)
+                    .triggers(List.of(triggerWithScope))
+                    .build();
+
+            alertResourceClient.updateAlert(createdAlertId, updated, mock.getLeft(), mock.getRight(),
+                    HttpStatus.SC_BAD_REQUEST);
+        }
+
     }
 
     @Nested
@@ -1549,6 +1648,180 @@ class AlertResourceTest {
         }
 
         @Test
+        @DisplayName("when alert is scoped via projectId column and guardrail fires from matching project, then webhook is called; from different project, webhook is not called")
+        void whenGuardrailScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column (not scope:project trigger config)
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.TRACE_GUARDRAILS_TRIGGERED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Trigger guardrail in projectA — webhook SHOULD fire
+            Trace traceA = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectAName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(traceA, mock.getLeft(), mock.getRight());
+
+            Guardrail guardrailA = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(traceA.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectAName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrailA), mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and trigger guardrail in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            Trace traceB = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectBName)
+                    .usage(null)
+                    .visibilityMode(null)
+                    .build();
+            traceResourceClient.createTrace(traceB, mock.getLeft(), mock.getRight());
+
+            Guardrail guardrailB = factory.manufacturePojo(Guardrail.class).toBuilder()
+                    .entityId(traceB.id())
+                    .secondaryId(UUID.randomUUID())
+                    .projectName(projectBName)
+                    .result(GuardrailResult.FAILED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrailB), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
+        @DisplayName("when alert is scoped via projectId column and prompt is created in matching project, then webhook is called; from different project, webhook is not called")
+        void whenPromptCreatedScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(PROMPT_CREATED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Create a prompt scoped to projectA — webhook SHOULD fire
+            var promptInProjectA = buildPrompt().toBuilder()
+                    .projectId(projectAId)
+                    .build();
+            promptResourceClient.createPrompt(promptInProjectA, mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and create a prompt in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            var promptInProjectB = buildPrompt().toBuilder()
+                    .projectName(projectBName)
+                    .build();
+            promptResourceClient.createPrompt(promptInProjectB, mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
+        @DisplayName("when alert is scoped via projectId column and experiment finishes in matching project, then webhook is called; from different project, webhook is not called")
+        void whenExperimentFinishedScopedByProjectIdColumn__thenWebhookFiresOnlyForMatchingProject() {
+            var mock = prepareMockWorkspace();
+
+            String projectAName = RandomStringUtils.randomAlphabetic(10);
+            String projectBName = RandomStringUtils.randomAlphabetic(10);
+            UUID projectAId = projectResourceClient.createProject(projectAName, mock.getLeft(), mock.getRight());
+            projectResourceClient.createProject(projectBName, mock.getLeft(), mock.getRight());
+
+            var dataset = buildDataset();
+            datasetResourceClient.createDataset(dataset, mock.getLeft(), mock.getRight());
+
+            // Create alert scoped to projectA via the new projectId column
+            var alert = createAlertForEvent(AlertTrigger.builder()
+                    .eventType(AlertEventType.EXPERIMENT_FINISHED)
+                    .build()).toBuilder()
+                    .projectId(projectAId)
+                    .build();
+
+            alertResourceClient.createAlert(alert, mock.getLeft(), mock.getRight(), HttpStatus.SC_CREATED);
+
+            // Finish experiment in projectA — webhook SHOULD fire
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .projectName(projectAName)
+                    .build();
+            UUID experimentAId = experimentResourceClient.create(experimentA, mock.getLeft(), mock.getRight());
+            experimentResourceClient.finishExperiments(Set.of(experimentAId), mock.getLeft(), mock.getRight());
+
+            verifyWebhookCalledAndGetPayload(alert);
+
+            // Reset server and finish experiment in projectB — webhook should NOT fire
+            externalWebhookServer.resetAll();
+            externalWebhookServer.stubFor(post(urlEqualTo(WEBHOOK_PATH))
+                    .willReturn(aResponse()
+                            .withStatus(200)
+                            .withHeader(HttpHeader.CONTENT_TYPE.toString(), MediaType.APPLICATION_JSON)
+                            .withBody("{\"status\":\"success\"}")));
+
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .projectName(projectBName)
+                    .build();
+            UUID experimentBId = experimentResourceClient.create(experimentB, mock.getLeft(), mock.getRight());
+            experimentResourceClient.finishExperiments(Set.of(experimentBId), mock.getLeft(), mock.getRight());
+
+            Awaitility.await()
+                    .pollDelay(java.time.Duration.ofSeconds(2))
+                    .atMost(java.time.Duration.ofSeconds(3))
+                    .untilAsserted(() -> {
+                        var requests = externalWebhookServer.findAll(postRequestedFor(urlEqualTo(WEBHOOK_PATH)));
+                        assertThat(requests).isEmpty();
+                    });
+        }
+
+        @Test
         @DisplayName("when spans with total cost exceed threshold, then cost alert webhook is called")
         void whenSpansWithCostExceedThreshold_thenCostAlertWebhookIsCalled() {
             var mock = prepareMockWorkspace();
@@ -2562,63 +2835,15 @@ class AlertResourceTest {
     }
 
     private void compareAlerts(Alert expected, Alert actual, boolean decryptSecretToken) {
-        var preparedExpected = prepareForComparison(expected, true);
-        var preparedActual = prepareForComparison(actual, false);
-
-        assertThat(preparedActual)
-                .usingRecursiveComparison()
-                .ignoringFields(ALERT_IGNORED_FIELDS)
-                .ignoringCollectionOrder()
-                .isEqualTo(preparedExpected);
-
-        assertThat(preparedActual.triggers())
-                .usingRecursiveComparison()
-                .ignoringFields(TRIGGER_IGNORED_FIELDS)
-                .ignoringCollectionOrder()
-                .isEqualTo(preparedExpected.triggers());
-
-        if (decryptSecretToken) {
-            // We should decrypt secretToken in order to compare, since it encrypts on deserialization
-            assertThat(decrypt(actual.webhook().secretToken())).isEqualTo(maskApiKey(expected.webhook().secretToken()));
-        } else {
-            assertThat(actual.webhook().secretToken()).isEqualTo(expected.webhook().secretToken());
-        }
-
-        for (int i = 0; i < preparedActual.triggers().size(); i++) {
-            var actualTrigger = preparedActual.triggers().get(i);
-            var expectedTrigger = preparedExpected.triggers().get(i);
-
-            assertThat(actualTrigger.triggerConfigs())
-                    .usingRecursiveComparison()
-                    .ignoringFields(TRIGGER_CONFIG_IGNORED_FIELDS)
-                    .ignoringCollectionOrder()
-                    .isEqualTo(expectedTrigger.triggerConfigs());
-        }
-    }
-
-    private Alert prepareForComparison(Alert alert, boolean isExpected) {
-        var sortedTriggers = alert.triggers().stream()
-                .map(trigger -> {
-                    var configs = trigger.triggerConfigs().stream()
-                            .map(config -> config.toBuilder()
-                                    .alertTriggerId(isExpected ? trigger.id() : config.alertTriggerId())
-                                    .build())
-                            .toList();
-                    return trigger.toBuilder()
-                            .triggerConfigs(configs)
-                            .alertId(isExpected ? alert.id() : trigger.alertId())
-                            .build();
-                })
-                .sorted(Comparator.comparing(AlertTrigger::id))
-                .toList();
-
-        return alert.toBuilder()
-                .triggers(sortedTriggers)
-                .build();
+        AlertAssertions.assertAlerts(expected, actual, decryptSecretToken);
     }
 
     private Alert generateAlert() {
-        var alert = factory.manufacturePojo(Alert.class);
+        return generateAlert(factory);
+    }
+
+    static Alert generateAlert(PodamFactory podamFactory) {
+        var alert = podamFactory.manufacturePojo(Alert.class);
 
         var webhook = alert.webhook().toBuilder()
                 .createdBy(null)
@@ -2628,12 +2853,11 @@ class AlertResourceTest {
 
         var triggers = alert.triggers().stream()
                 .map(trigger -> {
-                    var configs = trigger.triggerConfigs().stream()
-                            .map(config -> config.toBuilder()
-                                    .createdBy(null)
-                                    .createdAt(null)
-                                    .build())
-                            .toList();
+                    var configs = Optional.ofNullable(trigger.triggerConfigs())
+                            .map(list -> list.stream()
+                                    .map(AlertResourceTest::sanitizeTriggerConfig)
+                                    .toList())
+                            .orElse(null);
                     // Replace TRACE_COST and TRACE_LATENCY with TRACE_ERRORS for test assertion purposes
                     // This is needed because metrics-based alerts (cost/latency) are processed by MetricsAlertJob
                     // rather than AlertJob, so we normalize them to TRACE_ERRORS for consistent test validation
@@ -2652,7 +2876,43 @@ class AlertResourceTest {
                 .webhook(webhook)
                 .createdBy(null)
                 .createdAt(null)
+                .projectId(null)
                 .triggers(triggers)
+                .build();
+    }
+
+    private static AlertTriggerConfig sanitizeTriggerConfig(AlertTriggerConfig config) {
+        var builder = config.toBuilder()
+                .createdBy(null)
+                .createdAt(null);
+        if (config.type() == AlertTriggerConfigType.SCOPE_PROJECT
+                && config.configValue() != null
+                && config.configValue().containsKey(AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY)) {
+            var fixedConfigValue = new HashMap<>(config.configValue());
+            fixedConfigValue.put(
+                    AlertTriggerConfig.PROJECT_IDS_CONFIG_KEY,
+                    JsonUtils.writeValueAsString(List.of(UUID.randomUUID())));
+            builder.configValue(fixedConfigValue);
+        }
+        return builder.build();
+    }
+
+    private Alert generateAlertForProject(UUID projectId) {
+        return generateAlertForProject(factory, projectId);
+    }
+
+    static Alert generateAlertForProject(PodamFactory podamFactory, UUID projectId) {
+        var base = generateAlert(podamFactory);
+        var filteredTriggers = base.triggers().stream()
+                .map(t -> t.toBuilder()
+                        .triggerConfigs(t.triggerConfigs().stream()
+                                .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
+                                .toList())
+                        .build())
+                .toList();
+        return base.toBuilder()
+                .projectId(projectId)
+                .triggers(filteredTriggers)
                 .build();
     }
 
@@ -2672,6 +2932,14 @@ class AlertResourceTest {
                 .id(existingAlert.id())
                 .webhook(webhook)
                 .triggers(List.of(unchangedTrigger, newTrigger, updatedTrigger))
+                .build();
+    }
+
+    private AlertTrigger stripScopeProjectConfigs(AlertTrigger trigger) {
+        return trigger.toBuilder()
+                .triggerConfigs(trigger.triggerConfigs().stream()
+                        .filter(c -> c.type() != AlertTriggerConfigType.SCOPE_PROJECT)
+                        .toList())
                 .build();
     }
 

@@ -3,10 +3,10 @@ from agents import tracing
 
 import logging
 
+import opik
 from opik import context_storage, tracing_runtime_config
 from opik.api_objects.span import span_data
 from opik.api_objects.trace import trace_data
-from opik.api_objects import opik_client
 from opik.decorator import span_creation_handler, arguments_helpers
 
 from . import span_data_parsers
@@ -32,8 +32,6 @@ class OpikTracingProcessor(tracing.TracingProcessor):
 
         self._project_name = project_name
 
-        self._opik_client = opik_client.get_client_cached()
-
         self._openai_trace_id_to_first_meaningful_input: Dict[str, Dict[str, Any]] = {}
         self._openai_trace_id_to_last_meaningful_output: Dict[str, Dict[str, Any]] = {}
         """
@@ -46,6 +44,10 @@ class OpikTracingProcessor(tracing.TracingProcessor):
         ] = {}
 
         self._opik_context_storage = context_storage.get_current_context_instance()
+
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def force_flush(self) -> bool:
         return self._opik_client.flush()
@@ -64,7 +66,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             if current_trace is None:
                 current_trace = trace_data.TraceData(
                     name=trace.name,
-                    project_name=self._project_name,
+                    project_name=context_storage.resolve_project_name(
+                        self._project_name, "OpikTracingProcessor"
+                    ),
                     metadata=trace_metadata,
                     thread_id=trace.group_id,
                 )
@@ -74,11 +78,15 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                     self._opik_client.config.log_start_trace_span
                     and tracing_runtime_config.is_tracing_active()
                 ):
-                    self._opik_client.trace(**current_trace.as_start_parameters)
+                    self._opik_client.__internal_api__trace__(
+                        **current_trace.as_start_parameters
+                    )
             else:
                 start_span_arguments = arguments_helpers.StartSpanParameters(
                     name=trace.name,
-                    project_name=self._project_name,
+                    project_name=context_storage.resolve_project_name(
+                        self._project_name, "OpikTracingProcessor"
+                    ),
                     metadata=trace_metadata,
                     type="general",
                 )
@@ -97,7 +105,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                     self._opik_client.config.log_start_trace_span
                     and tracing_runtime_config.is_tracing_active()
                 ):
-                    self._opik_client.span(**result.span_data.as_start_parameters)
+                    self._opik_client.__internal_api__span__(
+                        **result.span_data.as_start_parameters
+                    )
 
         except Exception:
             LOGGER.error("on_trace_start failed", exc_info=True)
@@ -118,10 +128,14 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             )
             if isinstance(opik_trace_or_span_data, trace_data.TraceData):
                 if tracing_runtime_config.is_tracing_active():
-                    self._opik_client.trace(**opik_trace_or_span_data.as_parameters)
+                    self._opik_client.__internal_api__trace__(
+                        **opik_trace_or_span_data.as_parameters
+                    )
             else:
                 if tracing_runtime_config.is_tracing_active():
-                    self._opik_client.span(**opik_trace_or_span_data.as_parameters)
+                    self._opik_client.__internal_api__span__(
+                        **opik_trace_or_span_data.as_parameters
+                    )
         except Exception:
             LOGGER.error("on_trace_end failed", exc_info=True)
         finally:
@@ -155,7 +169,9 @@ class OpikTracingProcessor(tracing.TracingProcessor):
                 self._opik_client.config.log_start_trace_span
                 and tracing_runtime_config.is_tracing_active()
             ):
-                self._opik_client.span(**opik_span_data.as_start_parameters)
+                self._opik_client.__internal_api__span__(
+                    **opik_span_data.as_start_parameters
+                )
 
         except Exception:
             LOGGER.error("on_span_start failed", exc_info=True)
@@ -168,7 +184,7 @@ class OpikTracingProcessor(tracing.TracingProcessor):
             opik_span_data.init_end_time().update(**parsed_span_data.__dict__)
 
             if tracing_runtime_config.is_tracing_active():
-                self._opik_client.span(**opik_span_data.as_parameters)
+                self._opik_client.__internal_api__span__(**opik_span_data.as_parameters)
 
             if (
                 span.span_data.type

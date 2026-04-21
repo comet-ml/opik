@@ -67,6 +67,7 @@ class TraceData(ObservationData):
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=self.source,
         )
 
     @property
@@ -76,6 +77,7 @@ class TraceData(ObservationData):
             "id": self.id,
             "start_time": self.start_time,
             "project_name": self.project_name,
+            "source": self.source,
         }
         if self.name is not None:
             start_parameters["name"] = self.name
@@ -105,4 +107,5 @@ class TraceData(ObservationData):
             "error_info": self.error_info,
             "thread_id": self.thread_id,
             "attachments": self.attachments,
+            "source": self.source,
         }

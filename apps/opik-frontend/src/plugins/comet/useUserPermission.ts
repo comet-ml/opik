@@ -79,6 +79,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_CREATE),
+    [checkNullablePermission],
+  );
+
   const canEditDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_EDIT),
     [checkNullablePermission],
@@ -136,6 +141,12 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canEditAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.ANNOTATION_QUEUE_EDIT),
+    [checkNullablePermission],
+  );
+
   const canDeleteAnnotationQueues = useMemo(
     () =>
       checkNullablePermission(
@@ -146,6 +157,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const canDeleteTraces = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canCreatePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_CREATE),
     [checkNullablePermission],
   );
 
@@ -212,6 +228,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUsePlayground = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PLAYGROUND_USE),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -222,13 +243,16 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditDashboards,
     canDeleteDashboards,
     canViewDatasets,
+    canCreateDatasets,
     canEditDatasets,
     canDeleteDatasets,
     canCreateProjects,
     canDeleteProjects,
     canCreateAnnotationQueues,
+    canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
+    canCreatePrompts,
     canDeletePrompts,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
@@ -238,6 +262,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
     canTagTrace,
+    canUsePlayground,
     isPending: isEnabled && isPending,
   };
 };

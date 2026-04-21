@@ -175,10 +175,10 @@ const AutomationLogsPage = () => {
     <div className="mx-6 flex h-full flex-col bg-soft-background">
       <PageBodyScrollContainer>
         <PageBodyStickyContainer
-          className="flex items-center justify-between pb-4 pt-6"
+          className="flex items-center justify-between py-4"
           direction="bidirectional"
         >
-          <h1 className="comet-title-l truncate break-words">Logs</h1>
+          <h1 className="comet-title-xs truncate break-words">Logs</h1>
           <div className="flex items-center gap-2">
             <TooltipWrapper content="Refresh logs list">
               <Button

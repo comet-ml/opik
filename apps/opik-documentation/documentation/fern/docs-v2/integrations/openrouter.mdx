@@ -1,0 +1,82 @@
+---
+description: Start here to integrate Opik into your OpenRouter-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: OpenRouter | Opik Documentation
+og:description: Learn to integrate Opik with OpenRouter using OpenAI SDK for seamless
+  access to AI models via a unified API.
+og:site_name: Opik Documentation
+og:title: Integrate OpenRouter with Opik Easily
+title: Observability for OpenRouter with Opik
+---
+
+This guide explains how to integrate Opik with OpenRouter using the OpenAI SDK. OpenRouter provides a unified API for accessing hundreds of AI models through a single OpenAI-compatible interface.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You'll also need an OpenRouter API key which you can get from [OpenRouter](https://openrouter.ai/).
+
+## Tracking OpenRouter API calls
+
+```python
+from opik.integrations.openai import track_openai
+from openai import OpenAI
+
+# Initialize the OpenAI client with OpenRouter base URL
+client = OpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key="YOUR_OPENROUTER_API_KEY"
+)
+client = track_openai(client)
+
+# Optional headers for OpenRouter leaderboard
+headers = {
+    "HTTP-Referer": "YOUR_SITE_URL",  # Optional. Site URL for rankings
+    "X-Title": "YOUR_SITE_NAME"  # Optional. Site title for rankings
+}
+
+response = client.chat.completions.create(
+    model="openai/gpt-4",  # You can use any model available on OpenRouter
+    extra_headers=headers,
+    messages=[
+        {"role": "user", "content": "Hello, world!"}
+    ],
+    temperature=0.7,
+    max_tokens=100
+)
+
+print(response.choices[0].message.content)
+```
+
+## Available Models
+
+OpenRouter provides access to a wide variety of models, including many open source models from different providers.
+
+- [OpenAI models](https://openrouter.ai/openai) (GPT-4o, o1, o3-mini)
+- [Anthropic models](https://openrouter.ai/anthropic) (Opus, Sonnet, Haiku)
+- [Google models](https://openrouter.ai/google) (Gemini Pro, Flash, Flash Thinking)
+- And many open source models
+
+You can find the complete list of available models in the [OpenRouter documentation](https://openrouter.ai/models).
+
+## Supported Methods
+
+OpenRouter supports the following methods:
+
+### Chat Completions
+
+- `client.chat.completions.create()`: Works with all models
+- Provides standard chat completion functionality
+- Compatible with the OpenAI SDK interface
+
+### Structured Outputs
+
+- `client.beta.chat.completions.parse()`: Only compatible with OpenAI models
+- For non-OpenAI models, see OpenRouter's [Structured Outputs documentation](https://openrouter.ai/docs/features/structured-outputs)
+
+For detailed information about available methods, parameters, and best practices, refer to the [OpenRouter API documentation](https://openrouter.ai/docs).

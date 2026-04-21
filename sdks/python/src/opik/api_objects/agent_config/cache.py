@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_TTL_SECONDS = 300
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
-_CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
+_CacheKey = typing.Tuple[
+    str, typing.Optional[str], typing.Optional[str], typing.Optional[str]
+]
 
 
 def _get_ttl_seconds() -> int:
@@ -45,11 +47,9 @@ class SharedConfigCache:
             if self._refresh_callback is None:
                 self._refresh_callback = callback
 
-    def register_fields(
-        self, prefixed_field_types: typing.Dict[str, typing.Any]
-    ) -> None:
+    def register_fields(self, field_types: typing.Dict[str, typing.Any]) -> None:
         with self._lock:
-            self._registered_field_types.update(prefixed_field_types)
+            self._registered_field_types.update(field_types)
 
     @property
     def all_field_types(self) -> typing.Dict[str, typing.Any]:
@@ -127,8 +127,9 @@ class SharedCacheRegistry:
         project_name: str,
         env: typing.Optional[str],
         mask_id: typing.Optional[str],
+        version: typing.Optional[str] = None,
     ) -> SharedConfigCache:
-        key: _CacheKey = (project_name, env, mask_id)
+        key: _CacheKey = (project_name, env, mask_id, version)
         with self._lock:
             if key not in self._caches:
                 self._caches[key] = SharedConfigCache(ttl_seconds=_get_ttl_seconds())
@@ -183,25 +184,27 @@ def get_cached_config(
     project_name: str,
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
+    version: typing.Optional[str] = None,
 ) -> SharedConfigCache:
-    return _registry.get(project_name, env, mask_id)
+    return _registry.get(project_name, env, mask_id, version)
 
 
 def init_cache_entry(
     project_name: str,
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
-    prefixed_field_types: typing.Dict[str, typing.Any],
+    field_types: typing.Dict[str, typing.Any],
     agent_config_manager: typing.Any,
     blueprint: typing.Optional[Blueprint] = None,
+    version: typing.Optional[str] = None,
 ) -> None:
-    shared_cache = _registry.get(project_name, env, mask_id)
-    shared_cache.register_fields(prefixed_field_types)
+    shared_cache = _registry.get(project_name, env, mask_id, version)
+    shared_cache.register_fields(field_types)
 
     if blueprint is not None:
         shared_cache.update(blueprint)
 
-    if agent_config_manager is not None and mask_id is None:
+    if agent_config_manager is not None and mask_id is None and version is None:
 
         def _refresh() -> typing.Optional[Blueprint]:
             return agent_config_manager.get_blueprint(

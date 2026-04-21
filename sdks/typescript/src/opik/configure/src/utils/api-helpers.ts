@@ -4,6 +4,7 @@
 
 import axios from 'axios';
 import { DEFAULT_HOST_URL } from '../lib/constants';
+import { buildOpikApiUrl } from './urls';
 
 export interface AccountDetails {
   defaultWorkspaceName: string;
@@ -109,6 +110,55 @@ export async function isOpikAccessible(
     return response.status >= 200 && response.status < 500;
   } catch {
     return false;
+  }
+}
+
+const SORTING_CREATED_AT_DESC = '[{"field":"created_at","direction":"DESC"}]';
+
+/**
+ * Fetches the most recently created project name from the Opik API.
+ *
+ * @param host - The base host URL (e.g., "http://localhost:5173/" or "https://www.comet.com/")
+ * @param apiKey - Optional API key for authenticated requests
+ * @param workspace - Optional workspace name
+ * @returns The most recent project name, or null if none found or request fails
+ */
+export async function getMostRecentProjectName(
+  host: string,
+  apiKey?: string,
+  workspace?: string,
+): Promise<string | null> {
+  const projectsUrl = `${buildOpikApiUrl(host)}/v1/private/projects`;
+
+  try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    if (apiKey) {
+      headers['Authorization'] = apiKey;
+    }
+    if (workspace) {
+      headers['Comet-Workspace'] = workspace;
+    }
+
+    const response = await axios.get(projectsUrl, {
+      headers,
+      params: {
+        page: 1,
+        size: 1,
+        sorting: SORTING_CREATED_AT_DESC,
+      },
+      timeout: 5000,
+    });
+
+    const projects = response.data?.content;
+    if (Array.isArray(projects) && projects.length > 0) {
+      return projects[0].name || null;
+    }
+
+    return null;
+  } catch {
+    return null;
   }
 }
 

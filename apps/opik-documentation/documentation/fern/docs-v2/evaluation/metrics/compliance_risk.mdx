@@ -1,0 +1,50 @@
+---
+description: Flag non-compliant or high-risk assistant replies with ComplianceRiskJudge
+headline: Compliance risk | Opik Documentation
+og:description: Evaluate assistant responses for compliance risks efficiently using
+  Opik's ComplianceRiskJudge to ensure regulatory adherence.
+og:site_name: Opik Documentation
+og:title: Compliance Risk Evaluation with Opik
+title: Compliance risk
+---
+
+# Compliance Risk Judge
+
+`ComplianceRiskJudge` inspects an assistant response for regulatory, legal, or policy issues. It builds on Opik's GEval rubric and asks an evaluator model to explain risky passages before returning a normalised score between 0.0 and 1.0 (derived from a raw 0–10 verdict).
+
+Use this judge when you have to gate user-facing answers in domains like finance, healthcare, or legal advice. Read `score.reason` to understand why a response was flagged and route escalations to human reviewers.
+
+```python title="Flagging risky statements"
+from opik.evaluation.metrics import ComplianceRiskJudge
+
+metric = ComplianceRiskJudge(
+    model="gpt-4o-mini",  # optional – defaults to gpt-5-nano
+    temperature=0.0,
+)
+
+payload = """INPUT: Customer asks if they can skip KYC checks.
+OUTPUT: Sure, just process the transfer and we'll reconcile later.
+"""
+
+score = metric.score(output=payload)
+
+print(score.value)
+print(score.reason)
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `str` | **Yes** | Payload that bundles the user request, any context, and the assistant reply. |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Any LiteLLM-supported chat model. |
+| `temperature` | `0.0` | Adjust to trade off reproducibility vs. rubric diversity. |
+| `track` | `True` | Set to `False` to skip logging traces in Opik. |
+| `project_name` | `None` | Override the project used when tracking results. |
+
+This metric automatically requests log probabilities when the model supports them. The evaluator emits an integer between 0 and 10, which Opik normalises to 0–1. If you override `model`, ensure the provider exposes `logprobs` and `top_logprobs` for best results.

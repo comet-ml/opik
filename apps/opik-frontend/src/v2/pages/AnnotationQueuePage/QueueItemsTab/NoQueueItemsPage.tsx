@@ -9,7 +9,7 @@ import {
   AnnotationQueue,
 } from "@/types/annotation-queues";
 import { useActiveWorkspaceName } from "@/store/AppStore";
-import { LOGS_TYPE, PROJECT_TAB } from "@/constants/traces";
+import { LOGS_TYPE } from "@/constants/traces";
 
 type NoDataWrapperProps = {
   title: string;
@@ -65,13 +65,12 @@ const NoQueueItemsPage: React.FC<NoQueueItemsPageProps> = ({
           {annotationQueue?.project_id && (
             <Button variant="outline" asChild>
               <Link
-                to="/$workspaceName/projects/$projectId/traces"
+                to="/$workspaceName/projects/$projectId/logs"
                 params={{
                   workspaceName,
                   projectId: annotationQueue.project_id,
                 }}
                 search={{
-                  tab: PROJECT_TAB.logs,
                   logsType: isTraceQueue ? LOGS_TYPE.traces : LOGS_TYPE.threads,
                 }}
               >

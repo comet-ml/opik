@@ -16,7 +16,7 @@ const useAgentConfigCreateMutation = () => {
 
   return useMutation({
     mutationFn: async ({ agentConfig }: UseAgentConfigCreateMutationParams) => {
-      const { headers } = await api.post(
+      const { headers } = await api.patch(
         `${AGENT_CONFIGS_REST_ENDPOINT}blueprints/`,
         agentConfig,
       );

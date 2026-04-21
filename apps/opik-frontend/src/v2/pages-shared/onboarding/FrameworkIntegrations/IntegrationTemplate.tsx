@@ -17,6 +17,7 @@ type IntegrationTemplateProps = {
   executionLogs?: string[];
   withLineHighlights?: boolean;
   onRunCodeCallback?: () => void;
+  projectName?: string;
 };
 
 const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
@@ -26,6 +27,7 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
   executionLogs = [],
   withLineHighlights,
   onRunCodeCallback,
+  projectName,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { isPhonePortrait } = useIsPhone();
@@ -36,12 +38,14 @@ const IntegrationTemplate: React.FC<IntegrationTemplateProps> = ({
     apiKey,
     shouldMaskApiKey: true,
     withHighlight: withLineHighlights,
+    projectName,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
     code,
     workspaceName,
     apiKey,
     withHighlight: withLineHighlights,
+    projectName,
   });
 
   const canExecuteCode =

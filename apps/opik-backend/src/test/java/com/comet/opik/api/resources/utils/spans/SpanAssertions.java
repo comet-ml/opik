@@ -50,6 +50,7 @@ public class SpanAssertions {
                 it -> it.toBuilder().totalEstimatedCostVersion(null).build());
         EXCLUDE_FUNCTIONS.put(Span.SpanField.DURATION, it -> it.toBuilder().duration(null).build());
         EXCLUDE_FUNCTIONS.put(Span.SpanField.TTFT, it -> it.toBuilder().ttft(null).build());
+        EXCLUDE_FUNCTIONS.put(Span.SpanField.SOURCE, it -> it.toBuilder().source(null).build());
     }
 
     public static final String[] IGNORED_FIELDS = {"projectId", "projectName", "createdAt",

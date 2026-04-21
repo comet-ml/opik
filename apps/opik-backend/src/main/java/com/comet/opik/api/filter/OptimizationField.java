@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 public enum OptimizationField implements Field {
     METADATA(METADATA_QUERY_PARAM, FieldType.DICTIONARY),
     DATASET_ID(DATASET_ID_QUERY_PARAM, FieldType.STRING_EXACT),
+    PROJECT_ID(PROJECT_ID_QUERY_PARAM, FieldType.STRING_EXACT),
     STATUS(STATUS_QUERY_PARAM, FieldType.ENUM),
     ;
 

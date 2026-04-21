@@ -7,7 +7,7 @@ from typing import List, Dict, Union, Optional, Any, Type, Callable
 
 from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
-from opik.types import ErrorInfoDict, SpanType
+from opik.types import ErrorInfoDict, SpanType, TraceSource
 from . import models
 from .. import messages
 from ..processors import message_processors
@@ -240,6 +240,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
+        source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
     ) -> models.TraceModel:
         """
@@ -297,6 +298,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        source: TraceSource,
     ) -> models.SpanModel:
         """
         Abstract method to create a span model representing a span of a trace.
@@ -322,6 +324,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             error_info: Information regarding errors encountered during the span's execution.
             total_cost: Total cost incurred during the span.
             last_updated_at: Timestamp marking the last update of the span's information.
+            source: The source of the span's data (e.g., sdk, experiment).
 
         Returns:
             models.SpanModel: A fully initialized span model.
@@ -397,6 +400,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             last_updated_at=message.last_updated_at,
             feedback_scores=None,
             spans=None,
+            source=message.source,
         )
 
         self._save_trace(trace)
@@ -421,6 +425,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             last_updated_at=message.last_updated_at,
             spans=None,
             feedback_scores=None,
+            source=message.source,
         )
 
         self._save_span(
@@ -525,6 +530,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             error_info=error_info,
+            source=message.source,
         )
 
         self._save_span(
@@ -562,6 +568,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             error_info=error_info,
+            source=message.source,
         )
         self._save_trace(trace)
 

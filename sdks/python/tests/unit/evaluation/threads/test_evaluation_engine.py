@@ -5,6 +5,7 @@ from unittest.mock import patch
 import pytest
 
 from opik import exceptions
+from opik.api_objects import opik_client
 from opik.api_objects.conversation import conversation_thread
 from opik.api_objects.threads import threads_client
 from opik.evaluation.metrics import score_result
@@ -17,7 +18,7 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
     def setUp(self):
         # Mock the threads client
         self.mock_client = mock.MagicMock(spec=threads_client.ThreadsClient)
-        self.mock_opik_client = mock.MagicMock()
+        self.mock_opik_client = mock.MagicMock(spec=opik_client.Opik)
         self.mock_client.opik_client = self.mock_opik_client
 
         # Setup the evaluation engine
@@ -328,8 +329,8 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
     @patch("opik.evaluation.threads.evaluation_engine.helpers.load_conversation_thread")
     def test_evaluate_thread(self, load_conversation_thread, decorator_opik_client):
         """Test that evaluate_thread correctly evaluates a thread with metrics."""
-        mocked_opik_client = mock.MagicMock()
-        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+        mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
+        decorator_opik_client.get_global_client.return_value = mocked_opik_client
 
         # Create a mock conversation thread
         mock_conversation = conversation_thread.ConversationThread()
@@ -377,8 +378,8 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self.assertEqual(result.scores[1].value, 0.6)
 
         # Verify the trace and span calls
-        self.mock_opik_client.trace.assert_called()
-        mocked_opik_client.span.assert_called()
+        self.mock_opik_client.__internal_api__trace__.assert_called()
+        mocked_opik_client.__internal_api__span__.assert_called()
 
         # Verify metrics were called with the right parameters
         conversation_list = mock_conversation.model_dump()["discussion"]
@@ -391,8 +392,8 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         self, load_conversation_thread, decorator_opik_client
     ):
         """Test that evaluate_thread logs errors in metrics."""
-        mocked_opik_client = mock.MagicMock()
-        decorator_opik_client.get_client_cached.return_value = mocked_opik_client
+        mocked_opik_client = mock.MagicMock(spec=opik_client.Opik)
+        decorator_opik_client.get_global_client.return_value = mocked_opik_client
 
         # Create a mock thread
         thread = TraceThread(id="thread_1")

@@ -3,6 +3,7 @@ import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cva, type VariantProps } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
+import { usePortalContainer } from "@/lib/portal-container";
 
 const TooltipProvider = TooltipPrimitive.Provider;
 
@@ -10,7 +11,16 @@ const Tooltip = TooltipPrimitive.Root;
 
 const TooltipTrigger = TooltipPrimitive.Trigger;
 
-const TooltipPortal = TooltipPrimitive.Portal;
+const TooltipPortal: React.FC<
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Portal>
+> = ({ children, ...props }) => {
+  const container = usePortalContainer();
+  return (
+    <TooltipPrimitive.Portal container={container} {...props}>
+      {children}
+    </TooltipPrimitive.Portal>
+  );
+};
 
 const TooltipArrow = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Arrow>,
@@ -50,14 +60,18 @@ export interface TooltipContentProps
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
   TooltipContentProps
->(({ className, variant, sideOffset = 4, ...props }, ref) => (
-  <TooltipPrimitive.Content
-    ref={ref}
-    sideOffset={sideOffset}
-    className={cn(tooltipVariants({ variant, className }))}
-    {...props}
-  />
-));
+>(({ className, variant, sideOffset = 4, ...props }, ref) => {
+  const container = usePortalContainer();
+  return (
+    <TooltipPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      collisionBoundary={container ?? undefined}
+      className={cn(tooltipVariants({ variant, className }))}
+      {...props}
+    />
+  );
+});
 TooltipContent.displayName = TooltipPrimitive.Content.displayName;
 
 export {

@@ -1,0 +1,80 @@
+---
+headline: Evaluation Overview | Opik Documentation
+og:description: Evaluate your LLM applications with Opik using assertion-based Test
+  Suites or dataset-driven metric scoring
+og:site_name: Opik Documentation
+og:title: Evaluation Overview — Opik
+title: Evaluation Overview
+---
+
+<video
+  src="/img/v2/evaluation/prevent-regressions.mp4"
+  width="854"
+  height="480"
+  autoPlay
+  muted
+  loop
+  playsInline
+  controls
+  preload="auto"
+/>
+
+## Why evaluate your agent
+
+LLM agents fail in production in ways you can't predict upfront. A prompt that works for 90% of queries might hallucinate on edge cases, ignore context, or produce verbose responses when users expect concise answers. Manual review doesn't scale, and you can't anticipate every failure mode before shipping.
+
+You need automated regression testing — but not the kind where you sit down and write a test suite from scratch. The most effective test suites are built incrementally, from real production failures. Every time you find a bad response, you turn it into a test case. Over time, your suite becomes a comprehensive guard against the specific failure modes your agent actually encounters.
+
+<Tip>
+  Test suites are created as you debug and improve your agent — they grow organically from real failures, not from a separate test-writing phase.
+</Tip>
+
+## The evaluation loop
+
+<Steps>
+
+### Find an issue in production
+
+Start in the Opik dashboard. Browse traces, filter by error status or low feedback scores, and click into a trace to see the full span tree — every LLM call, tool invocation, and retrieval step with its inputs, outputs, and latencies.
+
+### Add it to a test suite
+
+Turn the failure into a test case. Add the trace to a test suite with a natural-language assertion that captures the expected behavior — for example, *"The response must not hallucinate facts not present in the context"*. You can do this through [Ollie](/tracing/debug-agents) (Opik's AI assistant), the UI, or the SDK.
+
+### Update your agent
+
+Fix the root cause. Update a prompt via [Agent Configuration](/development/agent-configuration/getting-started), adjust tool definitions, or change retrieval parameters. Use Ollie to help diagnose the issue and suggest fixes.
+
+### Validate with the test suite
+
+Run the test suite against your updated agent. The suite checks every test case — including the new one — so you confirm the fix works and nothing else regressed.
+
+</Steps>
+
+Each cycle adds a new test case. Over time, your test suite becomes a comprehensive regression guard tailored to the real failure modes of your agent.
+
+<Frame>
+  <img src="/img/v2/evaluation/experiments-comparison.png" alt="Comparing two test suite experiment runs side by side" />
+</Frame>
+
+## Two approaches to evaluation
+
+Opik provides two complementary approaches to evaluation:
+
+- **Test Suites**: Define natural-language assertions and let an LLM judge check them automatically. Best for pass/fail testing of specific behaviors.
+- **Datasets & Metrics**: Score your agent's outputs against a dataset using pre-built or custom metrics. Best for measuring quality across many traces with quantitative scores.
+
+## Key features
+
+- **Test Suites** with natural-language assertions and execution policies
+- **30+ pre-built metrics** for hallucination, relevance, coherence, and more
+- **Custom metrics** for domain-specific evaluation
+- **Experiment tracking** to compare versions side-by-side
+- **Annotation Queues** for human-in-the-loop review
+
+## Next steps
+
+- [Getting started](/evaluation/getting-started) — Run your first evaluation in minutes
+- [Concepts](/evaluation/concepts) — Understand Test Suites vs Datasets & Metrics
+- [Building Test Suites](/evaluation/advanced/building-test-suites) — Create and manage suites via the SDK, UI, or Ollie
+- [Debugging agents with Ollie](/tracing/debug-agents) — The full workflow for turning production failures into test cases

@@ -45,7 +45,7 @@ import java.util.UUID;
 @RegisterColumnMapper(MapFlatArgumentFactory.class)
 @RegisterArgumentFactory(AlertTypeArgumentFactory.class)
 @RegisterColumnMapper(AlertTypeColumnMapper.class)
-interface AlertDAO {
+public interface AlertDAO {
 
     String FIND = """
             WITH target_alerts AS (
@@ -55,6 +55,7 @@ interface AlertDAO {
                     a.enabled as enabled,
                     a.alert_type as alert_type,
                     a.metadata as metadata,
+                    a.project_id as project_id,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -72,6 +73,7 @@ interface AlertDAO {
                 JOIN webhooks w ON a.webhook_id = w.id
                 WHERE a.workspace_id = :workspaceId
                     <if(id)> AND a.id = :id <endif>
+                    <if(project_id)> AND a.project_id = :project_id <endif>
             ),
             trigger_ids AS (
                 SELECT id
@@ -122,22 +124,24 @@ interface AlertDAO {
                 ) AS tj
                 GROUP BY tj.alert_id
             )
-            SELECT *
+            SELECT a.*, t.triggers_json
             FROM target_alerts a
-            LEFT JOIN target_triggers t
-                ON a.id = t.alert_id
+            LEFT JOIN target_triggers t ON a.id = t.alert_id
             <if(filters)> WHERE <filters> <endif>
-            ORDER BY <if(sort_fields)> <sort_fields>, <endif> id DESC
+            ORDER BY <if(sort_fields)> <sort_fields>, <endif> a.id DESC
             <if(limit)> LIMIT :limit <endif>
             <if(offset)> OFFSET :offset <endif>;
             """;
 
     @SqlUpdate("""
-            INSERT INTO alerts (id, name, enabled, alert_type, metadata, webhook_id, workspace_id, created_by, last_updated_by, created_at)
-            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :webhookId, :workspaceId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
+            INSERT INTO alerts (id, name, enabled, alert_type, metadata, webhook_id, workspace_id, project_id, created_by, last_updated_by, created_at)
+            VALUES (:bean.id, :bean.name, :bean.enabled, :bean.alertType, :bean.metadata, :webhookId, :workspaceId, :bean.projectId, :bean.createdBy, :bean.lastUpdatedBy, COALESCE(:bean.createdAt, CURRENT_TIMESTAMP(6)))
             """)
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Alert alert,
             @Bind("webhookId") UUID webhookId);
+
+    @SqlQuery("SELECT EXISTS(SELECT 1 FROM alerts WHERE workspace_id = :workspaceId AND project_id IS NULL)")
+    boolean hasVersion1Alerts(@Bind("workspaceId") String workspaceId);
 
     @SqlQuery(FIND)
     @UseStringTemplateEngine
@@ -151,7 +155,8 @@ interface AlertDAO {
             @Define("offset") @Bind("offset") int offset, @Define("limit") @Bind("limit") int limit,
             @Define("sort_fields") @Bind("sort_fields") String sortingFields,
             @Define("filters") String filters,
-            @BindMap Map<String, Object> filterMapping);
+            @BindMap Map<String, Object> filterMapping,
+            @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlQuery("""
             WITH target_alerts AS (
@@ -161,6 +166,7 @@ interface AlertDAO {
                     a.enabled as enabled,
                     a.alert_type as alert_type,
                     a.metadata as metadata,
+                    a.project_id as project_id,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -227,10 +233,9 @@ interface AlertDAO {
                 ) AS tj
                 GROUP BY tj.alert_id
             )
-            SELECT *
+            SELECT a.*, t.triggers_json
             FROM target_alerts a
-            JOIN target_triggers t
-                ON a.id = t.alert_id;
+            JOIN target_triggers t ON a.id = t.alert_id;
             """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
@@ -243,6 +248,7 @@ interface AlertDAO {
                     a.id as id,
                     a.name as name,
                     a.alert_type as alert_type,
+                    a.project_id as project_id,
                     a.created_at as created_at,
                     a.created_by as created_by,
                     a.last_updated_at as last_updated_at,
@@ -252,6 +258,7 @@ interface AlertDAO {
                 FROM alerts a
                 JOIN webhooks w ON a.webhook_id = w.id
                 WHERE a.workspace_id = :workspaceId
+                    <if(project_id)> AND a.project_id = :project_id <endif>
             )
             SELECT
                 count(id)
@@ -262,7 +269,8 @@ interface AlertDAO {
     @AllowUnusedBindings
     long count(@Bind("workspaceId") String workspaceId,
             @Define("filters") String filters,
-            @BindMap Map<String, Object> filterMapping);
+            @BindMap Map<String, Object> filterMapping,
+            @Define("project_id") @Bind("project_id") UUID projectId);
 
     @SqlUpdate("""
                     DELETE a, w, atr, atrc
@@ -319,6 +327,10 @@ interface AlertDAO {
             // Parse metadata JSON to Map using column mapper
             Map<String, String> metadata = MAP_MAPPER.map(rs, "metadata", ctx);
 
+            UUID projectId = Optional.ofNullable(rs.getString("project_id"))
+                    .map(UUID::fromString)
+                    .orElse(null);
+
             // Build Alert object with embedded Webhook and Triggers
             return Alert.builder()
                     .id(UUID.fromString(rs.getString("id")))
@@ -333,6 +345,7 @@ interface AlertDAO {
                     .lastUpdatedAt(rs.getTimestamp("last_updated_at").toInstant())
                     .lastUpdatedBy(rs.getString("last_updated_by"))
                     .workspaceId(rs.getString("workspace_id"))
+                    .projectId(projectId)
                     .build();
         }
 

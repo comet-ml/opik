@@ -17,7 +17,7 @@ import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescrip
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { formatDate } from "@/lib/date";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -36,6 +36,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
 }) => {
   const datasetId = useDatasetIdFromCompareExperimentsURL();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(DEFAULT_SIZE);
@@ -54,6 +55,7 @@ const CompareExperimentsDialog: React.FC<CompareExperimentsDialogProps> = ({
   const { data, isPending } = useExperimentsList(
     {
       workspaceName,
+      projectId: activeProjectId ?? undefined,
       filters: [
         createFilter({
           id: "dataset_id",

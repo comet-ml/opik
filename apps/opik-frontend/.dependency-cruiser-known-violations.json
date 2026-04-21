@@ -589,51 +589,6 @@
   },
   {
     "type": "dependency",
-    "from": "src/v2/pages/HomePage/GetStartedSection.tsx",
-    "to": "src/v2/pages/HomePageShared/SetGuardrailDialog.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-cross-page-imports"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/v2/pages/HomePage/ObservabilitySection.tsx",
-    "to": "src/v2/pages/ProjectsPage/AddEditProjectDialog.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-cross-page-imports"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/v2/pages/HomePage/OptimizationRunsSection.tsx",
-    "to": "src/v2/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-cross-page-imports"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/v2/pages/HomePage/OptimizationRunsSection.tsx",
-    "to": "src/v2/pages/OptimizationsPage/OptimizationStatusCell.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-cross-page-imports"
-    }
-  },
-  {
-    "type": "dependency",
-    "from": "src/v2/pages/TracesPage/TracesPage.tsx",
-    "to": "src/v2/pages/HomePageShared/SetGuardrailDialog.tsx",
-    "rule": {
-      "severity": "error",
-      "name": "no-cross-page-imports"
-    }
-  },
-  {
-    "type": "dependency",
     "from": "src/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/PromptsTab.tsx",
     "to": "src/v1/pages/PromptPage/TryInPlaygroundButton.tsx",
     "rule": {

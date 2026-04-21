@@ -1,6 +1,6 @@
 import React, { useCallback } from "react";
 import { DropdownOption, ROW_HEIGHT } from "@/types/shared";
-import { Check, Rows3 } from "lucide-react";
+import { Check, Rows3, UnfoldVertical } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,6 +13,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 type DataTableRowHeightSelectorProps = {
   type: string;
   setType: (type: ROW_HEIGHT) => void;
+  layout?: "icon" | "labeled";
 };
 
 const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
@@ -23,7 +24,7 @@ const OPTIONS: DropdownOption<ROW_HEIGHT>[] = [
 
 const DataTableRowHeightSelector: React.FunctionComponent<
   DataTableRowHeightSelectorProps
-> = ({ type, setType }) => {
+> = ({ type, setType, layout = "icon" }) => {
   const handleSelect = useCallback(
     (value: ROW_HEIGHT) => {
       setType(value);
@@ -35,9 +36,16 @@ const DataTableRowHeightSelector: React.FunctionComponent<
     <DropdownMenu>
       <TooltipWrapper content="Rows">
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm">
-            <Rows3 className="size-3.5" />
-          </Button>
+          {layout === "labeled" ? (
+            <Button variant="outline" size="sm">
+              <UnfoldVertical className="mr-1.5 size-3.5" />
+              Row size
+            </Button>
+          ) : (
+            <Button variant="outline" size="icon-sm">
+              <Rows3 className="size-3.5" />
+            </Button>
+          )}
         </DropdownMenuTrigger>
       </TooltipWrapper>
       <DropdownMenuContent align="end">

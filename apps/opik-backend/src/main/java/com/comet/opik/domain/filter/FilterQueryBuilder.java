@@ -207,7 +207,8 @@ public class FilterQueryBuilder {
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
                                     "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) = lower(:filter%2$d)"),
-                            Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"))))
+                            Map.entry(FieldType.ENUM, "%1$s = :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s = :filter%2$d OR %1$s = '%3$s')"))))
                     .put(Operator.NOT_EQUAL, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) != lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s != :filter%2$d"),
@@ -227,7 +228,8 @@ public class FilterQueryBuilder {
                             // First remove escaped quotes with replaceAll, then trim remaining quotes with trimBoth
                             Map.entry(FieldType.MAP,
                                     "lower(trimBoth(replaceAll(arrayElement(mapValues(%1$s),indexOf(mapKeys(%1$s), :filterKey%2$d)), '\\\\\"', ''), '\"')) != lower(:filter%2$d)"),
-                            Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"))))
+                            Map.entry(FieldType.ENUM, "%1$s != :filter%2$d"),
+                            Map.entry(FieldType.ENUM_LEGACY, "(%1$s != :filter%2$d AND %1$s != '%3$s')"))))
                     .put(Operator.GREATER_THAN, new EnumMap<>(Map.ofEntries(
                             Map.entry(FieldType.STRING, "lower(%1$s) > lower(:filter%2$d)"),
                             Map.entry(FieldType.STRING_EXACT, "%1$s > :filter%2$d"),
@@ -278,14 +280,22 @@ public class FilterQueryBuilder {
                             FieldType.ERROR_CONTAINER,
                             "empty(%1$s)",
                             FieldType.LIST,
-                            "empty(%1$s)")))
+                            "empty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
                             FieldType.ERROR_CONTAINER,
                             "notEmpty(%1$s)",
                             FieldType.LIST,
-                            "notEmpty(%1$s)")))
+                            "notEmpty(%1$s)",
+                            FieldType.DICTIONARY,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
+                            FieldType.DICTIONARY_STATE_DB,
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -318,6 +328,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.EXPERIMENT_ID, EXPERIMENT_ID_DB)
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
+                    .put(TraceField.SOURCE, SOURCE_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -335,6 +346,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.STATUS, STATUS_DB)
                     .put(TraceThreadField.TAGS, TAGS_DB)
                     .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
+                    .put(TraceThreadField.SOURCE, SOURCE_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -362,6 +374,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.ERROR_TYPE, ERROR_TYPE_DB)
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .put(SpanField.TRACE_ID, TRACE_ID_DB)
+                    .put(SpanField.SOURCE, SOURCE_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -378,6 +391,7 @@ public class FilterQueryBuilder {
             ImmutableMap.<OptimizationField, String>builder()
                     .put(OptimizationField.METADATA, METADATA_ANALYTICS_DB)
                     .put(OptimizationField.DATASET_ID, DATASET_ID_ANALYTICS_DB)
+                    .put(OptimizationField.PROJECT_ID, PROJECT_ID_DB)
                     .put(OptimizationField.STATUS, STATUS_DB)
                     .build());
 
@@ -536,7 +550,9 @@ public class FilterQueryBuilder {
                 TraceField.GUARDRAILS,
                 TraceField.VISIBILITY_MODE,
                 TraceField.ERROR_INFO,
-                TraceField.ERROR_TYPE));
+                TraceField.ERROR_TYPE,
+                TraceField.SOURCE,
+                TraceThreadField.SOURCE));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
                 TraceField.EXPERIMENT_ID));
@@ -574,7 +590,8 @@ public class FilterQueryBuilder {
                 SpanField.ERROR_INFO,
                 SpanField.ERROR_TYPE,
                 SpanField.TYPE,
-                SpanField.TRACE_ID));
+                SpanField.TRACE_ID,
+                SpanField.SOURCE));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
@@ -712,6 +729,7 @@ public class FilterQueryBuilder {
         map.put(FilterStrategy.OPTIMIZATION, Set.of(
                 OptimizationField.METADATA,
                 OptimizationField.DATASET_ID,
+                OptimizationField.PROJECT_ID,
                 OptimizationField.STATUS));
 
         map.put(FilterStrategy.DASHBOARD, Set.of(
@@ -916,8 +934,9 @@ public class FilterQueryBuilder {
 
     private static String toAnalyticsDbFilter(Filter filter, int i, FilterStrategy filterStrategy) {
         var template = toAnalyticsDbOperator(filter, filterStrategy);
-        var formattedTemplate = template.formatted(getAnalyticsDbField(filter.field(), filterStrategy, i), i);
-        return "(%s)".formatted(formattedTemplate);
+        var dbField = getAnalyticsDbField(filter.field(), filterStrategy, i);
+        var enumFallbackTemplate = ANALYTICS_DB_OPERATOR_MAP.get(filter.operator()).get(FieldType.ENUM);
+        return filter.field().getType().buildFilter(template, dbField, i, filter.value(), enumFallbackTemplate);
     }
 
     private static String getAnalyticsDbField(Field field, FilterStrategy filterStrategy, int i) {

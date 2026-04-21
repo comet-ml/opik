@@ -70,13 +70,16 @@ export enum ManagementPermissionsNames {
   DASHBOARD_EDIT = "dashboard_edit",
   DASHBOARD_DELETE = "dashboard_delete",
   DATASET_VIEW = "dataset_view",
+  DATASET_CREATE = "dataset_create",
   DATASET_EDIT = "dataset_edit",
   DATASET_DELETE = "dataset_delete",
   ANNOTATION_QUEUE_CREATE = "annotation_queue_create",
+  ANNOTATION_QUEUE_EDIT = "annotation_queue_edit",
   ANNOTATION_QUEUE_DELETE = "annotation_queue_delete",
   TRACE_TAG = "trace_tag",
   TRACE_DELETE = "trace_delete",
   TRACE_SPAN_THREAD_ANNOTATE = "trace_span_thread_annotate",
+  PROMPT_CREATE = "prompt_create",
   PROMPT_DELETE = "prompt_delete",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
@@ -84,6 +87,7 @@ export enum ManagementPermissionsNames {
   COMMENT_WRITE = "comment_write",
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
+  PLAYGROUND_USE = "playground_use",
 }
 
 export interface UserPermission {

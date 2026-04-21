@@ -10,6 +10,7 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreNames;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.SpanBatchUpdate;
@@ -20,6 +21,8 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.attachment.AttachmentInfo;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.SpanField;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -83,6 +86,7 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
@@ -4105,6 +4109,182 @@ class SpansResourceTest {
                         assertThat(inputString).containsPattern("\\[input-attachment-\\d+-\\d+\\.(jpg|jpeg)\\]");
                         assertThat(outputString).containsPattern("\\[output-attachment-\\d+-\\d+\\.png\\]");
                     });
+        }
+    }
+
+    @Nested
+    @DisplayName("Source field on span creation")
+    class CreateSpanWithSource {
+
+        @ParameterizedTest
+        @EnumSource(Source.class)
+        @DisplayName("Create span with each valid source and verify it is stored")
+        void createSpanWithSource(Source source) {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(source)
+                    .build();
+
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.source()).isEqualTo(source);
+        }
+
+        @Test
+        @DisplayName("Create span without source defaults to null (unknown in storage)")
+        void createSpanWithoutSourceDefaultsToNull() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .traceId(traceId)
+                    .source(null)
+                    .build();
+
+            var id = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+
+            var actual = spanResourceClient.getById(id, TEST_WORKSPACE, API_KEY);
+            assertThat(actual.source()).isNull();
+        }
+
+        @Test
+        @DisplayName("Create span with invalid source returns 400")
+        void createSpanWithInvalidSourceReturns400() {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var body = """
+                    {
+                        "project_name": "%s",
+                        "trace_id": "%s",
+                        "name": "test-span",
+                        "type": "general",
+                        "start_time": "2024-01-01T00:00:00Z",
+                        "source": "invalid_source"
+                    }
+                    """.formatted(DEFAULT_PROJECT, traceId);
+
+            try (var response = client.target("%s/v1/private/spans".formatted(baseURI))
+                    .request()
+                    .accept(MediaType.APPLICATION_JSON_TYPE)
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(body))) {
+
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+            }
+        }
+    }
+
+    @Nested
+    @DisplayName("Filter spans by source")
+    class FilterSpansBySource {
+
+        @ParameterizedTest
+        @EnumSource(Source.class)
+        @DisplayName("Filter spans by source EQUAL returns only matching spans")
+        void filterSpansBySourceEqual(Source source) {
+            var projectName = "span-source-filter-test-" + UUID.randomUUID();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var matchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .source(source)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var otherSource = source == Source.SDK ? Source.EXPERIMENT : Source.SDK;
+            var nonMatchingSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .source(otherSource)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.createSpan(matchingSpan, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(nonMatchingSpan, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value(source.getValue())
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(matchingSpan), List.of(nonMatchingSpan), USER);
+        }
+
+        @Test
+        @DisplayName("Filter by source SDK also returns legacy spans with unknown source (null)")
+        void filterBySourceSdkIncludesUnknownSourceSpans() {
+            var projectName = "span-source-filter-sdk-unknown-" + UUID.randomUUID();
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var sdkSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .source(Source.SDK)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var unknownSourceSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .source(null)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var experimentSpan = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .source(Source.EXPERIMENT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.createSpan(sdkSpan, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(unknownSourceSpan, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(experimentSpan, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.SOURCE)
+                    .operator(Operator.EQUAL)
+                    .value(Source.SDK.getValue())
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            // ClickHouse returns spans in descending insertion order;
+            // unknownSourceSpan was inserted after sdkSpan so it comes first.
+            SpanAssertions.assertSpan(page.content(),
+                    List.of(unknownSourceSpan, sdkSpan),
+                    List.of(experimentSpan), USER);
         }
     }
 }

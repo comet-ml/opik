@@ -66,10 +66,10 @@ describe("validateEvaluators", () => {
   it("should throw TypeError for BaseMetric subclasses that are not LLMJudge", () => {
     const exactMatch = new ExactMatch("test_exact", false);
     expect(() =>
-      validateEvaluators([exactMatch], "evaluation suite")
+      validateEvaluators([exactMatch], "test suite")
     ).toThrow(TypeError);
     expect(() =>
-      validateEvaluators([exactMatch], "evaluation suite")
+      validateEvaluators([exactMatch], "test suite")
     ).toThrow("Received: ExactMatch");
   });
 

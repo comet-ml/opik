@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import isUndefined from "lodash/isUndefined";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
@@ -8,12 +8,11 @@ import ConfigurationTab from "@/v1/pages/CompareExperimentsPage/ConfigurationTab
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import ExperimentFeedbackScoresTab from "@/v1/pages/CompareExperimentsPage/ExperimentFeedbackScoresTab/ExperimentFeedbackScoresTab";
-import ExperimentAssertionsTab from "@/v1/pages/CompareExperimentsPage/ExperimentAssertionsTab/ExperimentAssertionsTab";
 import ExperimentInsightsTab from "@/v1/pages/CompareExperimentsPage/ExperimentInsightsTab/ExperimentInsightsTab";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment } from "@/types/datasets";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import CompareExperimentsDetails from "@/v1/pages/CompareExperimentsPage/CompareExperimentsDetails/CompareExperimentsDetails";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -42,20 +41,26 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
     [experiments],
   );
 
-  const isEvalSuite = isEvalSuiteExperiment(memorizedExperiments[0]);
+  const isTestSuite = isTestSuiteExperiment(memorizedExperiments[0]);
 
-  const hasAssertionScores = memorizedExperiments.some(
-    (e) => (e.assertion_scores ?? []).length > 0,
-  );
+  const showScoresTab = memorizedExperiments.length > 0 && !isTestSuite;
 
-  const showScoresTab =
-    memorizedExperiments.length > 0 && (!isEvalSuite || hasAssertionScores);
+  const availableTabs = useMemo(() => {
+    const tabs = new Set(["items", "config"]);
+    if (!isTestSuite) tabs.add("insights");
+    if (showScoresTab) tabs.add("scores");
+    return tabs;
+  }, [isTestSuite, showScoresTab]);
+
+  const effectiveTab = availableTabs.has(tab as string)
+    ? (tab as string)
+    : "items";
 
   const renderContent = () => {
     return (
       <Tabs
         defaultValue="items"
-        value={tab as string}
+        value={effectiveTab}
         onValueChange={setTab}
         className="min-w-min"
       >
@@ -64,21 +69,21 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
             <TabsTrigger variant="underline" value="items">
               Experiment items
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="insights">
-              Insights
-            </TabsTrigger>
+            {!isTestSuite && (
+              <TabsTrigger variant="underline" value="insights">
+                Insights
+              </TabsTrigger>
+            )}
             <TabsTrigger variant="underline" value="config">
               Configuration
             </TabsTrigger>
             {showScoresTab && (
               <TabsTrigger variant="underline" value="scores">
-                {isEvalSuite ? "Assertions" : "Feedback scores"}
-                {!isEvalSuite && (
-                  <ExplainerIcon
-                    className="ml-1"
-                    {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
-                  />
-                )}
+                Feedback scores
+                <ExplainerIcon
+                  className="ml-1"
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
+                />
               </TabsTrigger>
             )}
           </TabsList>
@@ -87,12 +92,14 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
           <ExperimentItemsTab
             experimentsIds={experimentsIds}
             experiments={memorizedExperiments}
-            isEvalSuite={isEvalSuite}
+            isTestSuite={isTestSuite}
           />
         </TabsContent>
-        <TabsContent value="insights">
-          <ExperimentInsightsTab experimentsIds={experimentsIds} />
-        </TabsContent>
+        {!isTestSuite && (
+          <TabsContent value="insights">
+            <ExperimentInsightsTab experimentsIds={experimentsIds} />
+          </TabsContent>
+        )}
         <TabsContent value="config">
           <ConfigurationTab
             experimentsIds={experimentsIds}
@@ -102,19 +109,11 @@ const CompareExperimentsPage: React.FunctionComponent = () => {
         </TabsContent>
         {showScoresTab && (
           <TabsContent value="scores">
-            {isEvalSuite ? (
-              <ExperimentAssertionsTab
-                experimentsIds={experimentsIds}
-                experiments={memorizedExperiments}
-                isPending={isPending}
-              />
-            ) : (
-              <ExperimentFeedbackScoresTab
-                experimentsIds={experimentsIds}
-                experiments={memorizedExperiments}
-                isPending={isPending}
-              />
-            )}
+            <ExperimentFeedbackScoresTab
+              experimentsIds={experimentsIds}
+              experiments={memorizedExperiments}
+              isPending={isPending}
+            />
           </TabsContent>
         )}
       </Tabs>

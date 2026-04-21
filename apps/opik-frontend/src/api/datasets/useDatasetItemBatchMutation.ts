@@ -63,6 +63,7 @@ const useDatasetItemBatchMutation = () => {
       queryClient.invalidateQueries({
         queryKey: ["dataset", { datasetId: variables.datasetId }],
       });
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

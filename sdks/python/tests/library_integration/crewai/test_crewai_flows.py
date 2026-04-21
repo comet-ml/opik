@@ -112,8 +112,10 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 ),
                                 total_cost=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                     # Second flow method - generate_fun_fact
                     SpanModel(
@@ -145,12 +147,16 @@ def test_crewai_flows__simple_flow__llm_call_logged(fake_backend):
                                 ),
                                 total_cost=ANY_BUT_NONE,
                                 spans=[],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

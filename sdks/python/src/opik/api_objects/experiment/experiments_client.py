@@ -19,6 +19,7 @@ class ExperimentsClient:
         truncate: bool = True,
         max_results: int = 1000,
         filter_string: Optional[str] = None,
+        project_name: Optional[str] = None,
     ) -> List[experiment_item.ExperimentItemContent]:
         """
         Find experiment items associated with a specific dataset among a list of experiments.
@@ -35,6 +36,7 @@ class ExperimentsClient:
             truncate: Whether to truncate image data stored in input, output,
                 or metadata. Defaults to True.
             max_results: Maximum number of results to return. Defaults to 1000.
+            project_name: Optional project name to associate with the query. If not provided, the default project will be used.
 
         Returns:
             A list of experiment item content objects that match the criteria.
@@ -51,7 +53,7 @@ class ExperimentsClient:
 
         # get dataset id
         dataset_id = self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=dataset_name
+            dataset_name=dataset_name, project_name=project_name
         ).id
 
         return rest_operations.find_experiment_items_for_dataset(

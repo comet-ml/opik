@@ -92,8 +92,10 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
                 spans=[],
                 provider="openai",
                 model=ANY_STRING.starting_with("gpt-4o"),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

@@ -12,13 +12,13 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
 import org.apache.commons.collections4.CollectionUtils;
-import org.redisson.api.AutoClaimResult;
-import org.redisson.api.PendingEntry;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
 import org.redisson.api.options.PlainOptions;
+import org.redisson.api.stream.AutoClaimResult;
+import org.redisson.api.stream.PendingEntry;
 import org.redisson.api.stream.StreamCreateGroupArgs;
+import org.redisson.api.stream.StreamMessageId;
 import org.redisson.api.stream.StreamPendingRangeArgs;
 import org.redisson.api.stream.StreamReadGroupArgs;
 import org.slf4j.Logger;
@@ -285,9 +285,11 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         try {
             stream.removeConsumer(config.getConsumerGroupName(), consumerId)
                     .subscribeOn(consumerScheduler)
-                    .doOnSuccess(pendingMessages -> log.info(
-                            "Removed consumer '{}', from group '{}', pendingMessages '{}'",
-                            consumerId, config.getConsumerGroupName(), pendingMessages))
+                    .doOnSuccess(pendingMessages -> {
+                        pendingMessages = Objects.requireNonNullElse(pendingMessages, 0L);
+                        log.info("Removed consumer '{}', from group '{}', pendingMessages '{}'",
+                                consumerId, config.getConsumerGroupName(), pendingMessages);
+                    })
                     .onErrorResume(throwable -> {
                         log.warn("Failed to remove consumer '{}', group '{}'",
                                 consumerId, config.getConsumerGroupName(), throwable);
@@ -378,6 +380,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .map(AutoClaimResult::getMessages)
                 .filter(Objects::nonNull)
                 .doOnSuccess(claimedMessages -> {
+                    claimedMessages = Objects.requireNonNullElse(claimedMessages, Map.of());
                     claimSize.set(claimedMessages.size());
                     log.debug("Successfully auto claimed from stream, size '{}'", claimedMessages.size());
                 })
@@ -400,7 +403,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         return stream.readGroup(config.getConsumerGroupName(), consumerId, streamReadGroupArgs)
                 .subscribeOn(consumerScheduler) // Isolates the Redis call
                 .filter(Objects::nonNull)
+                // doOnSuccess fires with null for empty Monos (e.g. long-poll timeout).
+                // Defaulting to empty map to avoid NullPointerException, and for the gauge to reset to 0
                 .doOnSuccess(messages -> {
+                    messages = Objects.requireNonNullElse(messages, Map.of());
                     readSize.set(messages.size());
                     log.debug("Successfully read from stream, size '{}'", messages.size());
                 })
@@ -434,9 +440,23 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
     private Mono<ProcessingResult> processMessage(Map.Entry<StreamMessageId, Map<String, M>> entry) {
         var messageId = entry.getKey();
         log.info("Message received with messageId '{}'", messageId);
-        var message = Optional.ofNullable(entry.getValue())
-                .map(valueMap -> valueMap.get(payloadField))
-                .orElse(null);
+        M message;
+        try {
+            message = Optional.ofNullable(entry.getValue())
+                    .map(valueMap -> valueMap.get(payloadField))
+                    .orElse(null);
+        } catch (ClassCastException classCastException) {
+            // Fix for OPIK-5647: received Collections.emptyList() as the entry value for empty/malformed stream
+            // entries, which the generic Map<String, M> type erasure hides at compile time.
+            // ClassCastException is already in NON_RETRYABLE_EXCEPTIONS,
+            // so the failure path will ack and remove the message without retry.
+            // Not logging here — postProcessFailureMessages logs non-retryable errors with full context.
+            return Mono.just(ProcessingResult.builder()
+                    .messageId(messageId)
+                    .status(MessageStatus.FAILURE)
+                    .error(classCastException)
+                    .build());
+        }
         var startMillis = System.currentTimeMillis();
         // Deferring as processEvent is out of our control, it might not return a cold Mono
         return Mono.defer(() -> processEvent(message))
@@ -483,7 +503,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
         var nonRetryable = failures.stream()
                 .filter(failure -> !isRetryableException(failure.error()))
                 .map(failure -> {
-                    log.error("Non-retryable error for messageId '{}', removing from stream",
+                    log.warn("Non-retryable error for messageId '{}', removing from stream",
                             failure.messageId(), failure.error());
                     return failure.messageId();
                 })
@@ -535,7 +555,10 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 // Only attempt to remove if ack was successful
                 .then(stream.remove(idsArray)
                         .subscribeOn(consumerScheduler))
-                .doOnSuccess(size -> log.debug("Successfully ack and remove from stream, size '{}'", size))
+                .doOnSuccess(size -> {
+                    size = Objects.requireNonNullElse(size, 0L);
+                    log.debug("Successfully ack and remove from stream, size '{}'", size);
+                })
                 .onErrorResume(throwable -> {
                     // If ack and or remove fails, message will be automatically claimed and retried
                     ackAndRemoveErrors.add(1);
@@ -587,14 +610,14 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
 
     /**
      * The delivery count indicates how many times a message has been delivered to consumers.
-     * Uses {@link PendingEntry#getLastTimeDelivered()} which returns number of times that a given message was delivered.
+     * Uses {@link PendingEntry#getDeliveryCount()} which returns number of times that a given message was delivered.
      *
      * @param messageId the message ID to query
      * @return Mono with the delivery count (0 if not found or on error)
      */
     private Mono<Long> getDeliveryCount(StreamMessageId messageId) {
         return listPending(messageId)
-                .map(PendingEntry::getLastTimeDelivered)
+                .map(PendingEntry::getDeliveryCount)
                 .defaultIfEmpty(0L);
     }
 
@@ -614,7 +637,7 @@ public abstract class BaseRedisSubscriber<M> implements Managed {
                 .subscribeOn(consumerScheduler)
                 .filter(CollectionUtils::isNotEmpty)
                 .map(List::getFirst) // Count is 1, so there would be only the first one
-                .doOnSuccess(size -> log.debug("Successfully list pending messageId '{}'", messageId))
+                .doOnNext(pendingEntry -> log.debug("Successfully list pending messageId '{}'", messageId))
                 .onErrorResume(throwable -> {
                     listPendingErrors.add(1);
                     log.warn("Error listing pending messageId '{}'", messageId, throwable);

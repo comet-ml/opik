@@ -27,7 +27,6 @@ import {
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
 import SelectBox from "@/shared/SelectBox/SelectBox";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import FeedbackDefinitionsSelectBox from "@/v2/pages-shared/annotation-queues/FeedbackDefinitionsSelectBox";
 
 import {
@@ -72,7 +71,7 @@ type AddEditAnnotationQueueDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   onQueueCreated?: (queue: Partial<AnnotationQueue>) => void;
-  projectId?: string;
+  projectId: string;
   scope?: ANNOTATION_QUEUE_SCOPE;
   queue?: AnnotationQueue;
 };
@@ -88,7 +87,7 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
   queue: defaultQueue,
 }) => {
   const {
-    permissions: { canCreateAnnotationQueues },
+    permissions: { canCreateAnnotationQueues, canEditAnnotationQueues },
   } = usePermissions();
 
   const [isNestedDialogOpen, setIsNestedDialogOpen] = useState(false);
@@ -163,7 +162,9 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
 
   return (
     <Dialog
-      open={open && (isEdit || canCreateAnnotationQueues)}
+      open={
+        open && (isEdit ? canEditAnnotationQueues : canCreateAnnotationQueues)
+      }
       onOpenChange={setOpen}
     >
       <DialogContent
@@ -201,35 +202,6 @@ const AddEditAnnotationQueueDialog: React.FunctionComponent<
                 }}
               />
               <div className="flex gap-4">
-                <FormField
-                  control={form.control}
-                  name="project_id"
-                  render={({ field, formState }) => {
-                    const validationErrors = get(formState.errors, [
-                      "project_id",
-                    ]);
-
-                    return (
-                      <FormItem className="flex-1">
-                        <FormLabel>Project</FormLabel>
-                        <FormControl>
-                          <ProjectsSelectBox
-                            value={field.value}
-                            onValueChange={field.onChange}
-                            className={cn({
-                              "border-destructive": Boolean(
-                                validationErrors?.message,
-                              ),
-                            })}
-                            disabled={Boolean(projectId)}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    );
-                  }}
-                />
-
                 <FormField
                   control={form.control}
                   name="scope"

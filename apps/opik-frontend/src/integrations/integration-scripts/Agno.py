@@ -10,7 +10,7 @@ from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExport
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 
-opik.configure()  # HIGHLIGHTED_LINE
+opik.configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # os.environ["OPENAI_API_KEY"] = "your-api-key-here"
 

@@ -21,10 +21,12 @@ const getMenuItems = ({
   canViewExperiments,
   canViewDashboards,
   canViewDatasets,
+  canUsePlayground,
 }: {
   canViewExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
+  canUsePlayground: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -84,12 +86,12 @@ const getMenuItems = ({
         ...(canViewDatasets
           ? [
               {
-                id: "evaluation_suites",
-                path: "/$workspaceName/evaluation-suites",
+                id: "test_suites",
+                path: "/$workspaceName/test-suites",
                 type: MENU_ITEM_TYPE.router,
                 icon: ListChecks,
                 label: "Datasets",
-                count: "evaluation_suites",
+                count: "test_suites",
               },
             ]
           : []),
@@ -115,13 +117,17 @@ const getMenuItems = ({
           label: "Prompt library",
           count: "prompts",
         },
-        {
-          id: "playground",
-          path: "/$workspaceName/playground",
-          type: MENU_ITEM_TYPE.router,
-          icon: Blocks,
-          label: "Playground",
-        },
+        ...(canUsePlayground
+          ? [
+              {
+                id: "playground",
+                path: "/$workspaceName/playground",
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Blocks,
+                label: "Playground",
+              },
+            ]
+          : []),
       ],
     },
     {

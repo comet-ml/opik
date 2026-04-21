@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_write import ErrorInfoWrite
 from .json_list_string_write import JsonListStringWrite
+from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 
 
@@ -38,6 +39,8 @@ class SpanWrite(UniversalBaseModel):
     """
     Time to first token in milliseconds
     """
+
+    source: typing.Optional[SpanWriteSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -1,3 +1,4 @@
+import logging
 from contextlib import contextmanager
 from typing import Any, Dict, List
 from unittest import mock
@@ -10,6 +11,7 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.evaluation import (
     evaluator as evaluator_module,
+    helpers as helpers_module,
     metrics,
     samplers,
     score_statistics,
@@ -34,11 +36,13 @@ def create_mock_dataset(
             "id",
             "dataset_items_count",
             "get_version_info",
+            "project_name",
         ]
     )
     mock_dataset.name = name
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     if items is not None:
         mock_dataset.__internal_api__stream_items_as_dataclasses__.return_value = iter(
             items
@@ -122,12 +126,14 @@ def test_evaluate__happyflow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -190,6 +196,7 @@ def test_evaluate__happyflow(
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -231,6 +238,7 @@ def test_evaluate__happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -264,8 +272,10 @@ def test_evaluate__happyflow(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -275,6 +285,7 @@ def test_evaluate__happyflow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -306,6 +317,7 @@ def test_evaluate__happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -337,8 +349,10 @@ def test_evaluate__happyflow(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -348,6 +362,7 @@ def test_evaluate__happyflow(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -366,12 +381,14 @@ def test_evaluate_with_scoring_key_mapping(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -435,6 +452,7 @@ def test_evaluate_with_scoring_key_mapping(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
     mock_experiment.insert.assert_has_calls(
         [
@@ -476,6 +494,7 @@ def test_evaluate_with_scoring_key_mapping(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -511,8 +530,10 @@ def test_evaluate_with_scoring_key_mapping(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -522,6 +543,7 @@ def test_evaluate_with_scoring_key_mapping(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -555,6 +577,7 @@ def test_evaluate_with_scoring_key_mapping(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -590,8 +613,10 @@ def test_evaluate_with_scoring_key_mapping(
                             start_time=ANY_BUT_NONE,
                             end_time=ANY_BUT_NONE,
                             spans=[],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -601,6 +626,7 @@ def test_evaluate_with_scoring_key_mapping(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -620,12 +646,14 @@ def test_evaluate___output_key_is_missing_in_task_output_dict__equals_metric_mis
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -683,12 +711,14 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -739,6 +769,7 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_called_once_with(
@@ -782,8 +813,10 @@ def test_evaluate__exception_raised_from_the_task__error_info_added_to_the_trace
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="experiment",
             ),
         ],
+        source="experiment",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
@@ -801,12 +834,14 @@ def test_evaluate__with_random_sampler__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -887,6 +922,7 @@ def test_evaluate__with_random_sampler__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -933,12 +969,14 @@ def test_evaluate__with_random_sampler__total_items_reflects_sampled_count(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 10  # Original dataset has 10 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1023,12 +1061,14 @@ def test_evaluate__with_task_span_metrics__total_items_reflects_actual_count(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 5
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1118,12 +1158,14 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = 100  # Original dataset has 100 items
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1197,7 +1239,7 @@ def test_evaluate__with_sampler_and_nb_samples__total_items_reflects_final_count
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=10,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -1242,12 +1284,14 @@ def test_evaluate_prompt_happyflow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1320,6 +1364,7 @@ def test_evaluate_prompt_happyflow(
         prompts=None,
         tags=experiment_tags,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1365,6 +1410,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1375,6 +1421,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[ANY_BUT_NONE],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1384,6 +1431,7 @@ def test_evaluate_prompt_happyflow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -1421,6 +1469,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1431,6 +1480,7 @@ def test_evaluate_prompt_happyflow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[ANY_BUT_NONE],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1440,6 +1490,7 @@ def test_evaluate_prompt_happyflow(
                     value=0.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -1458,12 +1509,14 @@ def test_evaluate__aggregated_metric__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1534,6 +1587,7 @@ def test_evaluate__aggregated_metric__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1575,6 +1629,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1628,6 +1683,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                                 SpanModel(
                                     id=ANY_BUT_NONE,
@@ -1649,10 +1705,13 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                             ],
+                            source="experiment",
                         ),
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1663,6 +1722,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     value=2.0,
                 )
             ],
+            source="experiment",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -1694,6 +1754,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     start_time=ANY_BUT_NONE,
                     end_time=ANY_BUT_NONE,
                     spans=[],
+                    source="experiment",
                 ),
                 SpanModel(
                     id=ANY_BUT_NONE,
@@ -1745,6 +1806,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                                 SpanModel(
                                     id=ANY_BUT_NONE,
@@ -1766,10 +1828,13 @@ def test_evaluate__aggregated_metric__happy_flow(
                                     },
                                     start_time=ANY_BUT_NONE,
                                     end_time=ANY_BUT_NONE,
+                                    source="experiment",
                                 ),
                             ],
+                            source="experiment",
                         )
                     ],
+                    source="experiment",
                 ),
             ],
             feedback_scores=[
@@ -1780,6 +1845,7 @@ def test_evaluate__aggregated_metric__happy_flow(
                     value=1.0,
                 )
             ],
+            source="experiment",
         ),
     ]
     for expected_trace, actual_trace in zip(
@@ -1802,12 +1868,14 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -1898,6 +1966,7 @@ def test_evaluate_prompt__with_random_sampling__happy_flow(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     mock_experiment.insert.assert_has_calls(
@@ -1940,12 +2009,14 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 2,
         "pass_threshold": 1,
@@ -2006,6 +2077,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
@@ -2056,6 +2128,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=1.0,
             )
         ],
+        source="experiment",
         spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
     )
 
@@ -2078,6 +2151,7 @@ def test_evaluate__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=0.0,
             )
         ],
+        source="experiment",
         spans=ANY_BUT_NONE,  # We don't need to verify span details for this test
     )
 
@@ -2099,12 +2173,14 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 2,
         "pass_threshold": 1,
@@ -2175,6 +2251,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
         prompts=None,
         tags=None,
         dataset_version_id=None,
+        project_name=None,
     )
 
     # With 2 trials and 2 dataset items, we expect 4 calls to insert
@@ -2228,6 +2305,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=1.0,
             )
         ],
+        source="experiment",
         spans=ANY_LIST,  # We don't need to verify span details for this test
     )
 
@@ -2253,6 +2331,7 @@ def test_evaluate_prompt__2_trials_lead_to_2_experiment_items_per_dataset_item(
                 value=0.0,
             )
         ],
+        source="experiment",
         spans=ANY_LIST,  # We don't need to verify span details for this test
     )
 
@@ -2273,11 +2352,13 @@ def test_evaluate__with_experiment_scores(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2376,11 +2457,13 @@ def test_evaluate__with_experiment_scores_empty_results(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "test-dataset"
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2703,12 +2786,14 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2754,7 +2839,7 @@ def test_evaluate__uses_streaming_by_default(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2768,12 +2853,14 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2818,7 +2905,7 @@ def test_evaluate__uses_streaming_with_dataset_item_ids(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=["dataset-item-id-1"],
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2832,12 +2919,14 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.name = "the-dataset-name"
     mock_dataset.dataset_items_count = None
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2889,7 +2978,7 @@ def test_evaluate__falls_back_to_non_streaming_with_dataset_sampler(fake_backend
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -2905,10 +2994,12 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
             "dataset_items_count",
             "get_version_info",
             "get_execution_policy",
+            "project_name",
             "get_evaluators",
         ]
     )
     mock_dataset.get_version_info.return_value = None
+    mock_dataset.project_name = None
     mock_dataset.get_execution_policy.return_value = {
         "runs_per_item": 1,
         "pass_threshold": 1,
@@ -2962,7 +3053,7 @@ def test_evaluate__streaming_with_nb_samples(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=None,
     )
 
@@ -3008,7 +3099,7 @@ def test_evaluate_prompt__with_filter_string__passes_to_streaming(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3062,7 +3153,7 @@ def test_evaluate_prompt__with_filter_string_and_nb_samples__passes_both_paramet
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3117,7 +3208,7 @@ def test_evaluate_prompt__with_filter_string_and_dataset_sampler__passes_filter_
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3164,7 +3255,7 @@ def test_evaluate__with_filter_string__passes_to_streaming(fake_backend):
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3214,7 +3305,7 @@ def test_evaluate__with_filter_string_and_nb_samples__passes_both_parameters(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=2,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3265,7 +3356,7 @@ def test_evaluate__with_filter_string_and_dataset_sampler__passes_filter_string(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
 
@@ -3315,9 +3406,135 @@ def test_evaluate_optimization_trial__with_filter_string__passes_to_streaming(
     mock_dataset.__internal_api__stream_items_as_dataclasses__.assert_called_once_with(
         nb_samples=None,
         dataset_item_ids=None,
-        batch_size=evaluator_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+        batch_size=helpers_module.EVALUATION_STREAM_DATASET_BATCH_SIZE,
         filter_string=filter_string,
     )
+
+
+def test_evaluate_optimization_trial__traces_and_spans__have_source_optimization(
+    fake_backend,
+):
+    """evaluate_optimization_trial always passes source='optimization' → all traces carry it."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+            dataset_item.DatasetItem(
+                id="dataset-item-id-2",
+                input={"message": "say bye"},
+                reference="bye",
+            ),
+        ]
+    )
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            scoring_metrics=[metrics.Equals()],
+            experiment_name="the-experiment-name",
+            task_threads=1,
+            verbose=0,
+        )
+
+    assert len(fake_backend.trace_trees) == 2
+    for trace in fake_backend.trace_trees:
+        assert trace.source == "optimization", (
+            f"Expected trace source 'optimization', got '{trace.source}'"
+        )
+
+        for span in trace.spans:
+            assert span.source == "optimization", (
+                f"Expected span source 'optimization', got '{span.source}'"
+            )
+
+
+def test_evaluate_optimization_trial__trace_tree_source_experiment_and_spans_source_experiment(
+    fake_backend,
+):
+    """Full trace tree assertion: source='optimization' on the trace and both task/scoring spans."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="dataset-item-id-1",
+                input={"message": "say hello"},
+                reference="hello",
+            ),
+        ]
+    )
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-789",
+            dataset=mock_dataset,
+            task=say_task,
+            scoring_metrics=[metrics.Equals()],
+            experiment_name="the-experiment-name",
+            task_threads=1,
+            verbose=0,
+        )
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="evaluation_task",
+        input=ANY_BUT_NONE,
+        output=ANY_BUT_NONE,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        source="optimization",
+        feedback_scores=ANY_LIST,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="say_task",
+                type="general",
+                input=ANY_BUT_NONE,
+                output=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=[],
+                source="optimization",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="metrics_calculation",
+                type="general",
+                input=ANY_BUT_NONE,
+                output=ANY_BUT_NONE,
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                spans=ANY_LIST,
+                source="optimization",
+            ),
+        ],
+    )
+
+    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
 def test_evaluate__verbose_zero__progress_bar_disabled(fake_backend):
@@ -3363,3 +3580,260 @@ def test_evaluate__verbose_zero__progress_bar_disabled(fake_backend):
         desc=mock.ANY,
         total=mock.ANY,
     )
+
+
+def test_evaluate__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="project-override-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="project-override-test",
+        experiment_config=None,
+        prompts=None,
+        tags=None,
+        dataset_version_id=None,
+        project_name="dataset-project",
+    )
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "project_name" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate__dataset_has_no_project_name__caller_value_preserved(fake_backend):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluation.evaluate(
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="project-fallback-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    mock_create_experiment.assert_called_once_with(
+        dataset_name="the-dataset-name",
+        name="project-fallback-test",
+        experiment_config=None,
+        prompts=None,
+        tags=None,
+        dataset_version_id=None,
+        project_name="caller-project",
+    )
+
+
+def test_evaluate_prompt__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    MODEL_NAME = "gpt-3.5-turbo"
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(id="item-1", input="hello", reference="hello"),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+    mock_models_factory_get, _mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "Say: {{input}}"}],
+            experiment_name="prompt-project-override-test",
+            project_name="caller-project",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "dataset-project"
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "evaluate_prompt()" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate_prompt__dataset_has_no_project_name__caller_value_preserved(
+    fake_backend,
+):
+    MODEL_NAME = "gpt-3.5-turbo"
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(id="item-1", input="hello", reference="hello"),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+    mock_models_factory_get, _mock_model = create_mock_model(model_name=MODEL_NAME)
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment,
+        mock_get_experiment_url_by_id,
+        mock_models_factory_get,
+    ):
+        evaluation.evaluate_prompt(
+            dataset=mock_dataset,
+            messages=[{"role": "user", "content": "Say: {{input}}"}],
+            experiment_name="prompt-project-fallback-test",
+            project_name="caller-project",
+            model=MODEL_NAME,
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "caller-project"
+
+
+def test_evaluate_optimization_trial__dataset_has_project_name__caller_override_ignored_and_warning_logged(
+    fake_backend, capture_log
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = "dataset-project"
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="trial-project-override-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "dataset-project"
+
+    deprecation_warnings = [
+        record
+        for record in capture_log.records
+        if record.levelno == logging.WARNING
+        and "deprecated" in record.getMessage()
+        and "evaluate_optimization_trial()" in record.getMessage()
+    ]
+    assert len(deprecation_warnings) == 1
+
+
+def test_evaluate_optimization_trial__dataset_has_no_project_name__caller_value_preserved(
+    fake_backend,
+):
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"message": "hello"}, reference="hello"
+            ),
+        ]
+    )
+    mock_dataset.project_name = None
+
+    def say_task(item: Dict[str, Any]):
+        return {"output": "hello"}
+
+    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
+        create_mock_experiment()
+    )
+
+    with patch_evaluation_dependencies(
+        mock_create_experiment, mock_get_experiment_url_by_id
+    ):
+        evaluator_module.evaluate_optimization_trial(
+            optimization_id="opt-123",
+            dataset=mock_dataset,
+            task=say_task,
+            experiment_name="trial-project-fallback-test",
+            project_name="caller-project",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    call_kwargs = mock_create_experiment.call_args.kwargs
+    assert call_kwargs["project_name"] == "caller-project"

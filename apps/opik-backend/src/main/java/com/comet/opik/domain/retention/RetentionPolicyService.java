@@ -8,6 +8,10 @@ import com.comet.opik.domain.SpanDAO;
 import com.comet.opik.domain.TraceDAO;
 import com.comet.opik.infrastructure.RetentionConfig;
 import com.google.common.collect.Lists;
+import io.opentelemetry.api.GlobalOpenTelemetry;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
@@ -30,6 +34,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
+import static io.opentelemetry.api.common.AttributeKey.stringKey;
 
 @Slf4j
 @Singleton
@@ -40,6 +45,9 @@ public class RetentionPolicyService {
     private final SpanDAO spanDAO;
     private final InstantToUUIDMapper uuidMapper;
     private final RetentionConfig config;
+
+    private final LongCounter workspacesProcessed;
+    private final LongCounter rowsToDelete;
 
     @Inject
     public RetentionPolicyService(
@@ -53,6 +61,19 @@ public class RetentionPolicyService {
         this.spanDAO = spanDAO;
         this.uuidMapper = uuidMapper;
         this.config = config;
+
+        Meter meter = GlobalOpenTelemetry.get().getMeter("opik.retention");
+
+        this.workspacesProcessed = meter
+                .counterBuilder("opik.retention.sliding_window.workspaces_processed")
+                .setDescription("Number of workspaces that had retention deletes issued")
+                .build();
+
+        this.rowsToDelete = meter
+                .counterBuilder("opik.retention.sliding_window.rows_to_delete")
+                .setDescription(
+                        "Lightweight pre-delete row count (upper-bound ceiling, >99% precision, excludes experiment exclusion)")
+                .build();
     }
 
     /**
@@ -97,6 +118,7 @@ public class RetentionPolicyService {
 
         log.info("Retention cycle: '{}' workspaces across '{}' retention levels",
                 resolved.size(), grouped.size());
+        workspacesProcessed.add(resolved.size());
 
         return Flux.fromIterable(grouped.entrySet())
                 .concatMap(entry -> deleteForRetentionLevel(entry.getKey(), entry.getValue(), now))
@@ -137,11 +159,35 @@ public class RetentionPolicyService {
         var batches = Lists.partition(workspaceIds, config.getWorkspaceBatchSize());
 
         return Flux.fromIterable(batches)
-                .concatMap(batch -> Flux.concat(
-                        spanDAO.deleteForRetention(batch, cutoffId, lowerBound)
-                                .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
-                        traceDAO.deleteForRetention(batch, cutoffId, lowerBound)
-                                .onErrorResume(e -> logAndSkip("traces", batch.size(), e))));
+                .concatMap(batch -> countAndDelete(batch, cutoffId, lowerBound));
+    }
+
+    private Flux<Long> countAndDelete(List<String> batch, UUID cutoffId, UUID lowerBound) {
+        // Lightweight pre-delete count for observability (upper-bound ceiling, >99% precision).
+        // Omits experiment_items exclusion to avoid join cost.
+        // Counts run sequentially before deletes (not in parallel) so the metric reflects what's about
+        // to be removed, and to avoid overloading ClickHouse with concurrent queries. Cost is minimal:
+        // SELECT count() hits the primary key index via UUID range filter. The collected metrics also
+        // help assess the actual cost of these queries over time.
+        return Flux.concat(
+                traceDAO.countForRetention(batch, cutoffId, lowerBound)
+                        .doOnNext(count -> {
+                            log.info("Retention count before delete: '{}' traces in range for '{}' workspaces",
+                                    count, batch.size());
+                            rowsToDelete.add(count, Attributes.of(stringKey("table"), "traces"));
+                        })
+                        .then(Mono.empty()),
+                spanDAO.countForRetention(batch, cutoffId, lowerBound)
+                        .doOnNext(count -> {
+                            log.info("Retention count before delete: '{}' spans in range for '{}' workspaces",
+                                    count, batch.size());
+                            rowsToDelete.add(count, Attributes.of(stringKey("table"), "spans"));
+                        })
+                        .then(Mono.empty()),
+                spanDAO.deleteForRetention(batch, cutoffId, lowerBound)
+                        .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
+                traceDAO.deleteForRetention(batch, cutoffId, lowerBound)
+                        .onErrorResume(e -> logAndSkip("traces", batch.size(), e)));
     }
 
     /**
@@ -162,11 +208,30 @@ public class RetentionPolicyService {
         var batches = partitionMap(workspaceMinIds, config.getWorkspaceBatchSize());
 
         return Flux.fromIterable(batches)
-                .concatMap(batch -> Flux.concat(
-                        spanDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
-                                .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
-                        traceDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
-                                .onErrorResume(e -> logAndSkip("traces", batch.size(), e))));
+                .concatMap(batch -> {
+                    var batchWsIds = List.copyOf(batch.keySet());
+                    return Flux.concat(
+                            traceDAO.countForRetention(batchWsIds, cutoffId, lowerBound)
+                                    .doOnNext(count -> {
+                                        log.info(
+                                                "Retention count before delete (bounded): '{}' traces for '{}' workspaces",
+                                                count, batchWsIds.size());
+                                        rowsToDelete.add(count, Attributes.of(stringKey("table"), "traces"));
+                                    })
+                                    .then(Mono.empty()),
+                            spanDAO.countForRetention(batchWsIds, cutoffId, lowerBound)
+                                    .doOnNext(count -> {
+                                        log.info(
+                                                "Retention count before delete (bounded): '{}' spans for '{}' workspaces",
+                                                count, batchWsIds.size());
+                                        rowsToDelete.add(count, Attributes.of(stringKey("table"), "spans"));
+                                    })
+                                    .then(Mono.empty()),
+                            spanDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
+                                    .onErrorResume(e -> logAndSkip("spans", batch.size(), e)),
+                            traceDAO.deleteForRetentionBounded(batch, cutoffId, lowerBound)
+                                    .onErrorResume(e -> logAndSkip("traces", batch.size(), e)));
+                });
     }
 
     private Mono<Long> logAndSkip(String table, int batchSize, Throwable error) {

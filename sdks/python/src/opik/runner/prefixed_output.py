@@ -62,8 +62,13 @@ class PrefixedStream(io.TextIOBase):
         return self._stream.fileno()
 
 
+_installed = False
+
+
 def install() -> None:
-    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+    global _installed
+    if _installed:
         return
     sys.stdout = PrefixedStream(sys.stdout)  # type: ignore[assignment]
     sys.stderr = PrefixedStream(sys.stderr)  # type: ignore[assignment]
+    _installed = True

@@ -12,6 +12,7 @@ def test_span_data__as_start_parameters__includes_parent_span_id():
         start_time=datetime.datetime.now(),
         project_name="test",
         name="span-name",
+        source="sdk",
     )
 
     expected_parameters = {
@@ -21,6 +22,7 @@ def test_span_data__as_start_parameters__includes_parent_span_id():
         "trace_id": "trace-1",
         "parent_span_id": "parent-1",
         "name": "span-name",
+        "source": "sdk",
     }
 
     assert_equal(expected_parameters, span_data.as_start_parameters)

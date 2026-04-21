@@ -4,7 +4,7 @@ import { DatasetField } from "./hooks/useDatasetItemData";
 import { useDatasetItemNavigation } from "./hooks/useDatasetItemNavigation";
 import { useDatasetItemData } from "./hooks/useDatasetItemData";
 import { useDatasetItemFormState } from "./hooks/useDatasetItemFormState";
-import { useEditItem, useDeleteItem } from "@/store/EvaluationSuiteDraftStore";
+import { useEditItem, useDeleteItem } from "@/store/TestSuiteDraftStore";
 import { prepareFormDataForSave } from "./hooks/useDatasetItemFormHelpers";
 
 interface DatasetItemEditorAutosaveContextValue {

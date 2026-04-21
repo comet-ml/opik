@@ -3,5 +3,6 @@
 export const PromptVersionPublicType = {
     Mustache: "mustache",
     Jinja2: "jinja2",
+    Python: "python",
 } as const;
 export type PromptVersionPublicType = (typeof PromptVersionPublicType)[keyof typeof PromptVersionPublicType];

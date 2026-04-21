@@ -83,7 +83,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
 
       if (projectData?.id) {
         navigate({
-          to: "/$workspaceName/projects/$projectId/traces",
+          to: "/$workspaceName/projects/$projectId/home",
           params: {
             projectId: projectData.id,
             workspaceName,

@@ -1,39 +1,37 @@
-import React from "react";
-import useLocalStorageState from "use-local-storage-state";
-
-import WorkspaceStatisticSection from "@/v2/pages/HomePage/WorkspaceStatisticSection";
-import OverallPerformanceSection from "@/v2/pages/HomePage/OverallPerformanceSection";
-import ObservabilitySection from "@/v2/pages/HomePage/ObservabilitySection";
-import EvaluationSection from "@/v2/pages/HomePage/EvaluationSection";
-import OptimizationRunsSection from "@/v2/pages/HomePage/OptimizationRunsSection";
-import WelcomeBanner from "@/v2/pages/HomePage/WecomeBanner";
-
-const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
+import { useEffect } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import {
+  useActiveWorkspaceName,
+  useActiveProjectId,
+  useIsProjectLoading,
+} from "@/store/AppStore";
+import Loader from "@/shared/Loader/Loader";
 
 const HomePage = () => {
-  const [showWelcomeMessage, setShowWelcomeMessage] =
-    useLocalStorageState<boolean>(SHOW_WELCOME_MESSAGE_KEY, {
-      defaultValue: true,
-    });
+  const workspaceName = useActiveWorkspaceName();
+  const activeProjectId = useActiveProjectId();
+  const isLoading = useIsProjectLoading();
+  const navigate = useNavigate();
 
-  return (
-    <div className="pt-6">
-      {showWelcomeMessage ? (
-        <WelcomeBanner setOpen={setShowWelcomeMessage} />
-      ) : (
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="comet-title-l truncate break-words">
-            Welcome back to Opik
-          </h1>
-        </div>
-      )}
-      <WorkspaceStatisticSection />
-      <OverallPerformanceSection />
-      <ObservabilitySection />
-      <EvaluationSection />
-      <OptimizationRunsSection />
-    </div>
-  );
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (activeProjectId) {
+      navigate({
+        to: "/$workspaceName/projects/$projectId/home",
+        params: { workspaceName, projectId: activeProjectId },
+        replace: true,
+      });
+    } else {
+      navigate({
+        to: "/$workspaceName/projects",
+        params: { workspaceName },
+        replace: true,
+      });
+    }
+  }, [activeProjectId, isLoading, workspaceName, navigate]);
+
+  return <Loader />;
 };
 
 export default HomePage;

@@ -19,6 +19,12 @@ const WorkspaceGuard = ({
   const PermissionsProviderPlugin = usePluginStore(
     (state) => state.PermissionsProvider,
   );
+  // Kick off Ollie pod provisioning as soon as the workspace resolves, so
+  // cold-start overlaps with onboarding instead of blocking sidebar mount.
+  // Rendered via plugin store so OSS builds don't import plugin internals.
+  const AssistantPrewarmer = usePluginStore(
+    (state) => state.AssistantPrewarmer,
+  );
 
   if (!WorkspacePreloader) {
     return <Loader />;
@@ -34,6 +40,7 @@ const WorkspaceGuard = ({
 
   return (
     <WorkspacePreloader>
+      {AssistantPrewarmer ? <AssistantPrewarmer /> : null}
       <WorkspaceVersionResolver>
         {PermissionsProviderPlugin ? (
           <PermissionsProviderPlugin>

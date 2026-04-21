@@ -67,7 +67,8 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
 
   const isUserFeedbackColumn =
     isEditingEnabled && context.column.id === "feedback_scores_User feedback";
-  const isSmall = rowHeight === ROW_HEIGHT.small;
+  const isCompact =
+    rowHeight === ROW_HEIGHT.small || rowHeight === ROW_HEIGHT.medium;
 
   return (
     <CellWrapper
@@ -75,7 +76,7 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
       tableMetadata={context.table.options.meta}
       className={cn(
         "flex w-full justify-end gap-1",
-        isSmall
+        isCompact
           ? "h-4 items-center"
           : "flex-col items-end justify-start overflow-hidden",
         isUserFeedbackColumn && "group",
@@ -85,27 +86,21 @@ const FeedbackScoreCell = (context: CellContext<unknown, unknown>) => {
         feedbackScore={feedbackScore}
         isUserFeedbackColumn={isUserFeedbackColumn}
         onValueChange={handleValueChange}
+        size={isCompact ? "sm" : "md"}
       />
 
-      {reasons.length > 0 && (
-        <FeedbackScoreReasonTooltip reasons={reasons}>
-          {!isSmall ? (
-            <span
-              className={cn(
-                "break-words text-xs text-muted-foreground",
-                rowHeight === ROW_HEIGHT.medium && "line-clamp-3",
-                rowHeight === ROW_HEIGHT.large && "line-clamp-[16]",
-              )}
-            >
-              {reasons.map((r) => r.reason).join(", ")}
-            </span>
-          ) : (
+      {reasons.length > 0 &&
+        (isCompact ? (
+          <FeedbackScoreReasonTooltip reasons={reasons}>
             <div className="flex h-[20px] items-center">
               <MessageSquareMore className="mt-0.5 size-3.5 shrink-0 text-light-slate" />
             </div>
-          )}
-        </FeedbackScoreReasonTooltip>
-      )}
+          </FeedbackScoreReasonTooltip>
+        ) : (
+          <span className="w-full min-w-0 overflow-y-auto break-words text-xs text-muted-foreground">
+            {reasons.map((r) => r.reason).join(", ")}
+          </span>
+        ))}
     </CellWrapper>
   );
 };

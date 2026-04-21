@@ -122,6 +122,7 @@ describe("Opik prompt operations", () => {
             type: PromptType.MUSTACHE,
           },
           templateStructure: PromptTemplateStructure.Text,
+          projectName: "opik-sdk-typescript",
         },
         client.api.requestOptions
       );
@@ -216,6 +217,7 @@ describe("Opik prompt operations", () => {
             type: PromptType.MUSTACHE,
           },
           templateStructure: PromptTemplateStructure.Text,
+          projectName: "opik-sdk-typescript",
         },
         client.api.requestOptions
       );
@@ -363,7 +365,7 @@ describe("Opik prompt operations", () => {
       );
     });
 
-    it("should handle errors gracefully", async () => {
+    it("should return unsynced prompt on API error", async () => {
       const apiError = new OpikApiError({
         message: "Server error",
         statusCode: 500,
@@ -373,20 +375,31 @@ describe("Opik prompt operations", () => {
         throw apiError;
       });
 
+      const result = await client.createPrompt({
+        name: "error-prompt",
+        prompt: "Test",
+      });
+
+      expect(result).toBeInstanceOf(Prompt);
+      expect(result.name).toBe("error-prompt");
+      expect(result.prompt).toBe("Test");
+      expect(result.synced).toBe(false);
+      expect(result.id).toBeUndefined();
+      expect(result.versionId).toBeUndefined();
+      expect(result.commit).toBeUndefined();
+    });
+
+    it("should propagate non-API errors", async () => {
+      retrievePromptVersionSpy.mockImplementationOnce(() => {
+        throw new TypeError("unexpected error");
+      });
+
       await expect(
         client.createPrompt({
           name: "error-prompt",
           prompt: "Test",
         })
-      ).rejects.toThrow();
-
-      expect(loggerErrorSpy).toHaveBeenCalledWith(
-        "Failed to create prompt",
-        expect.objectContaining({
-          name: "error-prompt",
-          error: apiError,
-        })
-      );
+      ).rejects.toThrow(TypeError);
     });
   });
 
@@ -433,7 +446,7 @@ describe("Opik prompt operations", () => {
         client.api.requestOptions
       );
       expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
-        { name: "test-prompt" },
+        { name: "test-prompt", projectName: "opik-sdk-typescript" },
         client.api.requestOptions
       );
       expect(result).toBeInstanceOf(Prompt);
@@ -477,7 +490,7 @@ describe("Opik prompt operations", () => {
       });
 
       expect(retrievePromptVersionSpy).toHaveBeenCalledWith(
-        { name: "test-prompt", commit: "specific-commit" },
+        { name: "test-prompt", commit: "specific-commit", projectName: "opik-sdk-typescript" },
         client.api.requestOptions
       );
       expect(result).toBeInstanceOf(Prompt);

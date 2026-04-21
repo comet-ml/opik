@@ -9,10 +9,14 @@
  *
  * Level 1 — WorkspaceVersionGate (this component, BEFORE the router):
  *   1. Check localStorage override ("opik-version-override") → use immediately
- *   2. Try to parse workspace name from window.location.pathname
+ *   2. Else parse the workspace name from window.location
+ *      (path segment for normal URLs, ?workspace= query for pair links)
  *   3. If found → fetch version from API with per-request Comet-Workspace header
  *   4. If not found (e.g. root "/") → default to v1 optimistically
- *   5. Render the correct App (V1App or V2App) based on resolved version
+ *
+ * Steps 1 and 4 are synchronous and run at module load, so the first paint
+ * already knows which App to render — no Loader flash in the common cases.
+ * Only step 3 (workspace in URL, version unknown) falls back to a Loader.
  *
  * Level 2 — WorkspaceVersionResolver (INSIDE the router, after WorkspacePreloader):
  *   1. Workspace is now fully resolved (auth, access, header set)
@@ -27,40 +31,33 @@ import React, { Suspense, useEffect } from "react";
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
 import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
 import {
-  DEFAULT_WORKSPACE_VERSION,
-  getVersionOverride,
-  getWorkspaceNameFromPath,
+  getWorkspaceNameFromUrl,
+  resolveSyncWorkspaceVersion,
 } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
 const V1App = React.lazy(() => import("@/v1/App"));
 const V2App = React.lazy(() => import("@/v2/App"));
 
+const initialVersion = resolveSyncWorkspaceVersion();
+if (initialVersion) {
+  useAppStore.getState().setWorkspaceVersion(initialVersion);
+}
+
 const WorkspaceVersionGate = () => {
   const version = useWorkspaceVersion();
 
   useEffect(() => {
+    if (useAppStore.getState().workspaceVersion) return;
+    const workspaceName = getWorkspaceNameFromUrl();
+    if (!workspaceName) return;
+
     let cancelled = false;
-
-    async function resolve() {
-      const override = getVersionOverride();
-      if (override) {
-        useAppStore.getState().setWorkspaceVersion(override);
-        return;
+    fetchWorkspaceVersion({ workspaceName }).then((resolved) => {
+      if (!cancelled) {
+        useAppStore.getState().setWorkspaceVersion(resolved);
       }
-
-      const workspaceName = getWorkspaceNameFromPath();
-      if (workspaceName) {
-        const resolved = await fetchWorkspaceVersion({ workspaceName });
-        if (!cancelled) {
-          useAppStore.getState().setWorkspaceVersion(resolved);
-        }
-      } else {
-        useAppStore.getState().setWorkspaceVersion(DEFAULT_WORKSPACE_VERSION);
-      }
-    }
-    resolve();
-
+    });
     return () => {
       cancelled = true;
     };

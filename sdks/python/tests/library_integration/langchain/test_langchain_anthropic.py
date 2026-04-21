@@ -85,6 +85,7 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -111,8 +112,10 @@ def test_langchain__anthropic_chat_is_used__token_usage_and_provider_is_logged__
                 usage=ANY_DICT,
                 provider="anthropic",
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -178,6 +181,7 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -204,8 +208,10 @@ def test_langchain__anthropic_chat_is_used__streaming_mode__token_usage_and_prov
                 usage=ANY_DICT,
                 provider="anthropic",
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS_SHORT),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

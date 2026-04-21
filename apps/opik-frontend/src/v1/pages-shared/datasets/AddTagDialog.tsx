@@ -5,7 +5,7 @@ import { Filters } from "@/types/filters";
 import {
   useBulkEditItems,
   useIsAllItemsSelected,
-} from "@/store/EvaluationSuiteDraftStore";
+} from "@/store/TestSuiteDraftStore";
 import { generateBatchGroupId } from "@/lib/utils";
 import ManageTagsDialog from "@/shared/ManageTagsDialog/ManageTagsDialog";
 

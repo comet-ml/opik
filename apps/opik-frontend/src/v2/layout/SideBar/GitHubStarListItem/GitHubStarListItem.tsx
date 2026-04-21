@@ -22,7 +22,7 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
   }, [data?.stargazers_count]);
 
   const itemElement = (
-    <li>
+    <li className="mb-2">
       <Button
         variant="outline"
         size="sm"
@@ -56,7 +56,11 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
   }
 
   return (
-    <TooltipWrapper content={`GitHub star ${starCount}`} side="right">
+    <TooltipWrapper
+      content={`GitHub star ${starCount}`}
+      side="right"
+      delayDuration={0}
+    >
       {itemElement}
     </TooltipWrapper>
   );

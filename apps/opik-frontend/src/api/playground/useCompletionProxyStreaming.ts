@@ -248,6 +248,10 @@ const useCompletionProxyStreaming = ({
               ? line.split(DATA_PREFIX)[1]
               : line;
 
+            if (JSONData.trim() === "[DONE]") {
+              continue;
+            }
+
             const parsed = safelyParseJSON(JSONData) as ChatCompletionResponse;
 
             // handle different message types

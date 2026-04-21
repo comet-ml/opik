@@ -21,6 +21,7 @@ export type MenuItem = {
   icon: LucideIcon;
   label: string;
   disabled?: boolean;
+  muted?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -55,38 +56,24 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     </>
   );
 
-  const baseClasses = cn(
-    "comet-body-s relative flex w-full items-center gap-2 rounded-md",
-    expanded ? "px-2 py-1" : "w-9 justify-center py-1",
+  const linkClasses = cn(
+    "comet-body-s relative flex w-full items-center gap-2 rounded-md h-7 hover:bg-primary-foreground data-[status=active]:bg-primary-100 data-[status=active]:text-primary py-1",
+    item.muted ? "text-muted-slate" : "text-foreground",
+    expanded ? "px-2" : "w-7 justify-center",
   );
 
   if (item.disabled) {
-    const disabledElement = (
+    return (
       <li className="flex">
         <span
-          className={cn(baseClasses, "cursor-not-allowed opacity-50")}
+          className={cn(linkClasses, "cursor-not-allowed opacity-50")}
           aria-disabled="true"
         >
           {content}
         </span>
       </li>
     );
-
-    if (!expanded) {
-      return (
-        <TooltipWrapper content={item.label} side="right">
-          {disabledElement}
-        </TooltipWrapper>
-      );
-    }
-
-    return disabledElement;
   }
-
-  const linkClasses = cn(
-    baseClasses,
-    "hover:bg-primary-foreground data-[status=active]:bg-muted data-[status=active]:font-medium",
-  );
 
   let itemElement: React.ReactElement | null = null;
 
@@ -125,17 +112,15 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     );
   }
 
-  if (!itemElement) return null;
-
-  if (!expanded) {
-    return (
-      <TooltipWrapper content={item.label} side="right">
-        {itemElement}
-      </TooltipWrapper>
-    );
+  if (expanded || !itemElement) {
+    return itemElement;
   }
 
-  return itemElement;
+  return (
+    <TooltipWrapper content={item.label} side="right" delayDuration={0}>
+      {itemElement}
+    </TooltipWrapper>
+  );
 };
 
 export default SidebarMenuItem;

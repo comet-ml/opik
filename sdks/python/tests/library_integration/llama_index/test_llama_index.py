@@ -97,6 +97,7 @@ def test_llama_index__happyflow(
             last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            source="sdk",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -109,6 +110,7 @@ def test_llama_index__happyflow(
             last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            source="sdk",
         ),
     ]
 
@@ -173,6 +175,7 @@ def test_llama_index__no_index_construction_logging_happyflow(
             last_updated_at=ANY_BUT_NONE,
             project_name=expected_project_name,
             spans=ANY_BUT_NONE,  # too complex spans tree, no check
+            source="sdk",
         ),
     ]
 
@@ -262,8 +265,10 @@ def test_llama_index_chat__happyflow(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -355,8 +360,10 @@ def test_llama_index_stream_chat__happyflow(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -430,8 +437,10 @@ async def test_llama_index_async_chat__happyflow(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -514,8 +523,10 @@ async def test_llama_index_async_stream_chat__happyflow(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -635,12 +646,16 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
                                 spans=[],
                                 model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                                 provider=LLMProvider.OPENAI,
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -772,14 +787,19 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
                                         spans=[],
                                         model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                                         provider=LLMProvider.OPENAI,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -845,8 +865,10 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
         TraceModel(
             id=ANY_BUT_NONE,
@@ -874,8 +896,10 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
                     spans=[],
                     model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                     provider=LLMProvider.OPENAI,
+                    source="sdk",
                 )
             ],
+            source="sdk",
         ),
     ]
 
@@ -967,10 +991,13 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
                         spans=[],
                         model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1062,10 +1089,13 @@ async def test_llama_index_async__used_with_start_as_current_trace__attached_to_
                         spans=[],
                         model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -1152,8 +1182,10 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             ),
             # Synthesize span with nested processing spans
             SpanModel(
@@ -1183,6 +1215,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
+                        source="sdk",
                     ),
                     # Another chunking span
                     SpanModel(
@@ -1198,6 +1231,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
+                        source="sdk",
                     ),
                     # Templating span
                     SpanModel(
@@ -1213,6 +1247,7 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         end_time=ANY_BUT_NONE,
                         project_name=expected_project_name,
                         spans=[],
+                        source="sdk",
                     ),
                     # LLM span
                     SpanModel(
@@ -1230,10 +1265,13 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
                         spans=[],
                         model=ANY_STRING.starting_with("gpt-3.5-turbo"),
                         provider=LLMProvider.OPENAI,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

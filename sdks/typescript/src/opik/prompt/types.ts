@@ -9,6 +9,8 @@ export const PromptType = {
   MUSTACHE: "mustache" as const,
   /** Jinja2 template syntax with {% %} blocks and {{ }} variables */
   JINJA2: "jinja2" as const,
+  /** Python template syntax with {variable} placeholders */
+  PYTHON: "python" as const,
 } as const;
 
 export type PromptType = (typeof PromptType)[keyof typeof PromptType];
@@ -54,6 +56,8 @@ export interface CreatePromptOptions extends CommonPromptOptions {
   name: string;
   /** Template text content with placeholders */
   prompt: string;
+  /** Optional project name to scope the prompt. If not provided, uses the client's configured project. */
+  projectName?: string;
 }
 
 /**
@@ -162,4 +166,6 @@ export interface CreateChatPromptOptions extends CommonPromptOptions {
   messages: ChatMessage[];
   /** Whether to validate template placeholders */
   validatePlaceholders?: boolean;
+  /** Optional project name to scope the prompt. If not provided, uses the client's configured project. */
+  projectName?: string;
 }

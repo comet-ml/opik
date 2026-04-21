@@ -28,13 +28,13 @@ import { Input } from "@/ui/input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/ui/use-toast";
 import { ToastAction } from "@/ui/toast";
-import useDashboardCreateMutation from "@/api/dashboards/useDashboardCreateMutation";
-import useDashboardUpdateMutation from "@/api/dashboards/useDashboardUpdateMutation";
+import useInsightsViewCreateMutation from "@/api/insights-views/useInsightsViewCreateMutation";
+import useInsightsViewUpdateMutation from "@/api/insights-views/useInsightsViewUpdateMutation";
 import {
   generateEmptyDashboard,
   regenerateAllIds,
 } from "@/lib/dashboard/utils";
-import { Dashboard, DASHBOARD_SCOPE, DASHBOARD_TYPE } from "@/types/dashboard";
+import { Dashboard, DASHBOARD_TYPE } from "@/types/dashboard";
 import { useDashboardStore } from "@/store/DashboardStore";
 
 export type InsightsViewDialogMode = "create" | "edit" | "clone";
@@ -83,9 +83,9 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
   const config = MODE_CONFIG[mode];
 
   const { mutate: createMutate, isPending: isCreating } =
-    useDashboardCreateMutation({ skipDefaultError: true });
+    useInsightsViewCreateMutation({ skipDefaultError: true });
   const { mutate: updateMutate, isPending: isUpdating } =
-    useDashboardUpdateMutation({ skipDefaultError: true });
+    useInsightsViewUpdateMutation({ skipDefaultError: true });
 
   const isPending = isCreating || isUpdating;
 
@@ -210,8 +210,6 @@ const InsightsViewDialog: React.FC<InsightsViewDialogProps> = ({
                 mode === "create"
                   ? DASHBOARD_TYPE.MULTI_PROJECT
                   : dashboard?.type,
-              scope:
-                mode === "create" ? DASHBOARD_SCOPE.INSIGHTS : dashboard?.scope,
             },
           },
           {

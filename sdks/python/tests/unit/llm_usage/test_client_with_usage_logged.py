@@ -5,7 +5,7 @@ from ...testlib import TraceModel, SpanModel, ANY_BUT_NONE, assert_equal
 def test_span__provider_supported__usage_format_is_correct__usage_converted_to_opik_format(
     fake_backend,
 ):
-    opik_client = opik.Opik(_use_batching=True)
+    opik_client = opik.Opik(batching=True)
 
     opik_client.span(
         type="llm",
@@ -40,8 +40,10 @@ def test_span__provider_supported__usage_format_is_correct__usage_converted_to_o
                 },
                 spans=[],
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -53,7 +55,7 @@ def test_span__provider_supported__usage_format_is_correct__usage_converted_to_o
 def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__usage_converted_to_opik_format(
     fake_backend,
 ):
-    opik_client = opik.Opik(_use_batching=True)
+    opik_client = opik.Opik(batching=True)
 
     opik_client.span(
         type="llm",
@@ -84,8 +86,10 @@ def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__u
                     "original_usage.output_tokens": 20,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -97,7 +101,7 @@ def test_span__provider_not_passed__usage_format_is_correct_for_some_provider__u
 def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provider__usage_converted_to_opik_format(
     fake_backend,
 ):
-    opik_client = opik.Opik(_use_batching=True)
+    opik_client = opik.Opik(batching=True)
 
     opik_client.span(
         type="llm",
@@ -130,8 +134,10 @@ def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provide
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -143,7 +149,7 @@ def test_span__unknown_provider_passed__usage_format_is_correct_for_some_provide
 def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flattened__prefix_added_to_keys__only_int_values_are_kept(
     fake_backend,
 ):
-    opik_client = opik.Opik(_use_batching=True)
+    opik_client = opik.Opik(batching=True)
 
     opik_client.span(
         type="llm",
@@ -178,8 +184,10 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -191,7 +199,7 @@ def test_span__unknown_provider_passed__usage_format_is_also_unknown__usage_flat
 def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_included_to_usage_dict_without_prefix(
     fake_backend,
 ):
-    opik_client = opik.Opik(_use_batching=True)
+    opik_client = opik.Opik(batching=True)
 
     opik_client.span(
         type="llm",
@@ -230,8 +238,10 @@ def test_span__user_added_openai_keys_to_unknown_usage_themselves__they_are_incl
                 },
                 provider="my-llm-provider",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

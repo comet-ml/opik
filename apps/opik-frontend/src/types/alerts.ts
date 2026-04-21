@@ -65,6 +65,7 @@ export interface AlertMetadata {
 export interface Alert {
   id?: string;
   name: string;
+  project_id?: string;
   enabled: boolean;
   alert_type?: ALERT_TYPE;
   metadata?: AlertMetadata;

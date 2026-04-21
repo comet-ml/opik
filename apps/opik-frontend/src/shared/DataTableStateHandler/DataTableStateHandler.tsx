@@ -6,6 +6,7 @@ type DataTableStateHandlerProps = {
   isEmpty: boolean;
   emptyState: ReactNode;
   children: ReactNode;
+  skeleton?: boolean;
 };
 
 const DataTableStateHandler: React.FC<DataTableStateHandlerProps> = ({
@@ -13,12 +14,13 @@ const DataTableStateHandler: React.FC<DataTableStateHandlerProps> = ({
   isEmpty,
   emptyState,
   children,
+  skeleton = false,
 }) => {
-  if (isLoading) {
+  if (isLoading && !skeleton) {
     return <Loader />;
   }
 
-  if (isEmpty) {
+  if (isEmpty && !isLoading) {
     return <>{emptyState}</>;
   }
 

@@ -8,7 +8,7 @@ from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 
 class AssertionScoreAverage(UniversalBaseModel):
     """
-    Per-assertion average pass rates for evaluation suite experiments. Null for regular experiments.
+    Per-assertion average pass rates for test suite experiments. Null for regular experiments.
     """
 
     name: str

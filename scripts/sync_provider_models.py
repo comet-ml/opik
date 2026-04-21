@@ -43,6 +43,7 @@ VERTEXAI_JAVA = JAVA_BASE / "vertexai" / "VertexAIModelName.java"
 PROVIDERS_TS = Path("apps/opik-frontend/src/types/providers.ts")
 MODELS_DATA_TS = Path("apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts")
 MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_context_window.json")
+LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/models"
 
@@ -908,6 +909,120 @@ def sync_vertexai(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# YAML regeneration
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Maps internal provider keys → YAML section names
+_PROVIDER_TO_YAML_KEY = {
+    "openai": "openai",
+    "anthropic": "anthropic",
+    "gemini": "gemini",
+    "vertexai": "vertex-ai",
+    "openrouter": "openrouter",
+}
+
+
+def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]:
+    """
+    Parse existing YAML to extract per-provider {model_id: reasoning} flags.
+    Uses simple line-by-line parsing to avoid requiring pyyaml.
+    Returns {yaml_section_key: {model_id: True}} for models with reasoning: true.
+    """
+    result: dict[str, dict[str, bool]] = {}
+    current_provider: str | None = None
+    current_id: str | None = None
+
+    for line in yaml_content.splitlines():
+        # Top-level provider key (no leading spaces, ends with colon)
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            current_provider = provider_match.group(1)
+            current_id = None
+            continue
+
+        if current_provider is None:
+            continue
+
+        # Model id line: "  - id: "value""
+        id_match = re.match(r'^\s+- id:\s+"([^"]+)"', line)
+        if id_match:
+            current_id = id_match.group(1)
+            continue
+
+        # reasoning flag line: "    reasoning: true"
+        if current_id and re.match(r'^\s+reasoning:\s+true', line):
+            result.setdefault(current_provider, {})[current_id] = True
+
+    return result
+
+
+def regenerate_llm_models_yaml(
+    existing_content: str,
+    models_by_provider: dict[str, list[ModelEntry]],
+) -> str:
+    """
+    Regenerate llm-models-default.yaml from the synced model entries.
+
+    - Replaces sections for providers managed by the sync script.
+    - Preserves reasoning flags carried over from the existing file.
+    - Sections for providers not managed here (bedrock, ollama, opik-free,
+      custom-llm) are preserved as-is if present.
+    """
+    # Carry over existing reasoning flags by provider/model-id
+    reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
+
+    lines: list[str] = []
+
+    for provider_key, yaml_key in _PROVIDER_TO_YAML_KEY.items():
+        entries = models_by_provider.get(provider_key, [])
+        provider_reasoning = reasoning_flags.get(yaml_key, {})
+
+        lines.append(f"{yaml_key}:")
+        if not entries:
+            lines.append("  []")
+            continue
+        for entry in entries:
+            if provider_key == "vertexai":
+                # value is qualified name (vertex_ai/gemini-...), id is base name
+                model_id = entry.value.removeprefix("vertex_ai/")
+                lines.append(f'  - id: "{model_id}"')
+                lines.append(f'    qualifiedName: "{entry.value}"')
+            else:
+                model_id = entry.value
+                lines.append(f'  - id: "{model_id}"')
+
+            if entry.structured_output:
+                lines.append("    structuredOutput: true")
+            if provider_reasoning.get(model_id):
+                lines.append("    reasoning: true")
+
+    # Preserve any provider sections not managed by the sync script
+    managed_yaml_keys = set(_PROVIDER_TO_YAML_KEY.values())
+    unmanaged_lines: list[str] = []
+    current_section: list[str] = []
+    current_key: str | None = None
+
+    for line in existing_content.splitlines():
+        provider_match = re.match(r'^(\S[^:]+):\s*$', line)
+        if provider_match:
+            key = provider_match.group(1)
+            if current_key and current_key not in managed_yaml_keys:
+                unmanaged_lines.extend(current_section)
+            current_key = key
+            current_section = [line]
+        else:
+            current_section.append(line)
+
+    if current_key and current_key not in managed_yaml_keys:
+        unmanaged_lines.extend(current_section)
+
+    if unmanaged_lines:
+        lines.extend(unmanaged_lines)
+
+    return "\n".join(lines) + "\n"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1066,6 +1181,10 @@ def main():
     }
     new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
 
+    # Regenerate llm-models-default.yaml
+    llm_models_yaml_content = read_file(LLM_MODELS_YAML)
+    new_llm_models_yaml = regenerate_llm_models_yaml(llm_models_yaml_content, models_by_provider)
+
     # 5. Print summary
     total_added = 0
     total_stale = 0
@@ -1126,8 +1245,9 @@ def main():
     write_file(VERTEXAI_JAVA, new_va_java)
     write_file(PROVIDERS_TS, new_providers_ts)
     write_file(MODELS_DATA_TS, new_models_data_ts)
+    write_file(LLM_MODELS_YAML, new_llm_models_yaml)
 
-    print(f"\nWrote changes ({total_added} added) across 7 files.", file=sys.stderr)
+    print(f"\nWrote changes ({total_added} added) across 8 files.", file=sys.stderr)
     sys.exit(0)
 
 

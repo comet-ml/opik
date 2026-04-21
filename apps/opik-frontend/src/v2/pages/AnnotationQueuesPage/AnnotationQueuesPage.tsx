@@ -7,6 +7,7 @@ import {
 } from "use-query-params";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
+import { Plus } from "lucide-react";
 import {
   ColumnDef,
   ColumnPinningState,
@@ -30,19 +31,16 @@ import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell
 import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import AnnotateQueueCell from "@/v2/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueProgressCell";
 import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/AnnotationQueueRowActionsCell";
 import AnnotationQueuesActionsPanel from "@/v2/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import NoDataPage from "@/shared/NoDataPage/NoDataPage";
-import NoAnnotationQueuesPage from "@/v2/pages-shared/annotation-queues/NoAnnotationQueuesPage";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
-import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyAnnotationQueuesLightUrl from "/images/empty-annotation-queues-light.svg";
+import emptyAnnotationQueuesDarkUrl from "/images/empty-annotation-queues-dark.svg";
 
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -52,14 +50,14 @@ import {
   getRowId,
 } from "@/shared/DataTable/utils";
 import useAnnotationQueuesList from "@/api/annotation-queues/useAnnotationQueuesList";
-import useAppStore, { useActiveProjectId } from "@/store/AppStore";
+import useAppStore from "@/store/AppStore";
+import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 import {
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   COLUMN_SELECT_ID,
   COLUMN_TYPE,
   ColumnData,
@@ -78,18 +76,6 @@ const SHARED_COLUMNS: ColumnData<AnnotationQueue>[] = [
     label: "ID",
     type: COLUMN_TYPE.string,
     cell: IdCell as never,
-  },
-  {
-    id: COLUMN_PROJECT_ID,
-    label: "Project",
-    type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
-    accessorFn: (row) => row.project_id,
-    customMeta: {
-      nameKey: "project_name",
-      idKey: "project_id",
-      resource: RESOURCE_TYPE.project,
-    },
   },
   {
     id: "instructions",
@@ -184,7 +170,6 @@ const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 
 const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   "instructions",
   "items_count",
   "progress",
@@ -196,7 +181,6 @@ const DEFAULT_SELECTED_COLUMNS: string[] = [
 const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
-  COLUMN_PROJECT_ID,
   "instructions",
   "items_count",
   "progress",
@@ -227,20 +211,12 @@ const FILTERS_CONFIG = {
         placeholder: "Select scope",
       },
     },
-    [COLUMN_PROJECT_ID]: {
-      keyComponent: ProjectsSelectBox,
-      keyComponentProps: {
-        className: "w-full min-w-72",
-      },
-      defaultOperator: "=",
-      operators: [{ label: "=", value: "=" }],
-    },
   },
 };
 
 export const AnnotationQueuesPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const activeProjectId = useActiveProjectId();
+  const projectId = useActiveProjectId()!;
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -316,6 +292,7 @@ export const AnnotationQueuesPage: React.FC = () => {
   } = useAnnotationQueuesList(
     {
       workspaceName,
+      projectId,
       search: search as string,
       page: page as number,
       size: size as number,
@@ -353,12 +330,12 @@ export const AnnotationQueuesPage: React.FC = () => {
         to: "/$workspaceName/projects/$projectId/annotation-queues/$annotationQueueId",
         params: {
           workspaceName,
-          projectId: activeProjectId!,
+          projectId,
           annotationQueueId: queue.id,
         },
       });
     },
-    [navigate, workspaceName, activeProjectId],
+    [navigate, workspaceName, projectId],
   );
 
   const columns = useMemo(() => {
@@ -409,106 +386,105 @@ export const AnnotationQueuesPage: React.FC = () => {
     return <Loader />;
   }
 
-  if (noData && rows.length === 0 && page === 1) {
-    return (
-      <>
-        <NoAnnotationQueuesPage
-          openModal={handleNewQueue}
-          Wrapper={NoDataPage}
-        />
-        <AddEditAnnotationQueueDialog
-          key={resetDialogKeyRef.current}
-          open={openDialog}
-          setOpen={setOpenDialog}
-        />
-      </>
-    );
-  }
+  const isEmpty = noData && rows.length === 0 && page === 1;
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
           Annotation queues
         </h1>
+        {canCreateAnnotationQueues && (
+          <Button size="xs" onClick={handleNewQueue}>
+            <Plus className="mr-1 size-4" />
+            Create queue
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_annotation_queues]}
-      />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search as string}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          />
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            config={FILTERS_CONFIG as never}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeleteAnnotationQueues && (
-            <>
-              <AnnotationQueuesActionsPanel queues={selectedRows} />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <DataTableRowHeightSelector
-            type={height as ROW_HEIGHT}
-            setType={setHeight}
-          />
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          />
-          {canCreateAnnotationQueues && (
-            <Button size="sm" onClick={handleNewQueue}>
-              Create new queue
-            </Button>
-          )}
-        </div>
-      </div>
-      <DataTable
-        columns={columns}
-        data={rows}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        rowHeight={height as ROW_HEIGHT}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={<DataTableNoData title={noDataText} />}
-        onRowClick={handleRowClick}
-        stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page as number}
-          pageChange={setPage}
-          size={size as number}
-          sizeChange={setSize}
-          total={data?.total ?? 0}
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyAnnotationQueuesLightUrl}
+          darkImageUrl={emptyAnnotationQueuesDarkUrl}
+          title="No annotation queues yet"
+          description={
+            "Get started by creating a queue for human review.\nOrganize traces and threads, label outputs, and gather feedback to improve performance."
+          }
+          primaryActionLabel="Create your first queue"
+          onPrimaryAction={handleNewQueue}
+          docsUrl={buildDocsUrl("/evaluation/annotation_queues")}
         />
-      </div>
-
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search as string}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              />
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                config={FILTERS_CONFIG as never}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {canDeleteAnnotationQueues && (
+                <>
+                  <AnnotationQueuesActionsPanel queues={selectedRows} />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <DataTableRowHeightSelector
+                type={height as ROW_HEIGHT}
+                setType={setHeight}
+              />
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              />
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={rows}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            rowHeight={height as ROW_HEIGHT}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={<DataTableNoData title={noDataText} />}
+            onRowClick={handleRowClick}
+            stickyHeader
+            showLoadingOverlay={isPlaceholderData && isFetching}
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page as number}
+              pageChange={setPage}
+              size={size as number}
+              sizeChange={setSize}
+              total={data?.total ?? 0}
+            />
+          </div>
+        </>
+      )}
       <AddEditAnnotationQueueDialog
         key={resetDialogKeyRef.current}
         open={openDialog}
         setOpen={setOpenDialog}
+        projectId={projectId}
       />
     </div>
   );

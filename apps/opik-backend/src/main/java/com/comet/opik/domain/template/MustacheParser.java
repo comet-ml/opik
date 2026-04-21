@@ -6,6 +6,7 @@ import com.github.mustachejava.Mustache;
 import com.github.mustachejava.MustacheException;
 import com.github.mustachejava.MustacheFactory;
 import com.github.mustachejava.codes.ValueCode;
+import jakarta.inject.Singleton;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
@@ -21,9 +22,23 @@ import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
+@Singleton
 public class MustacheParser implements TemplateParser {
 
     public static final MustacheFactory MF = new DefaultMustacheFactory();
+
+    // No-escape factory: renders values without HTML-escaping.
+    // Matches the frontend's `escape: (val) => val` behavior.
+    private static final MustacheFactory MF_NO_ESCAPE = new DefaultMustacheFactory() {
+        @Override
+        public void encode(String value, Writer writer) {
+            try {
+                writer.write(value);
+            } catch (IOException e) {
+                throw new UncheckedIOException(e);
+            }
+        }
+    };
 
     @Override
     public Set<String> extractVariables(String template) {
@@ -59,6 +74,25 @@ public class MustacheParser implements TemplateParser {
             return renderTemplate(context, mustache);
         } catch (MustacheException ex) {
             log.error("Failed to parse Mustache template for rendering:", ex);
+            throw new IllegalArgumentException("Invalid Mustache template", ex);
+        }
+    }
+
+    /**
+     * Renders a template without HTML-escaping substituted values.
+     * Use this for playground template rendering where values may contain
+     * special characters that should not be escaped.
+     */
+    public String renderUnescaped(String template, Map<String, ?> context) {
+        if (template == null) {
+            return "";
+        }
+
+        try {
+            Mustache mustache = MF_NO_ESCAPE.compile(new StringReader(template), "template");
+            return renderTemplate(context, mustache);
+        } catch (MustacheException ex) {
+            log.error("Failed to parse Mustache template for unescaped rendering:", ex);
             throw new IllegalArgumentException("Invalid Mustache template", ex);
         }
     }

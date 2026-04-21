@@ -32,7 +32,7 @@ class BasePrompt(ABC):
 
     @property
     @abstractmethod
-    def version_id(self) -> str:
+    def version_id(self) -> Optional[str]:
         """The unique identifier of the prompt version."""
         pass
 
@@ -72,9 +72,15 @@ class BasePrompt(ABC):
         """The list of tags associated with the prompt."""
         pass
 
+    @property
+    @abstractmethod
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        pass
+
     # Internal API fields for backend synchronization
-    __internal_api__prompt_id__: str
-    __internal_api__version_id__: str
+    __internal_api__prompt_id__: Optional[str]
+    __internal_api__version_id__: Optional[str]
 
     @abstractmethod
     def format(self, *args: Any, **kwargs: Any) -> Any:

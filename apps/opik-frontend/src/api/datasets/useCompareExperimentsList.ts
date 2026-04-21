@@ -1,4 +1,4 @@
-import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import api, {
   COMPARE_EXPERIMENTS_KEY,
   DATASETS_REST_ENDPOINT,
@@ -29,8 +29,8 @@ export type UseCompareExperimentsListResponse = {
   sortable_by: string[];
 };
 
-const getCompareExperimentsList = async (
-  { signal }: QueryFunctionContext,
+export const getCompareExperimentsList = async (
+  { signal }: { signal?: AbortSignal },
   {
     workspaceName,
     datasetId,

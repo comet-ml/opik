@@ -68,13 +68,13 @@ providers:
     display_name: "Anthropic"
     api_key_env_var: "ANTHROPIC_API_KEY"
     models:
-      - name: "Claude Opus 4.5"
-        ui_selector: "Claude Opus 4.5"
+      - name: "Claude Opus 4.6"
+        ui_selector: "Claude Opus 4.6"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "Claude Sonnet 4.5"
-        ui_selector: "Claude Sonnet 4.5"
+      - name: "Claude Sonnet 4.6"
+        ui_selector: "Claude Sonnet 4.6"
         enabled: true
         test_playground: true
         test_online_scoring: true

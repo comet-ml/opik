@@ -38,6 +38,7 @@ interface BaseLoadableSelectBoxProps {
   showTooltip?: boolean;
   autoFocus?: boolean;
   hideSearch?: boolean;
+  trigger?: ReactElement;
 }
 
 interface SingleSelectProps extends BaseLoadableSelectBoxProps {
@@ -82,6 +83,7 @@ export const LoadableSelectBox = ({
   emptyState,
   autoFocus = true,
   hideSearch = false,
+  trigger,
   ...props
 }: LoadableSelectBoxProps) => {
   const showSelectAll =
@@ -237,7 +239,7 @@ export const LoadableSelectBox = ({
     value,
   ]);
 
-  const buttonElement = (
+  const buttonElement = trigger ?? (
     <Button
       id={id}
       className={cn("group justify-between px-3", buttonClassName, {

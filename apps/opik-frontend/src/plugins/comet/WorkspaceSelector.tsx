@@ -1,8 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Link, useNavigate } from "@tanstack/react-router";
+import React from "react";
+import { Link } from "@tanstack/react-router";
 import { ChevronDown, ChevronUp, Settings2 } from "lucide-react";
-import sortBy from "lodash/sortBy";
-import toLower from "lodash/toLower";
 
 import { Button } from "@/ui/button";
 import {
@@ -18,21 +16,10 @@ import {
 } from "@/ui/dropdown-menu";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
-import { useToast } from "@/ui/use-toast";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
-import useCurrentOrganization from "@/plugins/comet/useCurrentOrganization";
-import useOrganizations from "@/plugins/comet/useOrganizations";
-import useUser from "@/plugins/comet/useUser";
-import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
-import useAppStore from "@/store/AppStore";
-import {
-  Workspace,
-  Organization,
-  ORGANIZATION_ROLE_TYPE,
-} from "@/plugins/comet/types";
-import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import useWorkspaceSelectorData from "@/plugins/comet/useWorkspaceSelectorData";
 import { buildUrl } from "@/plugins/comet/utils";
 
 type WorkspaceLinkProps = {
@@ -63,127 +50,32 @@ const WorkspaceLink: React.FC<WorkspaceLinkProps> = ({
 };
 
 const WorkspaceSelector: React.FC = () => {
-  const navigate = useNavigate();
-  const { toast } = useToast();
-  const [search, setSearch] = useState("");
-  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
-  const [isOrgSubmenuOpen, setIsOrgSubmenuOpen] = useState(false);
+  const {
+    user,
+    workspaceName,
+    currentOrganization,
+    isLoading,
 
-  const { data: user } = useUser();
-  const { data: userInvitedWorkspaces, isLoading } = useUserInvitedWorkspaces({
-    enabled: !!user?.loggedIn,
-  });
-  const { data: organizations } = useOrganizations({
-    enabled: !!user?.loggedIn,
-  });
-  const currentOrganization = useCurrentOrganization();
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+    search,
+    setSearch,
+    isDropdownOpen,
+    setIsDropdownOpen,
+    isOrgSubmenuOpen,
+    setIsOrgSubmenuOpen,
 
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      // If closing and submenu is open, close only the submenu first
-      if (!open && isOrgSubmenuOpen) {
-        setIsOrgSubmenuOpen(false);
-        return;
-      }
+    handleOpenChange,
+    handleChangeWorkspace,
+    handleChangeOrganization,
+    handleOrgSettingsClick,
 
-      setIsDropdownOpen(open);
-      if (!open) {
-        setSearch("");
-      }
-    },
-    [isOrgSubmenuOpen],
-  );
+    sortedWorkspaces,
+    sortedOrganizations,
 
-  const handleChangeWorkspace = useCallback(
-    (newWorkspace: Workspace) => {
-      navigate({
-        to: "/$workspaceName",
-        params: { workspaceName: newWorkspace.workspaceName },
-      });
-    },
-    [navigate],
-  );
+    shouldShowDropdown,
+    hasMultipleOrganizations,
+    isOrgAdmin,
+  } = useWorkspaceSelectorData();
 
-  const handleChangeOrganization = useCallback(
-    (newOrganization: Organization) => {
-      const newOrganizationWorkspaces =
-        userInvitedWorkspaces?.filter(
-          (workspace) => workspace.organizationId === newOrganization.id,
-        ) || [];
-
-      if (newOrganizationWorkspaces.length === 0) {
-        toast({
-          description: `You are not part of any workspaces in ${newOrganization.name}, please ask to be invited to one`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const newWorkspace =
-        newOrganizationWorkspaces.find((workspace) => workspace.default) ||
-        newOrganizationWorkspaces[0];
-
-      if (newWorkspace) {
-        navigate({
-          to: "/$workspaceName",
-          params: { workspaceName: newWorkspace.workspaceName },
-        });
-      }
-    },
-    [navigate, userInvitedWorkspaces, toast],
-  );
-
-  const handleOrgSettingsClick = useCallback(() => {
-    if (currentOrganization && workspaceName) {
-      window.location.href = buildUrl(
-        `organizations/${currentOrganization.id}`,
-        workspaceName,
-      );
-    }
-  }, [currentOrganization, workspaceName]);
-
-  // Filter member workspaces (workspaces user is invited to) by current organization
-  // Excludes default workspace from selectable options
-  const memberWorkspaces = useMemo(() => {
-    if (!userInvitedWorkspaces || !currentOrganization) return [];
-    return userInvitedWorkspaces.filter(
-      (workspace) =>
-        workspace.organizationId === currentOrganization.id &&
-        workspace.workspaceName !== DEFAULT_WORKSPACE_NAME,
-    );
-  }, [userInvitedWorkspaces, currentOrganization]);
-
-  // Filter workspaces by search query
-  const filteredWorkspaces = useMemo(() => {
-    if (!search) return memberWorkspaces;
-
-    const searchLower = toLower(search);
-    return memberWorkspaces.filter((workspace) => {
-      const displayName = calculateWorkspaceName(workspace.workspaceName);
-      return toLower(displayName).includes(searchLower);
-    });
-  }, [memberWorkspaces, search]);
-
-  // Sort workspaces and organizations
-  const sortedWorkspaces = useMemo(
-    () => sortBy(filteredWorkspaces, "workspaceName"),
-    [filteredWorkspaces],
-  );
-
-  const sortedOrganizations = useMemo(() => {
-    if (!organizations) return [];
-    return sortBy(organizations, "name");
-  }, [organizations]);
-
-  // Simple computed values - no memoization needed
-  const hasMultipleOrganizations = organizations && organizations.length > 1;
-  const hasMemberWorkspaces = memberWorkspaces.length > 0;
-  // Show dropdown if there are workspaces to select OR if user can switch orgs
-  const shouldShowDropdown = hasMemberWorkspaces || hasMultipleOrganizations;
-  const isOrgAdmin = currentOrganization?.role === ORGANIZATION_ROLE_TYPE.admin;
-
-  // Loading state
   if (isLoading) {
     return (
       <div className="flex h-8 items-center">
@@ -192,22 +84,10 @@ const WorkspaceSelector: React.FC = () => {
     );
   }
 
-  // Not logged in or missing data - show simple link
-  if (!user?.loggedIn || !organizations) {
+  if (!user?.loggedIn || !currentOrganization || !shouldShowDropdown) {
     return <WorkspaceLink workspaceName={workspaceName} />;
   }
 
-  // No current organization (e.g., opensource) - show simple link
-  if (!currentOrganization) {
-    return <WorkspaceLink workspaceName={workspaceName} />;
-  }
-
-  // Single workspace or only Personal workspace - show simple link
-  if (!shouldShowDropdown) {
-    return <WorkspaceLink workspaceName={workspaceName} />;
-  }
-
-  // Multiple workspaces - show name as link and chevron as dropdown trigger
   return (
     <WorkspaceLink className="gap-0.5" workspaceName={workspaceName}>
       <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
@@ -222,7 +102,6 @@ const WorkspaceSelector: React.FC = () => {
         </DropdownMenuTrigger>
 
         <DropdownMenuContent className="w-[320px] p-1" align="start">
-          {/* Organization Header */}
           <div className="flex items-center justify-between gap-2 px-3 py-2">
             <TooltipWrapper content={currentOrganization.name}>
               <span className="comet-body-s-accented min-w-0 flex-1 truncate text-foreground">
@@ -231,7 +110,6 @@ const WorkspaceSelector: React.FC = () => {
             </TooltipWrapper>
 
             <div className="flex shrink-0 items-center gap-1">
-              {/* Settings button - only for org admins */}
               {isOrgAdmin && (
                 <TooltipWrapper content="Organization settings">
                   <Button
@@ -244,12 +122,10 @@ const WorkspaceSelector: React.FC = () => {
                 </TooltipWrapper>
               )}
 
-              {/* Separator between icon buttons */}
               {isOrgAdmin && hasMultipleOrganizations && (
                 <Separator orientation="vertical" className="h-3.5" />
               )}
 
-              {/* Switch org submenu - only if multiple orgs */}
               {hasMultipleOrganizations && (
                 <DropdownMenuSub
                   open={isOrgSubmenuOpen}
@@ -300,7 +176,6 @@ const WorkspaceSelector: React.FC = () => {
 
           <DropdownMenuSeparator className="my-1" />
 
-          {/* Search */}
           <div className="px-1" onKeyDown={(e) => e.stopPropagation()}>
             <SearchInput
               searchText={search}
@@ -312,7 +187,6 @@ const WorkspaceSelector: React.FC = () => {
 
           <DropdownMenuSeparator className="my-1" />
 
-          {/* Workspaces List */}
           <div className="max-h-[50vh] overflow-auto">
             {sortedWorkspaces.length > 0 ? (
               sortedWorkspaces.map((workspace) => {
@@ -350,7 +224,6 @@ const WorkspaceSelector: React.FC = () => {
             )}
           </div>
 
-          {/* Manage Workspaces */}
           <DropdownMenuSeparator className="my-1" />
           <ListAction asChild>
             <a href={buildUrl("account-settings/workspaces", workspaceName)}>

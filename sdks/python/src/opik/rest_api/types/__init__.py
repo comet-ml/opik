@@ -9,6 +9,7 @@ from .agent_blueprint_public import AgentBlueprintPublic
 from .agent_blueprint_public_type import AgentBlueprintPublicType
 from .agent_blueprint_write import AgentBlueprintWrite
 from .agent_blueprint_write_type import AgentBlueprintWriteType
+from .agent_config_create_write import AgentConfigCreateWrite
 from .agent_config_env import AgentConfigEnv
 from .agent_config_value_history import AgentConfigValueHistory
 from .agent_config_value_history_type import AgentConfigValueHistoryType
@@ -176,6 +177,13 @@ from .boolean_feedback_detail_public import BooleanFeedbackDetailPublic
 from .boolean_feedback_detail_update import BooleanFeedbackDetailUpdate
 from .breakdown_config_public import BreakdownConfigPublic
 from .breakdown_config_public_field import BreakdownConfigPublicField
+from .bridge_command import BridgeCommand
+from .bridge_command_batch_response import BridgeCommandBatchResponse
+from .bridge_command_item import BridgeCommandItem
+from .bridge_command_item_type import BridgeCommandItemType
+from .bridge_command_status import BridgeCommandStatus
+from .bridge_command_submit_response import BridgeCommandSubmitResponse
+from .bridge_command_type import BridgeCommandType
 from .categorical_feedback_definition import CategoricalFeedbackDefinition
 from .categorical_feedback_definition_create import CategoricalFeedbackDefinitionCreate
 from .categorical_feedback_definition_public import CategoricalFeedbackDefinitionPublic
@@ -209,10 +217,15 @@ from .complete_multipart_upload_request import CompleteMultipartUploadRequest
 from .complete_multipart_upload_request_entity_type import CompleteMultipartUploadRequestEntityType
 from .completion_tokens_details import CompletionTokensDetails
 from .count_value_stat_public import CountValueStatPublic
+from .create_session_response import CreateSessionResponse
 from .dashboard_page_public import DashboardPagePublic
 from .dashboard_public import DashboardPublic
 from .dashboard_public_scope import DashboardPublicScope
 from .dashboard_public_type import DashboardPublicType
+from .dashboard_update_public import DashboardUpdatePublic
+from .dashboard_update_public_type import DashboardUpdatePublicType
+from .dashboard_write import DashboardWrite
+from .dashboard_write_type import DashboardWriteType
 from .data_point_double import DataPointDouble
 from .data_point_number_public import DataPointNumberPublic
 from .dataset import Dataset
@@ -280,8 +293,10 @@ from .execution_policy_public import ExecutionPolicyPublic
 from .execution_policy_write import ExecutionPolicyWrite
 from .experiment import Experiment
 from .experiment_evaluation_method import ExperimentEvaluationMethod
+from .experiment_execution_response import ExperimentExecutionResponse
 from .experiment_group_aggregations_response import ExperimentGroupAggregationsResponse
 from .experiment_group_response import ExperimentGroupResponse
+from .experiment_info import ExperimentInfo
 from .experiment_item import ExperimentItem
 from .experiment_item_bulk_record import ExperimentItemBulkRecord
 from .experiment_item_bulk_record_experiment_item_bulk_write_view import (
@@ -391,6 +406,9 @@ from .json_node_detail import JsonNodeDetail
 from .json_node_public import JsonNodePublic
 from .json_node_write import JsonNodeWrite
 from .json_schema import JsonSchema
+from .kpi_card_response import KpiCardResponse
+from .kpi_metric import KpiMetric
+from .kpi_metric_type import KpiMetricType
 from .llm_as_judge_code import LlmAsJudgeCode
 from .llm_as_judge_code_public import LlmAsJudgeCodePublic
 from .llm_as_judge_code_write import LlmAsJudgeCodeWrite
@@ -413,7 +431,6 @@ from .llm_as_judge_output_schema_type import LlmAsJudgeOutputSchemaType
 from .llm_as_judge_output_schema_write import LlmAsJudgeOutputSchemaWrite
 from .llm_as_judge_output_schema_write_type import LlmAsJudgeOutputSchemaWriteType
 from .local_runner import LocalRunner
-from .local_runner_connect_response import LocalRunnerConnectResponse
 from .local_runner_heartbeat_response import LocalRunnerHeartbeatResponse
 from .local_runner_job import LocalRunnerJob
 from .local_runner_job_metadata import LocalRunnerJobMetadata
@@ -421,8 +438,8 @@ from .local_runner_job_page import LocalRunnerJobPage
 from .local_runner_job_status import LocalRunnerJobStatus
 from .local_runner_log_entry import LocalRunnerLogEntry
 from .local_runner_page import LocalRunnerPage
-from .local_runner_pair_response import LocalRunnerPairResponse
 from .local_runner_status import LocalRunnerStatus
+from .local_runner_type import LocalRunnerType
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
@@ -490,6 +507,7 @@ from .prompt_public_template_structure import PromptPublicTemplateStructure
 from .prompt_template_structure import PromptTemplateStructure
 from .prompt_tokens_details import PromptTokensDetails
 from .prompt_type import PromptType
+from .prompt_variant import PromptVariant
 from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
@@ -524,6 +542,7 @@ from .span import Span
 from .span_batch import SpanBatch
 from .span_enrichment_options import SpanEnrichmentOptions
 from .span_experiment_item_bulk_write_view import SpanExperimentItemBulkWriteView
+from .span_experiment_item_bulk_write_view_source import SpanExperimentItemBulkWriteViewSource
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 from .span_filter import SpanFilter
 from .span_filter_operator import SpanFilterOperator
@@ -536,14 +555,18 @@ from .span_llm_as_judge_code_public import SpanLlmAsJudgeCodePublic
 from .span_llm_as_judge_code_write import SpanLlmAsJudgeCodeWrite
 from .span_page_public import SpanPagePublic
 from .span_public import SpanPublic
+from .span_public_source import SpanPublicSource
 from .span_public_type import SpanPublicType
+from .span_source import SpanSource
 from .span_type import SpanType
 from .span_update import SpanUpdate
+from .span_update_source import SpanUpdateSource
 from .span_update_type import SpanUpdateType
 from .span_user_defined_metric_python_code import SpanUserDefinedMetricPythonCode
 from .span_user_defined_metric_python_code_public import SpanUserDefinedMetricPythonCodePublic
 from .span_user_defined_metric_python_code_write import SpanUserDefinedMetricPythonCodeWrite
 from .span_write import SpanWrite
+from .span_write_source import SpanWriteSource
 from .span_write_type import SpanWriteType
 from .spans_count_response import SpansCountResponse
 from .start_multipart_upload_response import StartMultipartUploadResponse
@@ -576,6 +599,7 @@ from .trace_batch import TraceBatch
 from .trace_count_response import TraceCountResponse
 from .trace_enrichment_options import TraceEnrichmentOptions
 from .trace_experiment_item_bulk_write_view import TraceExperimentItemBulkWriteView
+from .trace_experiment_item_bulk_write_view_source import TraceExperimentItemBulkWriteViewSource
 from .trace_filter import TraceFilter
 from .trace_filter_operator import TraceFilterOperator
 from .trace_filter_public import TraceFilterPublic
@@ -584,7 +608,9 @@ from .trace_filter_write import TraceFilterWrite
 from .trace_filter_write_operator import TraceFilterWriteOperator
 from .trace_page_public import TracePagePublic
 from .trace_public import TracePublic
+from .trace_public_source import TracePublicSource
 from .trace_public_visibility_mode import TracePublicVisibilityMode
+from .trace_source import TraceSource
 from .trace_thread import TraceThread
 from .trace_thread_filter import TraceThreadFilter
 from .trace_thread_filter_operator import TraceThreadFilterOperator
@@ -603,8 +629,10 @@ from .trace_thread_user_defined_metric_python_code import TraceThreadUserDefined
 from .trace_thread_user_defined_metric_python_code_public import TraceThreadUserDefinedMetricPythonCodePublic
 from .trace_thread_user_defined_metric_python_code_write import TraceThreadUserDefinedMetricPythonCodeWrite
 from .trace_update import TraceUpdate
+from .trace_update_source import TraceUpdateSource
 from .trace_visibility_mode import TraceVisibilityMode
 from .trace_write import TraceWrite
+from .trace_write_source import TraceWriteSource
 from .usage import Usage
 from .user_defined_metric_python_code import UserDefinedMetricPythonCode
 from .user_defined_metric_python_code_public import UserDefinedMetricPythonCodePublic
@@ -636,6 +664,8 @@ from .workspace_name_holder import WorkspaceNameHolder
 from .workspace_spans_count import WorkspaceSpansCount
 from .workspace_trace_count import WorkspaceTraceCount
 from .workspace_user_permissions import WorkspaceUserPermissions
+from .workspace_version import WorkspaceVersion
+from .workspace_version_opik_version import WorkspaceVersionOpikVersion
 
 __all__ = [
     "Agent",
@@ -645,6 +675,7 @@ __all__ = [
     "AgentBlueprintPublicType",
     "AgentBlueprintWrite",
     "AgentBlueprintWriteType",
+    "AgentConfigCreateWrite",
     "AgentConfigEnv",
     "AgentConfigValueHistory",
     "AgentConfigValueHistoryType",
@@ -776,6 +807,13 @@ __all__ = [
     "BooleanFeedbackDetailUpdate",
     "BreakdownConfigPublic",
     "BreakdownConfigPublicField",
+    "BridgeCommand",
+    "BridgeCommandBatchResponse",
+    "BridgeCommandItem",
+    "BridgeCommandItemType",
+    "BridgeCommandStatus",
+    "BridgeCommandSubmitResponse",
+    "BridgeCommandType",
     "CategoricalFeedbackDefinition",
     "CategoricalFeedbackDefinitionCreate",
     "CategoricalFeedbackDefinitionPublic",
@@ -809,10 +847,15 @@ __all__ = [
     "CompleteMultipartUploadRequestEntityType",
     "CompletionTokensDetails",
     "CountValueStatPublic",
+    "CreateSessionResponse",
     "DashboardPagePublic",
     "DashboardPublic",
     "DashboardPublicScope",
     "DashboardPublicType",
+    "DashboardUpdatePublic",
+    "DashboardUpdatePublicType",
+    "DashboardWrite",
+    "DashboardWriteType",
     "DataPointDouble",
     "DataPointNumberPublic",
     "Dataset",
@@ -880,8 +923,10 @@ __all__ = [
     "ExecutionPolicyWrite",
     "Experiment",
     "ExperimentEvaluationMethod",
+    "ExperimentExecutionResponse",
     "ExperimentGroupAggregationsResponse",
     "ExperimentGroupResponse",
+    "ExperimentInfo",
     "ExperimentItem",
     "ExperimentItemBulkRecord",
     "ExperimentItemBulkRecordExperimentItemBulkWriteView",
@@ -984,6 +1029,9 @@ __all__ = [
     "JsonNodePublic",
     "JsonNodeWrite",
     "JsonSchema",
+    "KpiCardResponse",
+    "KpiMetric",
+    "KpiMetricType",
     "LlmAsJudgeCode",
     "LlmAsJudgeCodePublic",
     "LlmAsJudgeCodeWrite",
@@ -1006,7 +1054,6 @@ __all__ = [
     "LlmAsJudgeOutputSchemaWrite",
     "LlmAsJudgeOutputSchemaWriteType",
     "LocalRunner",
-    "LocalRunnerConnectResponse",
     "LocalRunnerHeartbeatResponse",
     "LocalRunnerJob",
     "LocalRunnerJobMetadata",
@@ -1014,8 +1061,8 @@ __all__ = [
     "LocalRunnerJobStatus",
     "LocalRunnerLogEntry",
     "LocalRunnerPage",
-    "LocalRunnerPairResponse",
     "LocalRunnerStatus",
+    "LocalRunnerType",
     "LogItem",
     "LogItemLevel",
     "LogPage",
@@ -1081,6 +1128,7 @@ __all__ = [
     "PromptTemplateStructure",
     "PromptTokensDetails",
     "PromptType",
+    "PromptVariant",
     "PromptVersion",
     "PromptVersionDetail",
     "PromptVersionDetailTemplateStructure",
@@ -1115,6 +1163,7 @@ __all__ = [
     "SpanBatch",
     "SpanEnrichmentOptions",
     "SpanExperimentItemBulkWriteView",
+    "SpanExperimentItemBulkWriteViewSource",
     "SpanExperimentItemBulkWriteViewType",
     "SpanFilter",
     "SpanFilterOperator",
@@ -1127,14 +1176,18 @@ __all__ = [
     "SpanLlmAsJudgeCodeWrite",
     "SpanPagePublic",
     "SpanPublic",
+    "SpanPublicSource",
     "SpanPublicType",
+    "SpanSource",
     "SpanType",
     "SpanUpdate",
+    "SpanUpdateSource",
     "SpanUpdateType",
     "SpanUserDefinedMetricPythonCode",
     "SpanUserDefinedMetricPythonCodePublic",
     "SpanUserDefinedMetricPythonCodeWrite",
     "SpanWrite",
+    "SpanWriteSource",
     "SpanWriteType",
     "SpansCountResponse",
     "StartMultipartUploadResponse",
@@ -1167,6 +1220,7 @@ __all__ = [
     "TraceCountResponse",
     "TraceEnrichmentOptions",
     "TraceExperimentItemBulkWriteView",
+    "TraceExperimentItemBulkWriteViewSource",
     "TraceFilter",
     "TraceFilterOperator",
     "TraceFilterPublic",
@@ -1175,7 +1229,9 @@ __all__ = [
     "TraceFilterWriteOperator",
     "TracePagePublic",
     "TracePublic",
+    "TracePublicSource",
     "TracePublicVisibilityMode",
+    "TraceSource",
     "TraceThread",
     "TraceThreadFilter",
     "TraceThreadFilterOperator",
@@ -1194,8 +1250,10 @@ __all__ = [
     "TraceThreadUserDefinedMetricPythonCodePublic",
     "TraceThreadUserDefinedMetricPythonCodeWrite",
     "TraceUpdate",
+    "TraceUpdateSource",
     "TraceVisibilityMode",
     "TraceWrite",
+    "TraceWriteSource",
     "Usage",
     "UserDefinedMetricPythonCode",
     "UserDefinedMetricPythonCodePublic",
@@ -1227,4 +1285,6 @@ __all__ = [
     "WorkspaceSpansCount",
     "WorkspaceTraceCount",
     "WorkspaceUserPermissions",
+    "WorkspaceVersion",
+    "WorkspaceVersionOpikVersion",
 ]

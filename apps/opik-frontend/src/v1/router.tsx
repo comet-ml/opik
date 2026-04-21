@@ -12,6 +12,7 @@ import WorkspaceGuard from "@/v1/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v1/layout/ExperimentsPageGuard";
 import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
+import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
 import CompareExperimentsPage from "@/v1/pages/CompareExperimentsPage/CompareExperimentsPage";
@@ -44,9 +45,10 @@ import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
 import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
-import EvaluationSuitesPage from "@/v1/pages/EvaluationSuitesPage/EvaluationSuitesPage";
-import EvaluationSuitePage from "@/v1/pages/EvaluationSuitePage/EvaluationSuitePage";
-import EvaluationSuiteItemsPage from "@/v1/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import TestSuitesPage from "@/v1/pages/TestSuitesPage/TestSuitesPage";
+import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
+import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
+import PairV1Page from "@/v1/pages/PairV1Page/PairV1Page";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -90,6 +92,28 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
   id: "workspaceGuardEmptyLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
+// ----------- pairing (root-level, no layout — V1 shows upgrade-required screen)
+// TanStack strips the router basepath before matching, so the canonical
+// route is basepath-relative: "/pair/v1" covers cloud (basepath "/opik"
+// → URL "/opik/pair/v1" strips to "/pair/v1").
+//
+// The legacy "/opik/pair/v1" alias below is an OSS-only fallback: the
+// Python SDK hardcodes "{origin}/opik/pair/v1" regardless of deployment
+// (see sdks/python/src/opik/cli/pairing.py), so on OSS (basepath "/") the
+// "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
+// TODO: make the Python SDK build basepath-aware pairing URLs and drop
+// this alias once shipped CLI versions roll over.
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair/v1",
+  component: PairV1Page,
+});
+const pairingRouteOssAlias = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/opik/pair/v1",
+  component: PairV1Page,
 });
 
 const baseRoute = createRoute({
@@ -287,34 +311,34 @@ const trialRoute = createRoute({
   },
 });
 
-// ----------- evaluation suites
-const evaluationSuitesRoute = createRoute({
-  path: "/evaluation-suites",
+// ----------- test suites
+const testSuitesRoute = createRoute({
+  path: "/test-suites",
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",
   },
 });
 
-const evaluationSuitesListRoute = createRoute({
+const testSuitesListRoute = createRoute({
   path: "/",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitesPage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitesPage,
 });
 
-const evaluationSuiteRoute = createRoute({
+const testSuiteRoute = createRoute({
   path: "/$suiteId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitePage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitePage,
   staticData: {
     param: "suiteId",
   },
 });
 
-const evaluationSuiteItemsRoute = createRoute({
+const testSuiteItemsRoute = createRoute({
   path: "/items",
-  getParentRoute: () => evaluationSuiteRoute,
-  component: EvaluationSuiteItemsPage,
+  getParentRoute: () => testSuiteRoute,
+  component: TestSuiteItemsPage,
 });
 
 // ----------- datasets (legacy redirects)
@@ -329,7 +353,7 @@ const datasetsListRoute = createRoute({
   getParentRoute: () => datasetsRoute,
   component: () => (
     <Navigate
-      to="/$workspaceName/evaluation-suites"
+      to="/$workspaceName/test-suites"
       params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
     />
   ),
@@ -347,7 +371,7 @@ const datasetRedirectRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId"
+        to="/$workspaceName/test-suites/$suiteId"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -364,7 +388,7 @@ const datasetItemsRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId/items"
+        to="/$workspaceName/test-suites/$suiteId/items"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -437,6 +461,12 @@ const playgroundRoute = createRoute({
   staticData: {
     title: "Playground",
   },
+  component: PlaygroundPageGuard,
+});
+
+const playgroundIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => playgroundRoute,
   component: PlaygroundPage,
 });
 
@@ -521,6 +551,8 @@ const automationLogsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  pairingRoute,
+  pairingRouteOssAlias,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -541,9 +573,9 @@ const routeTree = rootRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
       ]),
-      evaluationSuitesRoute.addChildren([
-        evaluationSuitesListRoute,
-        evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+      testSuitesRoute.addChildren([
+        testSuitesListRoute,
+        testSuiteRoute.addChildren([testSuiteItemsRoute]),
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
@@ -561,7 +593,7 @@ const routeTree = rootRoute.addChildren([
         redirectProjectsRoute,
         redirectDatasetsRoute,
       ]),
-      playgroundRoute,
+      playgroundRoute.addChildren([playgroundIndexRoute]),
       configurationRoute,
       alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,

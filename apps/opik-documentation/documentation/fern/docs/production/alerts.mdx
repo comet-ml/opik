@@ -9,6 +9,10 @@ og:title: Alerts Configuration - Opik
 title: Alerts
 ---
 
+<Note>
+  In Opik 2.0, prompts, datasets, and experiments are project-scoped. Alert events such as prompt changes and feedback scores are now associated with specific projects.
+</Note>
+
 Alerts allow you to configure automated webhook notifications for important events in your Opik workspace. When specific events occur — such as trace errors, new feedback scores, or prompt changes — Opik sends HTTP POST requests to your configured endpoint with detailed event data.
 
 Opik provides three destination types for alerts:
@@ -943,6 +947,6 @@ Failed webhooks are automatically retried:
 
 - Configure your first alert for production error monitoring
 - Set up Slack integration for team notifications
-- Explore [Online Evaluation Rules](/production/rules) for automated model monitoring
-- Learn about [Guardrails](/production/guardrails) for proactive risk detection
-- Review [Production Monitoring](/production/production_monitoring) best practices
+- Explore [Online Evaluation Rules](/v1/production/rules) for automated model monitoring
+- Learn about [Guardrails](/v1/production/guardrails) for proactive risk detection
+- Review [Production Monitoring](/v1/production/production_monitoring) best practices

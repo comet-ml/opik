@@ -1,7 +1,10 @@
-import opik
-from opik.integrations.crewai import track_crewai
-from opik.integrations.crewai import opik_tracker
+import pytest
 from crewai import Agent, Crew, Process, Task
+
+import opik
+from opik.integrations.crewai import opik_tracker
+from opik.integrations.crewai import track_crewai
+from . import constants
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -11,10 +14,6 @@ from ...testlib import (
     TraceModel,
     assert_equal,
 )
-from . import constants
-
-import pytest
-
 
 pytestmark = [
     pytest.mark.usefixtures("ensure_openai_configured"),
@@ -152,10 +151,13 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         ),
                                         total_cost=ANY,
                                         spans=[],
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                     # Second task - summary task
                     SpanModel(
@@ -198,14 +200,19 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
                                         ),
                                         total_cost=ANY,
                                         spans=[],
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

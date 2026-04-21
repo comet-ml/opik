@@ -1,22 +1,35 @@
 import React, { useEffect } from "react";
 import last from "lodash/last";
-import { Navigate, Outlet, useLocation } from "@tanstack/react-router";
+import { Link, Navigate, Outlet, useLocation } from "@tanstack/react-router";
 import useProjectById from "@/api/projects/useProjectById";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import useAppStore from "@/store/AppStore";
+import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
+import Loader from "@/shared/Loader/Loader";
+import NoData from "@/shared/NoData/NoData";
+import { Button } from "@/ui/button";
 
 const ProjectPage = () => {
   const setBreadcrumbParam = useBreadcrumbsStore((state) => state.setParam);
   const projectId = useProjectIdFromURL();
+  const workspaceName = useActiveWorkspaceName();
 
+  const activeProjectId = useActiveProjectId();
+
+  // The URL is the source of truth for the active project when we're on a
+  // project route. Re-assert whenever activeProjectId drifts from the URL —
+  // e.g. useActiveProjectInitializer (in SideBar) may write asynchronously
+  // after useProjectsList resolves and overwrite what we set on mount.
+  // Without this listener, the sidebar would get stuck showing a stale
+  // project while breadcrumbs/URL show the real one.
   useEffect(() => {
-    if (useAppStore.getState().activeProjectId !== projectId) {
-      useAppStore.getState().setActiveProjectId(projectId);
+    if (activeProjectId !== projectId) {
+      setActiveProject(workspaceName, projectId);
     }
-  }, [projectId]);
+  }, [projectId, workspaceName, activeProjectId]);
 
-  const { data } = useProjectById({
+  const { data, isPending, isError } = useProjectById({
     projectId,
   });
 
@@ -30,8 +43,29 @@ const ProjectPage = () => {
     select: (location) => location.pathname,
   });
 
+  if (isPending || activeProjectId !== projectId) {
+    return <Loader />;
+  }
+
+  if (isError || !data) {
+    setActiveProject(workspaceName, null);
+    return (
+      <NoData
+        icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
+        title="This project could not be found"
+        message="The project you're looking for doesn't exist or has been deleted."
+      >
+        <div className="pt-5">
+          <Link to="/$workspaceName/projects" params={{ workspaceName }}>
+            <Button>Back to Projects</Button>
+          </Link>
+        </div>
+      </NoData>
+    );
+  }
+
   if (last(pathname.split("/")) === projectId) {
-    return <Navigate to={pathname + "/traces"} />;
+    return <Navigate to={pathname + "/home"} />;
   }
 
   return <Outlet />;

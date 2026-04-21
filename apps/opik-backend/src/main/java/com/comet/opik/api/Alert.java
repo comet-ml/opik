@@ -53,6 +53,13 @@ public record Alert(
 
         @JsonView({
                 Alert.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
+        @JsonView({Alert.View.Public.class,
+                Alert.View.Write.class}) @Schema(description = """
+                        Optional project scope for this alert. \
+                        When set, the alert is scoped to the specified project. \
+                        Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. \
+                        Sending both project_id and a scope:project trigger config will result in an error.\
+                        """) UUID projectId,
         @JsonIgnore String workspaceId){
 
     public static class View {

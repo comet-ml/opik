@@ -1,9 +1,13 @@
 import copy
 import json
+import logging
 from typing import Any, Dict, List, Optional, Tuple, Type
+
+import httpx
 
 from typing_extensions import override
 
+from opik.rest_api import core as rest_api_core
 from opik.rest_api import types as rest_api_types
 from opik.validation import chat_prompt_messages, validator
 
@@ -11,6 +15,8 @@ from .. import base_prompt
 from .. import client as prompt_client
 from .. import types as prompt_types
 from . import chat_prompt_template
+
+LOGGER = logging.getLogger(__name__)
 
 
 class ChatPrompt(base_prompt.BasePrompt):
@@ -34,6 +40,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> None:
         """
         Initializes a new instance of the ChatPrompt class.
@@ -49,6 +56,7 @@ class ChatPrompt(base_prompt.BasePrompt):
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a text prompt with the same name already exists (template structure is immutable).
@@ -71,11 +79,13 @@ class ChatPrompt(base_prompt.BasePrompt):
         self._description = description
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
+        self._project_name = project_name
         self._commit: Optional[str] = None
-        self.__internal_api__prompt_id__: str
-        self.__internal_api__version_id__: str
+        self.__internal_api__prompt_id__: Optional[str] = None
+        self.__internal_api__version_id__: Optional[str] = None
+        self._synced: bool = False
 
-        self._sync_with_backend()
+        self.sync_with_backend()
 
     def _validate_inputs(self, **kwargs: Any) -> None:
         for parameter, validator_class in self._parameter_validators:
@@ -84,34 +94,61 @@ class ChatPrompt(base_prompt.BasePrompt):
                 validator_instance.validate()
                 validator_instance.raise_if_validation_failed()
 
-    def _sync_with_backend(self) -> None:
-        from opik.api_objects import opik_client
+    @property
+    def synced(self) -> bool:
+        """Whether the chat prompt has been successfully synced with the backend."""
+        return self._synced
 
-        opik_client_ = opik_client.get_client_cached()
-        prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+    def sync_with_backend(self) -> bool:
+        """Synchronize the chat prompt with the backend.
 
-        # Convert messages array to JSON string for backend storage
-        messages_str = json.dumps(self._messages)
+        Creates or updates the chat prompt on the Opik server. If the sync fails,
+        a warning is logged and the prompt continues to work locally.
 
-        prompt_version = prompt_client_.create_prompt(
-            name=self._name,
-            prompt=messages_str,
-            metadata=self._metadata,
-            type=self._type,
-            template_structure="chat",
-            id=self._id,
-            description=self._description,
-            change_description=self._change_description,
-            tags=self._tags,
-        )
+        Returns:
+            True if the sync succeeded, False otherwise.
+        """
+        try:
+            from opik.api_objects import opik_client
 
-        self._commit = prompt_version.commit
-        self.__internal_api__prompt_id__ = prompt_version.prompt_id
-        self.__internal_api__version_id__ = prompt_version.id
-        # Update fields from backend response to ensure consistency
-        self._id = prompt_version.id
-        self._change_description = prompt_version.change_description
-        self._tags = prompt_version.tags
+            opik_client_ = opik_client.get_global_client()
+            prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+
+            # Convert messages array to JSON string for backend storage
+            messages_str = json.dumps(self._messages)
+
+            prompt_version = prompt_client_.create_prompt(
+                name=self._name,
+                prompt=messages_str,
+                metadata=self._metadata,
+                type=self._type,
+                template_structure="chat",
+                id=self._id,
+                description=self._description,
+                change_description=self._change_description,
+                tags=self._tags,
+                project_name=self._project_name,
+            )
+
+            self._commit = prompt_version.commit
+            self.__internal_api__prompt_id__ = prompt_version.prompt_id
+            self.__internal_api__version_id__ = prompt_version.id
+            # Update fields from backend response to ensure consistency
+            self._id = prompt_version.id
+            self._change_description = prompt_version.change_description
+            self._tags = prompt_version.tags
+            self._synced = True
+            return True
+        except (rest_api_core.ApiError, httpx.ConnectError, httpx.TimeoutException):
+            LOGGER.warning(
+                "Failed to sync chat prompt '%s' with the backend. "
+                "The prompt will work locally but is not persisted on the server. "
+                "You can retry by calling .sync_with_backend().",
+                self._name,
+                exc_info=True,
+            )
+            self._synced = False
+            return False
 
     @property
     @override
@@ -132,7 +169,7 @@ class ChatPrompt(base_prompt.BasePrompt):
 
     @property
     @override
-    def version_id(self) -> str:
+    def version_id(self) -> Optional[str]:
         """The unique identifier of the prompt version."""
         return self.__internal_api__version_id__
 
@@ -162,6 +199,11 @@ class ChatPrompt(base_prompt.BasePrompt):
     def change_description(self) -> Optional[str]:
         """The description of changes in this version."""
         return self._change_description
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        return self._project_name
 
     @property
     @override
@@ -239,6 +281,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
     ) -> "ChatPrompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         chat_prompt = cls.__new__(cls)
@@ -267,4 +310,6 @@ class ChatPrompt(base_prompt.BasePrompt):
         chat_prompt._tags = (
             copy.copy(prompt_version.tags) if prompt_version.tags else []
         )
+        chat_prompt._project_name = project_name
+        chat_prompt._synced = True
         return chat_prompt

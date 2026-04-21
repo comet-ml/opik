@@ -1,5 +1,5 @@
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import { DetailsActionSectionValue, DetailsActionSection } from "./types";
 import { MessageSquareMore, PenLine, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,10 @@ const formatCounter = (
 };
 
 const configMap = {
+  [DetailsActionSection.Annotate]: {
+    icon: null,
+    tooltip: "Annotate",
+  },
   [DetailsActionSection.Annotations]: {
     icon: <PenLine className="size-3.5" />,
     tooltip: "Feedback scores",
@@ -42,6 +46,9 @@ type DetailsActionSectionToggleProps = {
   type: DetailsActionSectionValue;
   disabled?: boolean;
   tooltipContent?: string;
+  variant?: ButtonProps["variant"];
+  hotkey?: string;
+  buttonSize?: ButtonProps["size"];
 };
 const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   activeSection,
@@ -51,6 +58,9 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
   type,
   disabled,
   tooltipContent,
+  variant = "outline",
+  hotkey,
+  buttonSize = "sm",
 }) => {
   const showFullActionLabel = isLargeLayout(layoutSize);
 
@@ -58,8 +68,8 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
     <TooltipWrapper content={tooltipContent || configMap[type].tooltip}>
       <div>
         <Button
-          variant="outline"
-          size="sm"
+          variant={variant}
+          size={buttonSize}
           onClick={() => setActiveSection(type)}
           className={cn(
             "gap-1",
@@ -72,6 +82,11 @@ const DetailsActionSectionToggle: React.FC<DetailsActionSectionToggleProps> = ({
             <div className="pl-1">{configMap[type].tooltip}</div>
           )}
           {Boolean(count) && <div>{formatCounter(layoutSize, count)}</div>}
+          {hotkey && (
+            <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border bg-background px-1 text-xs text-muted-foreground">
+              {hotkey}
+            </kbd>
+          )}
         </Button>
       </div>
     </TooltipWrapper>

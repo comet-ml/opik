@@ -42,6 +42,7 @@ public class FiltersFactory {
                     .put(FieldType.STRING_EXACT, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.STRING_STATE_DB, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.ENUM, filter -> StringUtils.isNotBlank(filter.value()))
+                    .put(FieldType.ENUM_LEGACY, filter -> StringUtils.isNotBlank(filter.value()))
                     .put(FieldType.DATE_TIME, filter -> {
                         try {
                             Instant.parse(filter.value());
@@ -85,10 +86,18 @@ public class FiltersFactory {
 
                         return false;
                     })
-                    .put(FieldType.DICTIONARY, filter -> filter.value() != null &&
-                            StringUtils.isNotBlank(filter.key()))
-                    .put(FieldType.DICTIONARY_STATE_DB, filter -> filter.value() != null &&
-                            StringUtils.isNotBlank(filter.key()))
+                    .put(FieldType.DICTIONARY, filter -> {
+                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+                            return StringUtils.isNotBlank(filter.key());
+                        }
+                        return filter.value() != null && StringUtils.isNotBlank(filter.key());
+                    })
+                    .put(FieldType.DICTIONARY_STATE_DB, filter -> {
+                        if (Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+                            return StringUtils.isNotBlank(filter.key());
+                        }
+                        return filter.value() != null && StringUtils.isNotBlank(filter.key());
+                    })
                     .put(FieldType.MAP, filter -> filter.value() != null &&
                             StringUtils.isNotBlank(filter.key()))
                     .put(FieldType.LIST, filter ->
@@ -132,8 +141,9 @@ public class FiltersFactory {
 
     private Filter toValidAndDecoded(Filter filter) {
         if (filter.field().getType() != FieldType.STRING
-                && filter.field().getType() != FieldType.STRING_EXACT) {
-            // don't decode value for string fields as it is already decoded during JSON deserialization
+                && filter.field().getType() != FieldType.STRING_EXACT
+                && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
+            // don't decode value for string fields or no-value operators (IS_EMPTY, IS_NOT_EMPTY)
             try {
                 filter = filter.build(URLDecoder.decode(filter.value(), StandardCharsets.UTF_8));
             } catch (IllegalArgumentException exception) {

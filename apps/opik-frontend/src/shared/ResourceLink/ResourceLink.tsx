@@ -30,7 +30,7 @@ export enum RESOURCE_TYPE {
   experimentItem,
   optimization,
   trial,
-  evaluationSuite,
+  testSuite,
   annotationQueue,
   dashboard,
   traces,
@@ -40,6 +40,7 @@ export enum RESOURCE_TYPE {
 export const RESOURCE_MAP = {
   [RESOURCE_TYPE.project]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/home",
     icon: LayoutGrid,
     param: "projectId",
     deleted: "Deleted project",
@@ -47,23 +48,21 @@ export const RESOURCE_MAP = {
     color: "var(--color-green)",
   },
   [RESOURCE_TYPE.dataset]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
-    projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+    url: "/$workspaceName/datasets/$datasetId/items",
+    projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
     icon: Database,
-    param: "suiteId",
-    deleted: "Deleted evaluation suite",
-    label: "evaluation suite",
+    param: "datasetId",
+    deleted: "Deleted dataset",
+    label: "dataset",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.datasetItem]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
-    projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+    url: "/$workspaceName/datasets/$datasetId/items",
+    projectUrl: "/$workspaceName/projects/$projectId/datasets/$datasetId/items",
     icon: Database,
-    param: "suiteId",
-    deleted: "Deleted evaluation suite item",
-    label: "evaluation suite item",
+    param: "datasetId",
+    deleted: "Deleted dataset item",
+    label: "dataset item",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.prompt]: {
@@ -135,31 +134,35 @@ export const RESOURCE_MAP = {
   },
   [RESOURCE_TYPE.traces]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/logs",
     icon: ListTree,
     param: "projectId",
     deleted: "Deleted traces",
     label: "traces",
     color: "var(--color-green)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.traces },
+    projectSearch: { logsType: LOGS_TYPE.traces },
   },
-  [RESOURCE_TYPE.evaluationSuite]: {
-    url: "/$workspaceName/evaluation-suites/$suiteId/items",
+  [RESOURCE_TYPE.testSuite]: {
+    url: "/$workspaceName/test-suites/$suiteId/items",
     projectUrl:
-      "/$workspaceName/projects/$projectId/evaluation-suites/$suiteId/items",
+      "/$workspaceName/projects/$projectId/test-suites/$suiteId/items",
     icon: Database,
     param: "suiteId",
-    deleted: "Deleted evaluation suite",
-    label: "evaluation suite",
+    deleted: "Deleted test suite",
+    label: "test suite",
     color: "var(--color-yellow)",
   },
   [RESOURCE_TYPE.threads]: {
     url: "/$workspaceName/projects/$projectId/traces",
+    projectUrl: "/$workspaceName/projects/$projectId/logs",
     icon: MessagesSquare,
     param: "projectId",
     deleted: "Deleted threads",
     label: "threads",
     color: "var(--thread-icon-text)",
     search: { tab: PROJECT_TAB.logs, logsType: LOGS_TYPE.threads },
+    projectSearch: { logsType: LOGS_TYPE.threads },
   },
 };
 
@@ -220,7 +223,14 @@ function ResourceLink({
     <Link
       to={url}
       params={linkParams}
-      search={{ ...("search" in props ? props.search : {}), ...search }}
+      search={{
+        ...(useProjectUrl && "projectSearch" in props
+          ? props.projectSearch
+          : "search" in props
+            ? props.search
+            : {}),
+        ...search,
+      }}
       onClick={(event) => event.stopPropagation()}
       className="max-w-full"
       disabled={deleted}
@@ -273,7 +283,7 @@ function ResourceLink({
           variant="tableLink"
           size="sm"
           disabled={deleted}
-          className="block truncate px-0 leading-8"
+          className="block h-auto truncate px-0 text-[length:inherit] leading-normal"
           asChild
         >
           <span>{text}</span>

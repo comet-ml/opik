@@ -8,6 +8,10 @@ subtitle: Guides you through the process of updating an existing experiment
 title: Re-running an existing experiment
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 You can update existing experiments in several ways:
 
 1. **Update experiment name and configuration** - Change the experiment name or update its configuration metadata
@@ -131,7 +135,7 @@ evaluate_experiment(experiment_name="my-experiment", scoring_metrics=[hallucinat
 
 <Note>
   You can also compute experiment-level aggregate metrics when updating experiments using the `experiment_scoring_functions` parameter. 
-  Learn more about [experiment-level metrics](/evaluation/evaluate_your_llm#computing-experiment-level-metrics).
+  Learn more about [experiment-level metrics](/v1/evaluation/evaluate_your_llm#computing-experiment-level-metrics).
 </Note>
 
 ## Example
@@ -141,11 +145,14 @@ evaluate_experiment(experiment_name="my-experiment", scoring_metrics=[hallucinat
 Suppose you are building a chatbot and want to compute the hallucination scores for a set of example conversations. For this you would create a first experiment with the `evaluate` function:
 
 ```python
+import opik
 from opik import Opik, track
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
 from opik.integrations.openai import track_openai
 import openai
+
+opik.configure(project_name="my-project")
 
 # Define the task to evaluate
 openai_client = track_openai(openai.OpenAI())
@@ -169,7 +176,7 @@ def evaluation_task(x):
 
 # Create a simple dataset
 client = Opik()
-dataset = client.get_or_create_dataset(name="Existing experiment dataset")
+dataset = client.get_or_create_dataset(name="Existing experiment dataset", project_name="my-project")
 dataset.insert([
     {"input": "What is the capital of France?"},
     {"input": "What is the capital of Germany?"},
@@ -184,6 +191,7 @@ evaluation = evaluate(
     dataset=dataset,
     task=evaluation_task,
     scoring_metrics=[hallucination_metric],
+    project_name="my-project",
     experiment_config={
         "model": MODEL
     }
@@ -193,7 +201,7 @@ experiment_name = evaluation.experiment_name
 print(f"Experiment name: {experiment_name}")
 ```
 
-<Tip>Learn more about the `evaluate` function in our [LLM evaluation guide](/evaluation/evaluate_your_llm).</Tip>
+<Tip>Learn more about the `evaluate` function in our [LLM evaluation guide](/v1/evaluation/evaluate_your_llm).</Tip>
 
 ### Update the experiment
 

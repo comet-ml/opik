@@ -116,6 +116,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -130,8 +131,10 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                 spans=[],
                 provider="openai",
                 model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -208,6 +211,7 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 provider=None,
                 usage=None,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -232,8 +236,10 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 model=ANY_STRING.starting_with("gpt-4o"),
                 provider="openai",
                 usage=ANY_DICT.containing(EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -317,6 +323,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                 provider=None,
                 usage=None,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -343,8 +350,10 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                 provider="openai",
                 usage=None,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -425,6 +434,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
                 provider=None,
                 usage=None,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -454,8 +464,10 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
                 provider="openai",
                 usage=None,
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -514,6 +526,7 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -535,8 +548,10 @@ def test_langchain__openai_llm_is_used__error_occurred_during_openai_call__error
                     "message": None,
                 },
                 spans=[],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

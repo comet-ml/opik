@@ -81,7 +81,7 @@ const AnnotationQueuePage: React.FunctionComponent = () => {
         className="mb-4 mt-6 flex min-h-8 items-center justify-between"
         direction="horizontal"
       >
-        <h1 className="comet-title-l truncate break-words">{queueName}</h1>
+        <h1 className="comet-title-xs truncate break-words">{queueName}</h1>
         {annotationQueue && (
           <div className="flex items-center gap-2">
             <CopySMELinkButton annotationQueue={annotationQueue} />

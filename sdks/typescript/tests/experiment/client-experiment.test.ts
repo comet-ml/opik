@@ -87,6 +87,7 @@ describe("Opik experiment operations", () => {
       verifyExperiment(result, mockExperiment);
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: mockExperiment.name,
+        projectName: "opik-sdk-typescript",
       });
     });
 
@@ -105,6 +106,7 @@ describe("Opik experiment operations", () => {
 
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "nonexistent-experiment",
+        projectName: "opik-sdk-typescript",
       });
     });
 
@@ -125,6 +127,7 @@ describe("Opik experiment operations", () => {
       );
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "test-experiment",
+        projectName: "opik-sdk-typescript",
       });
     });
 
@@ -150,6 +153,7 @@ describe("Opik experiment operations", () => {
       verifyExperiment(result, firstExperiment);
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "test-experiment",
+        projectName: "opik-sdk-typescript",
       });
     });
   });
@@ -302,6 +306,7 @@ describe("Opik experiment operations", () => {
       verifyExperiment(results[1], mockExperiments[1]);
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "experiment-one",
+        projectName: "opik-sdk-typescript",
       });
     });
 
@@ -321,6 +326,7 @@ describe("Opik experiment operations", () => {
       expect(results).toEqual([]);
       expect(spies.streamExperiments).toHaveBeenCalledWith({
         name: "nonexistent-experiment",
+        projectName: "opik-sdk-typescript",
       });
     });
 
@@ -420,6 +426,7 @@ describe("Opik experiment operations", () => {
 
       expect(spies.getDatasetByIdentifier).toHaveBeenCalledWith({
         datasetName: "test-dataset",
+        projectName: "opik-sdk-typescript",
       });
       expect(spies.findExperiments).toHaveBeenCalledWith({
         page: 1,
@@ -473,6 +480,7 @@ describe("Opik experiment operations", () => {
 
       expect(spies.getDatasetByIdentifier).toHaveBeenCalledWith({
         datasetName: "test-dataset",
+        projectName: "opik-sdk-typescript",
       });
       expect(spies.findExperiments).toHaveBeenCalledTimes(2);
       expect(spies.findExperiments).toHaveBeenNthCalledWith(1, {

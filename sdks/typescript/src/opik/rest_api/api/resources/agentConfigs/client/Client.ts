@@ -27,13 +27,14 @@ export class AgentConfigsClient {
     }
 
     /**
-     * Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config
+     * Creates a new optimizer config with initial blueprint. Fails if the project already has a config.
      *
      * @param {OpikApi.AgentConfigCreateWrite} request
      * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
      *
      * @throws {@link OpikApi.BadRequestError}
      * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.ConflictError}
      *
      * @example
      *     await client.agentConfigs.createAgentConfig({
@@ -97,6 +98,8 @@ export class AgentConfigsClient {
                     throw new OpikApi.BadRequestError(_response.error.body, _response.rawResponse);
                 case 401:
                     throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 409:
+                    throw new OpikApi.ConflictError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -111,6 +114,176 @@ export class AgentConfigsClient {
             _response.rawResponse,
             "POST",
             "/v1/private/agent-configs/blueprints",
+        );
+    }
+
+    /**
+     * Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
+     *
+     * @param {OpikApi.AgentConfigCreateWrite} request
+     * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.agentConfigs.updateAgentConfig({
+     *         blueprint: {
+     *             type: "blueprint",
+     *             values: [{
+     *                     key: "key",
+     *                     type: "string"
+     *                 }]
+     *         }
+     *     })
+     */
+    public updateAgentConfig(
+        request: OpikApi.AgentConfigCreateWrite,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__updateAgentConfig(request, requestOptions));
+    }
+
+    private async __updateAgentConfig(
+        request: OpikApi.AgentConfigCreateWrite,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/agent-configs/blueprints",
+            ),
+            method: "PATCH",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.AgentConfigCreateWrite.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "PATCH",
+            "/v1/private/agent-configs/blueprints",
+        );
+    }
+
+    /**
+     * Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.
+     *
+     * @param {string} project_id
+     * @param {string} mask_id
+     * @param {OpikApi.CreateBlueprintFromMaskRequest} request
+     * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     * @throws {@link OpikApi.NotFoundError}
+     *
+     * @example
+     *     await client.agentConfigs.createBlueprintFromMask("project_id", "mask_id")
+     */
+    public createBlueprintFromMask(
+        project_id: string,
+        mask_id: string,
+        request: OpikApi.CreateBlueprintFromMaskRequest = {},
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(
+            this.__createBlueprintFromMask(project_id, mask_id, request, requestOptions),
+        );
+    }
+
+    private async __createBlueprintFromMask(
+        project_id: string,
+        mask_id: string,
+        _request: OpikApi.CreateBlueprintFromMaskRequest = {},
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                `v1/private/agent-configs/blueprints/projects/${core.url.encodePathParam(project_id)}/masks/${core.url.encodePathParam(mask_id)}`,
+            ),
+            method: "POST",
+            headers: _headers,
+            queryParameters: requestOptions?.queryParams,
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                case 404:
+                    throw new OpikApi.NotFoundError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/agent-configs/blueprints/projects/{project_id}/masks/{mask_id}",
         );
     }
 
@@ -911,6 +1084,85 @@ export class AgentConfigsClient {
             _response.rawResponse,
             "GET",
             "/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
+        );
+    }
+
+    /**
+     * Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+     *
+     * @param {OpikApi.AgentConfigRemoveValues} request
+     * @param {AgentConfigsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @throws {@link OpikApi.UnauthorizedError}
+     *
+     * @example
+     *     await client.agentConfigs.removeConfigKeys({
+     *         keys: ["keys"]
+     *     })
+     */
+    public removeConfigKeys(
+        request: OpikApi.AgentConfigRemoveValues,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): core.HttpResponsePromise<void> {
+        return core.HttpResponsePromise.fromPromise(this.__removeConfigKeys(request, requestOptions));
+    }
+
+    private async __removeConfigKeys(
+        request: OpikApi.AgentConfigRemoveValues,
+        requestOptions?: AgentConfigsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<void>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/agent-configs/blueprints/remove-keys",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.AgentConfigRemoveValues.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return { data: undefined, rawResponse: _response.rawResponse };
+        }
+
+        if (_response.error.reason === "status-code") {
+            switch (_response.error.statusCode) {
+                case 401:
+                    throw new OpikApi.UnauthorizedError(_response.error.body, _response.rawResponse);
+                default:
+                    throw new errors.OpikApiError({
+                        statusCode: _response.error.statusCode,
+                        body: _response.error.body,
+                        rawResponse: _response.rawResponse,
+                    });
+            }
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/agent-configs/blueprints/remove-keys",
         );
     }
 }

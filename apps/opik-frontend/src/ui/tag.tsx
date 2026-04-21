@@ -19,13 +19,16 @@ const tagVariants = cva("inline-block truncate rounded-sm transition-colors", {
       turquoise:
         "bg-[var(--tag-turquoise-bg)] text-[var(--tag-turquoise-text)]",
       blue: "bg-[var(--tag-blue-bg)] text-[var(--tag-blue-text)]",
+      lavender: "bg-[var(--tag-lavender-bg)] text-[var(--tag-lavender-text)]",
+      white:
+        "border border-gray-200 bg-white text-muted-slate dark:border-gray-600 dark:bg-gray-800 dark:text-foreground",
       transparent: "border border-border bg-transparent",
     },
     size: {
-      default: "comet-body-xs-accented h-5 px-2 leading-5",
-      sm: "comet-body-xs-accented h-4 px-2 text-[11px] leading-4",
-      md: "comet-body-s-accented h-6 rounded-md px-1.5 leading-6",
-      lg: "comet-body-s-accented h-7 rounded-md px-3 leading-7",
+      default: "comet-body-xs h-5 px-2 leading-5",
+      sm: "comet-body-xs h-4 px-2 text-[11px] leading-4",
+      md: "comet-body-s h-6 rounded-md px-1.5 leading-6",
+      lg: "comet-body-s h-7 rounded-md px-3 leading-7",
     },
   },
   defaultVariants: {
@@ -53,7 +56,7 @@ Tag.displayName = "Tag";
 
 export const TAG_VARIANTS: Exclude<
   TagProps["variant"],
-  "red" | "transparent"
+  "red" | "transparent" | "white" | "lavender"
 >[] = [
   "primary",
   "gray",
@@ -68,7 +71,10 @@ export const TAG_VARIANTS: Exclude<
 ];
 
 export const TAG_VARIANTS_COLOR_MAP: Record<
-  Exclude<TagProps["variant"], null | undefined | "red" | "transparent">,
+  Exclude<
+    TagProps["variant"],
+    null | undefined | "red" | "transparent" | "white" | "lavender"
+  >,
   string
 > = {
   default: "var(--color-gray)",
