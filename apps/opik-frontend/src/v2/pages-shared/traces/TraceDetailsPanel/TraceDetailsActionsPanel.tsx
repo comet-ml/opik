@@ -248,7 +248,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
               }
             >
               <Sparkles className="size-3.5 shrink-0" />
-              <span className="ml-1.5">Improve with Opik Connect</span>
+              <span className="ml-1.5">Improve with Ollie</span>
             </Button>
           </TooltipWrapper>
         )}
