@@ -157,7 +157,7 @@ class TestResolveProjectId:
         assert "API key should be provided —" in message
         assert "run `opik configure`" in message
         assert (
-            "(see https://www.comet.com/docs/opik/tracing/sdk_configuration)" in message
+            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)" in message
         )
         assert message.endswith(".")
 
@@ -191,7 +191,7 @@ class TestResolveProjectId:
         assert "Internal Server Error —" in message
         assert "verify your Opik configuration and connectivity" in message
         assert (
-            "(see https://www.comet.com/docs/opik/tracing/sdk_configuration)" in message
+            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)" in message
         )
 
     def test_resolve_project_id__empty_body__falls_back_to_status_text(self):

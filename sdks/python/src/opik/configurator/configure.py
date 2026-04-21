@@ -148,7 +148,7 @@ class OpikConfigurator:
             # Step 3: Ask user if they want to use the found local instance
             if not is_interactive() and not self.automatic_approvals:
                 raise ConfigurationError(
-                    f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                    f"Opik URL is not specified - A local Opik instance was detected at {OPIK_BASE_URL_LOCAL}, to use it set your URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
                 )
 
             use_url = (
@@ -167,7 +167,7 @@ class OpikConfigurator:
         # Step 4: Ask user for URL if no valid local instance is found or approved
         if not is_interactive():
             raise ConfigurationError(
-                "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "Opik URL is not specified - Please set your Opik instance URL using the environment variable OPIK_URL_OVERRIDE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
         self._ask_for_url()
         self._update_config_local_mode(save_to_file=True)
@@ -269,7 +269,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "API key missing - Please set your API key using the environment variable OPIK_API_KEY or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "API key missing - Please set your API key using the environment variable OPIK_API_KEY or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
 
         while retries > 0:
@@ -392,7 +392,7 @@ class OpikConfigurator:
 
         if not is_interactive():
             raise ConfigurationError(
-                "Workspace name missing - Please set your workspace name using the environment variable OPIK_WORKSPACE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "Workspace name missing - Please set your workspace name using the environment variable OPIK_WORKSPACE or provide it as an argument. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
 
         while retries > 0:
@@ -481,7 +481,7 @@ class OpikConfigurator:
         user_input_project_name = input("Please enter the project name: ")
         if user_input_project_name == "":
             raise ConfigurationError(
-                "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                "The project name cannot be empty. Please enter a valid project name. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
             )
         self.project_name = user_input_project_name
 
@@ -543,7 +543,7 @@ class OpikConfigurator:
 
             if user_input_opik_url == "":
                 raise ConfigurationError(
-                    "URL cannot be empty. Please enter a valid URL. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/sdk_configuration."
+                    "URL cannot be empty. Please enter a valid URL. For more details, refer to the documentation: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration."
                 )
 
             user_input_opik_url = url_helpers.get_base_url(user_input_opik_url)

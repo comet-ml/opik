@@ -62,7 +62,7 @@ def resolve_project_id(api: "OpikApi", project_name: str) -> str:
         ) from e
 
 
-_CONFIGURE_DOCS_URL = "https://www.comet.com/docs/opik/tracing/sdk_configuration"
+_CONFIGURE_DOCS_URL = "https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 
 _PROJECT_RETRIEVAL_NOT_FOUND_HINT = "check the project name and try again"
 _PROJECT_RETRIEVAL_AUTH_HINT = (
