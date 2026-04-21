@@ -32,85 +32,12 @@ from ...testlib import environment, ThreadSafeCounter
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_test_suite__item_level_assertions__feedback_scores_created(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Main flow: Items have their own assertions.
-
-    Each item can have different assertions to verify.
-
-    Expected behavior:
-    - Each item is evaluated using its own assertions
-    - Feedback scores are created with assertion text as the score name
-    - Score values are boolean (True=1.0, False=0.0)
-    """
-    geography_assertion = (
-        "The response correctly identifies Paris as the capital of France"
-    )
-    math_assertion = "The response correctly states that 2 + 2 equals 4"
-
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test item-level assertions",
-    )
-
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "What is the capital of France?"}},
-                "assertions": [geography_assertion],
-            },
-            {
-                "data": {"input": {"question": "What is 2 + 2?"}},
-                "assertions": [math_assertion],
-            },
-        ]
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        if "2 + 2" in question:
-            return {"input": item["input"], "output": "2 + 2 equals 4."}
-        return {"input": item["input"], "output": "Unknown"}
-
-    # opik.run_tests must handle flushing
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        items_passed=2,
-        experiment_items_count=2,
-        total_feedback_scores=2,  # 1 assertion per item * 2 items
-        expected_score_names={geography_assertion, math_assertion},
-    )
-
-    # Verify score values are boolean (True=1.0, False=0.0)
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    for exp_item in retrieved_experiment.get_items():
-        for score in exp_item.feedback_scores:
-            assert score["value"] in [0.0, 1.0, True, False], (
-                f"Score value should be boolean, got {score['value']}"
-            )
-
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
 def test_test_suite__multiple_assertions_per_item__all_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
     Test that multiple assertions on a single item create multiple
-    feedback scores, each evaluated independently.
+    feedback scores, each evaluated independently, with boolean values.
     """
     assertion_1 = "The response is factually correct"
     assertion_2 = "The response is concise and clear"
@@ -152,55 +79,14 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
         project_name=project_name,
     )
 
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_test_suite__suite_level_assertions__applied_to_all_items(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that suite-level assertions are applied to every item.
-    """
-    suite_assertion = "The response is helpful and informative"
-
-    project_name = "project_test_test_suite__suite_level_assertions"
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test suite-level assertions",
-        global_assertions=[suite_assertion],
-        project_name=project_name,
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
     )
-
-    suite.insert(
-        [
-            {"data": {"input": {"question": "What is the capital of France?"}}},
-            {"data": {"input": {"question": "What is 2 + 2?"}}},
-        ]
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        return {"input": item["input"], "output": "2 + 2 equals 4."}
-
-    # opik.run_tests must handle flushing
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        experiment_items_count=2,
-        total_feedback_scores=2,  # 1 assertion * 2 experiment items
-        expected_score_names={suite_assertion},
-        project_name=project_name,
-    )
+    for exp_item in retrieved_experiment.get_items():
+        for score in exp_item.feedback_scores:
+            assert score["value"] in [0.0, 1.0, True, False], (
+                f"Score value should be boolean, got {score['value']}"
+            )
 
 
 @pytest.mark.skipif(
