@@ -1,5 +1,10 @@
 package com.comet.opik.domain.experiments.aggregations;
 
+import com.clickhouse.client.api.Client;
+import com.clickhouse.client.api.insert.InsertResponse;
+import com.clickhouse.client.api.insert.InsertSettings;
+import com.clickhouse.client.api.metrics.ServerMetrics;
+import com.clickhouse.data.ClickHouseFormat;
 import com.comet.opik.api.AssertionScoreAverage;
 import com.comet.opik.api.DatasetItem.DatasetItemPage;
 import com.comet.opik.api.EvaluationMethod;
@@ -35,7 +40,6 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
-import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
@@ -54,8 +58,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
+import java.io.ByteArrayInputStream;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
@@ -83,7 +90,6 @@ import static com.comet.opik.domain.experiments.aggregations.ExperimentSourceDat
 import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
-import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolder;
 
 @ImplementedBy(ExperimentAggregatesDAOImpl.class)
 public interface ExperimentAggregatesDAO {
@@ -126,6 +132,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
+    private final @NonNull Client clickHouseClient;
 
     /**
      * Filter strategies used for experiment aggregates search binding.
@@ -942,71 +949,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 GROUP BY entity_id
             )
             SETTINGS log_comment = '<log_comment>'
-            ;
-            """;
-
-    /**
-     * Insert experiment item aggregate
-     */
-    private static final String INSERT_EXPERIMENT_ITEM_AGGREGATE = """
-            INSERT INTO experiment_item_aggregates
-            (
-                workspace_id,
-                id,
-                project_id,
-                experiment_id,
-                dataset_item_id,
-                trace_id,
-                input,
-                output,
-                input_slim,
-                output_slim,
-                metadata,
-                duration,
-                total_estimated_cost,
-                usage,
-                feedback_scores,
-                feedback_scores_array,
-                comments_array_agg,
-                visibility_mode,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                execution_policy,
-                assertions_array
-            )
-            SETTINGS log_comment = '<log_comment>'
-            FORMAT Values
-            <items:{item |
-                (
-                    :workspace_id,
-                    :id<item.index>,
-                    :project_id,
-                    :experiment_id<item.index>,
-                    :dataset_item_id<item.index>,
-                    :trace_id<item.index>,
-                    :input<item.index>,
-                    :output<item.index>,
-                    :input_slim<item.index>,
-                    :output_slim<item.index>,
-                    :metadata<item.index>,
-                    :duration<item.index>,
-                    :total_estimated_cost<item.index>,
-                    if(:has_usage<item.index>, mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>), CAST(map() AS Map(String, Int64)) ),
-                    if(:has_feedback_scores<item.index>, mapFromArrays(:feedback_scores_keys<item.index>, CAST(:feedback_scores_values<item.index> AS Array(Decimal64(9)))), CAST(map() AS Map(String, Decimal64(9))) ),
-                    :feedback_scores_array<item.index>,
-                    :comments_array_agg<item.index>,
-                    :visibility_mode<item.index>,
-                    parseDateTime64BestEffort(:created_at<item.index>, 9),
-                    parseDateTime64BestEffort(:last_updated_at<item.index>, 9),
-                    :created_by<item.index>,
-                    :last_updated_by<item.index>,
-                    :execution_policy<item.index>,
-                    :assertions_array<item.index>
-                )
-                <if(item.hasNext)>,<endif>
-            }>
             ;
             """;
 
@@ -1852,79 +1794,67 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .build();
     }
 
-    private void bindItemsParameters(Statement statement,
-            List<ExperimentItemData> items,
+    private void appendJsonRow(StringBuilder out,
+            String workspaceId,
+            UUID projectId,
+            ExperimentItemData item,
             Map<UUID, TraceData> tracesMap,
             Map<UUID, SpanData> spansMap,
             Map<UUID, FeedbackScoreData> feedbackMap,
             Map<UUID, CommentsData> commentsMap,
             Map<UUID, AssertionData> assertionsMap) {
 
-        for (int i = 0; i < items.size(); i++) {
-            var item = items.get(i);
+        TraceData trace = tracesMap.get(item.traceId());
+        SpanData span = spansMap.get(item.traceId());
+        FeedbackScoreData feedback = feedbackMap.get(item.traceId());
 
-            TraceData trace = tracesMap.get(item.traceId());
-            SpanData span = spansMap.get(item.traceId());
-            FeedbackScoreData feedback = feedbackMap.get(item.traceId());
+        Map<String, Long> usageMap = Optional.ofNullable(span).map(SpanData::usage).orElse(Map.of());
+        Map<String, BigDecimal> feedbackScoresMap = Optional.ofNullable(feedback)
+                .map(FeedbackScoreData::feedbackScores).orElse(Map.of());
 
-            Map<String, Long> usageMap = Optional.ofNullable(span)
-                    .map(SpanData::usage)
-                    .orElse(Map.of());
-            Map<String, BigDecimal> feedbackScoresMap = Optional.ofNullable(feedback)
-                    .map(FeedbackScoreData::feedbackScores)
-                    .orElse(Map.of());
-            String feedbackScoresArray = Optional.ofNullable(feedback)
-                    .map(FeedbackScoreData::feedbackScoresArray)
-                    .orElse(EMPTY_ARRAY_STR);
+        var node = JsonUtils.createObjectNode();
+        node.put("workspace_id", workspaceId);
+        node.put("id", item.id().toString());
+        node.put("project_id", projectId.toString());
+        node.put("experiment_id", item.experimentId().toString());
+        node.put("dataset_item_id", item.datasetItemId().toString());
+        node.put("trace_id", item.traceId().toString());
+        node.put("input", Optional.ofNullable(trace).map(TraceData::input).orElse(""));
+        node.put("output", Optional.ofNullable(trace).map(TraceData::output).orElse(""));
+        node.put("input_slim", Optional.ofNullable(trace).map(TraceData::inputSlim).orElse(""));
+        node.put("output_slim", Optional.ofNullable(trace).map(TraceData::outputSlim).orElse(""));
+        node.put("metadata", Optional.ofNullable(trace).map(TraceData::metadata).orElse(""));
+        node.put("duration",
+                Optional.ofNullable(trace).map(TraceData::duration).orElse(BigDecimal.ZERO).doubleValue());
+        node.put("total_estimated_cost",
+                Optional.ofNullable(span).map(SpanData::totalEstimatedCost).orElse(BigDecimal.ZERO)
+                        .toPlainString());
 
-            statement.bind("id" + i, item.id())
-                    .bind("has_usage" + i, !usageMap.isEmpty())
-                    .bind("has_feedback_scores" + i, !feedbackScoresMap.isEmpty())
-                    .bind("experiment_id" + i, item.experimentId())
-                    .bind("dataset_item_id" + i, item.datasetItemId())
-                    .bind("trace_id" + i, item.traceId())
-                    .bind("input" + i, Optional.ofNullable(trace).map(TraceData::input).orElse(""))
-                    .bind("output" + i, Optional.ofNullable(trace).map(TraceData::output).orElse(""))
-                    .bind("input_slim" + i, Optional.ofNullable(trace).map(TraceData::inputSlim).orElse(""))
-                    .bind("output_slim" + i, Optional.ofNullable(trace).map(TraceData::outputSlim).orElse(""))
-                    .bind("metadata" + i, Optional.ofNullable(trace).map(TraceData::metadata).orElse(""))
-                    .bind("duration" + i, Optional.ofNullable(trace).map(TraceData::duration).orElse(BigDecimal.ZERO))
-                    .bind("total_estimated_cost" + i,
-                            Optional.ofNullable(span).map(SpanData::totalEstimatedCost).orElse(BigDecimal.ZERO))
-                    .bind("feedback_scores_array" + i, feedbackScoresArray)
-                    .bind("comments_array_agg" + i,
-                            Optional.ofNullable(commentsMap.get(item.traceId()))
-                                    .map(CommentsData::commentsArrayAgg)
-                                    .orElse(EMPTY_ARRAY_STR))
-                    .bind("visibility_mode" + i,
-                            Optional.ofNullable(trace)
-                                    .map(TraceData::visibilityMode)
-                                    .map(VisibilityMode::getValue)
-                                    .orElse(VisibilityMode.DEFAULT.getValue()))
-                    .bind("created_at" + i, item.createdAt().toString())
-                    .bind("last_updated_at" + i, item.lastUpdatedAt().toString())
-                    .bind("created_by" + i, item.createdBy())
-                    .bind("last_updated_by" + i, item.lastUpdatedBy())
-                    .bind("execution_policy" + i,
-                            Optional.ofNullable(item.executionPolicy())
-                                    .filter(StringUtils::isNotBlank)
-                                    .orElse(""))
-                    .bind("assertions_array" + i,
-                            Optional.ofNullable(assertionsMap.get(item.traceId()))
-                                    .map(AssertionData::assertionsArray)
-                                    .orElse(EMPTY_ARRAY_STR));
+        var usageNode = node.putObject("usage");
+        usageMap.forEach(usageNode::put);
 
-            // Bind array parameters only if maps are not empty
-            var usageArrays = mapToArrays(usageMap, String[]::new, Long[]::new, Long::longValue);
-            statement.bind("usage_keys" + i, usageArrays.keys());
-            statement.bind("usage_values" + i, usageArrays.values());
+        var feedbackNode = node.putObject("feedback_scores");
+        feedbackScoresMap.forEach((k, v) -> feedbackNode.put(k, v.toPlainString()));
 
-            var feedbackScoresArrays = mapToArrays(feedbackScoresMap,
-                    String[]::new, BigDecimal[]::new,
-                    v -> BigDecimal.valueOf(v.doubleValue()));
-            statement.bind("feedback_scores_keys" + i, feedbackScoresArrays.keys());
-            statement.bind("feedback_scores_values" + i, feedbackScoresArrays.values());
-        }
+        node.put("feedback_scores_array",
+                Optional.ofNullable(feedback).map(FeedbackScoreData::feedbackScoresArray).orElse(EMPTY_ARRAY_STR));
+        node.put("comments_array_agg",
+                Optional.ofNullable(commentsMap.get(item.traceId())).map(CommentsData::commentsArrayAgg)
+                        .orElse(EMPTY_ARRAY_STR));
+        node.put("visibility_mode",
+                Optional.ofNullable(trace).map(TraceData::visibilityMode).map(VisibilityMode::getValue)
+                        .orElse(VisibilityMode.DEFAULT.getValue()));
+        node.put("created_at", item.createdAt().toString());
+        node.put("last_updated_at", item.lastUpdatedAt().toString());
+        node.put("created_by", item.createdBy());
+        node.put("last_updated_by", item.lastUpdatedBy());
+        node.put("execution_policy",
+                Optional.ofNullable(item.executionPolicy()).filter(StringUtils::isNotBlank).orElse(""));
+        node.put("assertions_array",
+                Optional.ofNullable(assertionsMap.get(item.traceId())).map(AssertionData::assertionsArray)
+                        .orElse(EMPTY_ARRAY_STR));
+
+        out.append(node).append('\n');
     }
 
     private Mono<Long> insertExperimentItemAggregates(
@@ -1948,27 +1878,41 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         Map<UUID, AssertionData> assertionsMap = assertionsData.stream()
                 .collect(Collectors.toMap(AssertionData::traceId, Function.identity()));
 
-        return asyncTemplate.nonTransaction(connection -> {
-            return makeMonoContextAware((userName, workspaceId) -> {
+        return insertExperimentItems(projectId, items, tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap);
+    }
 
-                List<TemplateUtils.QueryItem> queryItems = getQueryItemPlaceHolder(items.size());
+    private Mono<Long> insertExperimentItems(UUID projectId,
+            List<ExperimentItemData> items,
+            Map<UUID, TraceData> tracesMap,
+            Map<UUID, SpanData> spansMap,
+            Map<UUID, FeedbackScoreData> feedbackMap,
+            Map<UUID, CommentsData> commentsMap,
+            Map<UUID, AssertionData> assertionsMap) {
 
-                var template = getSTWithLogComment(INSERT_EXPERIMENT_ITEM_AGGREGATE,
-                        "insertExperimentItemAggregate", workspaceId, userName, items.size())
-                        .add("items", queryItems);
+        return makeMonoContextAware((userName, workspaceId) -> Mono.fromCallable(() -> {
+            StringBuilder body = new StringBuilder();
+            items.forEach(item -> appendJsonRow(body, workspaceId, projectId, item,
+                    tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap));
+            byte[] payload = body.toString().getBytes(StandardCharsets.UTF_8);
 
-                var statement = connection.createStatement(template.render())
-                        .bind("workspace_id", workspaceId)
-                        .bind("project_id", projectId);
+            String logComment = "insert_experiment_item_aggregate:%s:%s:%d".formatted(
+                    workspaceId, userName == null ? "" : userName, items.size());
 
-                // Bind item parameters in batch
-                bindItemsParameters(statement, items, tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap);
+            var settings = new InsertSettings()
+                    .logComment(logComment)
+                    .serverSetting("date_time_input_format", "best_effort");
 
-                return Mono.from(statement.execute())
-                        .flatMapMany(Result::getRowsUpdated)
-                        .reduce(0L, Long::sum);
-            });
-        });
+            try (InsertResponse response = clickHouseClient.insert(
+                    "experiment_item_aggregates",
+                    new ByteArrayInputStream(payload),
+                    ClickHouseFormat.JSONEachRow,
+                    settings).get()) {
+                return response.getMetrics().getMetric(ServerMetrics.NUM_ROWS_WRITTEN).getLong();
+            }
+        }).subscribeOn(Schedulers.boundedElastic())
+                .doOnError(err -> log.error(
+                        "Failed to insert experiment item aggregates: items='{}'",
+                        items.size(), err)));
     }
 
     // Row mapping methods

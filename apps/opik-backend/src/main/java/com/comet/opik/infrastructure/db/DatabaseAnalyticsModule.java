@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.db;
 
+import com.clickhouse.client.api.Client;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
@@ -36,6 +37,27 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Singleton
     public ConnectionFactory getConnectionFactory() {
         return connectionFactory;
+    }
+
+    @Provides
+    @Singleton
+    public DatabaseAnalyticsFactory getDatabaseAnalyticsFactory() {
+        return databaseAnalyticsFactory;
+    }
+
+    @Provides
+    @Singleton
+    public Client getClickHouseClient() {
+        var config = databaseAnalyticsFactory;
+        String endpoint = "%s://%s:%d/".formatted(config.getProtocol().getValue(), config.getHost(), config.getPort());
+        return new Client.Builder()
+                .addEndpoint(endpoint)
+                .setUsername(config.getUsername())
+                .setPassword(config.getPassword())
+                .setDefaultDatabase(config.getDatabaseName())
+                .compressClientRequest(true)
+                .compressServerResponse(true)
+                .build();
     }
 
     @Provides
