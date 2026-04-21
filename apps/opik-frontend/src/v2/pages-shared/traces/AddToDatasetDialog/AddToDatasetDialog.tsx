@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import isUndefined from "lodash/isUndefined";
-import { Database, MessageCircleWarning, Plus } from "lucide-react";
+import { Database, ListChecks, MessageCircleWarning, Plus } from "lucide-react";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Span, Trace } from "@/types/traces";
@@ -26,39 +26,28 @@ import {
   AccordionTrigger,
 } from "@/ui/accordion";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
-import Loader from "@/shared/Loader/Loader";
-import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import SearchInput from "@/shared/SearchInput/SearchInput";
 import useAddTracesToDatasetMutation from "@/api/datasets/useAddTracesToDatasetMutation";
 import useAddSpansToDatasetMutation from "@/api/datasets/useAddSpansToDatasetMutation";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
-import { COLUMN_TYPE } from "@/types/shared";
+import { COLUMN_TYPE, DropdownOption } from "@/types/shared";
 import { Filter } from "@/types/filters";
-import {
-  DEFAULT_EXECUTION_POLICY,
-  MAX_RUNS_PER_ITEM,
-} from "@/types/test-suites";
+import { DEFAULT_EXECUTION_POLICY } from "@/types/test-suites";
 import { Alert, AlertDescription } from "@/ui/alert";
 import { Button } from "@/ui/button";
 import { Checkbox } from "@/ui/checkbox";
-import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
-import { cn } from "@/lib/utils";
 import { isObjectSpan } from "@/lib/traces";
 import { useToast } from "@/ui/use-toast";
 import { extractAssertions, packAssertions } from "@/lib/assertion-converters";
-import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
-import AssertionsField from "@/shared/AssertionField/AssertionsField";
-import {
-  ASSERTIONS_DESCRIPTION,
-  PASS_CRITERIA_TITLE,
-} from "@/constants/test-suites";
 import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
+import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
+import { Separator } from "@/ui/separator";
 
 const DEFAULT_SIZE = 100;
 
@@ -107,9 +96,6 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   );
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [size, setSize] = useState(DEFAULT_SIZE);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
   const [fetching, setFetching] = useState<boolean>(false);
   const [selectedDataset, setSelectedDataset] = useState<Dataset | null>(null);
@@ -137,6 +123,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   const [passThreshold, setPassThreshold] = useState(
     DEFAULT_EXECUTION_POLICY.pass_threshold,
   );
+  const [useGlobalPolicy, setUseGlobalPolicy] = useState(true);
 
   const { mutate: addTracesToDataset } = useAddTracesToDatasetMutation();
   const { mutate: addSpansToDataset } = useAddSpansToDatasetMutation();
@@ -167,15 +154,15 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     if (!isTestSuiteMode || !selectedDataset?.id) return;
     setRunsPerItem(suiteExecutionPolicy.runs_per_item);
     setPassThreshold(suiteExecutionPolicy.pass_threshold);
+    setUseGlobalPolicy(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTestSuiteMode, selectedDataset?.id]);
 
   const { data, isPending } = useProjectDatasetsList(
     {
       projectId: activeProjectId!,
-      search,
-      page,
-      size,
+      page: 1,
+      size: DEFAULT_SIZE,
       filters: typeFilter,
     },
     {
@@ -184,8 +171,48 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     },
   );
 
-  const datasets = data?.content ?? [];
-  const total = data?.total ?? 0;
+  const datasets = useMemo(() => data?.content ?? [], [data?.content]);
+
+  const datasetOptions: DropdownOption<string>[] = useMemo(
+    () =>
+      datasets.map((d) => ({
+        value: d.id,
+        label: d.name,
+        description: d.description,
+      })),
+    [datasets],
+  );
+
+  const datasetsById = useMemo(() => {
+    const map = new Map<string, Dataset>();
+    datasets.forEach((d) => map.set(d.id, d));
+    return map;
+  }, [datasets]);
+
+  useEffect(() => {
+    if (!isPending && datasets.length === 1 && !selectedDataset) {
+      setSelectedDataset(datasets[0]);
+    }
+  }, [isPending, datasets, selectedDataset]);
+
+  const emptyDropdownState = useMemo(
+    () => (
+      <div className="flex min-h-32 flex-col items-center justify-center gap-1 px-6 py-4 text-center">
+        {isTestSuiteMode ? (
+          <ListChecks className="mb-1 size-5 text-muted-slate" />
+        ) : (
+          <Database className="mb-1 size-5 text-muted-slate" />
+        )}
+        <span className="comet-body-s-accented">No {entityName}s yet</span>
+        <span className="comet-body-xs text-muted-slate">
+          {isTestSuiteMode
+            ? "Define test cases with assertions to evaluate your LLM application's performance."
+            : "Define inputs and expected outputs to evaluate your LLM application's performance."}
+        </span>
+      </div>
+    ),
+    [entityName, isTestSuiteMode],
+  );
 
   const validRows = useMemo(() => {
     return selectedRows.filter((r) => !isUndefined(r.input));
@@ -234,22 +261,25 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     setAssertions((prev) => [...prev, ""]);
   }, []);
 
-  const runsInput = useClampedIntegerInput({
-    value: runsPerItem,
-    min: 1,
-    max: MAX_RUNS_PER_ITEM,
-    onCommit: (v) => {
+  const handleRunsPerItemChange = useCallback(
+    (v: number) => {
+      setUseGlobalPolicy(false);
       setRunsPerItem(v);
       if (passThreshold > v) setPassThreshold(v);
     },
-  });
+    [passThreshold],
+  );
 
-  const thresholdInput = useClampedIntegerInput({
-    value: passThreshold,
-    min: 1,
-    max: runsPerItem,
-    onCommit: setPassThreshold,
-  });
+  const handlePassThresholdChange = useCallback((v: number) => {
+    setUseGlobalPolicy(false);
+    setPassThreshold(v);
+  }, []);
+
+  const handleRevertToDefaults = useCallback(() => {
+    setUseGlobalPolicy(true);
+    setRunsPerItem(suiteExecutionPolicy.runs_per_item);
+    setPassThreshold(suiteExecutionPolicy.pass_threshold);
+  }, [suiteExecutionPolicy]);
 
   const buildEvaluatorParams = useCallback(() => {
     const nonEmptyAssertions = assertions.map((a) => a.trim()).filter(Boolean);
@@ -350,79 +380,24 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
     ],
   );
 
-  const renderListItems = () => {
-    if (isPending || fetching) {
-      return <Loader />;
-    }
-
-    if (datasets.length === 0) {
-      const text = search
-        ? "No search results"
-        : `There are no ${entityName}s yet`;
-
-      return (
-        <div className="comet-body-s flex h-32 items-center justify-center text-muted-slate">
-          {text}
-        </div>
-      );
-    }
-
-    return datasets.map((d) => {
-      const isSelected = selectedDataset?.id === d.id;
-      return (
-        <div
-          key={d.id}
-          className={cn(
-            "rounded-sm px-4 py-2.5 flex flex-col",
-            noValidRows
-              ? "cursor-default"
-              : "cursor-pointer hover:bg-primary-foreground",
-            isSelected && "bg-muted",
-          )}
-          onClick={() => {
-            if (noValidRows || d.id === selectedDataset?.id) return;
-            setSelectedDataset(d);
-            setAssertions([]);
-            setRunsPerItem(DEFAULT_EXECUTION_POLICY.runs_per_item);
-            setPassThreshold(DEFAULT_EXECUTION_POLICY.pass_threshold);
-            setTimeout(() => {
-              configSectionRef.current?.scrollIntoView({
-                behavior: "smooth",
-                block: "nearest",
-              });
-            }, 0);
-          }}
-        >
-          <div className="flex flex-col gap-0.5">
-            <div className="flex items-center gap-2">
-              <Database
-                className={cn(
-                  "size-4 shrink-0",
-                  noValidRows ? "text-muted-gray" : "text-muted-slate",
-                )}
-              />
-              <span
-                className={cn(
-                  "comet-body-s-accented truncate w-full",
-                  noValidRows && "text-muted-gray",
-                )}
-              >
-                {d.name}
-              </span>
-            </div>
-            <div
-              className={cn(
-                "comet-body-s pl-6 whitespace-pre-line break-words",
-                noValidRows ? "text-muted-gray" : "text-light-slate",
-              )}
-            >
-              {d.description}
-            </div>
-          </div>
-        </div>
-      );
-    });
-  };
+  const handleDatasetSelect = useCallback(
+    (datasetId: string) => {
+      const dataset = datasetsById.get(datasetId) ?? null;
+      if (!dataset || dataset.id === selectedDataset?.id) return;
+      setSelectedDataset(dataset);
+      setAssertions([]);
+      setRunsPerItem(DEFAULT_EXECUTION_POLICY.runs_per_item);
+      setPassThreshold(DEFAULT_EXECUTION_POLICY.pass_threshold);
+      setUseGlobalPolicy(true);
+      setTimeout(() => {
+        configSectionRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "nearest",
+        });
+      }, 0);
+    },
+    [datasetsById, selectedDataset?.id],
+  );
 
   const renderAlert = () => {
     const text = noValidRows
@@ -539,42 +514,38 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 {...EXPLAINERS_MAP[noSelectionExplainerId]}
               />
             )}
-            <div className="my-2 flex items-center justify-between">
-              <h3 className="comet-title-xs">Select a {entityName}</h3>
-              {canCreateDatasets && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => {
-                    setOpenDialog(true);
-                  }}
-                  disabled={noValidRows}
-                >
-                  <Plus className="mr-1 size-4" />
-                  Create new {entityName}
-                </Button>
-              )}
+            <div className="my-2">
+              <Label className="comet-body-s-accented mb-1">
+                Select a {entityName}
+              </Label>
+              <LoadableSelectBox
+                value={selectedDataset?.id ?? ""}
+                onChange={handleDatasetSelect}
+                options={datasetOptions}
+                placeholder={`Select a ${entityName}`}
+                searchPlaceholder={`Search ${entityName}s`}
+                isLoading={isPending}
+                disabled={noValidRows}
+                buttonClassName="w-full"
+                optionsCount={DEFAULT_SIZE}
+                emptyState={emptyDropdownState}
+                actionPanel={
+                  canCreateDatasets ? (
+                    <>
+                      <Separator className="my-1" />
+                      <div
+                        className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
+                        onClick={() => setOpenDialog(true)}
+                      >
+                        <Plus className="size-4 shrink-0" />
+                        <span className="comet-body-s">Add {entityName}</span>
+                      </div>
+                    </>
+                  ) : undefined
+                }
+              />
             </div>
-            <SearchInput
-              searchText={search}
-              setSearchText={setSearch}
-              className="w-full"
-            />
             {renderAlert()}
-            <div className="my-4 flex max-h-[225px] min-h-36 max-w-full flex-col justify-stretch overflow-y-auto">
-              {renderListItems()}
-            </div>
-            {total > DEFAULT_SIZE && (
-              <div className="pt-4">
-                <DataTablePagination
-                  page={page}
-                  pageChange={setPage}
-                  size={size}
-                  sizeChange={setSize}
-                  total={total}
-                ></DataTablePagination>
-              </div>
-            )}
             {!isTestSuiteMode && selectedDataset && (
               <div ref={configSectionRef}>
                 {hasOnlyTraces && renderMetadataConfiguration("trace", true)}
@@ -582,78 +553,21 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               </div>
             )}
             {isTestSuiteMode && selectedDataset && (
-              <Accordion
-                ref={configSectionRef}
-                type="single"
-                collapsible
-                defaultValue="assertions"
-                className="mt-2"
-              >
-                <AccordionItem value="assertions" className="border-t">
-                  <AccordionTrigger>{PASS_CRITERIA_TITLE}</AccordionTrigger>
-                  <AccordionContent className="px-3">
-                    <div className="flex flex-col gap-4">
-                      <div className="flex flex-col gap-1">
-                        <span className="comet-body-s-accented">
-                          Assertions
-                        </span>
-                        <span className="comet-body-xs text-light-slate">
-                          {ASSERTIONS_DESCRIPTION}
-                        </span>
-                        <AssertionsField
-                          readOnlyAssertions={suiteAssertions}
-                          editableAssertions={assertions}
-                          onChangeEditable={handleAssertionChange}
-                          onRemoveEditable={handleAssertionRemove}
-                          onAdd={handleAssertionAdd}
-                        />
-                      </div>
-                      <div className="flex gap-4">
-                        <div className="flex flex-1 flex-col gap-1">
-                          <Label className="comet-body-xs-accented">
-                            Runs per item
-                          </Label>
-                          <Input
-                            dimension="sm"
-                            className="[&::-webkit-inner-spin-button]:appearance-none"
-                            type="number"
-                            min={1}
-                            max={MAX_RUNS_PER_ITEM}
-                            value={runsInput.displayValue}
-                            onChange={runsInput.onChange}
-                            onFocus={runsInput.onFocus}
-                            onBlur={runsInput.onBlur}
-                            onKeyDown={runsInput.onKeyDown}
-                          />
-                          <span className="comet-body-xs text-light-slate">
-                            Suite default: {suiteExecutionPolicy.runs_per_item}
-                          </span>
-                        </div>
-                        <div className="flex flex-1 flex-col gap-1">
-                          <Label className="comet-body-xs-accented">
-                            Pass threshold
-                          </Label>
-                          <Input
-                            dimension="sm"
-                            className="[&::-webkit-inner-spin-button]:appearance-none"
-                            type="number"
-                            min={1}
-                            max={runsPerItem}
-                            value={thresholdInput.displayValue}
-                            onChange={thresholdInput.onChange}
-                            onFocus={thresholdInput.onFocus}
-                            onBlur={thresholdInput.onBlur}
-                            onKeyDown={thresholdInput.onKeyDown}
-                          />
-                          <span className="comet-body-xs text-light-slate">
-                            Suite default: {suiteExecutionPolicy.pass_threshold}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
+              <div ref={configSectionRef} className="mt-4">
+                <EvaluationCriteriaSection
+                  suiteAssertions={suiteAssertions}
+                  editableAssertions={assertions}
+                  onChangeAssertion={handleAssertionChange}
+                  onRemoveAssertion={handleAssertionRemove}
+                  onAddAssertion={handleAssertionAdd}
+                  runsPerItem={runsPerItem}
+                  passThreshold={passThreshold}
+                  onRunsPerItemChange={handleRunsPerItemChange}
+                  onPassThresholdChange={handlePassThresholdChange}
+                  useGlobalPolicy={useGlobalPolicy}
+                  onRevertToDefaults={handleRevertToDefaults}
+                />
+              </div>
             )}
           </DialogAutoScrollBody>
           <DialogFooter>

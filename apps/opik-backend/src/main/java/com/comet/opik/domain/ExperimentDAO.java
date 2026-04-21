@@ -70,7 +70,7 @@ import java.util.stream.Stream;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.parseCommentsFromJson;
-import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
 import static com.comet.opik.utils.JsonUtils.getJsonNodeOrDefault;
 import static com.comet.opik.utils.JsonUtils.getStringOrDefault;

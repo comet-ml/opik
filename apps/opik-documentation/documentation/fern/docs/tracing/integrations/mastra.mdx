@@ -30,134 +30,220 @@ cd your-mastra-project
 
 ### Install required packages
 
-Install the necessary dependencies for Mastra and AI SDK:
+Install the necessary dependencies for Mastra observability:
 
 ```bash
-npm install langfuse-vercel
+npm install @mastra/observability @mastra/otel
 ```
 
 ### Add environment variables
 
 Create or update your `.env` file with the following variables:
 
-Intent:
-Configure Mastra OTLP export so agent/workflow spans are routed to Opik. These settings are additive and do not introduce breaking changes to existing OTEL configuration.
-
-Applies when:
-Mastra telemetry is enabled with `export.type = "otlp"`.
-
-Required fields:
-- `OTEL_EXPORTER_OTLP_ENDPOINT`
-- `OTEL_EXPORTER_OTLP_HEADERS` (auth/routing for your deployment mode)
-
-Optional fields:
-- `projectName` in OTLP headers (recommended)
-- additional OTEL resource/sampling env vars
-
-Minimal valid input:
-- endpoint + headers for your Opik mode
-- telemetry enabled in Mastra config
-
 <Tabs>
     <Tab value="Opik Cloud" title="Opik Cloud">
         ```bash wordWrap
         # Your LLM API key
-        OPENAI_API_KEY=your-openai-api-key
-        
+        OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
+
         # Opik configuration
-        OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
-        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        OPIK_API_KEY=<your-opik-api-key>
+        OPIK_WORKSPACE_NAME=<your-workspace>
+        OPIK_PROJECT_NAME=<your-project-name>
         ```
-
-        <Tip>
-            To log the traces to a specific project, you can add the
-            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
-            environment variable:
-
-            ```bash wordWrap
-            OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
-            ```
-
-            You can also update the `Comet-Workspace` parameter to a different
-            value if you would like to log the data to a different workspace.
-        </Tip>
     </Tab>
     <Tab value="Enterprise deployment" title="Enterprise deployment">
         ```bash wordWrap
         # Your LLM API key
-        OPENAI_API_KEY=your-openai-api-key
+        OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
 
         # Opik configuration
-        OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
-        OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        OPIK_API_KEY=<your-opik-api-key>
+        OPIK_WORKSPACE_NAME=<your-workspace>
+        OPIK_PROJECT_NAME=<your-project-name>
         ```
-
-        <Tip>
-            To log the traces to a specific project, you can add the
-            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
-            environment variable:
-
-            ```bash wordWrap
-            OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
-            ```
-
-            You can also update the `Comet-Workspace` parameter to a different
-            value if you would like to log the data to a different workspace.
-        </Tip>
     </Tab>
     <Tab value="Self-hosted instance" title="Self-hosted instance">
         ```bash
         # Your LLM API key
-        OPENAI_API_KEY=your-openai-api-key
+        OPENAI_API_KEY=<YOUR_OPENAI_API_KEY>
 
         # Opik configuration
-        OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
-        OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        OPIK_PROJECT_NAME=<your-project-name>
         ```
     </Tab>
-
 </Tabs>
 
 ## Set up an agent
 
 Create an agent in your project. For example, create a file `src/mastra/index.ts`:
 
-```typescript
-import { Mastra } from "@mastra/core/mastra";
-import { PinoLogger } from "@mastra/loggers";
-import { LibSQLStore } from "@mastra/libsql";
-import { Agent } from "@mastra/core/agent";
-import { openai } from "@ai-sdk/openai";
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        ```typescript
+        import { Mastra } from "@mastra/core/mastra";
+        import { Observability } from "@mastra/observability";
+        import { OtelExporter } from "@mastra/otel";
+        import { PinoLogger } from "@mastra/loggers";
+        import { LibSQLStore } from "@mastra/libsql";
+        import { Agent } from "@mastra/core/agent";
+        import { openai } from "@ai-sdk/openai";
 
-export const chefAgent = new Agent({
-  name: "chef-agent",
-  instructions:
-    "You are Michel, a practical and experienced home chef " +
-    "You help people cook with whatever ingredients they have available.",
-  model: openai("gpt-4o-mini"),
-});
+        const OPIK_API_KEY = process.env.OPIK_API_KEY!;
+        const OPIK_WORKSPACE_NAME = process.env.OPIK_WORKSPACE_NAME!;
+        const OPIK_PROJECT_NAME = process.env.OPIK_PROJECT_NAME!;
 
-export const mastra = new Mastra({
-  agents: { chefAgent },
-  storage: new LibSQLStore({
-    url: ":memory:",
-  }),
-  logger: new PinoLogger({
-    name: "Mastra",
-    level: "info",
-  }),
-  telemetry: {
-    serviceName: "ai",
-    enabled: true,
-    sampling: {
-      type: "always_on",
-    },
-    export: {
-      type: "otlp",
-    },
-  },
-});
-```
+        export const chefAgent = new Agent({
+          name: "chef-agent",
+          instructions:
+            "You are Michel, a practical and experienced home chef " +
+            "You help people cook with whatever ingredients they have available.",
+          model: openai("gpt-4o-mini"),
+        });
+
+        export const mastra = new Mastra({
+          agents: { chefAgent },
+          storage: new LibSQLStore({
+            url: ":memory:",
+          }),
+          logger: new PinoLogger({
+            name: "Mastra",
+            level: "info",
+          }),
+          observability: new Observability({
+            configs: {
+              default: {
+                serviceName: "chef-agent",
+                exporters: [
+                  new OtelExporter({
+                    provider: {
+                      custom: {
+                        endpoint: "https://www.comet.com/opik/api/v1/private/otel/v1/traces",
+                        protocol: "http/json",
+                        headers: {
+                          Authorization: OPIK_API_KEY,
+                          "Comet-Workspace": OPIK_WORKSPACE_NAME,
+                          projectName: OPIK_PROJECT_NAME,
+                        },
+                      },
+                    },
+                  }),
+                ],
+              },
+            },
+          }),
+        });
+        ```
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        ```typescript
+        import { Mastra } from "@mastra/core/mastra";
+        import { Observability } from "@mastra/observability";
+        import { OtelExporter } from "@mastra/otel";
+        import { PinoLogger } from "@mastra/loggers";
+        import { LibSQLStore } from "@mastra/libsql";
+        import { Agent } from "@mastra/core/agent";
+        import { openai } from "@ai-sdk/openai";
+
+        const OPIK_API_KEY = process.env.OPIK_API_KEY!;
+        const OPIK_WORKSPACE_NAME = process.env.OPIK_WORKSPACE_NAME!;
+        const OPIK_PROJECT_NAME = process.env.OPIK_PROJECT_NAME!;
+
+        export const chefAgent = new Agent({
+          name: "chef-agent",
+          instructions:
+            "You are Michel, a practical and experienced home chef " +
+            "You help people cook with whatever ingredients they have available.",
+          model: openai("gpt-4o-mini"),
+        });
+
+        export const mastra = new Mastra({
+          agents: { chefAgent },
+          storage: new LibSQLStore({
+            url: ":memory:",
+          }),
+          logger: new PinoLogger({
+            name: "Mastra",
+            level: "info",
+          }),
+          observability: new Observability({
+            configs: {
+              default: {
+                serviceName: "chef-agent",
+                exporters: [
+                  new OtelExporter({
+                    provider: {
+                      custom: {
+                        endpoint: "https://<comet-deployment-url>/opik/api/v1/private/otel/v1/traces",
+                        protocol: "http/json",
+                        headers: {
+                          Authorization: OPIK_API_KEY,
+                          "Comet-Workspace": OPIK_WORKSPACE_NAME,
+                          projectName: OPIK_PROJECT_NAME,
+                        },
+                      },
+                    },
+                  }),
+                ],
+              },
+            },
+          }),
+        });
+        ```
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+        ```typescript
+        import { Mastra } from "@mastra/core/mastra";
+        import { Observability } from "@mastra/observability";
+        import { OtelExporter } from "@mastra/otel";
+        import { PinoLogger } from "@mastra/loggers";
+        import { LibSQLStore } from "@mastra/libsql";
+        import { Agent } from "@mastra/core/agent";
+        import { openai } from "@ai-sdk/openai";
+
+        const OPIK_PROJECT_NAME = process.env.OPIK_PROJECT_NAME!;
+
+        export const chefAgent = new Agent({
+          name: "chef-agent",
+          instructions:
+            "You are Michel, a practical and experienced home chef " +
+            "You help people cook with whatever ingredients they have available.",
+          model: openai("gpt-4o-mini"),
+        });
+
+        export const mastra = new Mastra({
+          agents: { chefAgent },
+          storage: new LibSQLStore({
+            url: ":memory:",
+          }),
+          logger: new PinoLogger({
+            name: "Mastra",
+            level: "info",
+          }),
+          observability: new Observability({
+            configs: {
+              default: {
+                serviceName: "chef-agent",
+                exporters: [
+                  new OtelExporter({
+                    provider: {
+                      custom: {
+                        endpoint: "http://localhost:5173/api/v1/private/otel/v1/traces",
+                        protocol: "http/json",
+                        headers: {
+                          projectName: OPIK_PROJECT_NAME,
+                        },
+                      },
+                    },
+                  }),
+                ],
+              },
+            },
+          }),
+        });
+        ```
+    </Tab>
+</Tabs>
 
 ## Run Mastra development server
 

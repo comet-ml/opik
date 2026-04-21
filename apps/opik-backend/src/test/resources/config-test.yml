@@ -211,6 +211,9 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment:
+  # Default: 1d (minimum allowed, sufficient for test duration)
+  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
+  firstTraceCreatedDedupTtl: 1d
 
 # Configuration for anonymous usage reporting
 usageReport:

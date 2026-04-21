@@ -17,9 +17,17 @@ const ProjectPage = () => {
 
   const activeProjectId = useActiveProjectId();
 
+  // The URL is the source of truth for the active project when we're on a
+  // project route. Re-assert whenever activeProjectId drifts from the URL —
+  // e.g. useActiveProjectInitializer (in SideBar) may write asynchronously
+  // after useProjectsList resolves and overwrite what we set on mount.
+  // Without this listener, the sidebar would get stuck showing a stale
+  // project while breadcrumbs/URL show the real one.
   useEffect(() => {
-    setActiveProject(workspaceName, projectId);
-  }, [projectId, workspaceName]);
+    if (activeProjectId !== projectId) {
+      setActiveProject(workspaceName, projectId);
+    }
+  }, [projectId, workspaceName, activeProjectId]);
 
   const { data, isPending, isError } = useProjectById({
     projectId,

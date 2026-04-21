@@ -6,7 +6,6 @@ on:
     paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
-      - 'apps/opik-guardrails-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
   push:
     branches:
@@ -14,7 +13,6 @@ on:
     paths:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
-      - 'apps/opik-guardrails-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
 
 concurrency:
