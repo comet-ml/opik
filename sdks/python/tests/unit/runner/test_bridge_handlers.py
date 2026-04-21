@@ -258,7 +258,7 @@ class TestBackgroundProcesses:
 
     @pytest.fixture()
     def handler(self, tmp_path: Path, tracker: BackgroundProcessTracker) -> ExecHandler:
-        return ExecHandler(tmp_path, bg_tracker=tracker, bg_startup_wait=0.5)
+        return ExecHandler(tmp_path, bg_tracker=tracker, bg_startup_wait=0.05)
 
     def test_background__returns_pid_and_log(self, handler: ExecHandler) -> None:
         result = handler.execute(
