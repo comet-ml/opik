@@ -68,7 +68,7 @@ const getMenuItems = ({
       items: [
         {
           id: "agent_runner",
-          path: projectPath("/agent-runner"),
+          path: projectPath("/agent-playground"),
           type: MENU_ITEM_TYPE.router,
           icon: GitBranch,
           label: "Agent playground",

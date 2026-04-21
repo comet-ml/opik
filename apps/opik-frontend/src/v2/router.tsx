@@ -401,7 +401,7 @@ const agentConfigurationRoute = createRoute({
 
 // ----------- agent runner (project-scoped)
 const agentRunnerRoute = createRoute({
-  path: "/agent-runner",
+  path: "/agent-playground",
   getParentRoute: () => projectScopedRoute,
   staticData: {
     title: "Agent playground",
