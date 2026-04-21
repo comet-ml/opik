@@ -88,12 +88,21 @@ export const convertCustomProviderModel = (
   }
 };
 
+const KNOWN_PROVIDER_TYPES = new Set<string>(Object.values(PROVIDER_TYPE));
+
 export const getProviderFromModel = (
   model: PROVIDER_MODEL_TYPE,
 ): PROVIDER_TYPE => {
   const snapshot = getLatestProviderModelsSnapshot();
   for (const [providerType, models] of Object.entries(snapshot)) {
-    if (models.some((m) => m.value === model)) {
+    // Only trust keys that match a known PROVIDER_TYPE. A YAML-backed
+    // provider key we don't understand (e.g. future provider added CDN-side
+    // before the FE ships matching metadata) shouldn't be returned as if it
+    // were a valid enum — callers read PROVIDERS[providerType] downstream.
+    if (
+      KNOWN_PROVIDER_TYPES.has(providerType) &&
+      models.some((m) => m.value === model)
+    ) {
       return providerType as PROVIDER_TYPE;
     }
   }
