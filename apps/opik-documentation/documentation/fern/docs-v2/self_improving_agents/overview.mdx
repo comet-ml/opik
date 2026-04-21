@@ -1,7 +1,7 @@
 ---
 headline: Building Self-Improving Agents | Opik Documentation
 og:description: The Opik philosophy on building agents that get better over time —
-  from production logging to automated improvement with Opik Connect
+  from production logging to automated improvement with Ollie
 og:site_name: Opik Documentation
 og:title: Building Self-Improving Agents — Opik
 title: Building Self-Improving Agents
@@ -43,18 +43,18 @@ def my_agent(query: str) -> str:
 
 **Where this happens in Opik:** The [Traces dashboard](/tracing/overview) shows every request with filtering by status, latency, cost, and custom tags.
 
-### Analyze with Opik Connect agent
+### Analyze with Ollie agent
 
-When you spot a trace that looks wrong — a hallucinated answer, ignored context, a failed tool call — open [Opik Connect](/opik-connect) from the trace view. Describe what looks off, and Opik Connect walks the span tree to find the root cause.
+When you spot a trace that looks wrong — a hallucinated answer, ignored context, a failed tool call — open [Ollie](/tracing/ollie) from the trace view. Describe what looks off, and Ollie walks the span tree to find the root cause.
 
-Opik Connect doesn't just summarize the trace. It reads the full execution path, compares failing runs to successful ones, and identifies exactly which step went wrong and why.
+Ollie doesn't just summarize the trace. It reads the full execution path, compares failing runs to successful ones, and identifies exactly which step went wrong and why.
 
 Example prompts:
 - *"Why did the final answer ignore the retrieved context?"*
 - *"Which tool call caused this trace to fail?"*
 - *"Compare this to a recent successful trace for the same query type"*
 
-**Where this happens in Opik:** The [Opik Connect debug panel](/tracing/debug-agents) is available from any trace view.
+**Where this happens in Opik:** The [Ollie debug panel](/tracing/debug-agents) is available from any trace view.
 
 ### Add failed agent responses to test suites
 
@@ -65,7 +65,7 @@ Example assertions:
 - *"The tool call must return a non-empty result"*
 - *"The response must not contain information not present in the context"*
 
-You can add test cases through Opik Connect, the Opik UI, or the SDK:
+You can add test cases through Ollie, the Opik UI, or the SDK:
 
 ```python
 import opik
@@ -80,15 +80,15 @@ suite.add_test_case(
 
 **Where this happens in Opik:** [Test Suites](/evaluation/advanced/building-test-suites) in the Evaluation section.
 
-### Update your agent prompts and code with Opik Connect
+### Update your agent prompts and code with Ollie
 
 With the root cause identified and a test case in place, fix the issue. This might mean updating a prompt, adjusting tool definitions, or changing retrieval parameters.
 
-With [`opik connect`](/development/agent-sandbox) running, Opik Connect can read your source files and propose code changes directly. You see the diff, approve it, and the file is updated on your machine. Nothing changes without your click.
+With [`opik connect`](/development/agent-sandbox) running, Ollie can read your source files and propose code changes directly. You see the diff, approve it, and the file is updated on your machine. Nothing changes without your click.
 
-This is the step where Opik Connect's full power shows — it has context from the trace (what went wrong), the test suite (what "correct" looks like), and your code (where to make the change). See [Opik Connect and your codebase](/self-improving-agents/opik-connect-and-your-codebase) for the full workflow.
+This is the step where Ollie's full power shows — it has context from the trace (what went wrong), the test suite (what "correct" looks like), and your code (where to make the change). See [Ollie and your codebase](/self-improving-agents/ollie-and-your-codebase) for the full workflow.
 
-**Where this happens in Opik:** The Opik Connect chat panel with `opik connect` active.
+**Where this happens in Opik:** The Ollie chat panel with `opik connect` active.
 
 ### Validate changes with test suites
 
@@ -109,7 +109,7 @@ You get a pass/fail summary for every assertion. If something fails, you're back
 The flywheel isn't just a process — it's a compounding investment:
 
 - **Each turn adds a test case.** After 50 production failures caught and fixed, you have 50 regression tests that run automatically.
-- **Opik Connect gets more context.** The more traces and test cases in your workspace, the better Opik Connect can diagnose new issues by comparing to known patterns.
+- **Ollie gets more context.** The more traces and test cases in your workspace, the better Ollie can diagnose new issues by comparing to known patterns.
 - **Confidence grows.** With a comprehensive test suite, you can ship changes faster because you know regressions will be caught.
 - **Failure rate drops.** Each fix addresses a real production failure mode. Over time, the easy failures are eliminated and your agent handles edge cases that would have broken it before.
 
@@ -122,6 +122,6 @@ The flywheel isn't just a process — it's a compounding investment:
 
 ## Next steps
 
-- [Opik Connect and your codebase](/self-improving-agents/opik-connect-and-your-codebase) — How `opik connect` lets Opik Connect read and edit your code
+- [Ollie and your codebase](/self-improving-agents/ollie-and-your-codebase) — How `opik connect` lets Ollie read and edit your code
 - [Getting started with evaluation](/evaluation/getting-started) — Run your first test suite
-- [Debugging agents with Opik Connect](/tracing/debug-agents) — Example prompts and the full debug workflow
+- [Debugging agents with Ollie](/tracing/debug-agents) — Example prompts and the full debug workflow

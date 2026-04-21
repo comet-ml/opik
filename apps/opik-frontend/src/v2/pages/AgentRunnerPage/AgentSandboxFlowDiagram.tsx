@@ -104,9 +104,7 @@ const AgentSandboxFlowDiagram: React.FC = () => {
         <div className="rounded border border-primary bg-primary-foreground px-2 py-1.5">
           <div className="flex items-center gap-1.5">
             <OllieOwl className="size-3 shrink-0" />
-            <span className="text-[11px] font-medium">
-              Improve with Opik Connect
-            </span>
+            <span className="text-[11px] font-medium">Improve with Ollie</span>
           </div>
           <p className="mt-0.5 text-[10px] text-muted-slate">
             Analyze traces, suggest prompt tweaks
