@@ -1,5 +1,6 @@
 import React from "react";
 import { useActiveProjectId } from "@/store/AppStore";
+import usePluginsStore from "@/store/PluginsStore";
 import { Separator } from "@/ui/separator";
 import SidebarMenuItem, {
   MenuItem,
@@ -13,6 +14,7 @@ interface SideBarMenuItemsProps {
 
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const activeProjectId = useActiveProjectId();
+  const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const {
     permissions: { canViewExperiments, canViewDatasets, canUsePlayground },
   } = usePermissions();
@@ -22,6 +24,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewExperiments,
     canViewDatasets,
     canUsePlayground,
+    showHome: !!AssistantSidebar,
   });
 
   const renderItems = (items: MenuItem[]) => {

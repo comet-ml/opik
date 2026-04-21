@@ -8,7 +8,7 @@ import {
   Plus,
   Trash,
 } from "lucide-react";
-import { Link, useMatchRoute, useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
@@ -49,13 +49,6 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const activeProjectId = useActiveProjectId();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const navigate = useNavigate();
-  const matchRoute = useMatchRoute();
-  const isOnProjectHome =
-    !!activeProjectId &&
-    !!matchRoute({
-      to: "/$workspaceName/projects/$projectId/home",
-      params: { workspaceName, projectId: activeProjectId },
-    });
 
   const {
     permissions: { canCreateProjects },
@@ -174,12 +167,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             className="w-full"
           >
             <TooltipWrapper content={activeProject.name}>
-              <span
-                className={cn(
-                  "comet-body-s-accented block w-full truncate text-left hover:underline hover:underline-offset-4",
-                  isOnProjectHome ? "text-primary" : "text-foreground",
-                )}
-              >
+              <span className="comet-body-s-accented block w-full truncate text-left text-foreground hover:underline hover:underline-offset-4">
                 {activeProject.name}
               </span>
             </TooltipWrapper>
@@ -222,12 +210,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
         <Link
           to="/$workspaceName/projects/$projectId/home"
           params={{ workspaceName, projectId: activeProject.id }}
-          className={cn(
-            "flex size-7 items-center justify-center rounded-md",
-            isOnProjectHome
-              ? "bg-primary-100 hover:bg-primary-200"
-              : "hover:bg-primary-foreground",
-          )}
+          className="flex size-7 items-center justify-center rounded-md hover:bg-primary-foreground"
         >
           {iconContent}
         </Link>
