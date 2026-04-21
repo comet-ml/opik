@@ -249,7 +249,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     let failedRuns = 0;
 
     const spinnerLabel = this.suiteMode
-      ? `Evaluating dataset (0/${totalRuns} runs across ${totalItems} items)`
+      ? `Evaluating test suite (0/${totalRuns} runs across ${totalItems} items)`
       : `Evaluating dataset (0/${totalItems} items)`;
     const spinner = ora({ text: spinnerLabel }).start();
 
@@ -258,7 +258,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     return {
       update: (completedRuns: number) => {
         spinner.text = this.suiteMode
-          ? `Evaluating dataset (${completedRuns}/${totalRuns} runs across ${totalItems} items, ${Math.round((completedRuns / totalRuns) * 100)}%${failSuffix()})`
+          ? `Evaluating test suite (${completedRuns}/${totalRuns} runs across ${totalItems} items, ${Math.round((completedRuns / totalRuns) * 100)}%${failSuffix()})`
           : `Evaluating dataset (${completedRuns}/${totalItems} items, ${Math.round((completedRuns / totalItems) * 100)}%${failSuffix()})`;
       },
       complete: (elapsedSeconds: number) => {

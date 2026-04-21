@@ -171,7 +171,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
                         .subscribeOn(Schedulers.boundedElastic()),
-                optimizationDAO.hasVersion1Optimizations(workspaceId),
+                optimizationDAO.hasVersion1Optimizations(workspaceId, DemoData.OPTIMIZATIONS),
                 experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS))
                 .any(found -> found)
                 .map(found -> {
@@ -211,7 +211,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;
             }
-            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId)) {
+            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId, DemoData.PROMPTS)) {
                 log.info("Found version_1 prompts in workspace '{}'", workspaceId);
                 return true;
             }

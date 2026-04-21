@@ -1695,6 +1695,11 @@ public class ExperimentDAO {
     private final @NonNull GroupingQueryBuilder groupingQueryBuilder;
     private final @NonNull ExperimentAggregatesDAO experimentAggregatesDAO;
 
+    /**
+     * Checks for V1 (workspace-scoped) experiments excluding known demo names.
+     * ClickHouse string comparison is case-sensitive — every known casing of a demo name
+     * must be listed explicitly in {@link DemoData#EXPERIMENTS}.
+     */
     public Mono<Boolean> hasVersion1Experiments(@NonNull String workspaceId,
             @NonNull List<String> demoExperimentNames) {
         var template = getSTWithLogComment(HAS_VERSION1_EXPERIMENTS,

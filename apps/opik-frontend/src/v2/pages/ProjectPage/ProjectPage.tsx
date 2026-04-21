@@ -17,21 +17,22 @@ const ProjectPage = () => {
 
   const activeProjectId = useActiveProjectId();
 
-  // The URL is the source of truth for the active project when we're on a
-  // project route. Re-assert whenever activeProjectId drifts from the URL —
-  // e.g. useActiveProjectInitializer (in SideBar) may write asynchronously
-  // after useProjectsList resolves and overwrite what we set on mount.
-  // Without this listener, the sidebar would get stuck showing a stale
-  // project while breadcrumbs/URL show the real one.
-  useEffect(() => {
-    if (activeProjectId !== projectId) {
-      setActiveProject(workspaceName, projectId);
-    }
-  }, [projectId, workspaceName, activeProjectId]);
-
   const { data, isPending, isError } = useProjectById({
     projectId,
   });
+
+  // The URL is the source of truth for the active project when we're on a
+  // project route — but only after we've verified the project actually exists.
+  // Writing the URL's projectId before verification would briefly point the
+  // store at a non-existent id on 404/5xx; skipping the write on error keeps
+  // the previously-valid activeProjectId so the sidebar doesn't flicker or
+  // end up highlighting nothing real.
+  useEffect(() => {
+    if (isPending || isError || !data) return;
+    if (activeProjectId !== projectId) {
+      setActiveProject(workspaceName, projectId);
+    }
+  }, [isPending, isError, data, projectId, workspaceName, activeProjectId]);
 
   useEffect(() => {
     if (data?.name) {
@@ -43,12 +44,11 @@ const ProjectPage = () => {
     select: (location) => location.pathname,
   });
 
-  if (isPending || activeProjectId !== projectId) {
+  if (isPending) {
     return <Loader />;
   }
 
   if (isError || !data) {
-    setActiveProject(workspaceName, null);
     return (
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
@@ -62,6 +62,13 @@ const ProjectPage = () => {
         </div>
       </NoData>
     );
+  }
+
+  // Hold the Outlet until the store catches up with the URL. Without this,
+  // children read a stale activeProjectId for one render (the sync effect
+  // fires after render) and kick off queries against the previous project.
+  if (activeProjectId !== projectId) {
+    return <Loader />;
   }
 
   if (last(pathname.split("/")) === projectId) {
