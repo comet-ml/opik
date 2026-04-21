@@ -449,8 +449,15 @@ class WorkspaceVersionResourceTest {
                     .build();
             datasetClient.createDataset(dataset, API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
+            // Demo optimization without project does not trigger V1
+            optimizationClient.create(optimizationClient.createPartialOptimization()
+                    .name("ivory_berm_3833")
+                    .datasetName(dataset.name())
+                    .build(),
+                    API_KEY, workspaceName);
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 
-            // Workspace level optimization triggers V1
+            // Non-demo workspace level optimization triggers V1
             optimizationClient.create(optimizationClient.createPartialOptimization()
                     .datasetName(dataset.name())
                     .build(),

@@ -171,7 +171,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
                         .subscribeOn(Schedulers.boundedElastic()),
-                optimizationDAO.hasVersion1Optimizations(workspaceId),
+                optimizationDAO.hasVersion1Optimizations(workspaceId, DemoData.OPTIMIZATIONS),
                 experimentDAO.hasVersion1Experiments(workspaceId, DemoData.EXPERIMENTS))
                 .any(found -> found)
                 .map(found -> {
