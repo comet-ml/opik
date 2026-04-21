@@ -61,9 +61,7 @@ export default function useConfigHistoryListInfinite({
     initialPageParam: 1,
     refetchInterval: (query) => {
       if (query.state.status !== "success" || !query.state.data) return false;
-      const isEmpty = !query.state.data.pages.some(
-        (p) => p.content.length > 0,
-      );
+      const isEmpty = !query.state.data.pages.some((p) => p.content.length > 0);
       return isEmpty ? 5000 : false;
     },
   });
