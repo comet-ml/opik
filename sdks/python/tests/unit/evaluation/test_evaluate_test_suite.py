@@ -13,15 +13,6 @@ from ...testlib import ANY_BUT_NONE, SpanModel, assert_equal
 from ...testlib.models import TraceModel
 
 
-def _suite_from(make_dataset, items=None, execution_policy=None, client=None):
-    """Build a real TestSuite wrapping a mock Dataset from ``make_dataset``."""
-    mock_dataset = make_dataset(items=items, execution_policy=execution_policy)
-    mock_dataset.client = client
-    return test_suite.TestSuite(
-        name=mock_dataset.name, dataset_=mock_dataset, client=client
-    )
-
-
 def _create_mock_dataset(name="test-dataset", items=None, execution_policy=None):
     mock_dataset = mock.MagicMock()
     mock_dataset.name = name
@@ -344,85 +335,82 @@ def test_run_tests__explicit_client__propagated_to_worker_threads(
 # =============================================================================
 
 
-def _run_suite(suite, task, worker_threads=1):
-    return evaluator_module.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name="exp-test",
-        verbose=0,
-        worker_threads=worker_threads,
-    )
-
-
-def test_run_tests__runs_per_item__task_called_n_times(
-    mock_create_experiment, mock_experiment_url, make_dataset, make_dataset_item,
-):
-    """Suite-level runs_per_item causes the task to run N times per item."""
-    suite = _suite_from(
-        make_dataset,
-        items=[make_dataset_item("item-1", {"q": "hi"})],
+def test_run_tests__runs_per_item__task_called_n_times():
+    """Suite-level runs_per_item=2 causes the task to run twice per item."""
+    items = [dataset_item.DatasetItem(id="item-1", input={"q": "hi"})]
+    mock_dataset = _create_mock_dataset(
+        items=items,
         execution_policy={"runs_per_item": 2, "pass_threshold": 1},
     )
+    suite = _create_suite(mock_dataset)
 
     call_count = 0
-    lock = threading.Lock()
 
     def task(item):
         nonlocal call_count
-        with lock:
-            call_count += 1
+        call_count += 1
         return {"input": item, "output": "ok"}
 
-    _run_suite(suite, task)
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", return_value=mock_experiment
+    ), mock.patch.object(
+        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    ):
+        evaluator_module.run_tests(
+            test_suite=suite, task=task, experiment_name="exp",
+            verbose=0, worker_threads=1,
+        )
 
     assert call_count == 2
 
 
-def test_run_tests__item_level_policy_overrides_suite_policy(
-    mock_create_experiment, mock_experiment_url, make_dataset, make_dataset_item,
-):
+def test_run_tests__item_level_policy_overrides_suite_policy():
     """Per-item execution_policy wins over the suite-level default."""
-    suite = _suite_from(
-        make_dataset,
-        items=[
-            make_dataset_item(
-                "item-1",
-                {"q": "hi"},
-                execution_policy={"runs_per_item": 3, "pass_threshold": 1},
-            )
-        ],
+    items = [
+        dataset_item.DatasetItem(
+            id="item-1",
+            input={"q": "hi"},
+            execution_policy=dataset_item.ExecutionPolicyItem(
+                runs_per_item=3, pass_threshold=1
+            ),
+        )
+    ]
+    mock_dataset = _create_mock_dataset(
+        items=items,
         execution_policy={"runs_per_item": 1, "pass_threshold": 1},
     )
+    suite = _create_suite(mock_dataset)
 
     call_count = 0
-    lock = threading.Lock()
 
     def task(item):
         nonlocal call_count
-        with lock:
-            call_count += 1
+        call_count += 1
         return {"input": item, "output": "ok"}
 
-    _run_suite(suite, task)
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", return_value=mock_experiment
+    ), mock.patch.object(
+        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    ):
+        evaluator_module.run_tests(
+            test_suite=suite, task=task, experiment_name="exp",
+            verbose=0, worker_threads=1,
+        )
 
     assert call_count == 3
 
 
-def test_run_tests__no_assertions__items_pass_with_single_run(
-    fake_backend,
-    mock_create_experiment,
-    mock_experiment_url,
-    make_dataset,
-    make_dataset_item,
-):
+def test_run_tests__no_assertions__items_pass_with_single_run(fake_backend):
     """Default policy with no assertions: task runs once per item and all pass."""
-    suite = _suite_from(
-        make_dataset,
-        items=[
-            make_dataset_item("item-1", {"q": "a"}),
-            make_dataset_item("item-2", {"q": "b"}),
-        ],
-    )
+    items = [
+        dataset_item.DatasetItem(id="item-1", input={"q": "a"}),
+        dataset_item.DatasetItem(id="item-2", input={"q": "b"}),
+    ]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
 
     call_count = 0
     lock = threading.Lock()
@@ -433,7 +421,16 @@ def test_run_tests__no_assertions__items_pass_with_single_run(
             call_count += 1
         return {"input": item, "output": "ok"}
 
-    result = _run_suite(suite, task)
+    mock_experiment = mock.Mock(id="exp", name="exp")
+    with mock.patch.object(
+        opik_client.Opik, "create_experiment", return_value=mock_experiment
+    ), mock.patch.object(
+        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    ):
+        result = evaluator_module.run_tests(
+            test_suite=suite, task=task, experiment_name="exp",
+            verbose=0, worker_threads=1,
+        )
 
     assert call_count == 2
     assert result.items_total == 2
