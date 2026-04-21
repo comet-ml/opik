@@ -366,6 +366,8 @@ def get_new_uuid_by_time(context: DemoDataContext, old_id, datetime):
     return new_id
 
 def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
+    """Seed the demo chatbot project. Returns True when fresh data was written,
+    False when the project already existed (409) and the seed was skipped."""
     with tracer.start_as_current_span("create_demo_chatbot_project"):
         client: opik.Opik = None
 
@@ -387,12 +389,12 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                     break
                 if attempt == max_retries - 1:
                     logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
-                    return
+                    return False
                 time.sleep(2 ** attempt)
 
             if status_code == 409:
                 logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
-                return
+                return False
 
             client = opik.Opik(
                 project_name=project_name,
@@ -485,8 +487,11 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                         time.sleep(0.5)
                 if not done:
                     logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
+
+            return True
         except Exception as e:
             logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e, exc_info=True)
+            return False
         finally:
             # Close the client
             if client:
@@ -916,9 +921,14 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         project_name = "Opik Demo Agent Observability"
 
         try:
-            create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
+            chatbot_seeded = create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
-            create_demo_test_suite_and_experiments(base_url, workspace_name, comet_api_key, project_name)
+            # Only run the test-suite seed when the chatbot project was freshly created.
+            # If the chatbot flow short-circuited on 409 (project already exists), the
+            # suite/prompt/blueprints/experiments were seeded on the prior run too —
+            # a second pass must be a no-op to stay idempotent under signup retries.
+            if chatbot_seeded:
+                create_demo_test_suite_and_experiments(base_url, workspace_name, comet_api_key, project_name)
             logger.info("Demo data created successfully")
         except Exception as e:
             logger.error(e)
