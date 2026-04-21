@@ -13,14 +13,14 @@ from ...testlib import ANY_BUT_NONE, SpanModel, assert_equal
 from ...testlib.models import TraceModel
 
 
-def _create_mock_dataset(name="test-dataset", items=None):
+def _create_mock_dataset(name="test-dataset", items=None, execution_policy=None):
     mock_dataset = mock.MagicMock()
     mock_dataset.name = name
     mock_dataset.id = "dataset-id-123"
     mock_dataset.project_name = None
     mock_dataset.dataset_items_count = len(items) if items else 0
     mock_dataset.get_evaluators.return_value = []
-    mock_dataset.get_execution_policy.return_value = {
+    mock_dataset.get_execution_policy.return_value = execution_policy or {
         "runs_per_item": 1,
         "pass_threshold": 1,
     }
@@ -38,6 +38,33 @@ def _create_suite(mock_dataset, client=None):
         dataset_=mock_dataset,
         client=client,
     )
+
+
+def _run_suite_with_mocked_backend(suite, task, worker_threads=1):
+    """Run the suite with experiment creation + URL helpers patched out.
+
+    Every suite test needs these mocks identically; centralising here prevents
+    copy-paste drift and keeps per-test bodies focused on the actual behaviour
+    being asserted.
+    """
+    mock_experiment = mock.Mock()
+    mock_experiment.id = "exp-test"
+    mock_experiment.name = "exp-test"
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
+    ):
+        return evaluator_module.run_tests(
+            test_suite=suite,
+            task=task,
+            experiment_name="exp-test",
+            verbose=0,
+            worker_threads=worker_threads,
+        )
 
 
 def test_run_tests__creates_experiment_with_evaluation_method_test_suite():
@@ -325,3 +352,97 @@ def test_run_tests__explicit_client__propagated_to_worker_threads(
         f"Worker threads should all see the same client instance, "
         f"but saw {len(client_ids)} distinct clients"
     )
+
+
+# =============================================================================
+# Execution policy — previously covered by e2e tests in
+# tests/e2e/evaluation/test_test_suite.py, moved here because the behaviour is
+# SDK-local (engine loops `runs_per_item` times; item-level policy overrides
+# suite-level) and does not require a real backend.
+# =============================================================================
+
+
+def test_run_tests__runs_per_item__task_called_n_times():
+    """Suite-level runs_per_item causes the task to run N times per item."""
+    items = [
+        dataset_item.DatasetItem(id="item-1", input={"q": "hi"}),
+    ]
+    mock_dataset = _create_mock_dataset(
+        items=items,
+        execution_policy={"runs_per_item": 2, "pass_threshold": 1},
+    )
+    suite = _create_suite(mock_dataset)
+
+    call_count = 0
+    lock = threading.Lock()
+
+    def task(item):
+        nonlocal call_count
+        with lock:
+            call_count += 1
+        return {"input": item, "output": "ok"}
+
+    _run_suite_with_mocked_backend(suite, task)
+
+    assert call_count == 2
+
+
+def test_run_tests__item_level_policy_overrides_suite_policy():
+    """Per-item execution_policy wins over the suite-level default."""
+    items = [
+        dataset_item.DatasetItem(
+            id="item-1",
+            input={"q": "hi"},
+            execution_policy=dataset_item.ExecutionPolicyItem(
+                runs_per_item=3, pass_threshold=1
+            ),
+        ),
+    ]
+    mock_dataset = _create_mock_dataset(
+        items=items,
+        execution_policy={"runs_per_item": 1, "pass_threshold": 1},
+    )
+    suite = _create_suite(mock_dataset)
+
+    call_count = 0
+    lock = threading.Lock()
+
+    def task(item):
+        nonlocal call_count
+        with lock:
+            call_count += 1
+        return {"input": item, "output": "ok"}
+
+    _run_suite_with_mocked_backend(suite, task)
+
+    assert call_count == 3
+
+
+def test_run_tests__no_assertions__items_pass_with_single_run(fake_backend):
+    """Default policy with no assertions: task runs once per item and all pass."""
+    items = [
+        dataset_item.DatasetItem(id="item-1", input={"q": "a"}),
+        dataset_item.DatasetItem(id="item-2", input={"q": "b"}),
+    ]
+    mock_dataset = _create_mock_dataset(items=items)
+    suite = _create_suite(mock_dataset)
+
+    call_count = 0
+    lock = threading.Lock()
+
+    def task(item):
+        nonlocal call_count
+        with lock:
+            call_count += 1
+        return {"input": item, "output": "ok"}
+
+    result = _run_suite_with_mocked_backend(suite, task)
+
+    assert call_count == 2
+    assert result.items_total == 2
+    assert result.items_passed == 2
+    assert result.all_items_passed is True
+    for item_result in result.item_results.values():
+        assert item_result.runs_total == 1
+        assert item_result.pass_threshold == 1
+    assert len(fake_backend.trace_trees) == 2

@@ -80,17 +80,14 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         # Verify the log_feedback_scores was called
         self.mock_client.log_threads_feedback_scores.assert_called()
 
-    def test_evaluate_threads__one_thread_closed__happy_path(self):
-        """Test the full evaluate_threads method with mocked dependencies for two threads one is closed and one is active.
-        Only one feedback score should be logged for the closed thread."""
-        # Mock threads
+    def test_evaluate_threads__mixed_active_and_inactive__all_evaluated(self):
+        """Both active and inactive threads are evaluated (no filtering by status)."""
         mock_threads = [
             TraceThread(id="thread_1", status="inactive"),
             TraceThread(id="thread_2", status="active"),
         ]
         self.mock_client.search_threads.return_value = mock_threads
 
-        # Create mock metrics
         mock_metric1 = mock.MagicMock(
             spec=conversation_thread_metric.ConversationThreadMetric
         )
@@ -101,47 +98,23 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         mock_metric2.name = "metric2"
         metrics = [mock_metric1, mock_metric2]
 
-        # Patch the evaluate_thread method
         self.engine.evaluate_thread = _mock_evaluate_thread_two_test_results
 
-        filter_string = "test_filter"
+        result = self.engine.evaluate_threads(
+            filter_string="test_filter",
+            eval_project_name="eval_project",
+            metrics=metrics,
+            trace_input_transform=lambda x: "",
+            trace_output_transform=lambda x: "",
+            max_traces_per_thread=10,
+        )
 
-        # Call the method
-        with self.assertLogs(
-            level="WARNING", logger="opik.evaluation.threads.evaluation_engine"
-        ) as log_context:
-            result = self.engine.evaluate_threads(
-                filter_string=filter_string,
-                eval_project_name="eval_project",
-                metrics=metrics,
-                trace_input_transform=lambda x: "",
-                trace_output_transform=lambda x: "",
-                max_traces_per_thread=10,
-            )
-
-        # Verify the result
-        self.assertEqual(len(result.results), 1)
+        self.assertEqual(len(result.results), 2)
         for result in result.results:
-            self.assertTrue(result.thread_id in ["thread_1"])
+            self.assertTrue(result.thread_id in ["thread_1", "thread_2"])
             self.assertEqual(len(result.scores), 2)
 
-        # Verify the log_feedback_scores was called
         self.mock_client.log_threads_feedback_scores.assert_called()
-
-        active_threads_ids = [
-            thread.id for thread in mock_threads if thread.status == "active"
-        ]
-        inactive_threads_ids = [
-            thread.id for thread in mock_threads if thread.status == "inactive"
-        ]
-        # Verify warning was logged
-        self.assertTrue(
-            any(
-                f"Some threads are active: {active_threads_ids} with filter_string: {filter_string}. Only closed threads will be evaluated: {inactive_threads_ids}."
-                in message
-                for message in log_context.output
-            )
-        )
 
     def test_evaluate_threads__with_empty_traces__warning_logged(self):
         """Test evaluate_threads when no traces are found."""
@@ -217,37 +190,6 @@ class TestThreadsEvaluationEngine(unittest.TestCase):
         assert (
             str(exc_info.value)
             == f"No threads found with filter_string: {filter_string}"
-        )
-
-    def test_evaluate_threads__no_closed_threads_found__exception_raised(self):
-        # Mock threads
-        mock_threads = [
-            TraceThread(id="thread_1", status="active"),
-            TraceThread(id="thread_2", status="active"),
-        ]
-        self.mock_client.search_threads.return_value = mock_threads
-
-        # Create mock metrics
-        mock_metric = mock.MagicMock(
-            spec=conversation_thread_metric.ConversationThreadMetric
-        )
-        metrics = [mock_metric]
-
-        filter_string = "test_filter"
-
-        # Call the method
-        with pytest.raises(exceptions.EvaluationError) as exc_info:
-            self.engine.evaluate_threads(
-                filter_string=filter_string,
-                eval_project_name="eval_project",
-                metrics=metrics,
-                trace_input_transform=lambda x: "",
-                trace_output_transform=lambda x: "",
-            )
-
-        assert (
-            str(exc_info.value)
-            == f"No closed threads found with filter_string: {filter_string}. Only closed threads can be evaluated."
         )
 
     def test_evaluate_threads__with_multiple_trace_threads__executor_called_with_correct_args(

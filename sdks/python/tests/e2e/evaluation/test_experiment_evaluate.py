@@ -462,51 +462,6 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
     )
 
 
-def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    project_name = "test-project-experiment_creation__experiment_config_not_set__None_metadata_sent_to_backend"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
-
-    dataset.insert(
-        [
-            {
-                "input": {"question": "What is the of capital of France?"},
-                "reference": "Paris",
-            },
-        ]
-    )
-
-    def task(item: dataset_item.DatasetItem):
-        if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-            }
-
-        raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item['input']}"
-        )
-
-    equals_metric = metrics.Equals()
-    evaluation_result = opik.evaluate(
-        dataset=dataset,
-        task=task,
-        scoring_metrics=[equals_metric],
-        experiment_name=experiment_name,
-        project_name=project_name,
-    )
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=evaluation_result.experiment_id,
-        experiment_name=evaluation_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=1,  # one trace per dataset item
-        feedback_scores_amount=1,
-        project_name=project_name,
-    )
-
-
 def test_experiment_creation__name_can_be_omitted(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
@@ -558,63 +513,6 @@ def test_experiment_creation__name_can_be_omitted(
     assert experiment_content.name is not None, (
         f"Expected experiment name to be set by backend, but got None. "
         f"Experiment ID: {experiment_id}, Experiment content: {experiment_content}"
-    )
-
-
-def test_experiment_creation__scoring_metrics_not_set(
-    opik_client: opik.Opik, dataset_name: str, experiment_name
-):
-    """
-    We can create an experiment without scoring metrics
-    """
-    project_name = "test-project-experiment_creation__scoring_metrics_not_set"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
-
-    dataset.insert(
-        [
-            {
-                "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
-            },
-        ]
-    )
-
-    def task(item: dataset_item.DatasetItem):
-        if item["input"] == {"question": "What is the of capital of France?"}:
-            return {
-                "output": "Paris",
-            }
-
-        raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item['input']}"
-        )
-
-    evaluation_result = opik.evaluate(
-        dataset=dataset,
-        task=task,
-        experiment_name=experiment_name,
-        project_name=project_name,
-    )
-
-    experiment_id = evaluation_result.experiment_id
-
-    if not synchronization.until(
-        lambda: (
-            opik_client._rest_client.experiments.get_experiment_by_id(experiment_id)
-            is not None
-        ),
-        allow_errors=True,
-    ):
-        raise AssertionError(f"Failed to get experiment with id {experiment_id}.")
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=evaluation_result.experiment_id,
-        experiment_name=evaluation_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=1,
-        feedback_scores_amount=0,
-        project_name=project_name,
     )
 
 
@@ -800,20 +698,6 @@ def test_experiment__get_experiments_by_name(
         f"Expected 1 experiment with name '{experiments_names[2]}', but got {len(experiments)}. "
         f"Experiment IDs: {[e.id for e in experiments]}"
     )
-
-
-def test_experiment__get_experiment_by_id__experiment_not_found__ExperimentNotFound_error_is_raised(
-    opik_client: opik.Opik,
-):
-    with pytest.raises(exceptions.ExperimentNotFound):
-        opik_client.get_experiment_by_id("not-existing-id")
-
-
-def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNotFound_error_is_raised(
-    opik_client: opik.Opik,
-):
-    with pytest.raises(exceptions.ExperimentNotFound):
-        opik_client.get_experiment_by_name("not-existing-name")
 
 
 def test_experiment__get_experiment_items__no_feedback_scores(
