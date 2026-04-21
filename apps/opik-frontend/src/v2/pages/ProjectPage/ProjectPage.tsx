@@ -64,6 +64,13 @@ const ProjectPage = () => {
     );
   }
 
+  // Hold the Outlet until the store catches up with the URL. Without this,
+  // children read a stale activeProjectId for one render (the sync effect
+  // fires after render) and kick off queries against the previous project.
+  if (activeProjectId !== projectId) {
+    return <Loader />;
+  }
+
   if (last(pathname.split("/")) === projectId) {
     return <Navigate to={pathname + "/home"} />;
   }
