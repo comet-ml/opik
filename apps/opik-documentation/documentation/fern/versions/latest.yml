@@ -33,9 +33,9 @@ navigation:
             path: ../docs-v2/quickstart.mdx
             slug: /quickstart
             icon: fa-regular fa-bolt
-          - page: Ollie Agent
+          - page: Opik Connect
             path: ../docs-v2/ollie.mdx
-            slug: ollie
+            slug: opik-connect
             icon: fa-regular fa-sparkles
           - page: FAQ
             path: ../docs-v2/faq.mdx
@@ -57,7 +57,7 @@ navigation:
           - page: Concepts
             path: ../docs-v2/tracing/concepts.mdx
             slug: concepts
-          - page: Debugging agents with Ollie
+          - page: Debugging agents with Opik Connect
             path: ../docs-v2/observability/debug_agents.mdx
             slug: debug-agents
           - section: Advanced
@@ -858,9 +858,9 @@ navigation:
       - page: Overview
         path: ../docs-v2/self_improving_agents/overview.mdx
         slug: overview
-      - page: Ollie and your codebase
+      - page: Opik Connect and your codebase
         path: ../docs-v2/self_improving_agents/ollie_and_your_codebase.mdx
-        slug: ollie-and-your-codebase
+        slug: opik-connect-and-your-codebase
   - tab: self-host
     layout:
       - page: Overview
