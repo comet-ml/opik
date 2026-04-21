@@ -2,7 +2,7 @@ from typing import Dict, Any, List
 
 import opik
 
-from opik import Prompt, synchronization, exceptions, id_helpers
+from opik import Prompt, synchronization, id_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.evaluation import metrics
 from opik.evaluation import test_result
@@ -11,8 +11,6 @@ from opik.api_objects.experiment import experiment_item
 from .. import verifiers
 from ..conftest import random_chars
 from ...testlib import assert_equal, ANY_BUT_NONE
-
-import pytest
 
 
 def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happyflow(

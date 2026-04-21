@@ -259,9 +259,7 @@ class Supervisor:
         with self._stderr_lock:
             return "\n".join(self._stderr_buffer)
 
-    def _stop_child(
-        self, graceful_timeout: Optional[float] = None
-    ) -> Optional[int]:
+    def _stop_child(self, graceful_timeout: Optional[float] = None) -> Optional[int]:
         if graceful_timeout is None:
             graceful_timeout = self._graceful_timeout_seconds
         with self._child_lock:

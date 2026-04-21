@@ -352,14 +352,20 @@ def test_run_tests__runs_per_item__task_called_n_times():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
-    with mock.patch.object(
-        opik_client.Opik, "create_experiment", return_value=mock_experiment
-    ), mock.patch.object(
-        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
     ):
         evaluator_module.run_tests(
-            test_suite=suite, task=task, experiment_name="exp",
-            verbose=0, worker_threads=1,
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=1,
         )
 
     assert call_count == 2
@@ -390,14 +396,20 @@ def test_run_tests__item_level_policy_overrides_suite_policy():
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
-    with mock.patch.object(
-        opik_client.Opik, "create_experiment", return_value=mock_experiment
-    ), mock.patch.object(
-        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
     ):
         evaluator_module.run_tests(
-            test_suite=suite, task=task, experiment_name="exp",
-            verbose=0, worker_threads=1,
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=1,
         )
 
     assert call_count == 3
@@ -422,14 +434,20 @@ def test_run_tests__no_assertions__items_pass_with_single_run(fake_backend):
         return {"input": item, "output": "ok"}
 
     mock_experiment = mock.Mock(id="exp", name="exp")
-    with mock.patch.object(
-        opik_client.Opik, "create_experiment", return_value=mock_experiment
-    ), mock.patch.object(
-        url_helpers, "get_experiment_url_by_id", return_value="any_url"
+    with (
+        mock.patch.object(
+            opik_client.Opik, "create_experiment", return_value=mock_experiment
+        ),
+        mock.patch.object(
+            url_helpers, "get_experiment_url_by_id", return_value="any_url"
+        ),
     ):
         result = evaluator_module.run_tests(
-            test_suite=suite, task=task, experiment_name="exp",
-            verbose=0, worker_threads=1,
+            test_suite=suite,
+            task=task,
+            experiment_name="exp",
+            verbose=0,
+            worker_threads=1,
         )
 
     assert call_count == 2

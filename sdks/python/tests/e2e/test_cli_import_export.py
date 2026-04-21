@@ -977,8 +977,7 @@ class TestCLIImportExport:
         # calculates cost asynchronously after the span is created).
         assert synchronization.until(
             lambda: (
-                (_span := opik_client.get_span_content(id=original_span_id))
-                is not None
+                (_span := opik_client.get_span_content(id=original_span_id)) is not None
                 and _span.type == "llm"
                 and _span.usage is not None
             ),
@@ -1076,9 +1075,7 @@ class TestCLIImportExport:
 
         # Wait for the imported trace to appear in the new project.
         assert synchronization.until(
-            lambda: len(
-                opik_client.search_traces(project_name=imported_project_name)
-            )
+            lambda: len(opik_client.search_traces(project_name=imported_project_name))
             >= 1,
             allow_errors=True,
         ), f"No imported traces found in project {imported_project_name}"

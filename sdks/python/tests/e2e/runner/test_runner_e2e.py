@@ -160,9 +160,7 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project):
     assert message in log_text, f"Expected '{message}' in job logs, got: {log_text}"
 
 
-def test_runner_with_mask(
-    opik_client, api_client, runner_process: RunnerInfo, project
-):
+def test_runner_with_mask(opik_client, api_client, runner_process: RunnerInfo, project):
     """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
     message = f"mask-e2e-{int(time.time())}"
     custom_greeting = f"custom-greeting-{int(time.time())}"
