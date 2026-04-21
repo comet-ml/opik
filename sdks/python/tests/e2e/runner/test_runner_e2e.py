@@ -12,7 +12,6 @@ from typing import Optional
 import opik
 import opik.rest_api.client as rest_api_client
 from opik.api_objects.agent_config.config import ConfigManager
-from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from .conftest import RunnerInfo
 
 
@@ -125,7 +124,9 @@ def wait_for_agent_registration(
 # ---------------------------------------------------------------------------
 
 
-def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
+def test_runner_happy_path(
+    api_client, runner_process: RunnerInfo, project_id, project_name
+):
     """Basic: register echo agent, run job, verify job result, trace output, and job logs."""
     message = f"hello-e2e-{int(time.time())}"
 
@@ -138,7 +139,7 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
     assert f"echo: {message}" in str(job.result)
     assert job.trace_id is not None, "Completed job should have a trace_id"
 
-    trace = find_trace_by_input(api_client, OPIK_E2E_TESTS_PROJECT_NAME, message)
+    trace = find_trace_by_input(api_client, project_name, message)
     assert f"echo: {message}" in str(trace.output)
 
     logs_result = []
@@ -162,7 +163,7 @@ def test_runner_happy_path(api_client, runner_process: RunnerInfo, project_id):
 
 
 def test_runner_with_mask(
-    opik_client, api_client, runner_process: RunnerInfo, project_id
+    opik_client, api_client, runner_process: RunnerInfo, project_id, project_name
 ):
     """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
     message = f"mask-e2e-{int(time.time())}"
@@ -171,7 +172,7 @@ def test_runner_with_mask(
     wait_for_agent_registration(api_client, "echo_config", project_id)
 
     manager = ConfigManager(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name,
         rest_client_=opik_client.rest_client,
     )
     manager.create_blueprint(
@@ -188,7 +189,7 @@ def test_runner_with_mask(
     assert custom_greeting in str(job.result)
     assert job.trace_id is not None, "Completed job should have a trace_id"
 
-    trace = find_trace_by_input(api_client, OPIK_E2E_TESTS_PROJECT_NAME, message)
+    trace = find_trace_by_input(api_client, project_name, message)
     assert custom_greeting in str(trace.output), (
         f"Expected '{custom_greeting}' in trace output, got: {trace.output}"
     )
