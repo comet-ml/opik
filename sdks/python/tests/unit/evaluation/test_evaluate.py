@@ -3846,68 +3846,48 @@ def test_evaluate_optimization_trial__dataset_has_no_project_name__caller_value_
 # =============================================================================
 
 
-def test_evaluate__experiment_config_not_set__none_metadata_sent(fake_backend):
+def test_evaluate__experiment_config_not_set__none_metadata_sent(
+    mock_create_experiment, mock_experiment_url, make_dataset, make_dataset_item,
+):
     """When experiment_config is omitted the SDK passes experiment_config=None
     to create_experiment (i.e. does not auto-populate empty metadata)."""
-    mock_dataset = create_mock_dataset(
-        items=[
-            dataset_item.DatasetItem(
-                id="item-1", input={"question": "hi"}, reference="hi"
-            )
-        ]
-    )
-    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
-        create_mock_experiment()
+    dataset = make_dataset(
+        items=[make_dataset_item("item-1", {"question": "hi"}, reference="hi")]
     )
 
-    def task(item):
-        return {"output": "hi"}
-
-    with patch_evaluation_dependencies(
-        mock_create_experiment, mock_get_experiment_url_by_id
-    ):
-        evaluator_module.evaluate(
-            dataset=mock_dataset,
-            task=task,
-            experiment_name="no-config-experiment",
-            scoring_metrics=[metrics.Equals()],
-            task_threads=1,
-            verbose=0,
-        )
+    evaluator_module.evaluate(
+        dataset=dataset,
+        task=lambda item: {"output": "hi"},
+        experiment_name="no-config-experiment",
+        scoring_metrics=[metrics.Equals()],
+        task_threads=1,
+        verbose=0,
+    )
 
     assert mock_create_experiment.call_args.kwargs["experiment_config"] is None
 
 
 def test_evaluate__no_scoring_metrics__completes_and_writes_no_feedback_scores(
     fake_backend,
+    mock_create_experiment,
+    mock_experiment_url,
+    make_dataset,
+    make_dataset_item,
 ):
     """An empty scoring_metrics list is accepted — traces are produced but
     no feedback scores are attached to them."""
-    mock_dataset = create_mock_dataset(
-        items=[
-            dataset_item.DatasetItem(
-                id="item-1", input={"question": "hi"}, reference="hi"
-            )
-        ]
-    )
-    mock_experiment, mock_create_experiment, mock_get_experiment_url_by_id = (
-        create_mock_experiment()
+    dataset = make_dataset(
+        items=[make_dataset_item("item-1", {"question": "hi"}, reference="hi")]
     )
 
-    def task(item):
-        return {"output": "hi"}
-
-    with patch_evaluation_dependencies(
-        mock_create_experiment, mock_get_experiment_url_by_id
-    ):
-        evaluator_module.evaluate(
-            dataset=mock_dataset,
-            task=task,
-            experiment_name="no-metrics-experiment",
-            scoring_metrics=[],
-            task_threads=1,
-            verbose=0,
-        )
+    evaluator_module.evaluate(
+        dataset=dataset,
+        task=lambda item: {"output": "hi"},
+        experiment_name="no-metrics-experiment",
+        scoring_metrics=[],
+        task_threads=1,
+        verbose=0,
+    )
 
     mock_create_experiment.assert_called_once()
     assert len(fake_backend.trace_trees) == 1
