@@ -30,9 +30,9 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
   return (
     <div className="flex flex-col gap-4 px-1">
       <p className="comet-body-s text-muted-slate">
-        Ollie is Opik&apos;s AI coding assistant. When you connect your repo,
-        Ollie can inspect your code, help add Opik tracing, and guide you
-        through setup.
+        Opik Connect is Opik&apos;s AI coding assistant. When you connect your
+        repo, Opik Connect can inspect your code, help add Opik tracing, and
+        guide you through setup.
       </p>
       <div className="flex flex-col">
         <TimelineStep number={1}>
@@ -45,12 +45,12 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
         <TimelineStep number={2}>
           <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">
-              Connect your repo to Ollie
+              Connect your repo to Opik Connect
             </h4>
             <p className="comet-body-xs text-muted-slate">
-              Run this command in the repository you want Ollie to work in. This
-              creates a local connection between Opik and your machine so Ollie
-              can help with setup.
+              Run this command in the repository you want Opik Connect to work
+              in. This creates a local connection between Opik and your machine
+              so Opik Connect can help with setup.
             </p>
             <CodeSnippet title="Terminal" code={connectCommandText} />
           </div>
@@ -65,11 +65,11 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
             </h4>
             <p className="comet-body-xs text-muted-slate">
               {connected ? (
-                "Ollie can now inspect your code and help you set up tracing in Opik."
+                "Opik Connect can now inspect your code and help you set up tracing in Opik."
               ) : (
                 <>
-                  Run the command above in your repo. Once connected, Ollie can
-                  inspect your code and help finish setup.{" "}
+                  Run the command above in your repo. Once connected, Opik
+                  Connect can inspect your code and help finish setup.{" "}
                   <a
                     href={buildDocsUrl(
                       "/agents/local-runner",

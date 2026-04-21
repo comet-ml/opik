@@ -3,7 +3,7 @@ import React, { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 const MESSAGES = [
-  "Ollie is waking up\u2026",
+  "Opik Connect is waking up\u2026",
   "Loading traces\u2026",
   "Crunching evaluation data\u2026",
   "Almost ready\u2026",
