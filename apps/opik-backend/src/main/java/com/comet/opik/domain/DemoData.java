@@ -25,4 +25,6 @@ public class DemoData {
             "Demo-flat_bulb_3765",
             "Demo-horizontal_shrimp_833",
             "Demo-continuous_milk_2919");
+
+    public static final List<String> OPTIMIZATIONS = List.of("ivory_berm_3833");
 }
