@@ -989,48 +989,20 @@ export class OpikClient {
 
     const dataset = await this.getDataset(datasetName, projectName);
 
-    const pageSize = Math.min(100, maxResults);
-    const experiments: Experiment[] = [];
-
     try {
-      let page = 1;
-      while (experiments.length < maxResults) {
-        const pageExperiments = await this.api.experiments.findExperiments({
-          page,
-          size: pageSize,
-          datasetId: dataset.id,
-        });
-
-        const content = pageExperiments?.content ?? [];
-
-        if (content.length === 0) {
-          break;
-        }
-        const remainingItems = maxResults - experiments.length;
-        const itemsToProcess = Math.min(content.length, remainingItems);
-
-        for (let i = 0; i < itemsToProcess; i++) {
-          const exp = content[i];
-          experiments.push(
-            new Experiment(
-              {
-                id: exp.id,
-                name: exp.name,
-                datasetName: exp.datasetName ?? undefined,
-              },
-              this
-            )
-          );
-        }
-
-        if (itemsToProcess < content.length) {
-          break;
-        }
-
-        page += 1;
-      }
-
-      return experiments;
+      return await this.findExperimentsByDatasetId(
+        dataset.id,
+        maxResults,
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+            },
+            this
+          )
+      );
     } catch (error) {
       logger.error(`Failed to get experiments for dataset "${datasetName}"`, {
         error,
@@ -1059,58 +1031,75 @@ export class OpikClient {
 
     const suiteDataset = await this.getDataset(name, projectName);
 
-    const pageSize = Math.min(100, maxResults);
-    const experiments: TestSuiteExperiment[] = [];
-
     try {
-      let page = 1;
-      while (experiments.length < maxResults) {
-        const pageExperiments = await this.api.experiments.findExperiments({
-          page,
-          size: pageSize,
-          datasetId: suiteDataset.id,
-        });
-
-        const content = pageExperiments?.content ?? [];
-
-        if (content.length === 0) {
-          break;
-        }
-        const remainingItems = maxResults - experiments.length;
-        const itemsToProcess = Math.min(content.length, remainingItems);
-
-        for (let i = 0; i < itemsToProcess; i++) {
-          const exp = content[i];
-          experiments.push(
-            new TestSuiteExperiment(
-              {
-                id: exp.id,
-                name: exp.name,
-                datasetName: exp.datasetName ?? undefined,
-                passRate: exp.passRate,
-                passedCount: exp.passedCount,
-                totalCount: exp.totalCount,
-                assertionScores: exp.assertionScores,
-              },
-              this
-            )
-          );
-        }
-
-        if (itemsToProcess < content.length) {
-          break;
-        }
-
-        page += 1;
-      }
-
-      return experiments;
+      return await this.findExperimentsByDatasetId(
+        suiteDataset.id,
+        maxResults,
+        (exp) =>
+          new TestSuiteExperiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+              passRate: exp.passRate,
+              passedCount: exp.passedCount,
+              totalCount: exp.totalCount,
+              assertionScores: exp.assertionScores,
+            },
+            this
+          )
+      );
     } catch (error) {
       logger.error(`Failed to get experiments for test suite "${name}"`, {
         error,
       });
       throw error;
     }
+  };
+
+  /**
+   * Paginated fetch of experiments for a given dataset ID, mapping each raw
+   * `ExperimentPublic` row to a caller-chosen entity. Used internally by
+   * `getDatasetExperiments` and `getTestSuiteExperiments` to share the
+   * loop shape and only differ on the constructed type.
+   */
+  private findExperimentsByDatasetId = async <T>(
+    datasetId: string,
+    maxResults: number,
+    factory: (exp: ExperimentPublic) => T
+  ): Promise<T[]> => {
+    const pageSize = Math.min(100, maxResults);
+    const experiments: T[] = [];
+    let page = 1;
+
+    while (experiments.length < maxResults) {
+      const pageExperiments = await this.api.experiments.findExperiments({
+        page,
+        size: pageSize,
+        datasetId,
+      });
+
+      const content = pageExperiments?.content ?? [];
+
+      if (content.length === 0) {
+        break;
+      }
+
+      const remainingItems = maxResults - experiments.length;
+      const itemsToProcess = Math.min(content.length, remainingItems);
+
+      for (let i = 0; i < itemsToProcess; i++) {
+        experiments.push(factory(content[i]));
+      }
+
+      if (itemsToProcess < content.length) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return experiments;
   };
 
   /**
