@@ -15,7 +15,9 @@ import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/v1/pages/CompareExperimentsPage/CompareExperimentsPage";
+const CompareExperimentsPage = lazy(
+  () => import("@/v1/pages/CompareExperimentsPage/CompareExperimentsPage"),
+);
 import HomePage from "@/v1/pages/HomePage/HomePage";
 import OldHomePage from "@/v1/pages/HomePage/OldHomePage";
 import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
@@ -25,10 +27,12 @@ import ProjectsPage from "@/v1/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/v1/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/v1/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/v1/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v1/pages/PromptPage/PromptPage";
+const PromptPage = lazy(() => import("@/v1/pages/PromptPage/PromptPage"));
 import RedirectProjects from "@/v1/redirect/RedirectProjects";
 import RedirectDatasets from "@/v1/redirect/RedirectDatasets";
-import PlaygroundPage from "@/v1/pages/PlaygroundPage/PlaygroundPage";
+const PlaygroundPage = lazy(
+  () => import("@/v1/pages/PlaygroundPage/PlaygroundPage"),
+);
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v1/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/v1/pages/GetStartedPage/GetStartedPage";
@@ -41,7 +45,9 @@ import OptimizationsNewPage from "@/v1/pages/OptimizationsPage/OptimizationsNewP
 import OptimizationPage from "@/v1/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v1/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v1/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
+const AlertsRouteWrapper = lazy(
+  () => import("@/v1/pages/AlertsPage/AlertsRouteWrapper"),
+);
 import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
