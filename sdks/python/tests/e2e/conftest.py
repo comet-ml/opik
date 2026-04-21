@@ -25,7 +25,11 @@ def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
 
     yield opik_client_
 
-    opik_client_.end()
+    # Tests explicitly poll the backend for anything they care about during
+    # the call phase, so teardown doesn't need to wait for the upload/flush
+    # pipeline to drain. Skip `flush=True` to avoid the 5-s polling budget
+    # in `file_upload_manager.flush`.
+    opik_client_.end(flush=False)
 
 
 @pytest.fixture

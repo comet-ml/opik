@@ -1,0 +1,2 @@
+# Local pytest artifacts — raw `--durations=0` dumps from e2e runs
+e2e_*.out
