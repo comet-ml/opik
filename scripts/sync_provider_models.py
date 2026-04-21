@@ -991,6 +991,12 @@ def regenerate_llm_models_yaml(
                 model_id = entry.value
                 lines.append(f'  - id: "{model_id}"')
 
+            # Only emit label when it differs from the id — saves bytes for providers
+            # where label == value (OpenRouter) and matches the FE fallback (label ?? id).
+            if entry.label and entry.label != model_id:
+                escaped_label = entry.label.replace('"', '\\"')
+                lines.append(f'    label: "{escaped_label}"')
+
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
             if provider_reasoning.get(model_id):
@@ -1182,8 +1188,15 @@ def main():
     new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
 
     # Regenerate llm-models-default.yaml
+    # For the YAML, use the dropdown-filtered + curated-sorted order for providers
+    # that have a sort function. OpenRouter uses its full alphabetical list because
+    # the FE doesn't curate its ~800 models today either.
+    yaml_by_provider = {
+        provider: (dropdown_by_provider[provider] if provider != "openrouter" else entries)
+        for provider, entries in models_by_provider.items()
+    }
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
-    new_llm_models_yaml = regenerate_llm_models_yaml(llm_models_yaml_content, models_by_provider)
+    new_llm_models_yaml = regenerate_llm_models_yaml(llm_models_yaml_content, yaml_by_provider)
 
     # 5. Print summary
     total_added = 0

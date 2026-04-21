@@ -179,6 +179,15 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
+      # LLM model registry (see apps/opik-backend/config.yml:1300-1305)
+      # Defaults mirror the backend's config.yml defaults: remote fetch disabled,
+      # no local override. Operators override these in their own values.yaml to
+      # point at a custom CDN, mount an override YAML, or tweak the refresh interval.
+      LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: "llm-models-default.yaml"
+      LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ""
+      LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
+      LLM_MODEL_REGISTRY_REMOTE_URL: ""
+      LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
     envFrom:
       - configMapRef:
           name: opik-backend

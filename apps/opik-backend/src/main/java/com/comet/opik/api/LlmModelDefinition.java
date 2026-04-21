@@ -10,6 +10,7 @@ import lombok.Builder;
 public record LlmModelDefinition(
         String id,
         String qualifiedName,
+        String label,
         boolean structuredOutput,
         boolean reasoning) {
 }

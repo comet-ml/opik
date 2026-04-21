@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -7,6 +7,7 @@ import {
   ProviderModelsMap,
 } from "@/types/providers";
 import useOpenAICompatibleModels from "@/hooks/useOpenAICompatibleModels";
+import useLlmModels, { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import first from "lodash/first";
@@ -21,6 +22,17 @@ export type ModelResolver = (
   preferredProvider?: COMPOSED_PROVIDER_TYPE | "",
 ) => PROVIDER_MODEL_TYPE | "";
 
+/**
+ * Retained static model catalogue.
+ *
+ * PROVIDER_MODELS is no longer read at runtime — the hook below fetches
+ * /v1/private/llm/models and merges that with useOpenAICompatibleModels.
+ * The constant is kept in the tree as an easy rollback handle: if the CDN
+ * flow needs to be reverted in production, wiring getProviderModels back
+ * to this map is a one-line change. OPIK-5022 will delete both this
+ * constant and the Java enums once the registry has soaked in prod.
+ */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   [PROVIDER_TYPE.OPIK_FREE]: [
     {
@@ -2061,15 +2073,98 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
 };
 
+/**
+ * Module-level reference cell. The hook writes the latest fetched + merged
+ * ProviderModelsMap here on mount/update. Pure utility functions that can't
+ * call React hooks (getProviderFromModel, isReasoningModel) read from this
+ * cell. Starts empty; before the first fetch resolves, readers fall back to
+ * static constants (see REASONING_MODELS in src/constants/llm.ts).
+ */
+let latestSnapshot: ProviderModelsMap = {};
+
+export const getLatestProviderModelsSnapshot = (): ProviderModelsMap =>
+  latestSnapshot;
+
+/**
+ * Module-level cache of per-model flags (reasoning, structuredOutput) keyed by
+ * both id AND qualifiedName. Populated by the hook alongside latestSnapshot.
+ * Synchronous readers use this to avoid O(N) scans through the map.
+ */
+type ModelFlags = { reasoning: boolean; structuredOutput: boolean };
+let latestFlags: Map<string, ModelFlags> = new Map();
+
+export const getLatestModelFlags = (
+  model?: string | null,
+): ModelFlags | undefined => {
+  if (!model) return undefined;
+  return latestFlags.get(model);
+};
+
+const MINIMAL_FALLBACK: ProviderModelsMap = {
+  [PROVIDER_TYPE.OPIK_FREE]: [
+    {
+      value: PROVIDER_MODEL_TYPE.OPIK_FREE_MODEL,
+      label: "Free model",
+    },
+  ],
+  [PROVIDER_TYPE.OPEN_AI]: [],
+  [PROVIDER_TYPE.ANTHROPIC]: [],
+  [PROVIDER_TYPE.OPEN_ROUTER]: [],
+  [PROVIDER_TYPE.GEMINI]: [],
+  [PROVIDER_TYPE.VERTEX_AI]: [],
+  [PROVIDER_TYPE.CUSTOM]: [],
+  [PROVIDER_TYPE.OLLAMA]: [],
+  [PROVIDER_TYPE.BEDROCK]: [],
+};
+
+const transformFetched = (fetched: LlmModelsByProvider): ProviderModelsMap => {
+  const out: ProviderModelsMap = {};
+  for (const [provider, models] of Object.entries(fetched)) {
+    out[provider] = models.map((m) => ({
+      value: (m.qualifiedName ?? m.id) as PROVIDER_MODEL_TYPE,
+      label: m.label ?? m.id,
+    }));
+  }
+  return out;
+};
+
+const buildFlagsIndex = (
+  fetched: LlmModelsByProvider,
+): Map<string, ModelFlags> => {
+  const index = new Map<string, ModelFlags>();
+  for (const models of Object.values(fetched)) {
+    for (const m of models) {
+      const flags: ModelFlags = {
+        reasoning: m.reasoning,
+        structuredOutput: m.structuredOutput,
+      };
+      index.set(m.id, flags);
+      if (m.qualifiedName) {
+        index.set(m.qualifiedName, flags);
+      }
+    }
+  }
+  return index;
+};
+
 const useLLMProviderModelsData = () => {
+  const { data: fetched } = useLlmModels();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
-  const getProviderModels = useCallback(() => {
+  const getProviderModels = useCallback((): ProviderModelsMap => {
+    const fromApi = fetched ? transformFetched(fetched) : {};
     return {
-      ...PROVIDER_MODELS,
+      ...MINIMAL_FALLBACK,
+      ...fromApi,
       ...openAICompatibleModels,
     } as ProviderModelsMap;
-  }, [openAICompatibleModels]);
+  }, [fetched, openAICompatibleModels]);
+
+  // Keep the module-level snapshot + flag index in sync with the latest data.
+  useEffect(() => {
+    latestSnapshot = getProviderModels();
+    latestFlags = fetched ? buildFlagsIndex(fetched) : new Map();
+  }, [getProviderModels, fetched]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
     (modelName) => {
