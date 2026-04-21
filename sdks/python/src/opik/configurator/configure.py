@@ -568,8 +568,9 @@ class OpikConfigurator:
         if extracted_base_url is None:
             return
 
+        normalized_extracted = url_helpers.get_base_url(extracted_base_url)
         if (
-            extracted_base_url != url_helpers.get_base_url(self.base_url)
+            normalized_extracted != url_helpers.get_base_url(self.base_url)
             and self.base_url != OPIK_BASE_URL_CLOUD
         ):
             LOGGER.warning(
@@ -577,7 +578,7 @@ class OpikConfigurator:
                 self.base_url,
             )
 
-        self.base_url = extracted_base_url
+        self.base_url = normalized_extracted
 
 
 def _set_environment_variables_for_integrations(
