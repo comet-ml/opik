@@ -2,7 +2,7 @@
 --changeset borystkachenko:000064_refactor_agent_blueprints_values
 --comment: Store full key/value parameters per blueprint as JSON; drop agent_config_values table
 
-ALTER TABLE agent_blueprints ADD COLUMN `values` JSON NOT NULL DEFAULT (JSON_ARRAY());
+ALTER TABLE agent_blueprints ADD COLUMN `values` JSON NOT NULL DEFAULT ('[]');
 
 DROP TABLE IF EXISTS agent_config_values;
 
