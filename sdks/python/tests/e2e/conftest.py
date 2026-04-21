@@ -6,6 +6,7 @@ import pytest
 
 import opik
 import opik.api_objects.opik_client
+from opik.rest_api import core as rest_api_core
 from .. import testlib
 from ..conftest import random_chars
 
@@ -46,10 +47,17 @@ def experiment_name(opik_client: opik.Opik):
 
 @pytest.fixture
 def temporary_project_name(opik_client: opik.Opik):
+    """A unique project name for the test; the project is deleted on teardown.
+
+    Tolerant of projects that were never created (e.g. test bailed before
+    creating one) or already deleted — cleanup is best-effort."""
     name = f"e2e-tests-temporary-project-{random_chars()}"
     yield name
-    project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
-    opik_client.rest_client.projects.delete_project_by_id(project_id)
+    try:
+        project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
+        opik_client.rest_client.projects.delete_project_by_id(project_id)
+    except rest_api_core.ApiError:
+        pass
 
 
 @pytest.fixture

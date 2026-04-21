@@ -124,22 +124,20 @@ def wait_for_agent_registration(
 # ---------------------------------------------------------------------------
 
 
-def test_runner_happy_path(
-    api_client, runner_process: RunnerInfo, project_id, project_name
-):
+def test_runner_happy_path(api_client, runner_process: RunnerInfo, project):
     """Basic: register echo agent, run job, verify job result, trace output, and job logs."""
     message = f"hello-e2e-{int(time.time())}"
 
-    wait_for_agent_registration(api_client, "echo", project_id)
+    wait_for_agent_registration(api_client, "echo", project.id)
 
-    submit_job(api_client, "echo", message, project_id)
+    submit_job(api_client, "echo", message, project.id)
 
     job = wait_for_completed_job(api_client, runner_process.runner_id, message)
     assert job.result is not None, "Completed job should have a result"
     assert f"echo: {message}" in str(job.result)
     assert job.trace_id is not None, "Completed job should have a trace_id"
 
-    trace = find_trace_by_input(api_client, project_name, message)
+    trace = find_trace_by_input(api_client, project.name, message)
     assert f"echo: {message}" in str(trace.output)
 
     logs_result = []
@@ -163,16 +161,16 @@ def test_runner_happy_path(
 
 
 def test_runner_with_mask(
-    opik_client, api_client, runner_process: RunnerInfo, project_id, project_name
+    opik_client, api_client, runner_process: RunnerInfo, project
 ):
     """Mask: register echo_config agent, create mask, verify mask value in job result and trace."""
     message = f"mask-e2e-{int(time.time())}"
     custom_greeting = f"custom-greeting-{int(time.time())}"
 
-    wait_for_agent_registration(api_client, "echo_config", project_id)
+    wait_for_agent_registration(api_client, "echo_config", project.id)
 
     manager = ConfigManager(
-        project_name=project_name,
+        project_name=project.name,
         rest_client_=opik_client.rest_client,
     )
     manager.create_blueprint(
@@ -182,14 +180,14 @@ def test_runner_with_mask(
         parameters={"greeting": custom_greeting},
     )
 
-    submit_job(api_client, "echo_config", message, project_id, mask_id=mask_id)
+    submit_job(api_client, "echo_config", message, project.id, mask_id=mask_id)
 
     job = wait_for_completed_job(api_client, runner_process.runner_id, message)
     assert job.result is not None, "Completed job should have a result"
     assert custom_greeting in str(job.result)
     assert job.trace_id is not None, "Completed job should have a trace_id"
 
-    trace = find_trace_by_input(api_client, project_name, message)
+    trace = find_trace_by_input(api_client, project.name, message)
     assert custom_greeting in str(trace.output), (
         f"Expected '{custom_greeting}' in trace output, got: {trace.output}"
     )

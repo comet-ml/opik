@@ -18,7 +18,6 @@ import opik.api_objects.opik_client
 from opik.api_objects import rest_helpers
 from opik.cli.pairing import hkdf_sha256
 from opik.rest_api import core as rest_api_core
-from ...conftest import random_chars
 
 
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
@@ -35,6 +34,12 @@ class RunnerInfo:
     process: subprocess.Popen
     output_lines: list
     bridge_key: bytes = b""
+
+
+@dataclasses.dataclass
+class TestProject:
+    id: str
+    name: str
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -69,29 +74,17 @@ def subprocess_env(opik_client):
 
 
 @pytest.fixture()
-def project_name(api_client):
-    """Unique project per test, deleted on teardown.
-
-    Using a fresh project per test isolates state that otherwise leaks between
-    tests — notably agent-config blueprints, which raise ConflictError on the
-    second test in the file when a shared project is reused.
-    """
-    name = f"e2e-runner-tests-{random_chars()}"
+def project(api_client, temporary_project_name) -> TestProject:
+    """Per-test project, created on setup. The shared ``temporary_project_name``
+    fixture handles name generation and teardown."""
     try:
-        api_client.projects.create_project(name=name)
+        api_client.projects.create_project(name=temporary_project_name)
     except rest_api_core.ApiError:
         pass
-    yield name
-    try:
-        project = api_client.projects.retrieve_project(name=name)
-        api_client.projects.delete_project_by_id(project.id)
-    except Exception:
-        pass  # best-effort cleanup
-
-
-@pytest.fixture()
-def project_id(api_client, project_name):
-    return rest_helpers.resolve_project_id_by_name(api_client, project_name)
+    project_id = rest_helpers.resolve_project_id_by_name(
+        api_client, temporary_project_name
+    )
+    return TestProject(id=project_id, name=temporary_project_name)
 
 
 def _drain_stdout(proc, output_lines):
@@ -254,21 +247,19 @@ def _start_runner(
 
 
 @pytest.fixture()
-def runner_process(
-    api_client, subprocess_env, project_id, project_name, opik_client, request
-):
+def runner_process(api_client, subprocess_env, project, opik_client, request):
     """Endpoint runner — for job/agent E2E tests."""
     yield from _start_runner(
         api_client,
         subprocess_env,
-        project_id,
+        project.id,
         opik_client,
         request,
         cli_args=[
             OPIK_CLI,
             "endpoint",
             "--project",
-            project_name,
+            project.name,
             "--",
             sys.executable,
             ECHO_APP,
@@ -277,20 +268,18 @@ def runner_process(
 
 
 @pytest.fixture()
-def bridge_runner_process(
-    api_client, subprocess_env, project_id, project_name, opik_client, request
-):
+def bridge_runner_process(api_client, subprocess_env, project, opik_client, request):
     """Connect runner — for bridge command E2E tests."""
     yield from _start_runner(
         api_client,
         subprocess_env,
-        project_id,
+        project.id,
         opik_client,
         request,
         cli_args=[
             OPIK_CLI,
             "connect",
             "--project",
-            project_name,
+            project.name,
         ],
     )
