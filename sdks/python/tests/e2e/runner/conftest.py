@@ -104,11 +104,11 @@ def _parse_pairing_url(output_lines, timeout):
             padded = fragment + "=" * ((4 - len(fragment) % 4) % 4)
             raw = base64.urlsafe_b64decode(padded)
             if len(raw) < 65:
-                time.sleep(0.2)
+                time.sleep(0.05)
                 continue
             name_len = raw[64]
             if len(raw) < 65 + name_len:
-                time.sleep(0.2)
+                time.sleep(0.05)
                 continue
             return {
                 "session_id": str(uuid.UUID(bytes=raw[0:16])),
@@ -116,7 +116,7 @@ def _parse_pairing_url(output_lines, timeout):
                 "project_id": str(uuid.UUID(bytes=raw[48:64])),
                 "runner_name": raw[65 : 65 + name_len].decode("utf-8"),
             }
-        time.sleep(0.2)
+        time.sleep(0.05)
     return None
 
 
@@ -180,7 +180,7 @@ def _start_runner(
             break
         if proc.poll() is not None:
             break
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     if not connected:
         proc.terminate()
@@ -221,13 +221,15 @@ def _start_runner(
 
     yield info
 
+    # Runner CLI + echo_app don't need a graceful window in tests; SIGTERM →
+    # short wait → SIGKILL is fine. Drops per-test teardown from ~10s to ~2s.
     proc.terminate()
     try:
-        proc.wait(timeout=10)
+        proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-    drain_thread.join(timeout=5)
+    drain_thread.join(timeout=2)
 
     report = request.node.stash.get(_phase_report_key, {})
     if report.get("call") and report["call"].failed:
