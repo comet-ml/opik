@@ -15,7 +15,9 @@ import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPage";
+const CompareExperimentsPage = lazy(
+  () => import("@/v2/pages/CompareExperimentsPage/CompareExperimentsPage"),
+);
 import HomePage from "@/v2/pages/HomePage/HomePage";
 import PartialPageLayout from "@/v2/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
@@ -26,7 +28,9 @@ import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
-import PlaygroundPage from "@/v2/pages/PlaygroundPage/PlaygroundPage";
+const PlaygroundPage = lazy(
+  () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
+);
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v2/pages/ConfigurationPage/ConfigurationPage";
 import NewQuickstart from "@/v2/pages/GetStartedPage/NewQuickstart";
@@ -42,7 +46,9 @@ import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewP
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
+const AlertsRouteWrapper = lazy(
+  () => import("@/v2/pages/AlertsPage/AlertsRouteWrapper"),
+);
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
