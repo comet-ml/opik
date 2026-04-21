@@ -643,7 +643,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             WHERE workspace_id = :workspace_id
             AND experiment_id = :experiment_id
             <if(cursor)>AND id > :cursor<endif>
-            ORDER BY (workspace_id, experiment_id, id) DESC, last_updated_at DESC
+            ORDER BY (workspace_id, experiment_id, id) ASC, last_updated_at DESC
             LIMIT 1 BY id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
