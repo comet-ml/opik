@@ -369,10 +369,21 @@ class WorkspaceVersionResourceTest {
             // Auth doesn't include opikVersion — defensive, entity check is primary signal
             var workspaceName = mockWorkspace(wireMock);
 
-            // Empty workspace returns version_2
+            // Demo prompt without project does not trigger V1
+            promptClient.createPrompt(podamFactory.manufacturePojo(Prompt.class).toBuilder()
+                    .name("Demo - Opik SDK Assistant - System Prompt")
+                    .projectId(null)
+                    .projectName(null)
+                    .build(),
+                    API_KEY, workspaceName);
+            // Prompt under project does not trigger version_1
+            promptClient.createPrompt(podamFactory.manufacturePojo(Prompt.class).toBuilder()
+                    .projectId(null)
+                    .build(),
+                    API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 
-            // Version 1 prompt triggers version_1
+            // Non-demo prompt without project triggers V1
             promptClient.createPrompt(podamFactory.manufacturePojo(Prompt.class).toBuilder()
                     .projectId(null)
                     .projectName(null)
@@ -385,7 +396,10 @@ class WorkspaceVersionResourceTest {
         void workspaceVersion__whenDashboardWithoutProject__returnsVersion1() {
             var workspaceName = mockWorkspace(wireMock);
 
-            // Empty workspace returns version_2
+            // Dashboard under project does not trigger version_1
+            dashboardClient.create(dashboardClient.createPartialDashboard()
+                    .projectName("project-" + RandomStringUtils.secure().nextAlphanumeric(32))
+                    .build(), API_KEY, workspaceName);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
 
             // Version 1 dashboard triggers version_1
