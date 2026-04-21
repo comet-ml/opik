@@ -294,7 +294,7 @@ const UserMenu = () => {
                 <span>New Opik experience</span>
                 <Switch
                   checked={false}
-                  className="ml-auto pointer-events-none"
+                  className="pointer-events-none ml-auto"
                   size="sm"
                 />
               </DropdownMenuItem>
