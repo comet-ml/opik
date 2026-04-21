@@ -9,6 +9,10 @@ export function getVersionOverride(): WorkspaceVersion | null {
   return override === "v1" || override === "v2" ? override : null;
 }
 
+export function setVersionOverride(version: WorkspaceVersion): void {
+  localStorage.setItem(OPIK_VERSION_OVERRIDE_KEY, version);
+}
+
 function getRelativePathSegments(): string[] {
   const basePath = (import.meta.env.VITE_BASE_URL || "/").replace(/\/$/, "");
   const pathname = window.location.pathname;
