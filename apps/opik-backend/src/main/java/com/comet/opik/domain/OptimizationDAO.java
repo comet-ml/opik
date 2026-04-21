@@ -874,6 +874,11 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return statement;
     }
 
+    /**
+     * Checks for V1 (workspace-scoped) optimizations excluding known demo names.
+     * ClickHouse string comparison is case-sensitive — every known casing of a demo name
+     * must be listed explicitly in {@link DemoData#OPTIMIZATIONS}.
+     */
     @Override
     public Mono<Boolean> hasVersion1Optimizations(
             @NonNull String workspaceId, @NonNull List<String> demoOptimizationNames) {

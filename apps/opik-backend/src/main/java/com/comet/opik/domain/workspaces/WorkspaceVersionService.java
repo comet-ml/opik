@@ -211,7 +211,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 log.info("Found multi-project automation rules in workspace '{}'", workspaceId);
                 return true;
             }
-            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId)) {
+            if (handle.attach(PromptDAO.class).hasVersion1Prompts(workspaceId, DemoData.PROMPTS)) {
                 log.info("Found version_1 prompts in workspace '{}'", workspaceId);
                 return true;
             }
