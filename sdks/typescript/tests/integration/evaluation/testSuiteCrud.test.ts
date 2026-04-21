@@ -111,6 +111,34 @@ describe.skipIf(!shouldRunApiTests)(
     );
 
     it(
+      "getTestSuiteExperiments — returns experiments run against the suite",
+      async () => {
+        const name = `client-suite-experiments-${Date.now()}`;
+        createdSuiteNames.push(name);
+
+        await client.createTestSuite({ name });
+        const experiment = await client.createExperiment({
+          name: `exp-${Date.now()}`,
+          datasetName: name,
+        });
+        await client.flush();
+
+        const clientResults = await searchAndWaitForDone(
+          async () => {
+            const experiments = await client.getTestSuiteExperiments(name);
+            return experiments.filter((e) => e.id === experiment.id);
+          },
+          1,
+          WAIT_OPTIONS.timeout,
+          WAIT_OPTIONS.interval
+        );
+        expect(clientResults.length).toBeGreaterThanOrEqual(1);
+        expect(clientResults[0].id).toBe(experiment.id);
+      },
+      30000
+    );
+
+    it(
       "getTestSuites — returns a list that includes a created suite",
       async () => {
         const name = `client-suite-list-${Date.now()}`;
