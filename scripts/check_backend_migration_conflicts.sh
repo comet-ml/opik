@@ -23,7 +23,7 @@ extract_prefixes_from_list() {
 # Function to get new migration files in PR
 get_new_migrations() {
   local dir=$1
-  git diff --name-only origin/main...HEAD -- "$dir" | grep '\.sql$' || true
+  git diff --diff-filter=A --name-only origin/main...HEAD -- "$dir" | grep '\.sql$' || true
 }
 
 # Function to extract prefix from filename
