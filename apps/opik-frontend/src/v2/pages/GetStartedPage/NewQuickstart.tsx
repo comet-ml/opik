@@ -40,7 +40,7 @@ const AgentOnboardingQuickstart: React.FC = () => {
   if (project?.id) {
     return (
       <Navigate
-        to="/$workspaceName/projects/$projectId/home"
+        to="/$workspaceName/projects/$projectId/logs"
         params={{ workspaceName, projectId: project.id }}
       />
     );
