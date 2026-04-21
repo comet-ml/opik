@@ -125,16 +125,86 @@ class TestResolveProjectId:
         assert result == "proj-uuid-123"
         api.projects.retrieve_project.assert_called_once_with(name="my-project")
 
-    def test_resolve_project_id__project_missing__raises(self):
+    def test_resolve_project_id__project_missing__uses_404_hint(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        # Project retrieve returns Opik's custom ErrorMessage shape.
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=404, body={"errors": ["Project not found"]}
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            resolve_project_id(api, "nonexistent")
+        assert exc_info.value.message == (
+            "Could not retrieve project 'nonexistent': Project not found "
+            "— check the project name and try again."
+        )
+
+    def test_resolve_project_id__unauthorized__surfaces_server_message_and_docs(self):
         from opik.rest_api.core.api_error import ApiError
 
         api = MagicMock()
         api.projects.retrieve_project.side_effect = ApiError(
-            status_code=404, body="not found"
+            status_code=401,
+            body={"code": 401, "message": "API key should be provided"},
         )
 
-        with pytest.raises(Exception, match="not found"):
-            resolve_project_id(api, "nonexistent")
+        with pytest.raises(click.ClickException) as exc_info:
+            resolve_project_id(api, "my-project")
+        message = exc_info.value.message
+        assert message.startswith("Could not retrieve project 'my-project':")
+        assert "API key should be provided —" in message
+        assert "run `opik configure`" in message
+        assert (
+            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)"
+            in message
+        )
+        assert message.endswith(".")
+
+    def test_resolve_project_id__forbidden__shares_auth_hint(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=403,
+            body={"code": 403, "message": "User is not allowed to access workspace"},
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            resolve_project_id(api, "my-project")
+        message = exc_info.value.message
+        assert "User is not allowed to access workspace —" in message
+        assert "run `opik configure`" in message
+
+    def test_resolve_project_id__server_error__falls_back_to_generic_hint(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(
+            status_code=500,
+            body="Internal Server Error",
+        )
+
+        with pytest.raises(click.ClickException) as exc_info:
+            resolve_project_id(api, "my-project")
+        message = exc_info.value.message
+        assert "Internal Server Error —" in message
+        assert "verify your Opik configuration and connectivity" in message
+        assert (
+            "(see https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration)"
+            in message
+        )
+
+    def test_resolve_project_id__empty_body__falls_back_to_status_text(self):
+        from opik.rest_api.core.api_error import ApiError
+
+        api = MagicMock()
+        api.projects.retrieve_project.side_effect = ApiError(status_code=502, body=None)
+
+        with pytest.raises(click.ClickException) as exc_info:
+            resolve_project_id(api, "my-project")
+        assert "server returned HTTP 502 —" in exc_info.value.message
 
 
 class TestValidateRunnerName:

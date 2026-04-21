@@ -21,7 +21,7 @@ class OpikConnector:
 
     In order to configure Opik, you will need to call first install the Opik SDK using `pip install opik` and then
     run `opik configure` from the command line. Alternatively you can configure Opik using environment variables,
-    you can find more information about how to configure Opik [here](https://www.comet.com/docs/opik/tracing/sdk_configuration).
+    you can find more information about how to configure Opik [here](https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration).
 
     In addition, you need to set the `HAYSTACK_CONTENT_TRACING_ENABLED` environment variable to `true` in order to
     enable Haystack tracing in your pipeline.
