@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { MockInstance } from "vitest";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { DatasetItem, DatasetItemData } from "@/dataset/DatasetItem";
+import { DatasetItem } from "@/dataset/DatasetItem";
 import { TestSuite } from "@/evaluation/suite/TestSuite";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
@@ -495,9 +495,12 @@ describe("TestSuite", () => {
 
       // Item 1: suite-level view with raw evaluators + raw (un-merged) executionPolicy
       expect(items[0].id).toBe("item-1");
-      expect(items[0].data).toEqual({ input: "hello", expected: "world" });
-      // description is lifted to the top-level field and excluded from data
-      expect(items[0].data).not.toHaveProperty("description");
+      expect(items[0].data).toEqual({
+        input: "hello",
+        expected: "world",
+        description: "first item",
+      });
+      // description is additionally exposed at the top level for convenience
       expect(items[0].description).toBe("first item");
       expect(items[0].evaluators).toEqual(rawEvaluators);
       expect(items[0].executionPolicy).toEqual({
@@ -561,27 +564,6 @@ describe("TestSuite", () => {
       const items = await suite.getRawItems();
 
       expect(items[0]).not.toBeInstanceOf(DatasetItem);
-    });
-
-    it("should propagate the generic data type to RawTestSuiteItem", async () => {
-      type MyData = DatasetItemData & {
-        input: string;
-        expected: string;
-      };
-      const rawItem = new DatasetItem<MyData>({
-        id: "item-1",
-        input: "hello",
-        expected: "world",
-      });
-      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([rawItem]);
-
-      const items = await suite.getRawItems<MyData>();
-
-      // Compile-time check: .input and .expected are typed as string
-      const first: string = items[0].data.input;
-      const second: string = items[0].data.expected;
-      expect(first).toBe("hello");
-      expect(second).toBe("world");
     });
   });
 

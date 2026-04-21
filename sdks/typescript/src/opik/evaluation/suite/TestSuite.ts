@@ -293,7 +293,8 @@ export class TestSuite {
    * - Decode `evaluators` into assertion strings (you get raw {@link EvaluatorItemWrite}[])
    * - Merge the item-level `executionPolicy` with the suite-level default
    *
-   * `description` is exposed as a top-level field and excluded from `data`.
+   * `data` mirrors the stored payload (includes `description` if present);
+   * `description` is additionally exposed at the top level for convenience.
    *
    * Use this when you need to inspect or forward the stored evaluator
    * config or per-item execution policy as-is.
@@ -302,22 +303,19 @@ export class TestSuite {
    * @param lastRetrievedId Opaque cursor for pagination (last `id` from a previous call).
    * @returns Array of {@link RawTestSuiteItem} objects.
    */
-  async getRawItems<T extends DatasetItemData = DatasetItemData>(
+  async getRawItems(
     nbSamples?: number,
     lastRetrievedId?: string,
-  ): Promise<RawTestSuiteItem<T>[]> {
+  ): Promise<RawTestSuiteItem[]> {
     const rawItems = await this.dataset.getRawItems(
       nbSamples,
       lastRetrievedId,
     );
 
     return rawItems.map((item) => {
-      const { description: _description, ...rest } = item.getContent() as T & {
-        description?: string;
-      };
-      const result: RawTestSuiteItem<T> = {
+      const result: RawTestSuiteItem = {
         id: item.id,
-        data: rest as T,
+        data: item.getContent(),
       };
       if (item.description !== undefined) result.description = item.description;
       if (item.evaluators !== undefined) result.evaluators = item.evaluators;

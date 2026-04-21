@@ -15,18 +15,18 @@ export type ExecutionPolicy = ExecutionPolicyWrite;
  * Unlike the view returned by {@link TestSuite.getItems}, this preserves:
  * - `evaluators` as raw {@link EvaluatorItemWrite} objects (not decoded to assertion strings)
  * - `executionPolicy` as the item-level value only (not merged with the suite-level default)
- * - `description` as a top-level field (absent from `data`)
+ *
+ * `data` is the full stored payload exactly as returned by the dataset
+ * (so if an item was stored with a `description`, it will be present in
+ * `data` as well). `description` is additionally exposed as a top-level
+ * field for ergonomic access.
  *
  * Use this when you need to introspect or forward the stored evaluator
  * config or per-item execution policy verbatim.
- *
- * @template T The shape of the user-defined data payload.
  */
-export interface RawTestSuiteItem<
-  T extends DatasetItemData = DatasetItemData,
-> {
+export interface RawTestSuiteItem {
   id: string;
-  data: T;
+  data: DatasetItemData;
   description?: string;
   evaluators?: EvaluatorItemWrite[];
   executionPolicy?: ExecutionPolicy;
