@@ -20,6 +20,7 @@ import { DatasetBatchQueue } from "./DatasetBatchQueue";
 import { Dataset, DatasetItemData, DatasetNotFoundError } from "@/dataset";
 import type { TestSuite, CreateTestSuiteOptions } from "@/evaluation/suite";
 import { Experiment } from "@/experiment/Experiment";
+import { TestSuiteExperiment } from "@/experiment/TestSuiteExperiment";
 import { buildMetadataAndPromptVersions } from "@/experiment/helpers";
 import { ExperimentType } from "@/rest_api/api/types";
 import { ExperimentNotFoundError } from "@/errors/experiment/errors";
@@ -988,54 +989,117 @@ export class OpikClient {
 
     const dataset = await this.getDataset(datasetName, projectName);
 
-    const pageSize = Math.min(100, maxResults);
-    const experiments: Experiment[] = [];
-
     try {
-      let page = 1;
-      while (experiments.length < maxResults) {
-        const pageExperiments = await this.api.experiments.findExperiments({
-          page,
-          size: pageSize,
-          datasetId: dataset.id,
-        });
-
-        const content = pageExperiments?.content ?? [];
-
-        if (content.length === 0) {
-          break;
-        }
-        const remainingItems = maxResults - experiments.length;
-        const itemsToProcess = Math.min(content.length, remainingItems);
-
-        for (let i = 0; i < itemsToProcess; i++) {
-          const exp = content[i];
-          experiments.push(
-            new Experiment(
-              {
-                id: exp.id,
-                name: exp.name,
-                datasetName: exp.datasetName ?? undefined,
-              },
-              this
-            )
-          );
-        }
-
-        if (itemsToProcess < content.length) {
-          break;
-        }
-
-        page += 1;
-      }
-
-      return experiments;
+      return await this.findExperimentsByDatasetId(
+        dataset.id,
+        maxResults,
+        (exp) =>
+          new Experiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+            },
+            this
+          )
+      );
     } catch (error) {
       logger.error(`Failed to get experiments for dataset "${datasetName}"`, {
         error,
       });
       throw error;
     }
+  };
+
+  /**
+   * Retrieves all experiments associated with a test suite.
+   *
+   * @param name The name of the test suite
+   * @param maxResults Maximum number of experiments to return (default: 100)
+   * @param projectName Optional project name to scope the suite lookup. If not provided, uses the client's configured project.
+   * @returns A list of TestSuiteExperiment objects associated with the test suite,
+   *   each carrying the suite-specific assertion aggregates (`passRate`, `passedCount`,
+   *   `totalCount`, `assertionScores`) populated by the backend.
+   * @throws {DatasetNotFoundError} If the test suite doesn't exist
+   */
+  public getTestSuiteExperiments = async (
+    name: string,
+    maxResults: number = 100,
+    projectName?: string
+  ): Promise<TestSuiteExperiment[]> => {
+    logger.debug(`Getting experiments for test suite "${name}"`);
+
+    const suiteDataset = await this.getDataset(name, projectName);
+
+    try {
+      return await this.findExperimentsByDatasetId(
+        suiteDataset.id,
+        maxResults,
+        (exp) =>
+          new TestSuiteExperiment(
+            {
+              id: exp.id,
+              name: exp.name,
+              datasetName: exp.datasetName ?? undefined,
+              passRate: exp.passRate,
+              passedCount: exp.passedCount,
+              totalCount: exp.totalCount,
+              assertionScores: exp.assertionScores,
+            },
+            this
+          )
+      );
+    } catch (error) {
+      logger.error(`Failed to get experiments for test suite "${name}"`, {
+        error,
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * Paginated fetch of experiments for a given dataset ID, mapping each raw
+   * `ExperimentPublic` row to a caller-chosen entity. Used internally by
+   * `getDatasetExperiments` and `getTestSuiteExperiments` to share the
+   * loop shape and only differ on the constructed type.
+   */
+  private findExperimentsByDatasetId = async <T>(
+    datasetId: string,
+    maxResults: number,
+    factory: (exp: ExperimentPublic) => T
+  ): Promise<T[]> => {
+    const pageSize = Math.min(100, maxResults);
+    const experiments: T[] = [];
+    let page = 1;
+
+    while (experiments.length < maxResults) {
+      const pageExperiments = await this.api.experiments.findExperiments({
+        page,
+        size: pageSize,
+        datasetId,
+      });
+
+      const content = pageExperiments?.content ?? [];
+
+      if (content.length === 0) {
+        break;
+      }
+
+      const remainingItems = maxResults - experiments.length;
+      const itemsToProcess = Math.min(content.length, remainingItems);
+
+      for (let i = 0; i < itemsToProcess; i++) {
+        experiments.push(factory(content[i]));
+      }
+
+      if (itemsToProcess < content.length) {
+        break;
+      }
+
+      page += 1;
+    }
+
+    return experiments;
   };
 
   /**
