@@ -3,9 +3,7 @@ import { DatasetVersion } from "@/types/datasets";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import CellTooltipWrapper from "@/shared/DataTableCells/CellTooltipWrapper";
 
-const VersionNoteCell = (
-  context: CellContext<DatasetVersion, string>,
-) => {
+const VersionNoteCell = (context: CellContext<DatasetVersion, string>) => {
   const value = context.getValue();
 
   return (
