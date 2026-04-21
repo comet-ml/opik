@@ -58,8 +58,78 @@ def resolve_project_id(api: "OpikApi", project_name: str) -> str:
         return resolve_project_id_by_name(api, project_name)
     except ApiError as e:
         raise click.ClickException(
-            f"Project '{project_name}' not found. Check the project name and try again."
+            _format_project_retrieval_error(project_name, e)
         ) from e
+
+
+# --- Project-retrieval error messaging -------------------------------------
+# The helpers below translate an ApiError raised by
+# `resolve_project_id_by_name` into a user-facing CLI message. They are
+# intentionally scoped to this one call site — they assume the failing
+# operation is a project lookup and phrase every message accordingly.
+
+_CONFIGURE_DOCS_URL = "https://www.comet.com/docs/opik/tracing/sdk_configuration"
+
+_PROJECT_RETRIEVAL_NOT_FOUND_HINT = "check the project name and try again"
+_PROJECT_RETRIEVAL_AUTH_HINT = (
+    f"run `opik configure` to set your API key and workspace "
+    f"(see {_CONFIGURE_DOCS_URL})"
+)
+_PROJECT_RETRIEVAL_GENERIC_HINT = (
+    f"verify your Opik configuration and connectivity (see {_CONFIGURE_DOCS_URL})"
+)
+
+# Per-status action hint for project retrieval failures. The hint is joined
+# to the server's own message inside a single sentence, so it must read as a
+# lowercase verb phrase. The server message is always the source of truth for
+# *what* went wrong; the SDK only contributes guidance on *what to do next*.
+_PROJECT_RETRIEVAL_STATUS_HINTS: "dict[int, str]" = {
+    404: _PROJECT_RETRIEVAL_NOT_FOUND_HINT,
+    401: _PROJECT_RETRIEVAL_AUTH_HINT,
+    403: _PROJECT_RETRIEVAL_AUTH_HINT,
+}
+
+
+def _extract_server_error_message(error: ApiError) -> Optional[str]:
+    """Return a human-readable server message from an ApiError body, if any.
+
+    Opik uses two response shapes:
+      - Dropwizard ``ErrorMessage``: ``{"code": ..., "message": ...}``
+      - Opik's custom ``ErrorMessage``: ``{"errors": ["..."]}`` (e.g. project
+        retrieve 404)
+    A ``"msg"``/``"error"`` fallback is kept for defence. Bodies may also
+    arrive as a plain string when the response is not JSON.
+    """
+    body = error.body
+    if isinstance(body, dict):
+        for key in ("message", "msg", "error"):
+            value = body.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        errors = body.get("errors")
+        if isinstance(errors, list):
+            joined = "; ".join(
+                item.strip()
+                for item in errors
+                if isinstance(item, str) and item.strip()
+            )
+            if joined:
+                return joined
+    elif isinstance(body, str) and body.strip():
+        return body.strip()
+    return None
+
+
+def _format_project_retrieval_error(project_name: str, error: ApiError) -> str:
+    """Format an ApiError raised while looking up a project by name."""
+    hint = _PROJECT_RETRIEVAL_STATUS_HINTS.get(
+        error.status_code or -1, _PROJECT_RETRIEVAL_GENERIC_HINT
+    )
+    detail = _extract_server_error_message(error) or (
+        f"server returned HTTP {error.status_code or 'unknown'}"
+    )
+    detail = detail.rstrip(".").strip()
+    return f"Could not retrieve project '{project_name}': {detail} — {hint}."
 
 
 _RUNNER_TYPE_BYTE = {
