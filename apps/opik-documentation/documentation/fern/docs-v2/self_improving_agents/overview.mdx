@@ -45,7 +45,7 @@ def my_agent(query: str) -> str:
 
 ### Analyze with Opik Connect agent
 
-When you spot a trace that looks wrong — a hallucinated answer, ignored context, a failed tool call — open [Opik Connect](/tracing/ollie) from the trace view. Describe what looks off, and Opik Connect walks the span tree to find the root cause.
+When you spot a trace that looks wrong — a hallucinated answer, ignored context, a failed tool call — open [Opik Connect](/opik-connect) from the trace view. Describe what looks off, and Opik Connect walks the span tree to find the root cause.
 
 Opik Connect doesn't just summarize the trace. It reads the full execution path, compares failing runs to successful ones, and identifies exactly which step went wrong and why.
 
@@ -86,7 +86,7 @@ With the root cause identified and a test case in place, fix the issue. This mig
 
 With [`opik connect`](/development/agent-sandbox) running, Opik Connect can read your source files and propose code changes directly. You see the diff, approve it, and the file is updated on your machine. Nothing changes without your click.
 
-This is the step where Opik Connect's full power shows — it has context from the trace (what went wrong), the test suite (what "correct" looks like), and your code (where to make the change). See [Opik Connect and your codebase](/self-improving-agents/ollie-and-your-codebase) for the full workflow.
+This is the step where Opik Connect's full power shows — it has context from the trace (what went wrong), the test suite (what "correct" looks like), and your code (where to make the change). See [Opik Connect and your codebase](/self-improving-agents/opik-connect-and-your-codebase) for the full workflow.
 
 **Where this happens in Opik:** The Opik Connect chat panel with `opik connect` active.
 
@@ -122,6 +122,6 @@ The flywheel isn't just a process — it's a compounding investment:
 
 ## Next steps
 
-- [Opik Connect and your codebase](/self-improving-agents/ollie-and-your-codebase) — How `opik connect` lets Opik Connect read and edit your code
+- [Opik Connect and your codebase](/self-improving-agents/opik-connect-and-your-codebase) — How `opik connect` lets Opik Connect read and edit your code
 - [Getting started with evaluation](/evaluation/getting-started) — Run your first test suite
 - [Debugging agents with Opik Connect](/tracing/debug-agents) — Example prompts and the full debug workflow

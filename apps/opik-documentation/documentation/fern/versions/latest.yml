@@ -35,7 +35,7 @@ navigation:
             icon: fa-regular fa-bolt
           - page: Opik Connect
             path: ../docs-v2/ollie.mdx
-            slug: ollie
+            slug: opik-connect
             icon: fa-regular fa-sparkles
           - page: FAQ
             path: ../docs-v2/faq.mdx
@@ -860,7 +860,7 @@ navigation:
         slug: overview
       - page: Opik Connect and your codebase
         path: ../docs-v2/self_improving_agents/ollie_and_your_codebase.mdx
-        slug: ollie-and-your-codebase
+        slug: opik-connect-and-your-codebase
   - tab: self-host
     layout:
       - page: Overview
