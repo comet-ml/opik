@@ -710,8 +710,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String GET_FEEDBACK_SCORES_DATA = """
             WITH feedback_scores_deduped AS (
                 SELECT
-                    workspace_id,
-                    project_id,
                     entity_id,
                     name,
                     category_name,
@@ -766,34 +764,41 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 )
                 ORDER BY last_updated_at DESC
                 LIMIT 1 BY workspace_id, project_id, entity_id, name, author
-            ), feedback_scores_grouped AS (
+            ), feedback_scores_grouped_agg AS (
                 SELECT
-                    workspace_id,
-                    project_id,
                     entity_id,
                     name,
-                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
-                FROM feedback_scores_deduped
-                GROUP BY workspace_id, project_id, entity_id, name
-            ), feedback_scores_final AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
-                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
-                    IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
-                    entries[1].4 AS source,
+                    count() AS n,
+                    avg(value) AS avg_value,
+                    any(value) AS any_value,
+                    any(reason) AS any_reason,
+                    arrayStringConcat(groupArray(if(reason = '', '\\<no reason>', reason)), ', ') AS reason_concat,
+                    arrayStringConcat(groupArray(category_name), ', ') AS category_name_concat,
+                    any(source) AS source_any,
+                    arrayStringConcat(groupArray(created_by), ', ') AS created_by_concat,
+                    arrayStringConcat(groupArray(last_updated_by), ', ') AS last_updated_by_concat,
+                    min(created_at) AS created_at_min,
+                    max(last_updated_at) AS last_updated_at_max,
                     mapFromArrays(
-                            arrayMap(e -> e.5, entries),
-                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
-                    ) AS value_by_author,
-                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
-                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
-                    arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
-                    arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
-                FROM feedback_scores_grouped
+                        groupArray(author),
+                        groupArray(tuple(value, reason, category_name, source, last_updated_at))
+                    ) AS value_by_author
+                FROM feedback_scores_deduped
+                GROUP BY entity_id, name
+            ), feedback_scores_per_name AS (
+                SELECT
+                    entity_id,
+                    name,
+                    IF(n = 1, any_value, toDecimal64(avg_value, 9)) AS value,
+                    IF(n = 1, any_reason, reason_concat) AS reason,
+                    category_name_concat AS category_name,
+                    source_any AS source,
+                    created_by_concat AS created_by,
+                    last_updated_by_concat AS last_updated_by,
+                    created_at_min AS created_at,
+                    last_updated_at_max AS last_updated_at,
+                    value_by_author
+                FROM feedback_scores_grouped_agg
             )
             SELECT
                 entity_id as trace_id,
@@ -814,7 +819,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     last_updated_by,
                     value_by_author
                 )) AS feedback_scores_array
-            FROM feedback_scores_final
+            FROM feedback_scores_per_name
             GROUP BY entity_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1463,7 +1468,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .collectList()
                     .flatMap(items -> {
                         if (items.isEmpty()) {
-                            return Mono.just(new BatchResult(0L, null));
+                            return Mono.just(BatchResult.builder().processedCount(0L).build());
                         }
 
                         var lastCursor = items.getLast().id();
@@ -1490,7 +1495,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                                             feedbackData,
                                             commentsData,
                                             assertionsData)
-                                            .map(ignored -> new BatchResult(items.size(), lastCursor));
+                                            .map(ignored -> BatchResult.builder()
+                                                    .processedCount(items.size())
+                                                    .lastCursor(lastCursor)
+                                                    .build());
                                 });
                     });
         });
@@ -1794,6 +1802,31 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 .build();
     }
 
+    /**
+     * Serialise a single experiment-item row as a JSONEachRow object and append it to {@code out},
+     * terminated by {@code '\n'} — the format expected by ClickHouse v2 bulk insert
+     * (see {@link #insertExperimentItemAggregates(UUID, List, List, List, List, List, List)}).
+     *
+     * <p>Why a shared {@link StringBuilder}: the v2 {@link com.clickhouse.client.api.Client#insert} call
+     * takes an {@link java.io.InputStream} over the whole batch; concatenating rows into one buffer
+     * then handing off a single {@link java.io.ByteArrayInputStream} avoids per-row stream plumbing
+     * and lets ClickHouse's HTTP layer compress + send the payload in one shot.
+     *
+     * <p>Why {@link com.comet.opik.utils.JsonUtils#createObjectNode()}: keeps JSON serialisation on the
+     * same Jackson {@code ObjectMapper} the rest of the backend uses (snake_case naming, BigDecimal
+     * handling, custom deserialisers). Using a local {@code new ObjectMapper()} would silently diverge
+     * from REST-side encoding and could reintroduce the NaN / precision / date-format mismatches that
+     * the JSONEachRow path was designed to avoid.
+     *
+     * <p>Field contract: the keys below must match the column names and types in the target table
+     * (see migrations {@code 000030_*} / {@code 000054_*} for {@code experiment_item_aggregates}). New
+     * columns require a matching {@code node.put(...)} here AND a {@code FORMAT JSONEachRow}-compatible
+     * ClickHouse type (strings, numbers, and {@code Map(String, ...)} via {@code putObject}).
+     *
+     * <p>Nullable upstream data ({@code trace}, {@code span}, {@code feedback}) is coalesced to safe
+     * defaults ({@code ""}, {@code 0}, {@code EMPTY_ARRAY_STR}) rather than emitted as JSON {@code null},
+     * because ClickHouse's non-nullable columns would reject nulls and fail the whole batch.
+     */
     private void appendJsonRow(StringBuilder out,
             String workspaceId,
             UUID projectId,
@@ -1881,6 +1914,46 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
         return insertExperimentItems(projectId, items, tracesMap, spansMap, feedbackMap, commentsMap, assertionsMap);
     }
 
+    /**
+     * Bulk-insert {@code items} into {@code experiment_item_aggregates} via the ClickHouse v2 HTTP
+     * client using {@link ClickHouseFormat#JSONEachRow}.
+     *
+     * <p>Why the v2 client + JSONEachRow (vs. the R2DBC path used elsewhere): this is the ONLY path
+     * in the backend that uses the v2 client — we specifically chose it for this bulk-insert flow
+     * because {@code EXPERIMENT_AGGREGATES_BATCH_SIZE} can be configured above 1k (e.g. {@code 10000}
+     * for workspaces with experiments of 1M+ items). R2DBC's bind-parameter serialisation scales
+     * super-linearly once a single statement carries more than ~1k rows (per-row parameter map,
+     * driver-side escaping, per-row round-trips), so at that batch size it becomes the dominant
+     * cost of the aggregation job. The JSONEachRow bulk path is ~500× faster end-to-end on those
+     * batches because (1) the payload is a single HTTP body, (2) compression is applied once by the
+     * v2 client, and (3) parsing happens server-side in ClickHouse's fast path. For smaller-batch
+     * inserts elsewhere in the codebase R2DBC remains the right choice and is unchanged. The v2
+     * client is shared and managed as a Dropwizard {@code Managed} (see
+     * {@code DatabaseAnalyticsModule.getClickHouseClient}); this method does not close it.
+     *
+     * <p>Flow:
+     * <ol>
+     *   <li>Materialise every item into a shared {@link StringBuilder} via
+     *       {@link #appendJsonRow} (one JSON object + newline per row).</li>
+     *   <li>Convert to UTF-8 bytes and wrap in a {@link ByteArrayInputStream}.</li>
+     *   <li>Attach a {@code log_comment} identifying the workspace / user / batch size so the query
+     *       can be correlated in {@code system.query_log} / ClickHouse traces.</li>
+     *   <li>Set {@code date_time_input_format=best_effort} per-request (NOT on the global
+     *       {@code Client.Builder}). Scoping it to the insert keeps the global client configuration
+     *       free of format-specific tolerances that would affect unrelated queries — if a future
+     *       caller needs a different format, it passes its own {@link InsertSettings}.</li>
+     *   <li>Run the blocking HTTP call on {@link Schedulers#boundedElastic()} so the reactive
+     *       chain is not pinned to the event loop.</li>
+     *   <li>Return the authoritative {@code NUM_ROWS_WRITTEN} metric from the server response
+     *       rather than {@code items.size()}, so the caller sees the count ClickHouse actually
+     *       accepted (truncation, deduplication, or engine-specific merges would otherwise be
+     *       invisible).</li>
+     * </ol>
+     *
+     * <p>Error handling: the {@code try-with-resources} ensures the response is always released,
+     * even on partial read failure. Exceptions propagate up the reactive chain; we only log the
+     * item count (no payload) to avoid dumping PII into the logs.
+     */
     private Mono<Long> insertExperimentItems(UUID projectId,
             List<ExperimentItemData> items,
             Map<UUID, TraceData> tracesMap,

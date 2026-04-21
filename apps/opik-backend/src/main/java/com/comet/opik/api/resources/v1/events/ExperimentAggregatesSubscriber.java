@@ -88,22 +88,22 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
                 lockKey,
                 action,
                 Mono.fromRunnable(() -> log.info(
-                        "Skipping aggregation for experiment '{}' in workspace '{}': lock already held by another node",
+                        "Skipping aggregation: lock already held by another node, experimentId='{}', workspaceId='{}'",
                         message.experimentId(), message.workspaceId())),
                 config.getAggregationLockTime().toJavaDuration(),
                 config.getLockAcquireWait().toJavaDuration())
                 .onErrorResume(TimeoutException.class, e -> {
                     log.warn(
-                            "Aggregation for experiment '{}' in workspace '{}' was cancelled after exceeding the lock TTL '{}ms'. Re-triggering via debounce.",
+                            "Aggregation cancelled after exceeding lock TTL, re-triggering via debounce, experimentId='{}', workspaceId='{}', lockTtlMs='{}'",
                             message.experimentId(), message.workspaceId(),
                             config.getAggregationLockTime().toMilliseconds());
                     return retriggerIfBelowMaxRetries(message);
                 })
                 .doOnSuccess(unused -> log.info(
-                        "Finished processing experiment aggregates for experimentId: '{}'",
+                        "Finished processing experiment aggregates, experimentId='{}'",
                         message.experimentId()))
                 .doOnError(error -> log.error(
-                        "Error processing experiment aggregates for experimentId: '{}' in workspace '{}'",
+                        "Error processing experiment aggregates, experimentId='{}', workspaceId='{}'",
                         message.experimentId(), message.workspaceId(), error));
     }
 
@@ -115,13 +115,13 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
                 .flatMap(retryCount -> {
                     if (retryCount > config.getMaxLockExpiryRetries()) {
                         log.warn(
-                                "Max lock-expiry retries '{}' reached for experiment '{}' in workspace '{}'. Stopping automatic re-trigger.",
-                                config.getMaxLockExpiryRetries(), message.experimentId(), message.workspaceId());
+                                "Max lock-expiry retries reached, stopping automatic re-trigger, experimentId='{}', workspaceId='{}', maxRetries='{}'",
+                                message.experimentId(), message.workspaceId(), config.getMaxLockExpiryRetries());
                         return counter.delete().then();
                     }
 
                     log.warn(
-                            "Re-triggering aggregation for experiment '{}' in workspace '{}' via debounce (lock-expiry attempt '{}/{}').",
+                            "Re-triggering aggregation via debounce after lock expiry, experimentId='{}', workspaceId='{}', attempt='{}/{}'",
                             message.experimentId(), message.workspaceId(), retryCount,
                             config.getMaxLockExpiryRetries());
 

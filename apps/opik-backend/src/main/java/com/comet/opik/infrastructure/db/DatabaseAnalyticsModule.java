@@ -6,6 +6,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
+import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.util.Duration;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.instrumentation.r2dbc.v1_0.R2dbcTelemetry;
@@ -19,12 +20,21 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
+    private transient Client clickHouseClient;
 
     @Override
     protected void configure() {
         databaseAnalyticsFactory = configuration(DatabaseAnalyticsFactory.class);
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
+
+        clickHouseClient = databaseAnalyticsFactory.buildClient();
+        environment().lifecycle().manage(new Managed() {
+            @Override
+            public void stop() {
+                clickHouseClient.close();
+            }
+        });
 
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
 
@@ -41,23 +51,8 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     @Provides
     @Singleton
-    public DatabaseAnalyticsFactory getDatabaseAnalyticsFactory() {
-        return databaseAnalyticsFactory;
-    }
-
-    @Provides
-    @Singleton
     public Client getClickHouseClient() {
-        var config = databaseAnalyticsFactory;
-        String endpoint = "%s://%s:%d/".formatted(config.getProtocol().getValue(), config.getHost(), config.getPort());
-        return new Client.Builder()
-                .addEndpoint(endpoint)
-                .setUsername(config.getUsername())
-                .setPassword(config.getPassword())
-                .setDefaultDatabase(config.getDatabaseName())
-                .compressClientRequest(true)
-                .compressServerResponse(true)
-                .build();
+        return clickHouseClient;
     }
 
     @Provides
