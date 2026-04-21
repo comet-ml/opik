@@ -959,17 +959,25 @@ def _parse_yaml_reasoning_flags(yaml_content: str) -> dict[str, dict[str, bool]]
 def regenerate_llm_models_yaml(
     existing_content: str,
     models_by_provider: dict[str, list[ModelEntry]],
+    dropdown_by_provider: dict[str, list[ModelEntry]] | None = None,
 ) -> str:
     """
     Regenerate llm-models-default.yaml from the synced model entries.
 
     - Replaces sections for providers managed by the sync script.
+    - Emits the *full* model list per provider so the YAML stays a superset
+      and remains a complete routing fallback for the backend when the
+      remote CDN is unavailable. Dropdown-curated entries (when
+      `dropdown_by_provider` is supplied) lead their provider section in
+      curated order and carry their human-readable `label`; the remaining
+      entries follow alphabetically with no label.
     - Preserves reasoning flags carried over from the existing file.
     - Sections for providers not managed here (bedrock, ollama, opik-free,
       custom-llm) are preserved as-is if present.
     """
     # Carry over existing reasoning flags by provider/model-id
     reasoning_flags = _parse_yaml_reasoning_flags(existing_content)
+    dropdown_by_provider = dropdown_by_provider or {}
 
     lines: list[str] = []
 
@@ -981,7 +989,19 @@ def regenerate_llm_models_yaml(
         if not entries:
             lines.append("  []")
             continue
-        for entry in entries:
+
+        # Build the final ordering: dropdown-curated entries first (in curated
+        # order, with labels), then the remaining models alphabetically (no
+        # label, same entry identity as in `entries`).
+        dropdown_entries = dropdown_by_provider.get(provider_key, [])
+        dropdown_values = {e.value for e in dropdown_entries}
+        non_dropdown_entries = sorted(
+            (e for e in entries if e.value not in dropdown_values),
+            key=lambda e: e.value,
+        )
+        ordered_entries = list(dropdown_entries) + non_dropdown_entries
+
+        for entry in ordered_entries:
             if provider_key == "vertexai":
                 # value is qualified name (vertex_ai/gemini-...), id is base name
                 model_id = entry.value.removeprefix("vertex_ai/")
@@ -990,6 +1010,14 @@ def regenerate_llm_models_yaml(
             else:
                 model_id = entry.value
                 lines.append(f'  - id: "{model_id}"')
+
+            # Emit label only for dropdown-visible entries and only when it
+            # differs from the id — saves bytes on OpenRouter and matches the
+            # FE fallback (`label ?? id`).
+            is_dropdown_entry = entry.value in dropdown_values
+            if is_dropdown_entry and entry.label and entry.label != model_id:
+                escaped_label = entry.label.replace('"', '\\"')
+                lines.append(f'    label: "{escaped_label}"')
 
             if entry.structured_output:
                 lines.append("    structuredOutput: true")
@@ -1181,9 +1209,15 @@ def main():
     }
     new_models_data_ts = regenerate_models_data_ts(models_data_ts, dropdown_by_provider)
 
-    # Regenerate llm-models-default.yaml
+    # Regenerate llm-models-default.yaml with the full model list per provider
+    # so the YAML stays a superset and the backend's classpath fallback covers
+    # every routable model. Dropdown-curated entries lead their provider
+    # section in curated order and carry human-readable labels; the rest
+    # follow alphabetically without a label.
     llm_models_yaml_content = read_file(LLM_MODELS_YAML)
-    new_llm_models_yaml = regenerate_llm_models_yaml(llm_models_yaml_content, models_by_provider)
+    new_llm_models_yaml = regenerate_llm_models_yaml(
+        llm_models_yaml_content, models_by_provider, dropdown_by_provider,
+    )
 
     # 5. Print summary
     total_added = 0

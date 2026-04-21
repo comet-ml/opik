@@ -9,7 +9,7 @@ import {
   LEGACY_CUSTOM_PROVIDER_NAME,
   PROVIDERS,
 } from "@/constants/providers";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
+import { getLatestProviderModelsSnapshot } from "@/hooks/useLLMProviderModelsData";
 
 export const getProviderDisplayName = (providerKey: ProviderObject) => {
   const { provider, provider_name } = providerKey;
@@ -91,7 +91,8 @@ export const convertCustomProviderModel = (
 export const getProviderFromModel = (
   model: PROVIDER_MODEL_TYPE,
 ): PROVIDER_TYPE => {
-  for (const [providerType, models] of Object.entries(PROVIDER_MODELS)) {
+  const snapshot = getLatestProviderModelsSnapshot();
+  for (const [providerType, models] of Object.entries(snapshot)) {
     if (models.some((m) => m.value === model)) {
       return providerType as PROVIDER_TYPE;
     }
