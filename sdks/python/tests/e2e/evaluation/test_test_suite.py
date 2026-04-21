@@ -76,14 +76,13 @@ def test_test_suite__item_level_assertions__feedback_scores_created(
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "Unknown"}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -135,14 +134,13 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "Paris is the capital of France."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -187,14 +185,13 @@ def test_test_suite__suite_level_assertions__applied_to_all_items(
             return {"input": item["input"], "output": "The capital of France is Paris."}
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -239,14 +236,13 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "The capital of France is Paris."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -305,14 +301,13 @@ def test_test_suite__no_assertions_default_policy__items_pass_with_single_run(
         call_count.increment()
         return {"input": item["input"], "output": "Some response"}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     # Default: runs_per_item=1, so 2 items = 2 calls
     assert call_count.value == 2
 
@@ -375,14 +370,13 @@ def test_test_suite__execution_policy_runs_per_item__task_called_multiple_times(
         call_count.increment()
         return {"input": item["input"], "output": "Paris"}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     assert call_count.value == 2
 
     verifiers.verify_test_suite_result(
@@ -449,14 +443,13 @@ def test_test_suite__item_level_execution_policy__overrides_suite_policy(
             germany_count.increment()
         return {"input": item["input"], "output": "Answer"}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     assert france_count.value == 1
     assert germany_count.value == 3
 
@@ -523,14 +516,13 @@ def test_test_suite__assertion_fails__item_fails(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -587,14 +579,13 @@ def test_test_suite__pass_threshold_not_met__item_fails(
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "I don't know."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -643,14 +634,13 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "The capital of France is Paris."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     assert suite_result.pass_rate == 1.0
 
     verifiers.verify_test_suite_result(
@@ -751,14 +741,13 @@ def test_test_suite__create_get_and_run__end_to_end(
             return {"input": item["input"], "output": "The capital of France is Paris."}
         return {"input": item["input"], "output": "The capital of Germany is Berlin."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=retrieved_suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     # Verify suite ran with persisted execution policy (runs_per_item=2)
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -1181,14 +1170,13 @@ def test_test_suite__insert_batch__all_items_persisted(
         question = item["input"]["question"]
         return {"input": item["input"], "output": answers.get(question, "Unknown")}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -1259,11 +1247,10 @@ def test_get_test_suite_experiments__returns_experiments(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "World"}
 
+    # opik.run_tests must handle flushing
     opik.run_tests(
         test_suite=suite, task=task, experiment_name=experiment_name, verbose=0
     )
-    opik.flush_tracker()
-
     experiments = opik_client.get_test_suite_experiments(name=dataset_name)
     experiment_names = {e.name for e in experiments}
 
