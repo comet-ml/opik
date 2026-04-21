@@ -24,7 +24,7 @@ const WRAPPER_CLASSES =
 const EDITABLE_WRAPPER_CLASSES = "bg-background";
 
 const READONLY_WRAPPER_CLASSES =
-  "border-dashed bg-gray-100 focus-within:border-border";
+  "border-dashed bg-gray-100 focus-within:border-border opacity-60";
 
 const TEXTAREA_CLASSES =
   "flex w-full rounded-l-md border-none bg-transparent px-3 py-1.5 text-sm text-foreground placeholder:text-light-slate focus:outline-none min-h-8 resize-none";

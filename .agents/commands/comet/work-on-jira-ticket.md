@@ -19,6 +19,7 @@ This workflow will:
 ## Inputs
 
 - **Jira link (required)**: e.g., `https://comet-ml.atlassian.net/browse/OPIK-1234`
+- **Worktree (optional)**: Pass `worktree` to work in an isolated git worktree. Defaults to no worktree when the argument is omitted — the command never prompts about worktrees.
 
 ---
 
@@ -91,19 +92,38 @@ This workflow will:
 ### 6. Git & Branch Setup
 
 - Repo: Opik repository (current workspace)
-- **CRITICAL**: Handle working directory state BEFORE branching:
+- **NEVER commit directly to main** (following Opik git workflow)
+
+#### 6a. Worktree Decision
+
+Worktree usage is strictly opt-in:
+
+- **If `worktree` was passed as an argument**: Use a worktree (continue to 6b).
+- **Otherwise (default)**: Skip 6b and go straight to 6c (normal path). Do not prompt the user.
+
+If the `EnterWorktree` tool is not available (e.g., running in Cursor or another editor) even when `worktree` was passed, fall back to 6c without prompting.
+
+#### 6b. Worktree Path (if using worktree)
+
+1. Slugify `{TICKET-SUMMARY}` for the worktree name: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`. Then call `EnterWorktree` with name `{USERNAME}-OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}`.
+2. Inside the worktree, create the properly named branch (using the same slugified summary):
+   ```bash
+   git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}
+   ```
+3. Continue with implementation in the worktree directory.
+
+#### 6c. Normal Path (if not using worktree)
+
+- **Handle working directory state BEFORE branching**:
   - If working directory has changes:
     - **Option 1**: Stash changes: `git stash push -m "WIP: before OPIK-{TICKET-NUMBER}"`
     - **Option 2**: Ask user what to do with uncommitted changes
-  - **NEVER commit directly to main** (following Opik git workflow)
+- Slugify `{TICKET-SUMMARY}` the same way as step 6b: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`.
 - If on `main`, create branch following Opik conventions:
   ```bash
-  # Ensure you're on main and pull latest
   git checkout main
   git pull origin main
-  
-  # Create task-specific branch
-  git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{TICKET-SUMMARY}
+  git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}
   ```
 - **After branch creation**: Apply stashed changes if any: `git stash pop`
 - **Verify branch creation**: Confirm new branch is active and clean.

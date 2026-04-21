@@ -4,7 +4,7 @@
 
 ## Overview
 
-Analyze the current branch's diff and Jira ticket context, then generate a self-contained HTML architecture diagram at `diagrams/opik-{TICKET_NUMBER}-diagram.html`.
+Analyze the current branch's diff and Jira ticket context, then generate a self-contained HTML architecture diagram at `{MAIN_REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.html`.
 
 - **Execution model**: Stateless. Each invocation re-checks tool availability (`gh` preferred, GitHub MCP fallback), re-analyzes the current branch diff and Jira context, then generates a fresh diagram.
 
@@ -14,7 +14,7 @@ This workflow will:
 - Gather the git diff (PR diff if available, otherwise branch diff from main)
 - Analyze changes to understand data flow, architecture, and design decisions
 - Generate a self-contained HTML diagram using the `diagram-generation` skill
-- Save the diagram to `diagrams/` (gitignored, local artifact)
+- Save the diagram under the **main repo root**'s `diagrams/` folder (gitignored, local artifact) — even when running inside a worktree, so the diagram survives worktree removal
 - Provide the file path for the user to open in a browser
 
 ---
@@ -36,7 +36,8 @@ This workflow will:
 - **GitHub fallback path**: If `gh` is unavailable or unauthenticated, test GitHub MCP availability by fetching repository info for `comet-ml/opik`.
   > If both are unavailable: warn but continue — diagram can be generated from local git diff alone.
 - **Check git repository**: Verify we're in a git repo with commits.
-- **Ensure `diagrams/` directory exists**: Create if missing.
+- **Resolve main repo root**: Compute `MAIN_REPO_ROOT="$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")"`. This returns the main worktree root whether we're currently in the main checkout or in a linked worktree under `.claude/worktrees/`. All diagram output goes under `${MAIN_REPO_ROOT}/diagrams/` so the files outlive any temporary worktree.
+- **Ensure `${MAIN_REPO_ROOT}/diagrams/` directory exists**: Create if missing.
 
 ---
 
@@ -109,9 +110,9 @@ Always include **Files Changed** section. Include at most 4 sections total.
 
 ### 5. Save Diagram
 
-- **Output path**: `diagrams/opik-{TICKET_NUMBER}-diagram.html`
-- **Create `diagrams/` directory** if it doesn't exist
-- **Write the HTML file** using the Write tool
+- **Output path**: `${MAIN_REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.html` — always under the main repo root, even when the session is running inside a worktree. This keeps the diagram accessible after the worktree is removed.
+- **Create `${MAIN_REPO_ROOT}/diagrams/` directory** if it doesn't exist
+- **Write the HTML file** using the Write tool (pass the absolute path)
 - **Verify file was written** by reading the first few lines back
 
 ---
@@ -122,13 +123,13 @@ Render the diagram to PNG and display it inline in chat.
 
 **Note**: Playwright MCP blocks `file://` URLs, so serve the HTML over a local HTTP server.
 
-1. **Start server**: `python3 -m http.server 8787 --bind 127.0.0.1` in the `diagrams/` directory (run in background)
+1. **Start server**: `python3 -m http.server 8787 --bind 127.0.0.1` in the `${MAIN_REPO_ROOT}/diagrams/` directory (run in background)
 2. **Navigate**: `browser_navigate` to `http://localhost:8787/opik-{TICKET_NUMBER}-diagram.html`
 3. **Hide button**: `browser_evaluate` with `document.querySelector('.copy-btn').style.display = 'none'` — prevents the fixed-position button from appearing in the screenshot
 4. **Snapshot**: `browser_snapshot` to get the element ref for `#diagram`
 5. **Screenshot**: `browser_take_screenshot` targeting the `#diagram` element ref
-   - Use an **absolute path** for the filename: `{REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.png`
-   - Playwright saves relative to its own CWD, so absolute paths ensure the PNG lands in `diagrams/`
+   - Use an **absolute path** for the filename: `${MAIN_REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.png`
+   - Playwright saves relative to its own CWD, so absolute paths ensure the PNG lands in the main repo's `diagrams/` folder (not the worktree's)
 6. **Close & cleanup**: `browser_close`, then kill the HTTP server process
 7. **Display**: Use the `Read` tool on the PNG — it renders as an image inline in the chat
 
@@ -139,7 +140,7 @@ If Playwright MCP is **not available**, skip this step and fall back to showing 
 ### 7. Present Result
 
 - **Show the PNG inline** if generated (step 6) — this is the primary visual output
-- **Show the HTML file path**: For browser viewing and "Copy as image" clipboard use
+- **Show the HTML file path** as a markdown link using the **absolute path** (e.g., `[diagrams/opik-{TICKET}-diagram.html](${MAIN_REPO_ROOT}/diagrams/opik-{TICKET}-diagram.html)`). Absolute paths ensure the link is clickable regardless of which folder the IDE has open as its workspace — important when the session is running inside a worktree while the user has the main repo open in VSCode.
 - **Summarize sections**: Brief description of what each section covers
 
 ---
@@ -176,14 +177,15 @@ The command is successful when:
 2. Code diff was analyzed and categorized by layer
 3. HTML diagram was generated with correct styling
 4. "Copy as image" button works in the generated HTML
-5. File was saved to `diagrams/opik-{TICKET_NUMBER}-diagram.html`
-6. User was shown the file path and summary
+5. File was saved to `${MAIN_REPO_ROOT}/diagrams/opik-{TICKET_NUMBER}-diagram.html`
+6. User was shown the file path (as an absolute-path markdown link) and summary
 
 ---
 
 ## Notes
 
-- Diagrams are **local artifacts** — the `diagrams/` folder is gitignored
+- Diagrams are **local artifacts** — the main repo's `/diagrams/` folder is gitignored
+- Diagrams are always written under the **main repo root**'s `diagrams/` folder. When the session runs inside a worktree under `.claude/worktrees/`, the command resolves `MAIN_REPO_ROOT` via `git rev-parse --git-common-dir` so the file lands in the shared `diagrams/` folder and survives worktree removal.
 - The diagram-generation logic lives in `.agents/skills/diagram-generation/` (shared skill)
 - The "Copy as image" button uses the browser Canvas API — requires opening in a modern browser
 - When run without a PR, the diagram reflects local uncommitted + committed changes vs main

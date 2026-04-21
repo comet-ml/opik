@@ -260,15 +260,16 @@ class TestRunPairing:
         runner.status = "pairing"
         api.runners.get_runner.return_value = runner
 
-        # First call sets deadline (0+300=300), second call exceeds it
-        call_count = 0
+        # Strictly-increasing clock: each call returns previous + 1000s. This
+        # guarantees the while-loop exits on the call immediately after
+        # `deadline = monotonic() + ttl_seconds` is computed, regardless of
+        # how many other calls (from logging, coverage, plugins, etc.) land
+        # on the patched monotonic before or after the test's own calls.
+        clock = {"t": 0.0}
 
         def advancing_monotonic():
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return 0.0
-            return 999.0
+            clock["t"] += 1000.0
+            return clock["t"]
 
         mock_monotonic.side_effect = advancing_monotonic
 

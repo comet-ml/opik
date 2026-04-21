@@ -9,6 +9,8 @@ import uuid
 import random
 
 import opik.rest_api
+from opik.rest_api.types.trace_write import TraceWrite
+from opik.rest_api.types.span_write import SpanWrite
 from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores
 from opentelemetry import trace
 from dataclasses import dataclass, field
@@ -94,9 +96,9 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
 
-def project_exists(base_url, workspace_name, comet_api_key, project_name):
+def create_project(base_url, workspace_name, comet_api_key, project_name):
     request = {
-        "url": "/v1/private/projects/retrieve",
+        "url": "/v1/private/projects",
         "method": "POST",
         "payload": {
             "name": project_name,
@@ -104,15 +106,7 @@ def project_exists(base_url, workspace_name, comet_api_key, project_name):
     }
 
     _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-    return status_code == 200
-
-def api_key_ready(base_url, workspace_name, comet_api_key):
-    request = {
-        "url": "/v1/private/projects",
-        "method": "GET",
-    }
-    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-    return status_code == 200
+    return status_code
 
 def calculate_time_shift_to_now(traces):
     """
@@ -174,60 +168,89 @@ def get_time_shift(context: DemoDataContext, trace_id):
         return time_shift
     return datetime.timedelta(0)
 
-def process_traces_with_time_shift(traces, context: DemoDataContext, client: opik.Opik):
+def process_traces_with_time_shift(traces, context: DemoDataContext, project_name: str):
     """
-    Process traces with proper time shifts and time-based UUIDs.
-    
+    Process traces with proper time shifts and time-based UUIDs, returning a list of
+    TraceWrite objects ready for a single synchronous POST /v1/private/traces/batch call.
+
     Shifts all trace timestamps to present time while preserving temporal relationships,
     and generates time-based UUIDs for consistent ordering.
-    
+
     Calculates time shift from the latest end_time across traces only
     to ensure all data is brought to present while preserving time distances.
-    
+
     Parameters:
     - traces: List of trace dictionaries to process
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging traces
-    
+    - project_name: Project name to attach to every TraceWrite
+
     Returns:
-    - datetime.timedelta: The time shift applied to all data (to be used for spans)
+    - tuple: (list[TraceWrite] ready to POST, datetime.timedelta time_shift applied)
     """
     # Calculate time shift from traces only to move latest trace end_time to now
     # This same shift will be applied to spans to preserve all time distances
     time_shift = calculate_time_shift_to_now(traces)
-    
+
+    # Track per-millisecond counters to break ties when multiple traces share the same
+    # start_time down to the millisecond. uuid7_from_datetime derives the UUID's temporal
+    # prefix from the ms-resolution timestamp, so two traces landing on the same ms can
+    # produce UUIDs that collide (or get silently deduplicated by the backend). Adding a
+    # monotonic microsecond offset ensures each trace gets a distinct UUID7 prefix.
+    ms_counter: dict = {}
+    trace_writes: list = []
+
     for idx, original_trace in enumerate(sorted(traces, key=lambda x: x["id"])):
         # Create a copy to avoid mutating the original demo_data
         trace = dict(original_trace)
         # Store the old ID before modification
         old_trace_id = trace["id"]
         # Apply time shift to maintain time differences
-        trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
-        trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
+        shifted_start = apply_time_shift(trace["start_time"], time_shift)
+        shifted_end = apply_time_shift(trace["end_time"], time_shift)
+
+        # Deduplicate sub-millisecond timestamps: if multiple traces land on the same
+        # millisecond after the shift, offset each by 1 µs so their UUID7s are distinct.
+        ms_key = int(shifted_start.timestamp() * 1000)
+        offset_us = ms_counter.get(ms_key, 0)
+        ms_counter[ms_key] = offset_us + 1
+        if offset_us > 0:
+            shifted_start = shifted_start + datetime.timedelta(microseconds=offset_us)
+            # Shift end_time by the same amount so duration is preserved and we never
+            # end up with end_time < start_time (would violate ordering invariants).
+            shifted_end = shifted_end + datetime.timedelta(microseconds=offset_us)
+
+        trace["start_time"] = shifted_start
+        trace["end_time"] = shifted_end
         new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
         trace["id"] = new_id
-        # Remove fields that shouldn't be in the trace data
+        # Attach project_name directly so the TraceWrite targets the right project.
+        trace["project_name"] = project_name
+        # Remove fields that shouldn't be in the trace payload
         trace.pop("project_id", None)
         trace.pop("workspace_id", None)
         set_time_shift(context, new_id, time_shift)
-        client.trace(**trace)
-    
-    return time_shift
+        trace_writes.append(TraceWrite(**trace))
 
-def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, client: opik.Opik):
+    return trace_writes, time_shift
+
+def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, project_name: str):
     """
-    Process spans with the same time shift as their parent traces.
-    
+    Process spans with the same time shift as their parent traces, returning a list of
+    SpanWrite objects ready for a single synchronous POST /v1/private/spans/batch call.
+
     Spans use the time shift passed from trace processing to maintain relative timing.
-    
+
     First pass generates all time-based UUIDs and stores time shifts.
-    Second pass logs all spans with properly shifted times and parent_span_id mappings.
-    
+    Second pass builds all SpanWrite objects with properly shifted times and parent_span_id mappings.
+
     Parameters:
     - spans: List of span dictionaries to process
     - time_shift: The time shift to apply (from traces)
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging spans
+    - project_name: Project name to attach to every SpanWrite
+
+    Returns:
+    - list[SpanWrite]: Spans ready to POST
     """
     # First pass: Generate all time-based UUIDs and store time shifts for spans
     # This ensures all parent span IDs are mapped before we reference them
@@ -248,7 +271,8 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         # Store the time shift for use in second pass
         span_time_shifts[old_span_id] = (span["start_time"], span["end_time"], time_shift)
 
-    # Second pass: Log all spans with properly shifted times and parent_span_id mappings
+    # Second pass: build SpanWrite objects with properly shifted times and parent_span_id mappings
+    span_writes: list = []
     for original_span in sorted(spans, key=lambda x: x["id"]):
         # Create a copy to avoid mutating the original demo_data
         span = dict(original_span)
@@ -262,10 +286,14 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         if "parent_span_id" in span:
             new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
             span["parent_span_id"] = new_parent_span_id
-        # Remove fields that shouldn't be in the span data
+        # Attach project_name directly so the SpanWrite targets the right project.
+        span["project_name"] = project_name
+        # Remove fields that shouldn't be in the span payload
         span.pop("project_id", None)
         span.pop("workspace_id", None)
-        client.span(**span)
+        span_writes.append(SpanWrite(**span))
+
+    return span_writes
 
 def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
 
@@ -331,21 +359,27 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
         try:
             project_name = "Opik Demo Agent Observability"
 
-            # Short-circuit if project already exists (also implicitly validates the API key)
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            # If project doesn't exist, it could be because the API key isn't ready yet.
-            # Wait for API key to be ready (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
+            # Create the project explicitly before sending traces.
+            # This is the single source of truth for whether demo data creation proceeds:
+            # - 201: project created, continue
+            # - 409: project already exists (signup hook re-run), skip entirely — idempotent
+            # - other: likely API key not yet propagated on fresh signup, retry with backoff
+            # We can't rely on implicit project creation via the SDK's batch trace endpoint because
+            # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
             max_retries = 5
+            status_code = None
             for attempt in range(max_retries):
-                if api_key_ready(base_url, workspace_name, comet_api_key):
+                status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
+                if status_code == 201 or status_code == 409:
                     break
                 if attempt == max_retries - 1:
-                    logger.error("API key not ready for workspace %s after %d retries, aborting demo data creation", workspace_name, max_retries)
+                    logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
                     return
-                time.sleep(0.5 * (2 ** attempt))
+                time.sleep(2 ** attempt)
+
+            if status_code == 409:
+                logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
+                return
 
             client = opik.Opik(
                 project_name=project_name,
@@ -355,24 +389,39 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 _use_batching=True,
             )
 
+            # Sanity check: warn if the demo dataset itself contains duplicate trace IDs
+            # (these would collapse to a single row on ingest).
+            trace_ids = [t["id"] for t in demo_traces]
+            seen_trace_ids: set = set()
+            for tid in trace_ids:
+                if tid in seen_trace_ids:
+                    logger.warning("Duplicate trace id found in demo data: %s", tid)
+                seen_trace_ids.add(tid)
+            logger.info("Found %d unique trace IDs in demo data", len(seen_trace_ids))
+
             # Extract unique thread IDs before processing traces
             threads = list({trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None})
-            
-            time_shift = process_traces_with_time_shift(demo_traces, context, client)
-            process_spans_with_time_shift(demo_spans, time_shift, context, client)
-            flush_result = client.flush()
-            if not flush_result:
-                logger.error("Failed to flush demo traces for workspace %s project %s, aborting", workspace_name, project_name)
-                return
 
-            # Wait for project to be queryable (exponential backoff: 0.5s, 1s, 2s, 4s, 8s ≈ 15.5s total)
-            for attempt in range(max_retries):
-                if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                    break
-                if attempt == max_retries - 1:
-                    logger.error("Project %s not found for workspace %s after %d retries, skipping thread/feedback operations", project_name, workspace_name, max_retries)
-                    return
-                time.sleep(0.5 * (2 ** attempt))
+            logger.info("Creating %d threads, %d traces, %d spans for workspace %s",
+                        len(threads), len(demo_traces), len(demo_spans), workspace_name)
+
+            # Build the full TraceWrite / SpanWrite payloads up-front, then POST them
+            # synchronously via the REST client. This deliberately bypasses the SDK's
+            # batch queue because:
+            #   - batch queue silently swallows 401s via the unauthorized-message
+            #     registry (10s block), so client.flush() can return True even when
+            #     nothing landed on the backend;
+            #   - the raw REST call returns a real HTTP status and raises ApiError on
+            #     non-2xx, which propagates up to our outer except as a loud failure;
+            #   - no ClickHouse read is needed for verification, so we avoid false
+            #     positives from CH replica lag.
+            trace_writes, time_shift = process_traces_with_time_shift(demo_traces, context, project_name)
+            logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
+            client.rest_client.traces.create_traces(traces=trace_writes)
+
+            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
+            logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
+            client.rest_client.spans.create_spans(spans=span_writes)
 
             done = False
             max_attempts = 10
@@ -424,7 +473,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 if not done:
                     logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
         except Exception as e:
-            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e)
+            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e, exc_info=True)
         finally:
             # Close the client
             if client:

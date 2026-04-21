@@ -117,6 +117,8 @@ anthropic:
     structuredOutput: true
   - id: "claude-opus-4-6"
     structuredOutput: true
+  - id: "claude-opus-4-7"
+    structuredOutput: true
   - id: "claude-sonnet-4-20250514"
     structuredOutput: true
   - id: "claude-sonnet-4-5"
@@ -124,7 +126,6 @@ anthropic:
     structuredOutput: true
   - id: "claude-sonnet-4-6"
     structuredOutput: true
-  - id: "claude-opus-4-7"
 gemini:
   - id: "aqa"
   - id: "gemini-1.0-pro"
@@ -333,6 +334,7 @@ openrouter:
     structuredOutput: true
   - id: "google/gemini-3.1-flash-image-preview"
   - id: "google/gemini-3.1-flash-lite-preview"
+    structuredOutput: true
   - id: "google/gemini-3.1-pro-preview"
     structuredOutput: true
   - id: "google/gemini-3.1-pro-preview-customtools"
@@ -484,6 +486,7 @@ openrouter:
   - id: "moonshotai/kimi-k2-thinking"
     reasoning: true
   - id: "moonshotai/kimi-k2.5"
+  - id: "moonshotai/kimi-k2.6"
   - id: "moonshotai/kimi-k2:free"
   - id: "moonshotai/kimi-linear-48b-a3b-instruct"
   - id: "morph/morph-v3-fast"

@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
-import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(AssertionResultDAOImpl.class)

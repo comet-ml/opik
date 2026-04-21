@@ -17,8 +17,8 @@ import java.util.UUID;
 
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
-@ImplementedBy(ThreadServiceImpl.class)
-public interface ThreadService {
+@ImplementedBy(TraceThreadQueryServiceImpl.class)
+public interface TraceThreadQueryService {
 
     Mono<TraceThread.TraceThreadPage> find(int page, int size, TraceSearchCriteria criteria);
 
@@ -32,7 +32,7 @@ public interface ThreadService {
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
-class ThreadServiceImpl implements ThreadService {
+class TraceThreadQueryServiceImpl implements TraceThreadQueryService {
 
     private final @NonNull ThreadDAO dao;
     private final @NonNull ProjectService projectService;

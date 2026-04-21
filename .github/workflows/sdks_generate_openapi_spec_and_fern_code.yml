@@ -171,19 +171,14 @@ jobs:
       needs.update-open-api-spec-and-fern-code.outputs.pr_url != ''
 
     steps:
-      - name: Check Slack configuration
-        id: check-slack
-        run: |
-          if [ -z "${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}" ]; then
-            echo "configured=false" >> $GITHUB_OUTPUT
-            echo "SLACK_WEBHOOK_URL_CODE_REVIEW not configured — skipping notification"
-          else
-            echo "configured=true" >> $GITHUB_OUTPUT
-          fi
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
 
       - name: Resolve Slack mention
         id: resolve-mention
-        if: steps.check-slack.outputs.configured == 'true'
         env:
           SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
         run: |
@@ -199,73 +194,11 @@ jobs:
           echo "author_display=$AUTHOR" >> $GITHUB_OUTPUT
 
       - name: Send Slack notification
-        if: steps.check-slack.outputs.configured == 'true'
         env:
-          SLACK_WEBHOOK_URL_CODE_REVIEW: ${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}
-        run: |
-          PR_URL="${{ needs.update-open-api-spec-and-fern-code.outputs.pr_url }}"
-          PR_NUMBER="${{ needs.update-open-api-spec-and-fern-code.outputs.pr_number }}"
-          ORIGINATING_PR="${{ needs.resolve-trigger-context.outputs.originating_pr_url }}"
-          AUTHOR="${{ steps.resolve-mention.outputs.author_display }}"
-          MENTION="${{ steps.resolve-mention.outputs.mention }}"
-          COMMIT_SHA="${{ github.sha }}"
-          SHORT_SHA="${COMMIT_SHA:0:7}"
-
-          # Build trigger text
-          if [ -n "$ORIGINATING_PR" ]; then
-            TRIGGER_TEXT="*Triggered by:*\n<$ORIGINATING_PR|BE PR> by $AUTHOR"
-          else
-            TRIGGER_TEXT="*Triggered by:*\nCommit <https://github.com/${{ github.repository }}/commit/$COMMIT_SHA|\`$SHORT_SHA\`> by $AUTHOR"
-          fi
-
-          # Build mention text
-          MENTION_TEXT=""
-          if [ -n "$MENTION" ]; then
-            MENTION_TEXT="$MENTION Your BE merge triggered FERN changes. Please review."
-          fi
-
-          # Build JSON payload with jq to handle special characters safely
-          jq -n \
-            --arg pr_url "$PR_URL" \
-            --arg pr_num "$PR_NUMBER" \
-            --arg trigger "$TRIGGER_TEXT" \
-            --arg mention "$MENTION_TEXT" \
-            '
-            {
-              "attachments": [{
-                "color": "#36a64f",
-                "blocks": (
-                  [
-                    {"type": "header", "text": {"type": "plain_text", "text": "FERN Update PR \u2014 Review Needed", "emoji": true}},
-                    {"type": "section", "text": {"type": "mrkdwn", "text": "A BE merge to main changed the OpenAPI spec. FERN SDK code has been regenerated."}},
-                    {"type": "section", "fields": [
-                      {"type": "mrkdwn", "text": ("*FERN PR:*\n<" + $pr_url + "|#" + $pr_num + ">")},
-                      {"type": "mrkdwn", "text": $trigger}
-                    ]}
-                  ]
-                  + (if $mention != "" then [{"type": "section", "text": {"type": "mrkdwn", "text": $mention}}] else [] end)
-                  + [
-                    {"type": "actions", "elements": [{
-                      "type": "button",
-                      "text": {"type": "plain_text", "text": "Review FERN PR", "emoji": true},
-                      "url": $pr_url,
-                      "style": "primary"
-                    }]}
-                  ]
-                )
-              }]
-            }
-            ' > payload.json
-
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" \
-            -X POST \
-            -H 'Content-type: application/json' \
-            --data @payload.json \
-            "$SLACK_WEBHOOK_URL_CODE_REVIEW")
-
-          if [ "$HTTP_CODE" -eq 200 ]; then
-            echo "Slack notification sent successfully"
-          else
-            echo "Slack notification failed with HTTP code: $HTTP_CODE"
-            exit 1
-          fi
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}
+          PR_URL: ${{ needs.update-open-api-spec-and-fern-code.outputs.pr_url }}
+          PR_NUMBER: ${{ needs.update-open-api-spec-and-fern-code.outputs.pr_number }}
+          ORIGINATING_PR: ${{ needs.resolve-trigger-context.outputs.originating_pr_url }}
+          AUTHOR_DISPLAY: ${{ steps.resolve-mention.outputs.author_display }}
+          MENTION: ${{ steps.resolve-mention.outputs.mention }}
+        run: .github/scripts/notify-slack-fern-update.sh

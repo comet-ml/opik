@@ -50,7 +50,7 @@ const AgentRunnerEmptyState: React.FC = () => {
               <p className="comet-body-xs text-muted-slate">
                 Trouble connecting?{" "}
                 <a
-                  href={buildDocsUrl("/faq#troubleshooting")}
+                  href={buildDocsUrl("/faq", "#troubleshooting")}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 underline hover:text-foreground"

@@ -21,6 +21,9 @@ import AgentConfigurationEditPanel from "@/v2/pages-shared/agent-configuration/A
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import AgentConfigTagList from "./AgentConfigTagList";
 import AgentConfigurationEmptyState from "@/v2/pages/AgentConfigurationPage/AgentConfigurationEmptyState";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+
+const NARROW_CONTAINER_WIDTH = 900;
 
 type HistoryPopoverProps = {
   items: ConfigHistoryItem[];
@@ -154,6 +157,11 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
     [allRows, setSelectedId],
   );
 
+  const [isNarrow, setIsNarrow] = useState<boolean | undefined>(undefined);
+  const { ref: containerRef } = useObserveResizeNode<HTMLDivElement>((node) => {
+    setIsNarrow(node.clientWidth < NARROW_CONTAINER_WIDTH);
+  });
+
   if (isPending) {
     return <Loader />;
   }
@@ -174,47 +182,65 @@ const AgentConfigurationTab: React.FC<AgentConfigurationTabProps> = ({
   const selectedItem = allRows[selectedIndex] as ConfigHistoryItem;
 
   return (
-    <div className="flex flex-col lg:flex-row lg:gap-0">
-      <div className="mx-6 mt-5 flex flex-col gap-4 lg:hidden">
-        <h1 className="comet-body-accented">Agent configuration</h1>
-        <HistoryPopover
-          items={allRows}
-          selectedIndex={selectedIndex}
-          onSelect={handleSelect}
-        />
-      </div>
+    <div
+      ref={containerRef}
+      className={cn("flex flex-col", isNarrow === false && "flex-row")}
+    >
+      {isNarrow !== undefined && (
+        <>
+          {isNarrow && (
+            <div className="mx-6 mt-5 flex flex-col gap-4">
+              <h1 className="comet-body-accented">Agent configuration</h1>
+              <HistoryPopover
+                items={allRows}
+                selectedIndex={selectedIndex}
+                onSelect={handleSelect}
+              />
+            </div>
+          )}
 
-      <div className="min-w-0 flex-1 [overflow-anchor:none] lg:w-[50vw]">
-        <div className="mx-6 mt-5 hidden lg:block">
-          <h1 className="comet-body-accented">Agent configuration</h1>
-        </div>
+          <div
+            className={cn(
+              "min-w-0 flex-1 [overflow-anchor:none]",
+              !isNarrow && "w-[50vw]",
+            )}
+          >
+            {!isNarrow && (
+              <div className="mx-6 mt-5">
+                <h1 className="comet-body-accented">Agent configuration</h1>
+              </div>
+            )}
 
-        {selectedItem ? (
-          <AgentConfigurationDetailView
-            item={selectedItem}
-            projectId={projectId}
-            versions={allRows}
-            onEdit={() => setEditItem(allRows[0])}
-          />
-        ) : (
-          <div className="flex h-full items-center justify-center text-muted-slate">
-            Select a version to view its configuration
+            {selectedItem ? (
+              <AgentConfigurationDetailView
+                item={selectedItem}
+                projectId={projectId}
+                versions={allRows}
+                onEdit={() => setEditItem(allRows[0])}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center text-muted-slate">
+                Select a version to view its configuration
+              </div>
+            )}
           </div>
-        )}
-      </div>
 
-      <div className="hidden w-[25vw] shrink-0 pr-2 lg:block">
-        <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
+          {!isNarrow && (
+            <div className="w-[25vw] shrink-0 pr-2">
+              <p className="comet-body-s-accented ml-3 mt-6">Version history</p>
 
-        <AgentConfigurationHistoryTimeline
-          items={allRows}
-          selectedIndex={selectedIndex}
-          onSelect={handleSelect}
-          hasNextPage={hasNextPage}
-          isFetchingNextPage={isFetchingNextPage}
-          onLoadMore={fetchNextPage}
-        />
-      </div>
+              <AgentConfigurationHistoryTimeline
+                items={allRows}
+                selectedIndex={selectedIndex}
+                onSelect={handleSelect}
+                hasNextPage={hasNextPage}
+                isFetchingNextPage={isFetchingNextPage}
+                onLoadMore={fetchNextPage}
+              />
+            </div>
+          )}
+        </>
+      )}
 
       {editItem && (
         <AgentConfigurationEditPanel
