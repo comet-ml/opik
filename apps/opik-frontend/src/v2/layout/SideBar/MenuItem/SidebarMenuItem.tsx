@@ -1,6 +1,5 @@
 import React, { MouseEventHandler } from "react";
 import { Link } from "@tanstack/react-router";
-import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -18,7 +17,7 @@ export type MenuItem = {
   id: string;
   path?: string;
   type: MENU_ITEM_TYPE;
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   disabled?: boolean;
   muted?: boolean;

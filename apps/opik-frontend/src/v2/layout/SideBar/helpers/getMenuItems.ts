@@ -15,6 +15,7 @@ import {
   GitBranch,
   Workflow,
 } from "lucide-react";
+import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
@@ -26,11 +27,13 @@ const getMenuItems = ({
   canViewExperiments,
   canViewDatasets,
   canUsePlayground,
+  showHome,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
   canUsePlayground: boolean;
+  showHome: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -40,6 +43,23 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
+    ...(showHome
+      ? [
+          {
+            id: "opik_connect_group",
+            items: [
+              {
+                id: "opik_connect",
+                path: projectPath("/home"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: OllieOwl,
+                label: "Opik Connect",
+                disabled: !projectPrefix,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "observability",
       label: "Observability",
