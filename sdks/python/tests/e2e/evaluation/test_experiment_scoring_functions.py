@@ -74,8 +74,6 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     # Verify experiment scores are in the result
     assert len(evaluation_result.experiment_scores) == 1, (
         f"Expected 1 experiment score in evaluation result, but got {len(evaluation_result.experiment_scores)}. "

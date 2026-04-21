@@ -74,8 +74,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -234,8 +232,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -374,8 +370,6 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -502,8 +496,6 @@ def test_experiment_creation__experiment_config_not_set__None_metadata_sent_to_b
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -547,8 +539,6 @@ def test_experiment_creation__name_can_be_omitted(
         scoring_metrics=[equals_metric],
         experiment_name=None,
     )
-
-    opik.flush_tracker()
 
     experiment_id = evaluation_result.experiment_id
 
@@ -605,8 +595,6 @@ def test_experiment_creation__scoring_metrics_not_set(
         experiment_name=experiment_name,
         project_name=project_name,
     )
-
-    opik.flush_tracker()
 
     experiment_id = evaluation_result.experiment_id
 
@@ -673,8 +661,6 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         prompt=prompt,
         project_name=project_name,
     )
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -698,8 +684,6 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
         ],
         project_name=project_name,
     )
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -715,122 +699,6 @@ def test_evaluate_experiment__an_experiment_created_with_evaluate__then_new_scor
 
     assert evaluation_result.dataset_id == dataset.id, (
         f"Expected evaluation result dataset_id '{dataset.id}', but got '{evaluation_result.dataset_id}'"
-    )
-
-
-def test_experiment__get_experiment_by_name__two_experiments_with_the_same_name(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    project_name = (
-        "test-project-get_experiment_by_name__two_experiments_with_the_same_name"
-    )
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
-
-    dataset.insert(
-        [
-            {
-                "input": {"question": "What is the of capital of France?"},
-                "expected_model_output": {"output": "Paris"},
-            },
-            {
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-            },
-            {
-                "input": {"question": "What is the of capital of Poland?"},
-                "expected_model_output": {"output": "Warsaw"},
-            },
-        ]
-    )
-
-    def task(item: Dict[str, Any]):
-        if item["input"] == {"question": "What is the of capital of France?"}:
-            return {"output": "Paris"}
-        if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin"}
-        if item["input"] == {"question": "What is the of capital of Poland?"}:
-            return {"output": "Krakow"}
-
-        raise AssertionError(
-            f"Task received dataset item with an unexpected input: {item['input']}"
-        )
-
-    prompt = Prompt(
-        name=f"test-experiment-prompt-{random_chars()}",
-        prompt=f"test-experiment-prompt-template-{random_chars()}",
-        project_name=project_name,
-    )
-
-    equals_metric = metrics.Equals()
-    evaluation_result1 = opik.evaluate(
-        dataset=dataset,
-        task=task,
-        scoring_metrics=[equals_metric],
-        experiment_name=experiment_name,
-        experiment_config={
-            "model_name": "gpt-3.5",
-        },
-        scoring_key_mapping={
-            "reference": lambda x: x["expected_model_output"]["output"],
-        },
-        prompt=prompt,
-        project_name=project_name,
-    )
-    evaluation_result2 = opik.evaluate(
-        dataset=dataset,
-        task=task,
-        scoring_metrics=[equals_metric],
-        experiment_name=experiment_name,
-        experiment_config={
-            "model_name": "gpt-3.5",
-        },
-        scoring_key_mapping={
-            "reference": lambda x: x["expected_model_output"]["output"],
-        },
-        prompt=prompt,
-        project_name=project_name,
-    )
-
-    opik.flush_tracker()
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=evaluation_result1.experiment_id,
-        experiment_name=evaluation_result1.experiment_name,
-        experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
-        feedback_scores_amount=1,
-        prompts=[prompt],
-        project_name=project_name,
-    )
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=evaluation_result2.experiment_id,
-        experiment_name=evaluation_result2.experiment_name,
-        experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
-        feedback_scores_amount=1,
-        prompts=[prompt],
-        project_name=project_name,
-    )
-
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
-    )
-    retrieved_experiments = opik_client.get_experiments_by_name(
-        experiment_name, project_name=project_name
-    )
-    assert len(retrieved_experiments) == 2, (
-        f"Expected 2 experiments with name '{experiment_name}', but got {len(retrieved_experiments)}. "
-        f"Retrieved experiments: {[e.id for e in retrieved_experiments]}"
-    )
-    assert retrieved_experiment is not None, (
-        f"Expected get_experiment_by_name to return an experiment, but got None. "
-        f"Experiment name: {experiment_name}"
-    )
-    assert retrieved_experiment.id in [e.id for e in retrieved_experiments], (
-        f"Expected retrieved experiment ID '{retrieved_experiment.id}' to be in the list of experiments. "
-        f"Experiment IDs: {[e.id for e in retrieved_experiments]}"
     )
 
 
@@ -896,8 +764,6 @@ def test_experiment__get_experiments_by_name(
         )
         evaluation_results.append(evaluation_result)
 
-    opik.flush_tracker()
-
     # make sure experiments saved and available
     for result in evaluation_results:
         verifiers.verify_experiment(
@@ -921,6 +787,12 @@ def test_experiment__get_experiments_by_name(
     )
     assert all(experiment.project_name == project_name for experiment in experiments)
 
+    single = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
+    )
+    assert single is not None
+    assert single.id in [e.id for e in experiments]
+
     experiments = opik_client.get_experiments_by_name(
         experiments_names[2], project_name=project_name
     )
@@ -941,7 +813,7 @@ def test_experiment__get_experiment_by_name__experiment_not_found__ExperimentNot
     opik_client: opik.Opik,
 ):
     with pytest.raises(exceptions.ExperimentNotFound):
-        opik_client.get_experiment_by_id("not-existing-name")
+        opik_client.get_experiment_by_name("not-existing-name")
 
 
 def test_experiment__get_experiment_items__no_feedback_scores(
@@ -969,8 +841,6 @@ def test_experiment__get_experiment_items__no_feedback_scores(
         scoring_metrics=[],
         experiment_name=experiment_name,
     )
-
-    opik.flush_tracker()
 
     experiment = opik_client.get_experiment_by_name(experiment_name)
     items = experiment.get_items()
@@ -1047,8 +917,6 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         experiment_scoring_functions=[constant_score],
         project_name=project_name,
     )
-
-    opik.flush_tracker()
 
     # Verify experiment scores are in the result
     assert len(evaluation_result.experiment_scores) == 1, (
