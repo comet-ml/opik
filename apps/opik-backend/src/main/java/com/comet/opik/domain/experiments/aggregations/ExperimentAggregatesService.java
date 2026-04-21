@@ -94,24 +94,27 @@ public class ExperimentAggregatesService {
      * @return Mono that completes when all batches are processed
      */
     private Mono<Void> populateExperimentItemsInBatches(UUID experimentId, int batchSize) {
-        return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, null, batchSize)
-                .expand(result -> {
-                    log.info("Processed '{}' experiment items in this batch for experiment: '{}'",
-                            result.processedCount(), experimentId);
-                    if (result.lastCursor() == null) {
-                        return Mono.empty();
-                    }
-                    log.debug("Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
-                            result.lastCursor(), experimentId);
-                    return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, result.lastCursor(),
-                            batchSize);
-                })
-                .map(BatchResult::processedCount)
-                .reduce(0L, Long::sum)
-                .doOnSuccess(total -> log.info(
-                        "Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
-                        total, experimentId))
-                .then();
+        return experimentAggregatesDAO.getProjectId(experimentId)
+                .flatMap(projectId -> experimentAggregatesDAO
+                        .populateExperimentItemAggregates(experimentId, projectId, null, batchSize)
+                        .expand(result -> {
+                            log.info("Processed '{}' experiment items in this batch for experiment: '{}'",
+                                    result.processedCount(), experimentId);
+                            if (result.lastCursor() == null) {
+                                return Mono.empty();
+                            }
+                            log.debug(
+                                    "Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
+                                    result.lastCursor(), experimentId);
+                            return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, projectId,
+                                    result.lastCursor(), batchSize);
+                        })
+                        .map(BatchResult::processedCount)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(total -> log.info(
+                                "Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
+                                total, experimentId))
+                        .then());
     }
 
     /**
