@@ -84,8 +84,8 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
                 Mono.defer(() -> {
                     var processedCount = new AtomicInteger();
                     return getExperimentsReadyToProcess()
-                            .doOnNext(__ -> processedCount.incrementAndGet())
-                            .flatMap(this::processExperiment)
+                            .flatMap(member -> processExperiment(member)
+                                    .doOnSuccess(__ -> processedCount.incrementAndGet()))
                             .onErrorContinue((throwable, experimentId) -> log.error(
                                     "Failed to process pending experiment '{}'",
                                     experimentId, throwable))
