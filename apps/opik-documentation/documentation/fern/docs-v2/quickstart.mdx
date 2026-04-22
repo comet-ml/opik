@@ -24,19 +24,240 @@ Before you begin, you'll need to choose how you want to use Opik:
 
 ## Logging your first LLM calls
 
-Opik makes it easy to integrate with your existing LLM application, the best way to get started is to use the Opik skill:
+Opik makes it easy to integrate with your existing LLM application. Pick the tab that matches your
+stack and follow the three steps to log your first trace:
 
 <Tabs>
+  <Tab title="Python SDK" value="python-function-decorator">
+    If you are using the Python function decorator, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your function with the `@track` decorator:
+
+        ```python
+        from opik import track
+
+        @track
+        def my_function(input: str) -> str:
+            return input
+        ```
+
+        All calls to the `my_function` will now be logged to Opik. This works well for any function
+        even nested ones and is also supported by most integrations (just wrap any parent function
+        with the `@track` decorator).
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="TypeScript SDK" value="typescript-sdk">
+    If you want to use the TypeScript SDK to log traces directly:
+
+    <Steps>
+      <Step>
+        Install the Opik TypeScript SDK:
+
+        ```bash
+        npm install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik TypeScript SDK by running the interactive CLI tool:
+
+        ```bash
+        npx opik-ts configure
+        ```
+
+        This will detect your project setup, install required dependencies, and help you configure environment variables.
+      </Step>
+      <Step>
+        Log a trace using the Opik client:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        const trace = client.trace({
+          name: "My LLM Application",
+          input: { prompt: "What is the capital of France?" },
+          output: { response: "The capital of France is Paris." },
+        });
+
+        trace.end();
+        await client.flush();
+        ```
+
+        All traces will now be logged to Opik. You can also log spans within traces for more detailed observability.
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="OpenAI (Python)" value="openai-python-sdk">
+    If you are using the OpenAI Python SDK, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik Python SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik Python SDK, this will prompt you for your API key if you are using Opik
+        Cloud or your Opik server address if you are self-hosting:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Wrap your OpenAI client with the `track_openai` function:
+
+        ```python
+        from opik.integrations.openai import track_openai
+        from openai import OpenAI
+
+        # Wrap your OpenAI client
+        client = OpenAI()
+        client = track_openai(client)
+
+        # Use the client as normal
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "user", "content": "Hello, how are you?",
+                },
+            ],
+        )
+        print(completion.choices[0].message.content)
+        ```
+
+        All OpenAI calls made using the `client` will now be logged to Opik. You can combine
+        this with the `@track` decorator to log the traces for each step of your agent.
+
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="OpenAI (TS)" value="openai-ts-sdk">
+    If you are using the OpenAI TypeScript SDK, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik TypeScript SDK:
+
+        ```bash
+        npm install opik-openai
+        ```
+      </Step>
+      <Step>
+        Configure the Opik TypeScript SDK by running the interactive CLI tool:
+
+        ```bash
+        npx opik-ts configure
+        ```
+
+        This will detect your project setup, install required dependencies, and help you configure environment variables.
+      </Step>
+      <Step>
+        Wrap your OpenAI client with the `trackOpenAI` function:
+
+        ```typescript
+        import OpenAI from "openai";
+        import { trackOpenAI } from "opik-openai";
+
+        // Initialize the original OpenAI client
+        const openai = new OpenAI({
+          apiKey: process.env.OPENAI_API_KEY,
+        });
+
+        // Wrap the client with Opik tracking
+        const trackedOpenAI = trackOpenAI(openai);
+
+        // Use the tracked client just like the original
+        const completion = await trackedOpenAI.chat.completions.create({
+          model: "gpt-4",
+          messages: [{ role: "user", content: "Hello, how can you help me today?" }],
+        });
+        console.log(completion.choices[0].message.content);
+
+        // Ensure all traces are sent before your app terminates
+        await trackedOpenAI.flush();
+        ```
+
+        All OpenAI calls made using the `trackedOpenAI` will now be logged to Opik.
+
+      </Step>
+    </Steps>
+
+  </Tab>
+  <Tab title="LangGraph" value="langgraph">
+    If you are using LangGraph, you can integrate by:
+
+    <Steps>
+      <Step>
+        Install the Opik SDK:
+
+        ```bash
+        pip install opik
+        ```
+      </Step>
+      <Step>
+        Configure the Opik SDK by running the `opik configure` command in your terminal:
+
+        ```bash
+        opik configure
+        ```
+      </Step>
+      <Step>
+        Track your LangGraph graph with `track_langgraph`:
+
+        ```python
+        from opik.integrations.langchain import OpikTracer, track_langgraph
+
+        # Create your LangGraph graph
+        graph = ...
+        app = graph.compile(...)
+
+        # Create OpikTracer and track the graph once
+        # The graph visualization is automatically extracted by track_langgraph
+        opik_tracer = OpikTracer()
+        app = track_langgraph(app, opik_tracer)
+
+        # Now all invocations are automatically tracked!
+        result = app.invoke({"messages": [HumanMessage(content = "How to use LangGraph ?")]})
+        ```
+
+        All LangGraph calls will now be logged to Opik. No need to pass callbacks on every invocation!
+      </Step>
+    </Steps>
+
+  </Tab>
   <Tab title="AI integration">
-    The simplest way to integrate with Opik is using the Opik Skills and your favorite coding agent.
+    If you already use a coding agent (Claude Code, Codex, Cursor, OpenCode, etc.), you can let it
+    instrument your app for you with the Opik Skill. Requires Node.js installed.
 
     <Steps>
       <Step title="Install the Opik skill">
         ```bash
         npx skills add comet-ml/opik-skills
         ```
-
-        This skill is compatible with all coding agents including Claude Code, Codex, Cursor, OpenCode and more.
       </Step>
       <Step title="Run the integration">
         Once the skill is installed, you can integrate with Opik using the following prompt:
@@ -46,20 +267,20 @@ Opik makes it easy to integrate with your existing LLM application, the best way
       </Step>
     </Steps>
   </Tab>
-  <Tab title="Manual integration">
-    Opik has integrations with all the popular Agent frameworks in both Python and Typescript as well as first-class support
-    for OpenTelemetry:
+  <Tab title="All integrations">
+    Opik has **30+ integrations** with popular frameworks and model providers:
 
-      <CardGroup cols={3}>
-        <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
-        <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
-        <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
-        <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
-        <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
-        <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
-      </CardGroup>
+    <CardGroup cols={3}>
+      <Card title="LangChain" href="/integrations/langchain" icon={<img src="/img/tracing/langchain.svg" />} iconPosition="left"/>
+      <Card title="LlamaIndex" href="/integrations/llama_index" icon={<img src="/img/tracing/llamaindex.svg" />} iconPosition="left"/>
+      <Card title="Anthropic" href="/integrations/anthropic" icon={<img src="/img/tracing/anthropic.svg" />} iconPosition="left"/>
+      <Card title="AWS Bedrock" href="/integrations/bedrock" icon={<img src="/img/tracing/bedrock.svg" />} iconPosition="left"/>
+      <Card title="Google Gemini" href="/integrations/gemini" icon={<img src="/img/tracing/gemini.svg" />} iconPosition="left"/>
+      <Card title="CrewAI" href="/integrations/crewai" icon={<img src="/img/tracing/crewai.svg" />} iconPosition="left"/>
+    </CardGroup>
 
-      **[View all 30+ integrations →](/integrations/overview)**
+    **[View all 30+ integrations →](/integrations/overview)**
+
   </Tab>
 </Tabs>
 
