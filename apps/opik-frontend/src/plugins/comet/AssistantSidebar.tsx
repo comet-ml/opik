@@ -403,12 +403,26 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
    * responsible for supplying values that match the destination route's
    * search schema. Structured values are single-stringified by the router so
    * `use-query-params`' `JsonParam` round-trips correctly.
+   *
+   * The workspace is injected via a `$workspaceName` template param rather
+   * than string concatenation. TanStack Router strips the basepath from `to`
+   * with an unbounded `^basepath` regex (see @tanstack/react-router path.js
+   * `resolvePath`/`removeBasepath`), so a literal `to: "/opik-demos/..."`
+   * with basepath `/opik` would be mangled to `/opik/-demos/...`. Keeping
+   * the workspace as a param defers substitution until after the strip runs.
    */
   const navigateRef = useLatestRef(
     (path: string, search?: Record<string, unknown>) => {
       const ws = contextRef.current.workspaceName;
-      const fullPath = ws ? `/${ws}${path}` : path;
-      router.navigate({ to: fullPath, search });
+      if (ws) {
+        router.navigate({
+          to: `/$workspaceName${path}`,
+          params: { workspaceName: ws },
+          search,
+        });
+      } else {
+        router.navigate({ to: path, search });
+      }
     },
   );
 

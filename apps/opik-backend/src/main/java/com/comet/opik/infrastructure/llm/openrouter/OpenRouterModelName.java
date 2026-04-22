@@ -150,6 +150,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     INCEPTION_MERCURY("inception/mercury"),
     INCEPTION_MERCURY_2("inception/mercury-2"),
     INCEPTION_MERCURY_CODER("inception/mercury-coder"),
+    INCLUSIONAI_LING_2_6_FLASH_FREE("inclusionai/ling-2.6-flash:free"),
     INFLECTION_INFLECTION_3_PI("inflection/inflection-3-pi"),
     INFLECTION_INFLECTION_3_PRODUCTIVITY("inflection/inflection-3-productivity"),
     KWAIPILOT_KAT_CODER_PRO("kwaipilot/kat-coder-pro"),
@@ -319,6 +320,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     OPENAI_GPT_5_3_CHAT("openai/gpt-5.3-chat"),
     OPENAI_GPT_5_3_CODEX("openai/gpt-5.3-codex"),
     OPENAI_GPT_5_4("openai/gpt-5.4"),
+    OPENAI_GPT_5_4_IMAGE_2("openai/gpt-5.4-image-2"),
     OPENAI_GPT_5_4_MINI("openai/gpt-5.4-mini"),
     OPENAI_GPT_5_4_NANO("openai/gpt-5.4-nano"),
     OPENAI_GPT_5_4_PRO("openai/gpt-5.4-pro"),
@@ -347,6 +349,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     OPENROUTER_FREE("openrouter/free"),
     OPENROUTER_HEALER_ALPHA("openrouter/healer-alpha"),
     OPENROUTER_HUNTER_ALPHA("openrouter/hunter-alpha"),
+    OPENROUTER_PARETO_CODE("openrouter/pareto-code"),
     PERPLEXITY_SONAR("perplexity/sonar"),
     PERPLEXITY_SONAR_DEEP_RESEARCH("perplexity/sonar-deep-research"),
     PERPLEXITY_SONAR_PRO("perplexity/sonar-pro"),
@@ -472,7 +475,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_5("z-ai/glm-5"),
     Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
     Z_AI_GLM_5_1("z-ai/glm-5.1"),
-    Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo");
+    Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo"),
+    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 

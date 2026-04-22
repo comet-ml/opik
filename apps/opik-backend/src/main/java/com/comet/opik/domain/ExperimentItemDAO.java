@@ -458,6 +458,7 @@ class ExperimentItemDAO {
     private static final String DELETE = """
             DELETE FROM experiment_items
             WHERE id IN :ids
+            AND experiment_id = :experiment_id
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -508,6 +509,15 @@ class ExperimentItemDAO {
             WHERE ei.workspace_id = :workspace_id
             AND ei.id IN :item_ids
             AND ea.status IN :statuses
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String SELECT_EXPERIMENT_ITEM_REFS_BY_ITEM_IDS = """
+            SELECT DISTINCT ei.experiment_id, ei.id AS item_id
+            FROM experiment_items AS ei
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.id IN :item_ids
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -722,21 +732,22 @@ class ExperimentItemDAO {
     }
 
     @WithSpan
-    public Mono<Long> delete(Set<UUID> ids) {
+    public Mono<Long> delete(@NonNull UUID experimentId, Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids),
                 "Argument 'ids' must not be empty");
 
         return Mono.from(connectionFactory.create())
-                .flatMapMany(connection -> delete(ids, connection))
+                .flatMapMany(connection -> delete(experimentId, ids, connection))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);
     }
 
-    private Publisher<? extends Result> delete(Set<UUID> ids, Connection connection) {
-        log.info("Deleting experiment items, count '{}'", ids.size());
+    private Publisher<? extends Result> delete(UUID experimentId, Set<UUID> ids, Connection connection) {
+        log.info("Deleting experiment items, experimentId '{}', count '{}'", experimentId, ids.size());
 
         Statement statement = connection.createStatement(DELETE)
-                .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new));
+                .bind("ids", ids.stream().map(UUID::toString).toArray(String[]::new))
+                .bind("experiment_id", experimentId);
 
         return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
     }
@@ -777,6 +788,24 @@ class ExperimentItemDAO {
     public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
             @NonNull Set<ExperimentStatus> statuses) {
         return getExperimentRefsByIds(GET_EXPERIMENT_REFS_BY_ITEM_IDS, "item_ids", itemIds, statuses);
+    }
+
+    @WithSpan
+    public Flux<ExperimentItemRef> findExperimentItemRefsByItemIds(Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
+            return Flux.empty();
+        }
+
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> {
+                    Statement statement = connection.createStatement(SELECT_EXPERIMENT_ITEM_REFS_BY_ITEM_IDS)
+                            .bind("item_ids", itemIds.stream().map(UUID::toString).toArray(String[]::new));
+
+                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+                })
+                .flatMap(result -> result.map((row, rowMetadata) -> new ExperimentItemRef(
+                        row.get("experiment_id", UUID.class),
+                        row.get("item_id", UUID.class))));
     }
 
     @WithSpan

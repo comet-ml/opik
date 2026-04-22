@@ -1,5 +1,7 @@
 package com.comet.opik.domain.experiments.aggregations;
 
+import lombok.Builder;
+
 import java.util.UUID;
 
 /**
@@ -13,6 +15,7 @@ public class ExperimentAggregatesUtils {
      * @param processedCount Number of items processed
      * @param lastCursor     The cursor position after processing
      */
+    @Builder
     public record BatchResult(long processedCount, UUID lastCursor) {
     }
 

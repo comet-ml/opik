@@ -458,6 +458,9 @@ experimentDenormalization:
   jobLockTime: 4s
   jobLockWaitTime: 300ms
   aggregationLockTime: 120s
+  lockAcquireWait: 500ms
+  maxLockExpiryRetries: 3
+  retryCounterTtl: 10m
   claimIntervalRatio: 10
   pendingMessageDuration: 10m
   maxRetries: 3

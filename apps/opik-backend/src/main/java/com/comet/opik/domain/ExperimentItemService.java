@@ -23,7 +23,6 @@ import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -306,7 +305,9 @@ public class ExperimentItemService {
                 .flatMapMany(experimentIds -> experimentItemDAO.getItems(experimentIds, criteria));
     }
 
-    public Mono<Void> delete(@NonNull Set<UUID> ids) {
+    private static final int DELETE_BATCH_SIZE = 1000;
+
+    public Mono<Void> delete(Set<UUID> ids) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(ids),
                 "Argument 'ids' must not be empty");
 
@@ -316,15 +317,27 @@ public class ExperimentItemService {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
 
-            return experimentItemDAO.getExperimentRefsByItemIds(ids, EnumSet.allOf(ExperimentStatus.class))
-                    .map(ExperimentTraceRef::experimentId)
-                    .collect(Collectors.toUnmodifiableSet())
-                    .flatMap(experimentIds -> experimentItemDAO.delete(ids)
-                            .doOnSuccess(__ -> {
-                                if (!experimentIds.isEmpty()) {
-                                    eventBus.post(new ExperimentItemsDeleted(experimentIds, workspaceId, userName));
-                                }
-                            }))
+            return experimentItemDAO.findExperimentItemRefsByItemIds(ids)
+                    .buffer(DELETE_BATCH_SIZE)
+                    .concatMap(refs -> {
+                        Map<UUID, Set<UUID>> itemsByExperiment = refs.stream()
+                                .collect(Collectors.groupingBy(
+                                        ExperimentItemRef::experimentId,
+                                        Collectors.mapping(ExperimentItemRef::itemId, toSet())));
+
+                        return Flux.fromIterable(itemsByExperiment.entrySet())
+                                .concatMap(entry -> {
+                                    UUID experimentId = entry.getKey();
+                                    Set<UUID> batchItemIds = entry.getValue();
+                                    Set<ExperimentItemRef> batchRefs = batchItemIds.stream()
+                                            .map(itemId -> new ExperimentItemRef(experimentId, itemId))
+                                            .collect(toSet());
+                                    return experimentItemDAO.delete(experimentId, batchItemIds)
+                                            .doOnSuccess(__ -> eventBus.post(new ExperimentItemsDeleted(
+                                                    batchRefs, workspaceId, userName)));
+                                })
+                                .then();
+                    })
                     .then();
         });
     }

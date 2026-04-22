@@ -850,6 +850,7 @@ public class ExperimentService {
                         .then(Mono.defer(() -> experimentItemDAO.deleteByExperimentIds(ids)))
                         .doOnSuccess(unused -> eventBus.post(new ExperimentsDeleted(
                                 experimentDatasetInfo,
+                                ids,
                                 ctx.get(RequestContext.WORKSPACE_ID),
                                 ctx.get(RequestContext.USER_NAME))))))
                 .then();
