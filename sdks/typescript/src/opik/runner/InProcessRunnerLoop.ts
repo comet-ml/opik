@@ -227,7 +227,7 @@ export class InProcessRunnerLoop {
     const entry = getAll().get(agentName)!;
     const args = entry.params.map((p) => {
       const value = inputs[p.name];
-      if (p.required === false && (value === undefined || value === null)) {
+      if (p.required === false && value === undefined && !(p.name in inputs)) {
         return undefined;
       }
       return castInputValue(value, p.type);
