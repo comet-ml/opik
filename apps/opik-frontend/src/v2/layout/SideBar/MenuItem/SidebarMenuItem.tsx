@@ -21,6 +21,7 @@ export type MenuItem = {
   label: string;
   disabled?: boolean;
   muted?: boolean;
+  exact?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -83,7 +84,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     }
     itemElement = (
       <li className="flex">
-        <Link to={item.path} params={params} className={linkClasses}>
+        <Link
+          to={item.path}
+          params={params}
+          activeOptions={{ exact: item.exact ?? false }}
+          className={linkClasses}
+        >
           {content}
         </Link>
       </li>
