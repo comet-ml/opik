@@ -6,7 +6,9 @@ import useAppStore, {
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
   clearVersionOverride,
+  getNewExperienceOptIn,
   getVersionOverride,
+  setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
@@ -21,20 +23,29 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   children,
 }) => {
   const override = getVersionOverride();
+  const optIn = getNewExperienceOptIn();
   const gateVersion = useWorkspaceVersion();
   const workspaceName = useActiveWorkspaceName();
 
   const { data: apiVersion, isLoading } = useWorkspaceVersionQuery();
-  // The override is only honored when the backend says v1. Once a workspace is
-  // migrated to v2 on the backend, v2 is always rendered and any stale override
-  // is cleared.
-  const resolvedVersion = apiVersion === "v2" ? "v2" : override ?? apiVersion;
+  // Priority: explicit override wins; once the backend reports v2 the workspace
+  // is fully migrated and v2 always renders; otherwise the user's opt-in to the
+  // new experience upgrades a v1 workspace to v2; default to whatever the
+  // backend returned.
+  const resolvedVersion = override
+    ? override
+    : apiVersion === "v2"
+      ? "v2"
+      : optIn
+        ? "v2"
+        : apiVersion;
 
   useEffect(() => {
     if (!resolvedVersion || !workspaceName) return;
 
-    if (apiVersion === "v2" && override) {
-      clearVersionOverride();
+    if (apiVersion === "v2") {
+      if (override) clearVersionOverride();
+      if (optIn) setNewExperienceOptIn(false);
     }
 
     useAppStore.getState().setWorkspaceVersion(resolvedVersion);
@@ -50,9 +61,16 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
     } else {
       sessionStorage.removeItem(reloadKey);
     }
-  }, [apiVersion, override, resolvedVersion, gateVersion, workspaceName]);
+  }, [
+    apiVersion,
+    override,
+    optIn,
+    resolvedVersion,
+    gateVersion,
+    workspaceName,
+  ]);
 
-  if (!override && isLoading) {
+  if (!override && !optIn && isLoading) {
     return <Loader />;
   }
 

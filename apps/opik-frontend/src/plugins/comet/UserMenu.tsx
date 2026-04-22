@@ -39,9 +39,9 @@ import { cn, maskAPIKey } from "@/lib/utils";
 import useAppStore from "@/store/AppStore";
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
-  clearVersionOverride,
+  getNewExperienceOptIn,
   getVersionOverride,
-  setVersionOverride,
+  setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
 import api from "./api";
 import { ORGANIZATION_ROLE_TYPE } from "./types";
@@ -61,7 +61,8 @@ const UserMenu = () => {
     useThemeOptions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { data: backendWorkspaceVersion } = useWorkspaceVersionQuery();
-  const isOverriddenToV2 = getVersionOverride() === "v2";
+  const hasVersionOverride = getVersionOverride() !== null;
+  const hasOptedIn = getNewExperienceOptIn();
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -287,23 +288,19 @@ const UserMenu = () => {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
-            {backendWorkspaceVersion === "v1" && (
+            {backendWorkspaceVersion === "v1" && !hasVersionOverride && (
               <DropdownMenuItem
                 className="cursor-pointer"
                 onSelect={(e) => {
                   e.preventDefault();
-                  if (isOverriddenToV2) {
-                    clearVersionOverride();
-                  } else {
-                    setVersionOverride("v2");
-                  }
+                  setNewExperienceOptIn(!hasOptedIn);
                   window.location.reload();
                 }}
               >
                 <Sparkles className="mr-2 size-4" />
                 <span>New Opik experience</span>
                 <Switch
-                  checked={isOverriddenToV2}
+                  checked={hasOptedIn}
                   className="pointer-events-none ml-auto"
                   size="sm"
                 />
