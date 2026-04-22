@@ -22,9 +22,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}"${
-    apiKey ? ` and API key "${apiKey}"` : ""
-  }. Once you are ready with the instrumentation of your agent, run it with a couple of interactions so that we make sure that the observability is correctly instrumented and the right traces are flowing to the Opik dashboard.`;
+  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}" and API key "${apiKey}".`;
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -49,10 +47,6 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
         <TimelineStep number={1}>
           <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">Add the Opik skill</h4>
-            <p className="comet-body-xs text-muted-slate">
-              Install the Opik skill so it&apos;s available in Claude Code,
-              Codex, Cursor, Windsurf, and other AI editors.
-            </p>
             <CodeSnippet title="Terminal" code={INSTALL_OPIK_SKILLS_COMMAND} />
           </div>
         </TimelineStep>
@@ -62,10 +56,6 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
             </h4>
-            <p className="comet-body-xs text-muted-slate">
-              Navigate to the repo you want to instrument and paste this prompt.
-              It will instrument your agent with Opik tracing automatically.
-            </p>
             <CodeSnippet title="Prompt" code={promptText} />
           </div>
         </TimelineStep>

@@ -47,11 +47,6 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
             <h4 className="comet-body-s-accented">
               Connect your repo to Ollie
             </h4>
-            <p className="comet-body-xs text-muted-slate">
-              Run this command in the repository you want Ollie to work in. This
-              creates a local connection between Opik and your machine so Ollie
-              can help with setup.
-            </p>
             <CodeSnippet title="Terminal" code={connectCommandText} />
           </div>
         </TimelineStep>

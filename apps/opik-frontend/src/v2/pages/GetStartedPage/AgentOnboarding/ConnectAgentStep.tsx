@@ -3,6 +3,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, MonitorPlay, Undo2 } from "lucide-react";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
@@ -16,7 +17,6 @@ import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
-  DEFAULT_ONBOARDING_FLOW,
   TRACES_OLDEST_FIRST_SORTING,
 } from "./AgentOnboardingContext";
 import AgentOnboardingCard from "./AgentOnboardingCard";
@@ -25,6 +25,7 @@ import InstallWithAITab from "./InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
 import ShowDemoProjectButton from "./ShowDemoProjectButton";
+import AgentCopyButtons from "./AgentCopyButtons";
 import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,
@@ -38,10 +39,11 @@ const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
+
   // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "control" to preserve the Opik skills tab as default.
   const aiAssistedOpikSkillsVariant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    DEFAULT_ONBOARDING_FLOW;
+    "connect-to-ollie";
 
   const aiAssistedUsesOpikSkills = aiAssistedOpikSkillsVariant === "control";
   const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
@@ -236,6 +238,12 @@ const ConnectAgentStep: React.FC = () => {
     <AgentOnboardingCard
       title={`Set up Opik for ${agentName}`}
       description="Connect your repo so Opik can help set up tracing, or instrument your code manually."
+      headerContent={
+        <div className="flex flex-col gap-3">
+          <Separator />
+          <AgentCopyButtons />
+        </div>
+      }
       showFooterSeparator
       footer={
         primaryReady ? (
