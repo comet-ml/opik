@@ -460,8 +460,15 @@ def test__ragas_exact_match():
 
 
 def test__ragas_llm_context_precision():
+    # gpt-5-nano only accepts temperature=1; LangchainLLMWrapper rewrites
+    # the langchain_llm's temperature to its own default (0.01) at call
+    # time. `bypass_temperature=True` disables that rewrite for reasoning
+    # models.
     llm_evaluator = ragas_llms.LangchainLLMWrapper(
-        langchain_openai.ChatOpenAI(model=llm_constants.OPENAI_GPT_NANO),
+        langchain_openai.ChatOpenAI(
+            model=llm_constants.OPENAI_GPT_NANO, temperature=1.0
+        ),
+        bypass_temperature=True,
     )
 
     ragas_context_precision_metric = metrics.RagasMetricWrapper(

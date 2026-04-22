@@ -188,7 +188,12 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 if parent_span_id is None:
                     continue
 
-                parent_span = self._span_observations[parent_span_id]
+                # Parent span may not have arrived yet when messages are
+                # produced by parallel async flows; skip attaching until the
+                # next rebuild instead of crashing.
+                parent_span = self._span_observations.get(parent_span_id)
+                if parent_span is None:
+                    continue
                 if not _observation_already_stored(span_id, parent_span.spans):
                     parent_span.spans.append(self._span_observations[span_id])
                     parent_span.spans.sort(key=lambda x: x.start_time)
