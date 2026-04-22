@@ -112,6 +112,8 @@ public interface ExperimentAggregatesDAO {
     Mono<AggregatedExperimentCounts> getAggregationBranchCounts(AggregationBranchCountsCriteria criteria);
 
     Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds);
+
+    Mono<Long> deleteItemAggregatesByItemIds(UUID experimentId, Set<UUID> itemIds);
 }
 
 @Singleton
@@ -545,6 +547,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_EXPERIMENT_IDS = """
             DELETE FROM experiment_item_aggregates
             WHERE experiment_id IN :experiment_ids
+            AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_ITEM_IDS = """
+            DELETE FROM experiment_item_aggregates
+            WHERE id IN :item_ids
+            AND experiment_id = :experiment_id
             AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2779,7 +2790,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     }
 
     @Override
-    public Mono<Long> deleteByExperimentIds(@NonNull Set<UUID> experimentIds) {
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
                 "Argument 'experimentIds' must not be empty");
 
@@ -2797,6 +2808,24 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             var template = getSTWithLogComment(query, queryName, workspaceId, userName, details);
             var statement = connection.createStatement(template.render())
                     .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId);
+
+            return Flux.from(statement.execute());
+        }).flatMap(Result::getRowsUpdated).reduce(0L, Long::sum));
+    }
+
+    @Override
+    public Mono<Long> deleteItemAggregatesByItemIds(@NonNull UUID experimentId, Set<UUID> itemIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(itemIds),
+                "Argument 'itemIds' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var details = experimentId.toString();
+            var template = getSTWithLogComment(DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_ITEM_IDS,
+                    "deleteExperimentItemAggregatesByItemIds", workspaceId, userName, details);
+            var statement = connection.createStatement(template.render())
+                    .bind("item_ids", itemIds.toArray(UUID[]::new))
+                    .bind("experiment_id", experimentId)
                     .bind("workspace_id", workspaceId);
 
             return Flux.from(statement.execute());

@@ -19,6 +19,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentItemRef;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
@@ -27,12 +28,15 @@ import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
@@ -85,13 +89,24 @@ public class ExperimentAggregateEventListener {
     }
 
     @Subscribe
-    public void onExperimentItemsDeleted(ExperimentItemsDeleted event) {
-        triggerByExperimentIds(event.experimentIds(), event.workspaceId(), event.userName())
+    public void onExperimentItemsDeleted(@NonNull ExperimentItemsDeleted event) {
+        Map<UUID, Set<UUID>> itemsByExperiment = event.itemRefs().stream()
+                .collect(Collectors.groupingBy(
+                        ExperimentItemRef::experimentId,
+                        Collectors.mapping(ExperimentItemRef::itemId, Collectors.toSet())));
+
+        Flux.fromIterable(itemsByExperiment.entrySet())
+                .concatMap(entry -> experimentAggregatesService
+                        .deleteItemAggregatesByItemIds(entry.getKey(), entry.getValue()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .then(triggerByExperimentIds(event.experimentIds(), event.workspaceId(), event.userName()))
                 .subscribe(null, e -> log.error("Error triggering aggregation for experiment items deleted", e));
     }
 
     @Subscribe
-    public void onExperimentsDeleted(ExperimentsDeleted event) {
+    public void onExperimentsDeleted(@NonNull ExperimentsDeleted event) {
         if (CollectionUtils.isEmpty(event.experimentIds())) {
             return;
         }
@@ -101,8 +116,8 @@ public class ExperimentAggregateEventListener {
                         .put(RequestContext.USER_NAME, event.userName()))
                 .subscribe(null,
                         e -> log.error(
-                                "Error deleting aggregated experiments, workspaceId '{}', ids '{}'",
-                                event.workspaceId(), event.experimentIds(), e));
+                                "Error deleting aggregated experiments, workspaceId '{}', size '{}'",
+                                event.workspaceId(), event.experimentIds().size(), e));
     }
 
     @Subscribe
