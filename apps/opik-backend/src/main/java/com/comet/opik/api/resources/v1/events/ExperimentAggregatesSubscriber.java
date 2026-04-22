@@ -124,11 +124,11 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
                             message.experimentId(), message.workspaceId(), retryCount,
                             config.getMaxLockExpiryRetries());
 
-                    return publisher.publish(
-                            Set.of(message.experimentId()),
-                            message.workspaceId(),
-                            message.userName())
-                            .then(counter.expire(config.getRetryCounterTtl().toJavaDuration()).then());
+                    return counter.expire(config.getRetryCounterTtl().toJavaDuration())
+                            .then(publisher.publish(
+                                    Set.of(message.experimentId()),
+                                    message.workspaceId(),
+                                    message.userName()));
                 });
     }
 
