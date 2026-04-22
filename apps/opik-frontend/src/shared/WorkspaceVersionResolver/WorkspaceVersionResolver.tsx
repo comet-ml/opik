@@ -5,6 +5,7 @@ import useAppStore, {
 } from "@/store/AppStore";
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
+  getNewExperienceOptIn,
   getVersionOverride,
   setCachedWorkspaceVersion,
 } from "@/lib/workspaceVersion";
@@ -21,17 +22,22 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   children,
 }) => {
   const override = getVersionOverride();
+  const optIn = getNewExperienceOptIn();
   const gateVersion = useWorkspaceVersion();
   const workspaceName = useActiveWorkspaceName();
 
   const { data: apiVersion, isLoading } = useWorkspaceVersionQuery();
-  const resolvedVersion = override ?? apiVersion;
+  const resolvedVersion = override ?? (optIn ? "v2" : apiVersion);
 
   useEffect(() => {
     if (!resolvedVersion || !workspaceName) return;
 
-    useAppStore.getState().setWorkspaceVersion(resolvedVersion);
-    setCachedWorkspaceVersion(workspaceName, resolvedVersion);
+    const store = useAppStore.getState();
+    store.setWorkspaceVersion(resolvedVersion);
+    if (apiVersion) {
+      store.setDetectedWorkspaceVersion(apiVersion);
+      setCachedWorkspaceVersion(workspaceName, apiVersion);
+    }
 
     const reloadKey = VERSION_RELOAD_PREFIX + workspaceName;
 
@@ -44,9 +50,9 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
     } else {
       sessionStorage.removeItem(reloadKey);
     }
-  }, [resolvedVersion, gateVersion, workspaceName]);
+  }, [apiVersion, resolvedVersion, gateVersion, workspaceName]);
 
-  if (!override && isLoading) {
+  if (!override && !optIn && isLoading) {
     return <Loader />;
   }
 
