@@ -753,6 +753,48 @@ class LocalRunnersResourceTest {
         }
 
         @Test
+        void storesAndReturnsParamsWithRequired() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-params", projectId, ctx.apiKey, ctx.workspace);
+
+            var params = List.of(
+                    LocalRunner.Agent.Param.builder().name("query").type("string").required(true).build(),
+                    LocalRunner.Agent.Param.builder().name("thread_id").type("string").required(false).build());
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().params(params).build();
+            runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
+
+            LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(runner.agents()).hasSize(1);
+            var returnedParams = runner.agents().get(0).params();
+            assertThat(returnedParams).hasSize(2);
+            assertThat(returnedParams.get(0).name()).isEqualTo("query");
+            assertThat(returnedParams.get(0).type()).isEqualTo("string");
+            assertThat(returnedParams.get(0).required()).isTrue();
+            assertThat(returnedParams.get(1).name()).isEqualTo("thread_id");
+            assertThat(returnedParams.get(1).type()).isEqualTo("string");
+            assertThat(returnedParams.get(1).required()).isFalse();
+        }
+
+        @Test
+        void storesParamsWithNullRequired() {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-null-req", projectId, ctx.apiKey, ctx.workspace);
+
+            var params = List.of(
+                    LocalRunner.Agent.Param.builder().name("query").type("string").build());
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().params(params).build();
+            runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
+
+            LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+            var returnedParams = runner.agents().get(0).params();
+            assertThat(returnedParams).hasSize(1);
+            assertThat(returnedParams.get(0).name()).isEqualTo("query");
+            assertThat(returnedParams.get(0).required()).isNull();
+        }
+
+        @Test
         void throwsNotFoundForWrongWorkspace() {
             var ctx = createIsolatedWorkspace();
             UUID projectId = createProject(ctx.apiKey, ctx.workspace);
