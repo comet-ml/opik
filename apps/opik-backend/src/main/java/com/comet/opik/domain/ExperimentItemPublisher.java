@@ -23,16 +23,16 @@ public class ExperimentItemPublisher {
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
-    private final AssertionCounterService assertionCounterService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
-            @NonNull AssertionCounterService assertionCounterService) {
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         this.redisClient = redisClient;
         this.config = config;
-        this.assertionCounterService = assertionCounterService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
     /**
@@ -68,6 +68,6 @@ public class ExperimentItemPublisher {
         var itemsByExperiment = messages.stream()
                 .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
 
-        return assertionCounterService.setCounters(itemsByExperiment);
+        return testSuiteAssertionCounterService.setCounters(itemsByExperiment);
     }
 }

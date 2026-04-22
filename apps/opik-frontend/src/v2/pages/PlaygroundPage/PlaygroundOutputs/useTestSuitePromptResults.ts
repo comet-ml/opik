@@ -14,11 +14,11 @@ import {
   DATASET_TYPE,
   Evaluator,
   Experiment,
-  EXPERIMENT_STATUS,
   ExperimentsCompare,
   ExperimentItem,
 } from "@/types/datasets";
 import { MetricType } from "@/types/test-suites";
+import { isExperimentTerminal } from "@/lib/experiments";
 
 const REFETCH_INTERVAL = 5000;
 
@@ -51,7 +51,7 @@ export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
   const items = row.experiment_items ?? [];
   if (items.length === 0) return false;
 
-  if (row.evaluators && row.evaluators.length === 0) return true;
+  if ((row.evaluators?.length ?? 0) === 0) return true;
 
   const expected = getExpectedAssertionCount(row.evaluators);
   return items.every((ei) => isItemScoredByAssertions(ei, expected));
@@ -92,10 +92,7 @@ export default function useTestSuitePromptResults(): Record<
       enabled: isTestSuite && !!experimentId,
       refetchInterval: (query: { state: { data: unknown } }) => {
         const data = query.state.data as Experiment | undefined;
-        if (
-          data?.status === EXPERIMENT_STATUS.COMPLETED ||
-          data?.status === EXPERIMENT_STATUS.CANCELLED
-        ) {
+        if (isExperimentTerminal(data?.status)) {
           return data?.pass_rate != null ? false : REFETCH_INTERVAL;
         }
         return REFETCH_INTERVAL;
@@ -107,10 +104,7 @@ export default function useTestSuitePromptResults(): Record<
     if (experimentStatusResults.length === 0) return false;
     return experimentStatusResults.every((r) => {
       const data = r.data as Experiment | undefined;
-      return (
-        data?.status === EXPERIMENT_STATUS.COMPLETED ||
-        data?.status === EXPERIMENT_STATUS.CANCELLED
-      );
+      return isExperimentTerminal(data?.status);
     });
   }, [experimentStatusResults]);
 

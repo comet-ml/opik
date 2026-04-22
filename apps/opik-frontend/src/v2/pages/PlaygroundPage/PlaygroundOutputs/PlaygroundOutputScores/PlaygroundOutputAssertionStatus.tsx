@@ -5,7 +5,7 @@ import { getExperimentById } from "@/api/datasets/useExperimentById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
-import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { isExperimentTerminal } from "@/lib/experiments";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -43,19 +43,14 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     enabled: !!experimentId,
     refetchInterval: (query) => {
       const status = query.state.data?.status;
-      if (
-        status === EXPERIMENT_STATUS.COMPLETED ||
-        status === EXPERIMENT_STATUS.CANCELLED
-      ) {
+      if (isExperimentTerminal(status)) {
         return false;
       }
       return REFETCH_INTERVAL;
     },
   });
 
-  const experimentFinished =
-    experimentData?.status === EXPERIMENT_STATUS.COMPLETED ||
-    experimentData?.status === EXPERIMENT_STATUS.CANCELLED;
+  const experimentFinished = isExperimentTerminal(experimentData?.status);
 
   const { data } = useCompareExperimentsList(
     {

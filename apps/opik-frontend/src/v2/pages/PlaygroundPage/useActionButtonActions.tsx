@@ -14,9 +14,9 @@ import {
   DatasetItem,
   DATASET_TYPE,
   EVALUATION_METHOD,
-  EXPERIMENT_STATUS,
   ExperimentsCompare,
 } from "@/types/datasets";
+import { isExperimentTerminal } from "@/lib/experiments";
 import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
@@ -347,10 +347,8 @@ const useActionButtonActions = ({
             ),
           ]);
 
-          const experimentsFinished = experimentResults.every(
-            (exp) =>
-              exp?.status === EXPERIMENT_STATUS.COMPLETED ||
-              exp?.status === EXPERIMENT_STATUS.CANCELLED,
+          const experimentsFinished = experimentResults.every((exp) =>
+            isExperimentTerminal(exp?.status),
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
@@ -360,10 +358,11 @@ const useActionButtonActions = ({
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
+            const noEvaluators = (row.evaluators?.length ?? 0) === 0;
 
             for (const ei of experimentItems) {
               totalExperimentItems++;
-              if (isItemScored(ei)) {
+              if (noEvaluators || isItemScored(ei)) {
                 scoredItems++;
               }
             }
@@ -400,7 +399,7 @@ const useActionButtonActions = ({
         }
       };
 
-      setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
+      poll();
     },
     [
       workspaceName,
@@ -470,10 +469,8 @@ const useActionButtonActions = ({
             setProgress(Math.min(totalTraces, totalItems), totalItems);
           }
 
-          const allExperimentsFinished = results.every(
-            (exp) =>
-              exp?.status === EXPERIMENT_STATUS.COMPLETED ||
-              exp?.status === EXPERIMENT_STATUS.CANCELLED,
+          const allExperimentsFinished = results.every((exp) =>
+            isExperimentTerminal(exp?.status),
           );
 
           if (allExperimentsFinished) {
