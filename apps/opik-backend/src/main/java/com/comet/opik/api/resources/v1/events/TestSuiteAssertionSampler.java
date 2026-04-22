@@ -159,7 +159,7 @@ public class TestSuiteAssertionSampler {
                         var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
                         var preparedDatasetEvaluators = datasetEvaluatorsCache
                                 .computeIfAbsent(cacheKey, k -> {
-                                    log.info("Fetching test suite evaluators for dataset '{}', "
+                                    log.debug("Fetching test suite evaluators for dataset '{}', "
                                             + "version hash '{}'",
                                             datasetId, versionHash != null ? versionHash : "latest");
                                     DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId,
