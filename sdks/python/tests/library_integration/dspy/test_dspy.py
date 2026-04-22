@@ -11,6 +11,7 @@ from opik import context_storage, opik_context, semantic_version
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
+from ... import llm_constants
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -54,7 +55,7 @@ def test_dspy__happyflow(
 ):
     lm = dspy.LM(
         cache=False,
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -95,7 +96,7 @@ def test_dspy__happyflow(
                         type="llm",
                         name=ANY_STRING.starting_with("LM"),
                         provider="openai",
-                        model=ANY_STRING.starting_with("gpt-4o-mini"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         input=ANY_DICT,
                         output=ANY_DICT,
                         usage=ANY_USAGE_DICT,
@@ -138,7 +139,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
 ):
     lm = dspy.LM(
         cache=False,
-        model="openai/gpt-3.5-turbo",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
         api_key="incorrect-api-key",
     )
     dspy.configure(lm=lm)
@@ -188,7 +189,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                         type="llm",
                         name=ANY_STRING.starting_with("LM: "),
                         provider="openai",
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         input=ANY_DICT,
                         output=ANY_DICT,
                         metadata={"created_from": "dspy"},
@@ -208,7 +209,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                         type="llm",
                         name=ANY_STRING.starting_with("LM: "),
                         provider="openai",
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         input=ANY_DICT,
                         output=ANY_DICT,
                         metadata={"created_from": "dspy"},
@@ -240,7 +241,7 @@ def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info
                 type="llm",
                 name=ANY_STRING.starting_with("LM: "),
                 provider="openai",
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 input=ANY_DICT,
                 output=ANY_DICT,
                 metadata={"created_from": "dspy"},
@@ -275,7 +276,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
     def f(x):
         lm = dspy.LM(
             cache=False,
-            model="openai/gpt-3.5-turbo",
+            model=llm_constants.LITELLM_OPENAI_GPT_NANO,
         )
         dspy.configure(lm=lm)
 
@@ -343,7 +344,7 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         type="llm",
                                         name=ANY_STRING.starting_with("LM: openai"),
                                         provider="openai",
-                                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                                         input=ANY_DICT,
                                         output=ANY_DICT,
                                         usage=ANY_USAGE_DICT,
@@ -383,7 +384,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
     def f():
         lm = dspy.LM(
             cache=False,
-            model="openai/gpt-3.5-turbo",
+            model=llm_constants.LITELLM_OPENAI_GPT_NANO,
         )
         dspy.configure(lm=lm)
 
@@ -451,7 +452,7 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
     assert llm_span.name == ANY_STRING.starting_with("LM: openai")
     assert llm_span.type == "llm"
     assert llm_span.provider == "openai"
-    assert llm_span.model == ANY_STRING.starting_with("gpt-3.5-turbo")
+    assert llm_span.model == ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO)
     assert llm_span.usage == ANY_USAGE_DICT
     assert llm_span.metadata == ANY_METADATA_WITH_CREATED_FROM
 
@@ -462,7 +463,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     def f():
         lm = dspy.LM(
             cache=False,
-            model="openai/gpt-3.5-turbo",
+            model=llm_constants.LITELLM_OPENAI_GPT_NANO,
         )
         dspy.configure(lm=lm)
 
@@ -531,7 +532,7 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 type="llm",
                                 name=ANY_STRING.starting_with("LM"),
                                 provider="openai",
-                                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
@@ -574,7 +575,7 @@ def test_dspy_log_graph(
 ):
     lm = dspy.LM(
         cache=False,
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -612,7 +613,7 @@ def test_dspy_no_log_graph(
 ):
     lm = dspy.LM(
         cache=False,
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -637,7 +638,7 @@ def test_dspy__cache_disabled__usage_present_and_cache_hit_false(
     """
     lm = dspy.LM(
         cache=False,
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -678,7 +679,7 @@ def test_dspy__cache_enabled_and_response_cached__no_usage_and_cache_hit_true(
     """
     lm = dspy.LM(
         cache=True,  # Enable caching
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -724,7 +725,7 @@ def test_dspy__cache_enabled_first_call__has_usage_and_cache_hit_false(
     """
     lm = dspy.LM(
         cache=True,  # Enable caching
-        model="openai/gpt-4o-mini",
+        model=llm_constants.LITELLM_OPENAI_GPT_NANO,
     )
     dspy.configure(lm=lm)
 
@@ -774,7 +775,7 @@ def test_dspy_callback__opik_context_api_accessible_during_execution(
     dspy.LM.__call__ = patched_call
 
     try:
-        lm = dspy.LM(cache=False, model="openai/gpt-4o-mini")
+        lm = dspy.LM(cache=False, model=llm_constants.LITELLM_OPENAI_GPT_NANO)
         dspy.configure(lm=lm)
 
         opik_callback = OpikCallback()

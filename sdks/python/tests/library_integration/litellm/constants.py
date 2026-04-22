@@ -2,13 +2,13 @@ from ... import llm_constants
 from ...testlib import ANY_BUT_NONE, ANY_DICT
 
 
-MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_MINI
+MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_NANO
 
 # Models for parametrized tests - used in streaming and non-streaming tests
 # Only includes models that pass strict usage validation
 TEST_MODELS_PARAMETRIZE = [
     (
-        llm_constants.OPENAI_GPT_MINI,
+        llm_constants.OPENAI_GPT_NANO,
         "openai",
     ),  # OpenAI - fully supported with usage tracking
     (
@@ -16,7 +16,7 @@ TEST_MODELS_PARAMETRIZE = [
         "anthropic",
     ),  # Anthropic - fully supported with usage tracking
     (
-        llm_constants.LITELLM_OPENAI_GPT_MINI,
+        llm_constants.LITELLM_OPENAI_GPT_NANO,
         "openai",
     ),  # OpenAI - same model via LiteLLM provider/model form
 ]

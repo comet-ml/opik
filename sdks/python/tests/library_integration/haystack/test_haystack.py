@@ -3,6 +3,7 @@ import sys
 import pytest
 import opik.jsonable_encoder
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
+from ... import llm_constants
 from ...testlib import (
     ANY,
     ANY_DICT,
@@ -24,7 +25,7 @@ def enable_haystack_content_tracing():
         yield
 
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = llm_constants.OPENAI_GPT_NANO
 
 
 @pytest.mark.parametrize(

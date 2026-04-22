@@ -6,6 +6,7 @@ from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain import OpikTracer
 from opik import semantic_version
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -59,6 +60,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     stream_usage,
 ):
     llm_args = {
+        "model": llm_constants.OPENAI_GPT_NANO,
         "max_tokens": 10,
         "name": "custom-openai-llm-name",
     }
@@ -130,7 +132,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
                 usage=expected_usage,
                 spans=[],
                 provider="openai",
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 source="sdk",
             ),
         ],
@@ -152,7 +154,7 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
     )
 
     model = langchain_openai.ChatOpenAI(
-        model="gpt-4o",
+        model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
@@ -233,7 +235,7 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 usage=ANY_DICT.containing(EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT),
                 source="sdk",
@@ -265,7 +267,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
     )
 
     model = langchain_openai.ChatOpenAI(
-        model="gpt-4o",
+        model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
@@ -346,7 +348,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 usage=None,
                 spans=[],
@@ -375,7 +377,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
     )
 
     model = langchain_openai.ChatOpenAI(
-        model="gpt-4o",
+        model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
         name="custom-openai-llm-name",
         callbacks=[callback],
@@ -460,7 +462,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 type="llm",
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 usage=None,
                 spans=[],

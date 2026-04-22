@@ -2,6 +2,7 @@ import pytest
 from opik.evaluation import metrics
 from opik import exceptions
 import opik
+from ... import llm_constants
 from ...testlib import assert_helpers
 import langchain_openai
 from opik.evaluation.models.langchain import langchain_chat_model
@@ -18,10 +19,10 @@ pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 model_parametrizer = pytest.mark.parametrize(
     argnames="model",
     argvalues=[
-        "gpt-4o",
+        llm_constants.OPENAI_GPT_NANO,
         langchain_chat_model.LangchainChatModel(
             chat_model=langchain_openai.ChatOpenAI(
-                model="gpt-4o",
+                model=llm_constants.OPENAI_GPT_NANO,
             )
         ),
     ],
@@ -218,7 +219,7 @@ def test__syc_eval__invalid_score_from_judge():
     Tests that SycEval.score() raises an error if the judge model
     returns a score outside the valid range [0.0, 1.0].
     """
-    syc_eval_metric = metrics.SycEval(model="gpt-4o", track=False)
+    syc_eval_metric = metrics.SycEval(model=llm_constants.OPENAI_GPT_NANO, track=False)
 
     invalid_judge_output = (
         '{"initial_classification": "correct", "rebuttal_classification": "incorrect", '
@@ -459,7 +460,7 @@ def test__ragas_exact_match():
 
 def test__ragas_llm_context_precision():
     llm_evaluator = ragas_llms.LangchainLLMWrapper(
-        langchain_openai.ChatOpenAI(model="gpt-4o"),
+        langchain_openai.ChatOpenAI(model=llm_constants.OPENAI_GPT_NANO),
     )
 
     ragas_context_precision_metric = metrics.RagasMetricWrapper(
@@ -492,7 +493,7 @@ def test__usefulness__track_parameter(
     # Override the autouse fixture that disables LiteLLM monitoring
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    usefulness_metric = metrics.Usefulness(model="gpt-4o", track=track)
+    usefulness_metric = metrics.Usefulness(model=llm_constants.OPENAI_GPT_NANO, track=track)
 
     result = usefulness_metric.score(
         input="What is the capital of France?",

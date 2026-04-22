@@ -8,6 +8,7 @@ from pydantic import BaseModel
 import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.openai import track_openai
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -22,7 +23,7 @@ from ...testlib import (
 
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
-MODEL_FOR_TESTS = "gpt-4o-mini"
+MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_NANO
 EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,
     "completion_tokens": ANY_BUT_NONE,
@@ -80,7 +81,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
     ]
 
     _ = wrapped_client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=llm_constants.OPENAI_GPT_NANO,
         messages=messages,
         max_tokens=100,
         response_format=CalendarEvent,
@@ -113,7 +114,7 @@ def test_openai_client_beta_chat_completions_parse__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
                 spans=[],
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 source="sdk",
             )
@@ -149,7 +150,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
 
     asyncio.run(
         wrapped_client.beta.chat.completions.parse(
-            model="gpt-4o",
+            model=llm_constants.OPENAI_GPT_NANO,
             messages=messages,
             response_format=CalendarEvent,
             max_tokens=100,
@@ -181,7 +182,7 @@ def test_async_openai_client_beta_chat_completions_parse__happyflow(fake_backend
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 source="sdk",
             )

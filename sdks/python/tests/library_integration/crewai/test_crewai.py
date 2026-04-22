@@ -27,7 +27,7 @@ pytestmark = [
 @pytest.mark.parametrize(
     "model, opik_provider",
     [
-        (llm_constants.LITELLM_OPENAI_GPT_MINI, "openai"),
+        (llm_constants.LITELLM_OPENAI_GPT_NANO, "openai"),
         (
             f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/{llm_constants.GEMINI_FLASH}",
             "google_vertexai",

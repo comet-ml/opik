@@ -3,7 +3,7 @@ from ...testlib import (
     ANY_BUT_NONE,
 )
 
-OPENAI_MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_MINI
+OPENAI_MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_NANO
 
 EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,

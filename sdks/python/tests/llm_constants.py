@@ -8,7 +8,7 @@ is a one-line change to the value — every test picks it up automatically.
 Naming convention
 -----------------
 * ``<PROVIDER>_<FAMILY>`` — the plain model id as the provider's own client
-  expects it (e.g. ``OPENAI_GPT_MINI = "gpt-4o-mini"``). When the provider
+  expects it (e.g. ``OPENAI_GPT_NANO = "gpt-5-nano"``). When the provider
   bumps the family we just bump the value here.
 * ``LITELLM_<PROVIDER>_<FAMILY>`` — the ``provider/model`` form LiteLLM,
   DSPy and CrewAI use (derived from the plain constant).
@@ -24,12 +24,13 @@ readability and avoids false-coupling with real model identifiers.
 # OpenAI
 # ---------------------------------------------------------------------------
 # Default chat model: gpt-5-nano — the latest cheap+fast tier. gpt-4o-mini is
-# on the sunset path; when OpenAI bumps the "nano" tier again we only update
+# on the sunset path. When OpenAI bumps the "nano" tier again we only update
 # the value here.
-OPENAI_GPT_MINI = "gpt-5-nano"
+OPENAI_GPT_NANO = "gpt-5-nano"
 OPENAI_SORA = "sora-2"
 
-LITELLM_OPENAI_GPT_MINI = f"openai/{OPENAI_GPT_MINI}"
+LITELLM_OPENAI_GPT_NANO = f"openai/{OPENAI_GPT_NANO}"
+AISUITE_OPENAI_GPT_NANO = f"openai:{OPENAI_GPT_NANO}"
 
 # ---------------------------------------------------------------------------
 # Anthropic

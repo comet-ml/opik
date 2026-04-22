@@ -76,7 +76,7 @@ def after_agent_callback(
 
 root_agent = LlmAgent(
     name="weather_time_agent",
-    model=LiteLlm(model=llm_constants.LITELLM_OPENAI_GPT_MINI),
+    model=LiteLlm(model=llm_constants.LITELLM_OPENAI_GPT_NANO),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."
