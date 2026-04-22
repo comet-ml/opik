@@ -32,14 +32,8 @@ class AssertionResultMapper {
     }
 
     static ExperimentItem enrichWithAssertions(@NonNull ExperimentItem item, @Nullable String assertionsJson) {
-        if (assertionsJson == null) {
-            return item;
-        }
         if (StringUtils.isBlank(assertionsJson)) {
-            return item.toBuilder()
-                    .assertionResults(List.of())
-                    .status(RunStatus.SKIPPED)
-                    .build();
+            return item;
         }
 
         List<AssertionResultRow> rows;
@@ -51,10 +45,7 @@ class AssertionResultMapper {
         }
 
         if (CollectionUtils.isEmpty(rows)) {
-            return item.toBuilder()
-                    .assertionResults(List.of())
-                    .status(RunStatus.SKIPPED)
-                    .build();
+            return item;
         }
 
         var assertionResults = rows.stream()
@@ -93,27 +84,10 @@ class AssertionResultMapper {
                 continue;
             }
 
-            boolean allSkipped = group.stream()
-                    .allMatch(i -> RunStatus.SKIPPED.equals(i.status()));
-
-            if (allSkipped) {
-                summaries.put(entry.getKey().toString(),
-                        ExperimentRunSummary.builder()
-                                .passedRuns(0)
-                                .totalRuns(group.size())
-                                .status(RunStatus.SKIPPED)
-                                .build());
-                continue;
-            }
-
-            var itemsWithAssertions = group.stream()
-                    .filter(i -> !RunStatus.SKIPPED.equals(i.status()))
-                    .toList();
-
-            long passedRuns = itemsWithAssertions.stream()
+            long passedRuns = group.stream()
                     .filter(i -> RunStatus.PASSED.equals(i.status()))
                     .count();
-            int totalRuns = itemsWithAssertions.size();
+            int totalRuns = group.size();
 
             int passThreshold = group.stream()
                     .map(ExperimentItem::executionPolicy)

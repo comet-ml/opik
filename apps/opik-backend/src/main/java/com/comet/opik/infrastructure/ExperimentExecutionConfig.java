@@ -21,6 +21,7 @@ public class ExperimentExecutionConfig implements StreamConfiguration {
 
     public static final String PAYLOAD_FIELD = "message";
     public static final String BATCH_COUNTER_KEY_PREFIX = "experiment:batch:";
+    public static final String ASSERTION_COUNTER_KEY_PREFIX = "experiment:assertion:";
 
     @Valid @NotBlank @JsonProperty
     private String defaultProjectName = "playground";

@@ -15,6 +15,7 @@ import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -22,6 +23,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
@@ -63,6 +65,7 @@ public class TestSuiteAssertionSampler {
     private final TestSuiteConfig testSuiteConfig;
     private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
+    private final RedissonReactiveClient redisClient;
 
     @Inject
     public TestSuiteAssertionSampler(
@@ -72,7 +75,8 @@ public class TestSuiteAssertionSampler {
             @NonNull IdGenerator idGenerator,
             @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
             @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
-            @NonNull LlmProviderApiKeyService llmProviderApiKeyService) {
+            @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
+            @NonNull RedissonReactiveClient redisClient) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -80,6 +84,7 @@ public class TestSuiteAssertionSampler {
         this.testSuiteConfig = testSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
+        this.redisClient = redisClient;
     }
 
     @Subscribe
@@ -145,10 +150,15 @@ public class TestSuiteAssertionSampler {
                         return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
                     });
 
+                    var experimentId = getMetadataString(trace, "test_suite_experiment_id")
+                            .flatMap(id -> parseUUID(id, trace.id()))
+                            .orElse(null);
+
                     var datasetItemId = getMetadataString(trace, "test_suite_dataset_item_id");
                     if (datasetItemId.isEmpty()) {
                         log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
                                 trace.id());
+                        decrementAssertionCounter(experimentId);
                         return Stream.empty();
                     }
 
@@ -162,7 +172,12 @@ public class TestSuiteAssertionSampler {
                                 if (allEvaluators.isEmpty()) {
                                     log.debug("No evaluators found for trace '{}', dataset item '{}'",
                                             trace.id(), datasetItemId.get());
+                                    decrementAssertionCounter(experimentId);
                                     return Stream.empty();
+                                }
+
+                                if (allEvaluators.size() > 1) {
+                                    adjustAssertionCounter(experimentId, allEvaluators.size() - 1);
                                 }
 
                                 return allEvaluators.stream()
@@ -176,6 +191,7 @@ public class TestSuiteAssertionSampler {
                                                 .categoryName(SUITE_ASSERTION_CATEGORY)
                                                 .scoreNameMapping(prepared.scoreNameMapping())
                                                 .promptType(PromptType.PYTHON)
+                                                .experimentId(experimentId)
                                                 .build());
                             });
                 })
@@ -251,6 +267,30 @@ public class TestSuiteAssertionSampler {
         } catch (IllegalArgumentException e) {
             log.warn("Invalid UUID for test_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
             return Optional.empty();
+        }
+    }
+
+    private void decrementAssertionCounter(UUID experimentId) {
+        if (experimentId == null) {
+            return;
+        }
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + experimentId;
+        try {
+            redisClient.getAtomicLong(counterKey).decrementAndGet().block();
+        } catch (Exception e) {
+            log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
+        }
+    }
+
+    private void adjustAssertionCounter(UUID experimentId, long additionalMessages) {
+        if (experimentId == null) {
+            return;
+        }
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + experimentId;
+        try {
+            redisClient.getAtomicLong(counterKey).addAndGet(additionalMessages).block();
+        } catch (Exception e) {
+            log.error("Failed to adjust assertion counter for experiment '{}'", experimentId, e);
         }
     }
 

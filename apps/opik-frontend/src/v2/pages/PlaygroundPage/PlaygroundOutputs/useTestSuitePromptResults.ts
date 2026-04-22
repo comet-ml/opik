@@ -10,7 +10,15 @@ import {
 } from "@/store/PlaygroundStore";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
 import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
-import { DATASET_TYPE, Experiment, ExperimentsCompare } from "@/types/datasets";
+import {
+  DATASET_TYPE,
+  Evaluator,
+  Experiment,
+  EXPERIMENT_STATUS,
+  ExperimentsCompare,
+  ExperimentItem,
+} from "@/types/datasets";
+import { MetricType } from "@/types/test-suites";
 
 const REFETCH_INTERVAL = 5000;
 
@@ -18,14 +26,35 @@ export const isItemScored = (ei: { status?: string | null }): boolean => {
   return ei.status != null;
 };
 
+const getExpectedAssertionCount = (evaluators?: Evaluator[]): number => {
+  if (!evaluators) return 0;
+  return evaluators.reduce((sum, ev) => {
+    if (ev.type === MetricType.LLM_AS_JUDGE) {
+      const schema = (ev.config as { schema?: unknown[] })?.schema;
+      return sum + (Array.isArray(schema) ? schema.length : 0);
+    }
+    return sum;
+  }, 0);
+};
+
+const isItemScoredByAssertions = (
+  ei: ExperimentItem,
+  expectedCount: number,
+): boolean => {
+  if (expectedCount > 0) {
+    return (ei.assertion_results?.length ?? 0) >= expectedCount;
+  }
+  return isItemScored(ei);
+};
+
 export const areAllRowItemsScored = (row: ExperimentsCompare): boolean => {
   const items = row.experiment_items ?? [];
   if (items.length === 0) return false;
-  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
-  return items.every((ei) => {
-    if (ei.status === "skipped") return !hasEvaluators;
-    return ei.status != null;
-  });
+
+  if (row.evaluators && row.evaluators.length === 0) return true;
+
+  const expected = getExpectedAssertionCount(row.evaluators);
+  return items.every((ei) => isItemScoredByAssertions(ei, expected));
 };
 
 export type PromptResult = {
@@ -55,6 +84,36 @@ export default function useTestSuitePromptResults(): Record<
 
   const experimentIds = useMemo(() => entries.map(([, id]) => id), [entries]);
 
+  const experimentStatusResults = useQueries({
+    queries: entries.map(([, experimentId]) => ({
+      queryKey: ["experiment", { experimentId }],
+      queryFn: (context: QueryFunctionContext) =>
+        getExperimentById(context, { experimentId }),
+      enabled: isTestSuite && !!experimentId,
+      refetchInterval: (query: { state: { data: unknown } }) => {
+        const data = query.state.data as Experiment | undefined;
+        if (
+          data?.status === EXPERIMENT_STATUS.COMPLETED ||
+          data?.status === EXPERIMENT_STATUS.CANCELLED
+        ) {
+          return data?.pass_rate != null ? false : REFETCH_INTERVAL;
+        }
+        return REFETCH_INTERVAL;
+      },
+    })),
+  });
+
+  const allExperimentsFinished = useMemo(() => {
+    if (experimentStatusResults.length === 0) return false;
+    return experimentStatusResults.every((r) => {
+      const data = r.data as Experiment | undefined;
+      return (
+        data?.status === EXPERIMENT_STATUS.COMPLETED ||
+        data?.status === EXPERIMENT_STATUS.CANCELLED
+      );
+    });
+  }, [experimentStatusResults]);
+
   const { data: compareData } = useCompareExperimentsList(
     {
       workspaceName,
@@ -70,41 +129,29 @@ export default function useTestSuitePromptResults(): Record<
         const rows = query.state.data?.content ?? [];
         if (rows.length === 0) return REFETCH_INTERVAL;
 
+        if (allExperimentsFinished) return false;
         return rows.every(areAllRowItemsScored) ? false : REFETCH_INTERVAL;
       },
     },
   );
 
   const allItemsScored = useMemo(() => {
+    if (allExperimentsFinished) return true;
     const rows = compareData?.content ?? [];
     if (rows.length === 0) return false;
     return rows.every(areAllRowItemsScored);
-  }, [compareData?.content]);
-
-  const experimentResults = useQueries({
-    queries: entries.map(([, experimentId]) => ({
-      queryKey: ["experiment", { experimentId }],
-      queryFn: (context: QueryFunctionContext) =>
-        getExperimentById(context, { experimentId }),
-      enabled: isTestSuite && !!experimentId && allItemsScored,
-      refetchInterval: (query: { state: { data: unknown } }) => {
-        if (!allItemsScored) return false;
-        const data = query.state.data as Experiment | undefined;
-        return data?.pass_rate != null ? false : REFETCH_INTERVAL;
-      },
-    })),
-  });
+  }, [compareData?.content, allExperimentsFinished]);
 
   return useMemo(() => {
     if (!isTestSuite || entries.length === 0 || !allItemsScored) return null;
 
     const allLoaded = entries.every(
-      (_, i) => experimentResults[i]?.data != null,
+      (_, i) => experimentStatusResults[i]?.data != null,
     );
     if (!allLoaded) return null;
 
     const experimentsData = entries.map(
-      (_, i) => experimentResults[i]?.data as Experiment | undefined,
+      (_, i) => experimentStatusResults[i]?.data as Experiment | undefined,
     );
 
     const passRates = experimentsData
@@ -130,5 +177,5 @@ export default function useTestSuitePromptResults(): Record<
         ];
       }),
     );
-  }, [isTestSuite, entries, allItemsScored, experimentResults]);
+  }, [isTestSuite, entries, allItemsScored, experimentStatusResults]);
 }

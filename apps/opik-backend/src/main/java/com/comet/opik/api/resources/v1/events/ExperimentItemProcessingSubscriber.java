@@ -90,6 +90,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 ? Mono.empty()
                 : failureCounter.incrementAndGet()
                         .then(failureCounter.expire(config.getBatchCounterTtl().toJavaDuration()))
+                        .then(decrementAssertionCounter(message))
                         .then();
 
         return trackFailure.then(counter.decrementAndGet())
@@ -104,13 +105,48 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                         return markExperimentsFailed(message,
                                                 buildReactorContext(message));
                                     }
-                                    log.info("Batch '{}' complete, finishing '{}' experiments",
-                                            message.batchId(), message.allExperimentIds().size());
-                                    return finishExperiments(message);
+                                    return hasAssertionCounter(message)
+                                            .flatMap(hasCounter -> {
+                                                if (hasCounter) {
+                                                    log.info("Batch '{}' complete, waiting for assertions to finish",
+                                                            message.batchId());
+                                                    return Mono.empty();
+                                                }
+                                                log.info("Batch '{}' complete, finishing '{}' experiments",
+                                                        message.batchId(), message.allExperimentIds().size());
+                                                return finishExperiments(message);
+                                            });
                                 });
                     }
                     log.debug("Batch '{}' has '{}' remaining items", message.batchId(), remaining);
                     return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<Boolean> hasAssertionCounter(ExperimentItemToProcess message) {
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
+        return redisClient.getAtomicLong(counterKey).isExists();
+    }
+
+    private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
+        var counter = redisClient.getAtomicLong(counterKey);
+        return counter.isExists()
+                .flatMap(exists -> {
+                    if (!exists) {
+                        return Mono.empty();
+                    }
+                    return counter.decrementAndGet()
+                            .flatMap(remaining -> {
+                                if (remaining <= 0) {
+                                    log.info(
+                                            "Assertion counter reached zero for experiment '{}' (via failure), finishing",
+                                            message.experimentId());
+                                    return finishExperiments(message);
+                                }
+                                return Mono.<Void>empty();
+                            });
                 })
                 .then();
     }

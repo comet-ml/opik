@@ -36,13 +36,13 @@ class AssertionResultMapperTest {
     }
 
     @Test
-    void enrichWithAssertions_emptyArray_statusSkipped() {
+    void enrichWithAssertions_emptyArray_returnsUnchanged() {
         var item = baseItem().build();
 
         var result = AssertionResultMapper.enrichWithAssertions(item, "[]");
 
-        assertThat(result.assertionResults()).isEmpty();
-        assertThat(result.status()).isEqualTo(RunStatus.SKIPPED);
+        assertThat(result.assertionResults()).isNull();
+        assertThat(result.status()).isNull();
     }
 
     @Test
@@ -186,52 +186,7 @@ class AssertionResultMapperTest {
     }
 
     @Test
-    void computeRunSummaries_allSkipped_statusSkipped() {
-        var experimentId = UUID.randomUUID();
-        var items = List.of(
-                baseItem().experimentId(experimentId)
-                        .assertionResults(List.of())
-                        .status(RunStatus.SKIPPED).build(),
-                baseItem().experimentId(experimentId)
-                        .assertionResults(List.of())
-                        .status(RunStatus.SKIPPED).build());
-
-        Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
-
-        assertThat(result).hasSize(1);
-        var summary = result.get(experimentId.toString());
-        assertThat(summary.passedRuns()).isEqualTo(0);
-        assertThat(summary.totalRuns()).isEqualTo(2);
-        assertThat(summary.status()).isEqualTo(RunStatus.SKIPPED);
-    }
-
-    @Test
-    void computeRunSummaries_mixedSkippedAndPassed_ignoresSkipped() {
-        var experimentId = UUID.randomUUID();
-        var items = List.of(
-                baseItem().experimentId(experimentId)
-                        .assertionResults(
-                                List.of(AssertionResult.builder().value("a").passed(true).build()))
-                        .status(RunStatus.PASSED).build(),
-                baseItem().experimentId(experimentId)
-                        .assertionResults(List.of())
-                        .status(RunStatus.SKIPPED).build(),
-                baseItem().experimentId(experimentId)
-                        .assertionResults(
-                                List.of(AssertionResult.builder().value("a").passed(false).build()))
-                        .status(RunStatus.FAILED).build());
-
-        Map<String, ExperimentRunSummary> result = AssertionResultMapper.computeRunSummaries(items);
-
-        assertThat(result).hasSize(1);
-        var summary = result.get(experimentId.toString());
-        assertThat(summary.passedRuns()).isEqualTo(1);
-        assertThat(summary.totalRuns()).isEqualTo(2);
-        assertThat(summary.status()).isEqualTo(RunStatus.PASSED);
-    }
-
-    @Test
-    void computeRunSummaries_regularExperimentItems_returnsNull() {
+    void computeRunSummaries_noAssertionResults_returnsNull() {
         var items = List.of(
                 baseItem().build(),
                 baseItem().build());

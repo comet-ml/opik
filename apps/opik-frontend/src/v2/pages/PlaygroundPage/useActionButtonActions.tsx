@@ -326,16 +326,31 @@ const useActionButtonActions = ({
             controller,
             promptId: scope?.scopedPromptIds?.[0] ?? "",
           });
-          const data = await getCompareExperimentsList(
-            { signal: controller.signal },
-            {
-              workspaceName,
-              datasetId: curDatasetId,
-              experimentsIds: experimentIds,
-              truncate: true,
-              size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-              page: 1,
-            },
+
+          const [data, ...experimentResults] = await Promise.all([
+            getCompareExperimentsList(
+              { signal: controller.signal },
+              {
+                workspaceName,
+                datasetId: curDatasetId,
+                experimentsIds: experimentIds,
+                truncate: true,
+                size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
+                page: 1,
+              },
+            ),
+            ...experimentIds.map((id) =>
+              getExperimentById(
+                { signal: controller.signal },
+                { experimentId: id },
+              ),
+            ),
+          ]);
+
+          const experimentsFinished = experimentResults.every(
+            (exp) =>
+              exp?.status === EXPERIMENT_STATUS.COMPLETED ||
+              exp?.status === EXPERIMENT_STATUS.CANCELLED,
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
@@ -345,23 +360,22 @@ const useActionButtonActions = ({
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
-            const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
 
             for (const ei of experimentItems) {
               totalExperimentItems++;
-              if (ei.status === "skipped" ? !hasEvaluators : isItemScored(ei)) {
+              if (isItemScored(ei)) {
                 scoredItems++;
               }
             }
           }
 
-          if (!isScoped && totalItems > 0) {
-            setProgress(scoredItems, totalItems);
+          if (!isScoped && totalExperimentItems > 0) {
+            setProgress(scoredItems, totalExperimentItems);
           }
 
-          if (totalItems > 0 && scoredItems >= totalItems) {
+          if (experimentsFinished) {
             if (!isScoped) {
-              setProgress(totalItems, totalItems);
+              setProgress(totalExperimentItems, totalExperimentItems);
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
@@ -456,13 +470,28 @@ const useActionButtonActions = ({
             setProgress(Math.min(totalTraces, totalItems), totalItems);
           }
 
-          const allDone = results.every(
+          const allExperimentsFinished = results.every(
             (exp) =>
               exp?.status === EXPERIMENT_STATUS.COMPLETED ||
               exp?.status === EXPERIMENT_STATUS.CANCELLED,
           );
 
-          if (allDone) {
+          if (allExperimentsFinished) {
+            // Assertions already done — skip Step 2, finish immediately
+            if (!isScoped) {
+              setProgress(totalItems, totalItems);
+              setTimeout(() => resetProgress(), 3000);
+            }
+            finishPollScope(scope);
+            queryClient.invalidateQueries({ queryKey: ["experiments"] });
+            queryClient.invalidateQueries({
+              queryKey: [COMPARE_EXPERIMENTS_KEY],
+            });
+            return;
+          }
+
+          const allTracesCollected = totalTraces >= totalItems;
+          if (allTracesCollected) {
             if (!isScoped) {
               setProgress(totalItems, totalItems);
               setProgressPhase("evaluating");
@@ -489,6 +518,7 @@ const useActionButtonActions = ({
     [
       setProgress,
       setProgressPhase,
+      resetProgress,
       finishPollScope,
       handlePollTimeout,
       queryClient,

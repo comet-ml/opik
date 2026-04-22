@@ -15,6 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AssertionResult,
+  EXPERIMENT_STATUS,
   ExperimentItem,
   ExperimentsCompare,
 } from "@/types/datasets";
@@ -44,11 +45,10 @@ const SKIPPED_RESULT = (reason: string): StatusInfo => ({
 
 export function getStatusFromExperimentItems(
   row: ExperimentsCompare,
+  experimentFinished?: boolean,
 ): StatusInfo {
   const items = row.experiment_items;
   if (!items?.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
-
-  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
 
   const summaryValues = Object.values(row.run_summaries_by_experiment ?? {});
   let status: RunStatus | undefined;
@@ -69,11 +69,12 @@ export function getStatusFromExperimentItems(
     status = items[0].status;
   }
 
-  if (status === RunStatus.SKIPPED && hasEvaluators) {
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
+  if (!status) {
+    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
     status = undefined;
   }
-
-  if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
 
   // Item-level execution_policy overrides the dataset-level one
   const passThreshold =
@@ -85,7 +86,7 @@ export function getStatusFromExperimentItems(
 
   return {
     status,
-    evaluating: !status && hasEvaluators,
+    evaluating: !status,
     assertionsByRun: items.map((item) => item.assertion_results ?? []),
     skippedReason: undefined,
     passThreshold,
@@ -97,6 +98,7 @@ export function getStatusInfoForExperiment(
   row: ExperimentsCompare,
   experimentId: string,
   item: ExperimentItem | undefined,
+  experimentFinished?: boolean,
 ): StatusInfo {
   const expItems: ExperimentItem[] = item
     ? isAggregatedItem(item)
@@ -106,17 +108,17 @@ export function getStatusInfoForExperiment(
 
   if (!expItems.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
 
-  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
   const summary = row.run_summaries_by_experiment?.[experimentId];
   let status: RunStatus | undefined = summary
     ? summary.status
     : expItems[0].status;
 
-  if (status === RunStatus.SKIPPED && hasEvaluators) {
+  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
+  if (!status) {
+    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
     status = undefined;
   }
-
-  if (!status && !hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
 
   // Item-level execution_policy overrides the dataset-level one
   const passThreshold =
@@ -128,7 +130,7 @@ export function getStatusInfoForExperiment(
 
   return {
     status,
-    evaluating: !status && hasEvaluators,
+    evaluating: !status,
     assertionsByRun: expItems.map((item) => item.assertion_results ?? []),
     skippedReason: undefined,
     passThreshold,
@@ -147,7 +149,7 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
 }) => {
   if (evaluating) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs text-muted-slate">
+      <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-slate">
         <span className="inline-flex animate-spin">
           <Loader2 className="size-3" />
         </span>
@@ -214,18 +216,35 @@ export const StatusTag: React.FC<StatusInfo & { className?: string }> = ({
   );
 };
 
+const isExperimentFinished = (
+  experiments: CustomMeta["experiments"],
+  experimentId: string,
+): boolean => {
+  const exp = experiments?.find((e) => e.id === experimentId);
+  return (
+    exp?.status === EXPERIMENT_STATUS.COMPLETED ||
+    exp?.status === EXPERIMENT_STATUS.CANCELLED
+  );
+};
+
 const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
   context,
 ) => {
   const row = context.row.original;
   const { custom } = context.column.columnDef.meta ?? {};
-  const { experimentsIds } = (custom ?? {}) as Partial<CustomMeta>;
+  const { experimentsIds, experiments } = (custom ?? {}) as Partial<CustomMeta>;
   if (experimentsIds) {
     const renderContent = (
       item: ExperimentItem | undefined,
       experimentId: string,
     ) => {
-      const statusInfo = getStatusInfoForExperiment(row, experimentId, item);
+      const finished = isExperimentFinished(experiments, experimentId);
+      const statusInfo = getStatusInfoForExperiment(
+        row,
+        experimentId,
+        item,
+        finished,
+      );
       return (
         <div className="flex h-full items-center">
           <StatusTag {...statusInfo} />

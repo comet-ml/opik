@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -10,6 +11,7 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -21,6 +23,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -45,11 +48,28 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
+            @NonNull ExperimentService experimentService,
             @NonNull LlmProviderFactory llmProviderFactory) {
-        super(config, redisson, feedbackScoreService, traceService, LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, traceService, experimentService, LLM_AS_JUDGE,
+                Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
+    }
+
+    @Override
+    @Nullable protected UUID getExperimentId(TraceToScoreLlmAsJudge message) {
+        return message.experimentId();
+    }
+
+    @Override
+    @Nullable protected String getWorkspaceId(TraceToScoreLlmAsJudge message) {
+        return message.workspaceId();
+    }
+
+    @Override
+    @Nullable protected String getUserName(TraceToScoreLlmAsJudge message) {
+        return message.userName();
     }
 
     /**

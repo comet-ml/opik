@@ -31,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -70,6 +71,9 @@ class TestSuiteAssertionSamplerTest {
         @Mock
         LlmProviderApiKeyService llmProviderApiKeyService;
 
+        @Mock
+        RedissonReactiveClient redissonClient;
+
         private TestSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
@@ -83,7 +87,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, redissonClient);
         }
 
         @Test
