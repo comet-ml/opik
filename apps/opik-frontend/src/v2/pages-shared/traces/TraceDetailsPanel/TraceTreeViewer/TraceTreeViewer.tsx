@@ -155,7 +155,7 @@ const TraceTreeViewer: React.FunctionComponent<TraceTreeViewerProps> = ({
       className="relative size-full overflow-y-auto overflow-x-hidden pb-4"
       ref={scrollRef}
     >
-      <div className="max-w-full pt-2">
+      <div className="max-w-full pt-3">
         {tree.length ? (
           <VirtualizedTreeViewer
             scrollRef={scrollRef}

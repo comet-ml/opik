@@ -32,11 +32,11 @@ const AgentGraphHeader: React.FC<AgentGraphHeaderProps> = ({
         </Button>
       </TooltipWrapper>
       <TooltipWrapper content={isCollapsed ? "Expand graph" : "Collapse graph"}>
-        <Button variant="ghost" size="icon-2xs" onClick={onToggleCollapse}>
+        <Button variant="ghost" size="2xs" onClick={onToggleCollapse}>
           {isCollapsed ? (
-            <ChevronUp className="size-3.5" />
+            <ChevronUp className="size-4" />
           ) : (
-            <ChevronDown className="size-3.5" />
+            <ChevronDown className="size-4" />
           )}
         </Button>
       </TooltipWrapper>
