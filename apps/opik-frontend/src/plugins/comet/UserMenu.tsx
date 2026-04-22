@@ -36,8 +36,13 @@ import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn, maskAPIKey } from "@/lib/utils";
-import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
-import { setVersionOverride } from "@/lib/workspaceVersion";
+import useAppStore from "@/store/AppStore";
+import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
+import {
+  clearVersionOverride,
+  getVersionOverride,
+  setVersionOverride,
+} from "@/lib/workspaceVersion";
 import api from "./api";
 import { ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -55,7 +60,8 @@ const UserMenu = () => {
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const workspaceVersion = useWorkspaceVersion();
+  const { data: backendWorkspaceVersion } = useWorkspaceVersionQuery();
+  const isOverriddenToV2 = getVersionOverride() === "v2";
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -281,19 +287,23 @@ const UserMenu = () => {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
-            {workspaceVersion === "v1" && (
+            {backendWorkspaceVersion === "v1" && (
               <DropdownMenuItem
                 className="cursor-pointer"
                 onSelect={(e) => {
                   e.preventDefault();
-                  setVersionOverride("v2");
+                  if (isOverriddenToV2) {
+                    clearVersionOverride();
+                  } else {
+                    setVersionOverride("v2");
+                  }
                   window.location.reload();
                 }}
               >
                 <Sparkles className="mr-2 size-4" />
                 <span>New Opik experience</span>
                 <Switch
-                  checked={false}
+                  checked={isOverriddenToV2}
                   className="pointer-events-none ml-auto"
                   size="sm"
                 />
