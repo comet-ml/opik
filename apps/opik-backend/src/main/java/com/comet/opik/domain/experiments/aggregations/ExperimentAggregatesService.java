@@ -70,19 +70,19 @@ public class ExperimentAggregatesService {
 
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
 
-            log.info("Starting aggregation population for experiment: '{}' in workspaceId: '{}', batchSize: '{}'",
+            log.info("Starting aggregation population, experimentId='{}', workspaceId='{}', batchSize='{}'",
                     experimentId, workspaceId, batchSize);
 
             return populateExperimentItemsInBatches(experimentId, batchSize)
                     .doOnSuccess(v -> log.info(
-                            "Experiment item aggregates populated for experiment: '{}' in workspaceId: '{}'",
+                            "Experiment item aggregates populated, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId))
                     .then(Mono.defer(() -> experimentAggregatesDAO.populateExperimentAggregate(experimentId)))
                     .doOnSuccess(v -> log.info(
-                            "All aggregations populated successfully for experiment: '{}' in workspaceId: '{}'",
+                            "All aggregations populated successfully, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId))
                     .doOnError(error -> log.error(
-                            "Failed to populate aggregations for experiment: '{}' in workspaceId: '{}'",
+                            "Failed to populate aggregations, experimentId='{}', workspaceId='{}'",
                             experimentId, workspaceId, error));
         });
     }
@@ -95,24 +95,27 @@ public class ExperimentAggregatesService {
      * @return Mono that completes when all batches are processed
      */
     private Mono<Void> populateExperimentItemsInBatches(UUID experimentId, int batchSize) {
-        return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, null, batchSize)
-                .expand(result -> {
-                    log.info("Processed '{}' experiment items in this batch for experiment: '{}'",
-                            result.processedCount(), experimentId);
-                    if (result.lastCursor() == null) {
-                        return Mono.empty();
-                    }
-                    log.debug("Batch processed with cursor: '{}', continuing with next batch for experiment: '{}'",
-                            result.lastCursor(), experimentId);
-                    return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, result.lastCursor(),
-                            batchSize);
-                })
-                .map(BatchResult::processedCount)
-                .reduce(0L, Long::sum)
-                .doOnSuccess(total -> log.info(
-                        "Finished processing all experiment items. Total processed: '{}' for experiment: '{}'",
-                        total, experimentId))
-                .then();
+        return experimentAggregatesDAO.getProjectId(experimentId)
+                .flatMap(projectId -> experimentAggregatesDAO
+                        .populateExperimentItemAggregates(experimentId, projectId, null, batchSize)
+                        .expand(result -> {
+                            log.info("Processed experiment items in this batch, experimentId='{}', batchSize='{}'",
+                                    experimentId, result.processedCount());
+                            if (result.lastCursor() == null) {
+                                return Mono.empty();
+                            }
+                            log.debug(
+                                    "Batch processed, continuing with next batch, experimentId='{}', cursor='{}'",
+                                    experimentId, result.lastCursor());
+                            return experimentAggregatesDAO.populateExperimentItemAggregates(experimentId, projectId,
+                                    result.lastCursor(), batchSize);
+                        })
+                        .map(BatchResult::processedCount)
+                        .reduce(0L, Long::sum)
+                        .doOnSuccess(total -> log.info(
+                                "Finished processing all experiment items, experimentId='{}', totalProcessed='{}'",
+                                experimentId, total))
+                        .then());
     }
 
     /**

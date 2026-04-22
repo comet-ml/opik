@@ -1,10 +1,12 @@
 package com.comet.opik.infrastructure.db;
 
+import com.clickhouse.client.api.Client;
 import com.comet.opik.infrastructure.ClickHouseLogAppenderConfig;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
+import io.dropwizard.lifecycle.Managed;
 import io.dropwizard.util.Duration;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.instrumentation.r2dbc.v1_0.R2dbcTelemetry;
@@ -18,12 +20,21 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
 
     private transient DatabaseAnalyticsFactory databaseAnalyticsFactory;
     private transient ConnectionFactory connectionFactory;
+    private transient Client clickHouseClient;
 
     @Override
     protected void configure() {
         databaseAnalyticsFactory = configuration(DatabaseAnalyticsFactory.class);
         connectionFactory = R2dbcTelemetry.create(GlobalOpenTelemetry.get())
                 .wrapConnectionFactory(databaseAnalyticsFactory.build(), ConnectionFactoryOptions.builder().build());
+
+        clickHouseClient = databaseAnalyticsFactory.buildClient();
+        environment().lifecycle().manage(new Managed() {
+            @Override
+            public void stop() {
+                clickHouseClient.close();
+            }
+        });
 
         ClickHouseLogAppenderConfig clickHouseLogAppenderConfig = configuration(ClickHouseLogAppenderConfig.class);
 
@@ -36,6 +47,12 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Singleton
     public ConnectionFactory getConnectionFactory() {
         return connectionFactory;
+    }
+
+    @Provides
+    @Singleton
+    public Client getClickHouseClient() {
+        return clickHouseClient;
     }
 
     @Provides
