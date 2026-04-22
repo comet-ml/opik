@@ -188,6 +188,7 @@ export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
           icon: LayoutDashboard,
           label: "Workspace",
           muted: true,
+          exact: true,
         },
         {
           id: "configuration",
