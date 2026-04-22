@@ -7,7 +7,7 @@ from ... import llm_constants
 
 MODEL_PARAMS = [
     pytest.param(
-        (llm_constants.OPENAI_GPT, ["ensure_openai_configured"]),
+        (llm_constants.OPENAI_GPT_MINI, ["ensure_openai_configured"]),
         id="openai",
     ),
     pytest.param(

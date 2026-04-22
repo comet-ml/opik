@@ -23,19 +23,13 @@ readability and avoids false-coupling with real model identifiers.
 # ---------------------------------------------------------------------------
 # OpenAI
 # ---------------------------------------------------------------------------
-OPENAI_GPT = "gpt-4o"
-OPENAI_GPT_MINI = "gpt-4o-mini"
-OPENAI_GPT_LEGACY = "gpt-3.5-turbo"
-OPENAI_GPT_NEXT = "gpt-5-mini"
-OPENAI_GPT_OSS = "gpt-oss-20b"
+# Default chat model: gpt-5-nano — the latest cheap+fast tier. gpt-4o-mini is
+# on the sunset path; when OpenAI bumps the "nano" tier again we only update
+# the value here.
+OPENAI_GPT_MINI = "gpt-5-nano"
 OPENAI_SORA = "sora-2"
 
-LITELLM_OPENAI_GPT = f"openai/{OPENAI_GPT}"
 LITELLM_OPENAI_GPT_MINI = f"openai/{OPENAI_GPT_MINI}"
-LITELLM_OPENAI_GPT_LEGACY = f"openai/{OPENAI_GPT_LEGACY}"
-LITELLM_OPENAI_GPT_OSS = f"openai/{OPENAI_GPT_OSS}"
-
-AISUITE_OPENAI_GPT_LEGACY = f"openai:{OPENAI_GPT_LEGACY}"
 
 # ---------------------------------------------------------------------------
 # Anthropic
