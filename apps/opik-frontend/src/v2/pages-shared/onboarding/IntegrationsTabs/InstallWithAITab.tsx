@@ -1,5 +1,4 @@
 import React from "react";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
 import { buildDocsUrl } from "@/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
@@ -10,17 +9,21 @@ import cursorLogo from "/images/integrations/cursor.svg";
 import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
 
 interface InstallWithAITabProps {
-  traceReceived: boolean;
+  agentName: string;
+  traceReceived?: boolean;
+  showWaitingStep?: boolean;
 }
 
 const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
-  traceReceived,
+  agentName,
+  traceReceived = false,
+  showWaitingStep = true,
 }) => {
-  const { agentName } = useAgentOnboarding();
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}"${
+  const projectPart = agentName ? `, project name "${agentName}"` : "";
+  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart}${
     apiKey ? ` and API key "${apiKey}"` : ""
   }. Once you are ready with the instrumentation of your agent, run it with a couple of interactions so that we make sure that the observability is correctly instrumented and the right traces are flowing to the Opik dashboard.`;
 
@@ -55,7 +58,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
           </div>
         </TimelineStep>
 
-        <TimelineStep number={2}>
+        <TimelineStep number={2} isLast={!showWaitingStep}>
           <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
@@ -68,33 +71,35 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
           </div>
         </TimelineStep>
 
-        <TimelineStep isLast completed={traceReceived}>
-          <div className="flex flex-col gap-1">
-            <h4 className="comet-body-s-accented text-primary">
-              {traceReceived
-                ? "First trace received! You're all set."
-                : "Waiting for first trace\u2026"}
-            </h4>
-            <p className="comet-body-xs text-muted-slate">
-              {traceReceived ? (
-                "Traces are flowing. You can now debug, evaluate, and optimize."
-              ) : (
-                <>
-                  Connect your agent to Opik for observability, evaluation and
-                  optimization.{" "}
-                  <a
-                    href={buildDocsUrl("/faq", "#troubleshooting")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    Why isn&apos;t my trace showing?
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
-        </TimelineStep>
+        {showWaitingStep && (
+          <TimelineStep isLast completed={traceReceived}>
+            <div className="flex flex-col gap-1">
+              <h4 className="comet-body-s-accented text-primary">
+                {traceReceived
+                  ? "First trace received! You're all set."
+                  : "Waiting for first trace\u2026"}
+              </h4>
+              <p className="comet-body-xs text-muted-slate">
+                {traceReceived ? (
+                  "Traces are flowing. You can now debug, evaluate, and optimize."
+                ) : (
+                  <>
+                    Connect your agent to Opik for observability, evaluation and
+                    optimization.{" "}
+                    <a
+                      href={buildDocsUrl("/faq", "#troubleshooting")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      Why isn&apos;t my trace showing?
+                    </a>
+                  </>
+                )}
+              </p>
+            </div>
+          </TimelineStep>
+        )}
       </div>
     </div>
   );

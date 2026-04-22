@@ -5,7 +5,6 @@ import { THEME_MODE } from "@/constants/theme";
 import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
 import IntegrationCard from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import CopyButton from "@/shared/CopyButton/CopyButton";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey } from "@/store/AppStore";
 import { maskAPIKey } from "@/lib/utils";
 import {
@@ -18,9 +17,11 @@ import InstallWithAITab from "./InstallWithAITab";
 const INSTALL_WITH_AI = "install-with-ai";
 
 type ManualIntegrationListProps = {
+  agentName: string;
   onSelectIntegration: (id: string) => void;
   showInstallWithAI?: boolean;
   traceReceived?: boolean;
+  showWaitingStep?: boolean;
   activeCategory?: string | null;
   onCategoryChange?: (category: string) => void;
 };
@@ -35,13 +36,14 @@ const CATEGORY_TABS = [
 ] as const;
 
 const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
+  agentName,
   onSelectIntegration,
   showInstallWithAI = false,
   traceReceived = false,
+  showWaitingStep = true,
   activeCategory: controlledCategory,
   onCategoryChange,
 }) => {
-  const { agentName } = useAgentOnboarding();
   const apiKey = useUserApiKey();
   const { themeMode } = useTheme();
 
@@ -61,21 +63,23 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
   return (
     <div className="flex flex-col gap-4">
       <div className="flex gap-3">
-        <div className="flex flex-1 flex-col gap-1">
-          <span className="comet-body-s-accented px-0.5 pb-0.5">
-            Project name
-          </span>
-          <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
-            <code className="comet-body-s text-muted-slate">{agentName}</code>
-            <CopyButton
-              text={agentName}
-              message="Project name copied"
-              tooltipText="Copy project name"
-              size="icon-3xs"
-              className="ml-auto"
-            />
+        {agentName && (
+          <div className="flex flex-1 flex-col gap-1">
+            <span className="comet-body-s-accented px-0.5 pb-0.5">
+              Project name
+            </span>
+            <div className="flex h-8 items-center gap-1 rounded border bg-primary-foreground px-2.5">
+              <code className="comet-body-s text-muted-slate">{agentName}</code>
+              <CopyButton
+                text={agentName}
+                message="Project name copied"
+                tooltipText="Copy project name"
+                size="icon-3xs"
+                className="ml-auto"
+              />
+            </div>
           </div>
-        </div>
+        )}
         {apiKey && (
           <div className="flex flex-1 flex-col gap-1">
             <span className="comet-body-s-accented px-0.5 pb-0.5">API key</span>
@@ -124,7 +128,11 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
         </ToggleGroup>
 
         {activeCategory === INSTALL_WITH_AI ? (
-          <InstallWithAITab traceReceived={traceReceived} />
+          <InstallWithAITab
+            agentName={agentName}
+            traceReceived={traceReceived}
+            showWaitingStep={showWaitingStep}
+          />
         ) : (
           <div className="grid grid-cols-4 gap-2">
             {integrations.map((integration) => (
