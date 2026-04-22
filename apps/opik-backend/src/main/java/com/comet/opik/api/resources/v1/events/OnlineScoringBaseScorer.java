@@ -1,15 +1,18 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
-import com.comet.opik.domain.AssertionCounterService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OnlineScoringStreamConfigurationAdapter;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -26,6 +29,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -51,13 +55,14 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     protected final FeedbackScoreService feedbackScoreService;
     protected final TraceService traceService;
     protected final AutomationRuleEvaluatorType type;
-    private final AssertionCounterService assertionCounterService;
+    private final RedissonReactiveClient redisClient;
+    private final ExperimentService experimentService;
 
     protected OnlineScoringBaseScorer(@NonNull @Config OnlineScoringConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
-            @NonNull AssertionCounterService assertionCounterService,
+            @NonNull ExperimentService experimentService,
             @NonNull AutomationRuleEvaluatorType type,
             @NonNull String metricsBaseName) {
         super(OnlineScoringStreamConfigurationAdapter.create(config, type),
@@ -67,7 +72,8 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
                 metricsBaseName);
         this.feedbackScoreService = feedbackScoreService;
         this.traceService = traceService;
-        this.assertionCounterService = assertionCounterService;
+        this.experimentService = experimentService;
+        this.redisClient = redisson;
         this.type = type;
     }
 
@@ -75,28 +81,13 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
     protected Mono<Void> processEvent(M message) {
         UUID experimentId = getExperimentId(message);
         if (experimentId != null) {
-            String workspaceId = getWorkspaceId(message);
-            String userName = getUserName(message);
             return Mono.fromRunnable(() -> score(message))
-                    .then(Mono.defer(() -> {
-                        if (workspaceId == null || userName == null) {
-                            log.warn("Cannot finish experiment '{}' — missing workspace or user context",
-                                    experimentId);
-                            return assertionCounterService.decrement(experimentId).then();
-                        }
-                        return assertionCounterService.decrementAndFinishIfComplete(
-                                experimentId, workspaceId, userName);
-                    }))
+                    .thenReturn(true)
                     .onErrorResume(e -> {
                         log.error("Failed to score assertion for experiment '{}'", experimentId, e);
-                        return assertionCounterService.decrement(experimentId)
-                                .then()
-                                .onErrorResume(re -> {
-                                    log.error("Failed to decrement assertion counter for experiment '{}'",
-                                            experimentId, re);
-                                    return Mono.empty();
-                                });
-                    });
+                        return Mono.just(false);
+                    })
+                    .flatMap(success -> decrementAssertionCounter(experimentId, message));
         }
         return Mono.fromRunnable(() -> score(message));
     }
@@ -111,6 +102,43 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
 
     @Nullable protected String getUserName(M message) {
         return null;
+    }
+
+    private Mono<Void> decrementAssertionCounter(UUID experimentId, M message) {
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + experimentId;
+        return redisClient.getAtomicLong(counterKey).decrementAndGet()
+                .flatMap(remaining -> {
+                    if (remaining <= 0) {
+                        log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
+                        return finishExperimentAfterAssertions(experimentId, message);
+                    }
+                    return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<Void> finishExperimentAfterAssertions(UUID experimentId, M message) {
+        String workspaceId = getWorkspaceId(message);
+        String userName = getUserName(message);
+        if (workspaceId == null || userName == null) {
+            log.warn("Cannot finish experiment '{}' — missing workspace or user context", experimentId);
+            return Mono.empty();
+        }
+
+        var statusUpdate = ExperimentUpdate.builder()
+                .status(ExperimentStatus.COMPLETED)
+                .build();
+
+        return experimentService.update(experimentId, statusUpdate)
+                .then(experimentService.finishExperiments(Set.of(experimentId)))
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .doOnSuccess(unused -> log.info("Finished experiment '{}' after all assertions completed",
+                        experimentId))
+                .onErrorResume(error -> {
+                    log.error("Failed to finish experiment '{}' after assertions", experimentId, error);
+                    return Mono.empty();
+                });
     }
 
     /**

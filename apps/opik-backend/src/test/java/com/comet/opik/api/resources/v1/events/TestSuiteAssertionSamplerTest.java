@@ -15,7 +15,6 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
-import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
@@ -32,6 +31,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 
 import java.time.Instant;
@@ -72,7 +72,7 @@ class TestSuiteAssertionSamplerTest {
         LlmProviderApiKeyService llmProviderApiKeyService;
 
         @Mock
-        AssertionCounterService assertionCounterService;
+        RedissonReactiveClient redissonClient;
 
         private TestSuiteAssertionSampler sampler;
 
@@ -87,7 +87,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, assertionCounterService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, redissonClient);
         }
 
         @Test

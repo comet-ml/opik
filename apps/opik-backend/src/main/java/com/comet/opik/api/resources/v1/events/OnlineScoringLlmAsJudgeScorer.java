@@ -1,7 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
-import com.comet.opik.domain.AssertionCounterService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -48,9 +48,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
-            @NonNull AssertionCounterService assertionCounterService,
+            @NonNull ExperimentService experimentService,
             @NonNull LlmProviderFactory llmProviderFactory) {
-        super(config, redisson, feedbackScoreService, traceService, assertionCounterService, LLM_AS_JUDGE,
+        super(config, redisson, feedbackScoreService, traceService, experimentService, LLM_AS_JUDGE,
                 Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);

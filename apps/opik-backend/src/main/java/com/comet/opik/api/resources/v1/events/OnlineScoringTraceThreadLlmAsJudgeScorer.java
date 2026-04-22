@@ -6,7 +6,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
-import com.comet.opik.domain.AssertionCounterService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
@@ -64,11 +64,11 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull ChatCompletionService aiProxyService,
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull TraceService traceService,
-            @NonNull AssertionCounterService assertionCounterService,
+            @NonNull ExperimentService experimentService,
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, assertionCounterService, TRACE_THREAD_LLM_AS_JUDGE,
+        super(config, redisson, feedbackScoreService, traceService, experimentService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
