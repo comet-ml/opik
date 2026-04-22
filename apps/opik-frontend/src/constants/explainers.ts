@@ -175,7 +175,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   [EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite]: {
     id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite,
     description:
-      "Add traces to a test suite to evaluate and benchmark LLM outputs using real production data. You can then use these test suites in experiments to track how your LLM app's performance evolves over time.",
+      "Add traces to a test suite to evaluate your agent's performance using real production data.",
   },
   [EXPLAINER_ID.hows_the_cost_estimated]: {
     id: EXPLAINER_ID.hows_the_cost_estimated,

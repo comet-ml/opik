@@ -209,10 +209,10 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
 
       <AssertionsField
         variant="item"
-        headerContent={
+        footerContent={
           <button
             type="button"
-            className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
+            className="comet-body-xs inline-flex shrink-0 items-center gap-1 text-foreground underline"
             onClick={onOpenSettings}
           >
             <Settings2 className="size-3.5 shrink-0" />
