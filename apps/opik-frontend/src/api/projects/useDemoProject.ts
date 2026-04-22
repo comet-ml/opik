@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { Project } from "@/types/projects";
@@ -44,13 +44,14 @@ export default function useDemoProject(
   // `query.state.dataUpdatedAt` resets on every successful fetch (even null),
   // so deriving the cap from it would never trigger. Track start time in a ref.
   const pollStartRef = useRef<number | null>(null);
+  const [pollExpired, setPollExpired] = useState(false);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["project", { workspaceName }],
     queryFn: (context) => getDemoProject(context),
     refetchInterval: poll
-      ? (query) => {
-          if (query.state.data) {
+      ? (q) => {
+          if (q.state.data) {
             pollStartRef.current = null;
             return false;
           }
@@ -58,6 +59,7 @@ export default function useDemoProject(
             pollStartRef.current = Date.now();
           }
           if (Date.now() - pollStartRef.current > MAX_POLL_DURATION_MS) {
+            setPollExpired(true);
             return false;
           }
           return POLL_INTERVAL_MS;
@@ -65,4 +67,6 @@ export default function useDemoProject(
       : undefined,
     ...options,
   });
+
+  return { ...query, pollExpired };
 }

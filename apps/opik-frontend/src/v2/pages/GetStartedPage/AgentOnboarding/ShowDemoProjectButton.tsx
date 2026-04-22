@@ -8,9 +8,15 @@ import useDemoProject from "@/api/projects/useDemoProject";
 
 const ShowDemoProjectButton: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
-  const { data: demoProject } = useDemoProject({ workspaceName, poll: true });
+  const { data: demoProject, pollExpired } = useDemoProject({
+    workspaceName,
+    poll: true,
+  });
 
   if (!demoProject) {
+    if (pollExpired) {
+      return null;
+    }
     return (
       <Button
         variant="link"

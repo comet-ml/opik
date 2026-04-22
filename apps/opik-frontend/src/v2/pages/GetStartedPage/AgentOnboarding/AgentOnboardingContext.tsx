@@ -3,6 +3,7 @@ import React, {
   useContext,
   useCallback,
   useEffect,
+  useState,
 } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import posthog from "posthog-js";
@@ -14,11 +15,15 @@ export const AGENT_ONBOARDING_KEY = "agent-onboarding";
 export const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
   "onboarding-integrations-3-options";
 
+export const DEFAULT_ONBOARDING_FLOW = "control";
+
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
 export const AGENT_ONBOARDING_STEPS = {
+  SELECT_INTENT: "select-intent",
   AGENT_NAME: "agent-name",
   CONNECT_AGENT: "connect-agent",
+  DEMO_LOADING: "demo-loading",
   DONE: "done",
 } as const;
 
@@ -55,7 +60,7 @@ export const useAgentOnboarding = () => {
 };
 
 const DEFAULT_STATE: AgentOnboardingState = {
-  step: AGENT_ONBOARDING_STEPS.AGENT_NAME,
+  step: AGENT_ONBOARDING_STEPS.SELECT_INTENT,
   agentName: "",
 };
 
@@ -67,17 +72,27 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
   children,
 }) => {
   const workspaceName = useActiveWorkspaceName();
-  const [state, setState] = useLocalStorageState<AgentOnboardingState>(
-    `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
-    { defaultValue: DEFAULT_STATE },
-  );
+  const [persistedState, setPersistedState] =
+    useLocalStorageState<AgentOnboardingState>(
+      `${AGENT_ONBOARDING_KEY}-${workspaceName}`,
+      { defaultValue: DEFAULT_STATE },
+    );
+  const [transientStep, setTransientStep] =
+    useState<AgentOnboardingStep | null>(null);
+
+  const currentStep = transientStep ?? persistedState.step;
 
   const submitAnswer = useSubmitOnboardingAnswerMutation();
 
   useEffect(() => {
-    if (!state.step || state.step === AGENT_ONBOARDING_STEPS.DONE) return;
+    if (
+      !currentStep ||
+      currentStep === AGENT_ONBOARDING_STEPS.DONE ||
+      currentStep === AGENT_ONBOARDING_STEPS.DEMO_LOADING
+    )
+      return;
 
-    const hash = `#${state.step}`;
+    const hash = `#${currentStep}`;
     const traceParam = new URLSearchParams(window.location.search).get("trace");
 
     if (window.location.hash !== hash && !traceParam) {
@@ -91,7 +106,7 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
         // PostHog may not be initialized
       }
     }
-  }, [state.step]);
+  }, [currentStep]);
 
   const goToStep = useCallback(
     (
@@ -99,26 +114,32 @@ const AgentOnboardingProvider: React.FC<AgentOnboardingProviderProps> = ({
       data: Omit<AgentOnboardingState, "step">,
     ) => {
       const stepKey =
-        state.step && state.step !== AGENT_ONBOARDING_STEPS.DONE
-          ? state.step
+        currentStep && currentStep !== AGENT_ONBOARDING_STEPS.DONE
+          ? currentStep
           : "unknown";
 
       submitAnswer.mutate({ answer: data.agentName, step: stepKey });
 
-      setState({ ...data, step: nextStep });
+      if (nextStep === AGENT_ONBOARDING_STEPS.DEMO_LOADING) {
+        setTransientStep(nextStep);
+        setPersistedState((prev) => ({ ...prev, ...data }));
+      } else {
+        setTransientStep(null);
+        setPersistedState({ ...data, step: nextStep });
+      }
     },
-    [state.step, submitAnswer, setState],
+    [currentStep, submitAnswer, setPersistedState],
   );
 
-  if (state.step === AGENT_ONBOARDING_STEPS.DONE) {
+  if (currentStep === AGENT_ONBOARDING_STEPS.DONE) {
     return null;
   }
 
   return (
     <AgentOnboardingContext.Provider
       value={{
-        currentStep: state.step,
-        agentName: state.agentName,
+        currentStep,
+        agentName: persistedState.agentName,
         goToStep,
       }}
     >

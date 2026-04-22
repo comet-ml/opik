@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import OwlArt from "@/shared/OwlArt";
 
 const MESSAGES = [
   "Ollie is waking up\u2026",
@@ -22,33 +23,6 @@ const OWL_SIZE: Record<OllieLoaderVariant, string> = {
 interface OllieLoaderProps {
   variant?: OllieLoaderVariant;
 }
-
-const OwlArt: React.FC<{ className?: string }> = ({ className }) => (
-  <div className={cn("motion-safe:animate-ollie-breathe", className)}>
-    <svg
-      className="size-full"
-      viewBox="0 0 72 72"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden
-    >
-      <path d="M13.5 27L19.125 15.75L24.75 27" fill="#F46E41" />
-      <path d="M47.25 27L52.875 15.75L58.5 27" fill="#F46E41" />
-      <g
-        className="motion-safe:animate-ollie-blink"
-        style={{
-          transformOrigin: "center",
-          transformBox: "fill-box",
-        }}
-      >
-        <path
-          d="M51.75 21.9375C62.0018 21.9375 70.3125 30.2482 70.3125 40.5C70.3125 50.7518 62.0018 59.0625 51.75 59.0625C45.1063 59.0625 39.2797 55.5711 36 50.3242C32.7203 55.5711 26.8937 59.0625 20.25 59.0625C9.99821 59.0625 1.6875 50.7518 1.6875 40.5C1.6875 30.2482 9.99821 21.9375 20.25 21.9375C26.8934 21.9375 32.7202 25.4283 36 30.6748C39.2798 25.4283 45.1066 21.9375 51.75 21.9375ZM20.25 27.5625C13.1048 27.5625 7.3125 33.3548 7.3125 40.5C7.3125 47.6452 13.1048 53.4375 20.25 53.4375C27.3952 53.4375 33.1875 47.6452 33.1875 40.5C33.1875 33.3548 27.3952 27.5625 20.25 27.5625ZM51.75 27.5625C44.6048 27.5625 38.8125 33.3548 38.8125 40.5C38.8125 47.6452 44.6048 53.4375 51.75 53.4375C58.8952 53.4375 64.6875 47.6452 64.6875 40.5C64.6875 33.3548 58.8952 27.5625 51.75 27.5625Z"
-          fill="#F46E41"
-        />
-      </g>
-    </svg>
-  </div>
-);
 
 export function OllieLoader({
   variant = "page",
