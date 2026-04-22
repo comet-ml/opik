@@ -186,8 +186,8 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
         <div
           ref={overlayRef}
           className={cn(
-            "absolute right-0 top-1/2 z-10 h-8 max-w-full -translate-y-1/2 overflow-hidden transition-[width] duration-200 ease-in-out",
-            isExpanded ? "w-[300px]" : "w-0 pointer-events-none",
+            "absolute right-0 top-1/2 z-10 h-8 -translate-y-1/2 overflow-hidden transition-[width] duration-200 ease-in-out",
+            isExpanded ? "w-full" : "w-0 pointer-events-none",
           )}
         >
           <div
