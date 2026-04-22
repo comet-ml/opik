@@ -9,7 +9,7 @@ import {
 } from "@/ui/dialog";
 import { Separator } from "@/ui/separator";
 import HelpLinks from "./HelpLinks";
-import InstallWithAITab from "@/v2/pages/GetStartedPage/AgentOnboarding/InstallWithAITab";
+import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
 
 type QuickInstallDialogProps = {
   open: boolean;

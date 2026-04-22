@@ -21,7 +21,7 @@ import {
 } from "./AgentOnboardingContext";
 import AgentOnboardingCard from "./AgentOnboardingCard";
 import ConnectToOllieTab from "./ConnectToOllieTab";
-import InstallWithAITab from "./InstallWithAITab";
+import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
 import ShowDemoProjectButton from "./ShowDemoProjectButton";

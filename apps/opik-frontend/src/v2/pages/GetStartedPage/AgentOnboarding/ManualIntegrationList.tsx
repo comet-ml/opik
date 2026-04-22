@@ -9,7 +9,8 @@ import {
   getIntegrationsByCategory,
 } from "@/constants/integrations";
 import { buildDocsUrl } from "@/lib/utils";
-import InstallWithAITab from "./InstallWithAITab";
+import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
+import { useAgentOnboarding } from "./AgentOnboardingContext";
 
 const INSTALL_WITH_AI = "install-with-ai";
 
@@ -37,6 +38,7 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
   activeCategory: controlledCategory,
   onCategoryChange,
 }) => {
+  const { agentName } = useAgentOnboarding();
   const { themeMode } = useTheme();
 
   const defaultCategory = showInstallWithAI
@@ -83,7 +85,7 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
         </ToggleGroup>
 
         {activeCategory === INSTALL_WITH_AI ? (
-          <InstallWithAITab traceReceived={traceReceived} />
+          <InstallWithAITab traceReceived={traceReceived} agentName={agentName} />
         ) : (
           <div className="grid grid-cols-4 gap-2">
             {integrations.map((integration) => (
