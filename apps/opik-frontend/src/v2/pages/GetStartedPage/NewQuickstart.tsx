@@ -49,11 +49,13 @@ const AgentOnboardingQuickstart: React.FC = () => {
   return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
 };
 
+const DEFAULT_ONBOARDING_FLOW = "control";
+
 const NewQuickstart: React.FC = () => {
   // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "manual".
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    "manual";
+    DEFAULT_ONBOARDING_FLOW;
 
   if (variant === "manual") {
     return (
