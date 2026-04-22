@@ -294,7 +294,9 @@ const UserMenu = () => {
                 onSelect={(e) => {
                   e.preventDefault();
                   setNewExperienceOptIn(!hasOptedIn);
-                  window.location.href = buildFullBaseUrl() + workspaceName;
+                  const base = buildFullBaseUrl();
+                  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+                  window.location.href = normalizedBase + workspaceName;
                 }}
               >
                 <Sparkles className="mr-2 size-4" />

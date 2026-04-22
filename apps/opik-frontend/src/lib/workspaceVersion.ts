@@ -12,14 +12,22 @@ export function getVersionOverride(): WorkspaceVersion | null {
 }
 
 export function getNewExperienceOptIn(): boolean {
-  return localStorage.getItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY) === "true";
+  try {
+    return localStorage.getItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY) === "true";
+  } catch {
+    return false;
+  }
 }
 
 export function setNewExperienceOptIn(optIn: boolean): void {
-  if (optIn) {
-    localStorage.setItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY, "true");
-  } else {
-    localStorage.removeItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY);
+  try {
+    if (optIn) {
+      localStorage.setItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY, "true");
+    } else {
+      localStorage.removeItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY);
+    }
+  } catch {
+    // localStorage unavailable (private mode, quota) — silently skip
   }
 }
 
