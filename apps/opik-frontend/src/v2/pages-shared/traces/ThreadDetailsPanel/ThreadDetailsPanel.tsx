@@ -45,6 +45,7 @@ import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/ui/button";
+import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
@@ -514,6 +515,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
             <div className="flex size-full flex-col">
               <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
+                <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+                  Inspect
+                </span>
                 <div className="flex-auto" />
                 <AddToDropdown
                   getDataForExport={async () => rows}
@@ -572,7 +576,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       <div className="flex flex-auto items-center justify-between">
         <div className="flex items-center gap-1 overflow-hidden">
           <TooltipWrapper content="Close panel">
-            <Button variant="ghost" size="icon-xs" onClick={onClose}>
+            <Button variant="ghost" size="icon-2xs" onClick={onClose}>
               <ChevronsRight />
             </Button>
           </TooltipWrapper>
@@ -585,7 +589,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <div className="flex shrink-0 items-center gap-2 pl-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-xs">
+              <Button variant="outline" size="icon-2xs">
                 <span className="sr-only">Actions menu</span>
                 <MoreHorizontal />
               </Button>
@@ -667,27 +671,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <Separator orientation="vertical" className="mx-1 h-4" />
               <Button
                 variant="outline"
-                size="xs"
+                size="2xs"
                 disabled={!horizontalNavigation.hasPrevious}
                 onClick={() => horizontalNavigation.onChange(-1)}
                 className="gap-1"
               >
                 Previous
-                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                  J
-                </kbd>
+                <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
               </Button>
               <Button
                 variant="outline"
-                size="xs"
+                size="2xs"
                 disabled={!horizontalNavigation.hasNext}
                 onClick={() => horizontalNavigation.onChange(1)}
                 className="gap-1"
               >
                 Next
-                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                  K
-                </kbd>
+                <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
               </Button>
             </>
           )}
@@ -695,7 +695,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <TooltipWrapper content="View all traces for this thread">
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               onClick={() => {
                 navigate({
                   to: "/$workspaceName/projects/$projectId/logs",

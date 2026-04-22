@@ -183,11 +183,12 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   );
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-4 border-b bg-muted/50 px-4">
-      <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
-        Spans ({spanCount})
-      </span>
-      <div className="relative flex flex-1 items-center justify-end gap-1 text-foreground">
+    <div className="flex h-10 shrink-0 items-center border-b bg-muted/50 px-4">
+      <div className="relative flex flex-1 items-center">
+        <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+          Spans ({spanCount})
+        </span>
+        <div className="flex-auto" />
         <ExpandableSearchInput
           value={search}
           placeholder="Search by all fields"
@@ -197,6 +198,8 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
           tooltip="Search spans"
           overlayExpand
         />
+      </div>
+      <div className="flex items-center gap-1 text-foreground">
         <FiltersButton
           columns={filtersColumnData}
           filters={filters}

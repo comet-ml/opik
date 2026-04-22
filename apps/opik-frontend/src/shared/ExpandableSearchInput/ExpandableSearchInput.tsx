@@ -53,8 +53,16 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   const [isExpanded, setIsExpanded] = useState(Boolean(value) && !disabled);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    if (overlayRef.current) {
+      if (isExpanded) {
+        overlayRef.current.removeAttribute("inert");
+      } else {
+        overlayRef.current.setAttribute("inert", "");
+      }
+    }
     if (isExpanded && inputRef.current) {
       inputRef.current.focus();
     }
@@ -167,7 +175,6 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
             size="icon-sm"
             onClick={handleExpand}
             disabled={disabled}
-            tabIndex={isExpanded ? -1 : undefined}
             className={cn(
               "transition-opacity duration-100",
               isExpanded && "pointer-events-none opacity-0",
@@ -177,6 +184,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
           </Button>
         </TooltipWrapper>
         <div
+          ref={overlayRef}
           className={cn(
             "absolute right-0 top-1/2 z-10 h-8 max-w-full -translate-y-1/2 overflow-hidden transition-[width] duration-200 ease-in-out",
             isExpanded ? "w-[300px]" : "w-0 pointer-events-none",
@@ -184,10 +192,8 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
         >
           <div
             className={cn(
-              "h-full w-full transition-opacity",
-              isExpanded
-                ? "opacity-100 duration-150 delay-75"
-                : "pointer-events-none opacity-0 duration-150",
+              "h-full w-full",
+              isExpanded && "animate-in fade-in duration-150",
             )}
           >
             {inputContent}
