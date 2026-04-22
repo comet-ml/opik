@@ -21,6 +21,7 @@ import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -66,6 +67,9 @@ class ExperimentAggregateEventListenerTest {
     private ExperimentAggregationPublisher publisher;
 
     @Mock
+    private ExperimentAggregatesService experimentAggregatesService;
+
+    @Mock
     private ExperimentDenormalizationConfig config;
 
     private ExperimentAggregateEventListener listener;
@@ -75,7 +79,8 @@ class ExperimentAggregateEventListenerTest {
     @BeforeEach
     void setUp() {
         lenient().when(publisher.publish(any(), anyString(), anyString())).thenReturn(Mono.empty());
-        listener = new ExperimentAggregateEventListener(experimentItemService, publisher, config);
+        listener = new ExperimentAggregateEventListener(experimentItemService, publisher,
+                experimentAggregatesService, config);
     }
 
     @Nested

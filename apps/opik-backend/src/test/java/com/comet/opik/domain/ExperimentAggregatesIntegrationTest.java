@@ -52,6 +52,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,6 +78,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.random.RandomGenerator;
 import java.util.stream.IntStream;
@@ -2328,6 +2330,106 @@ class ExperimentAggregatesIntegrationTest {
 
         assertPageNotEmpty(afterAggregation);
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
+    @Test
+    @DisplayName("ExperimentAggregatesService.deleteByExperimentIds removes rows from experiment_aggregates and experiment_item_aggregates")
+    void deleteByExperimentIdsRemovesAggregateRows() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var aggregatedBefore = experimentAggregatesService.getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        assertThat(aggregatedBefore)
+                .as("Aggregated experiment must exist before delete")
+                .isNotNull();
+
+        experimentAggregatesService.deleteByExperimentIds(Set.of(experiment.id()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var aggregatedAfter = experimentAggregatesService.getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        assertThat(aggregatedAfter)
+                .as("Aggregated experiment must be gone after delete")
+                .isNull();
+    }
+
+    @Test
+    @DisplayName("ExperimentService.delete triggers ExperimentsDeleted event that cleans up aggregates")
+    void deleteExperimentCleansUpAggregatesViaEvent() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var aggregatedBefore = experimentAggregatesService.getExperimentFromAggregates(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        assertThat(aggregatedBefore)
+                .as("Aggregated experiment must exist before delete")
+                .isNotNull();
+
+        experimentService.delete(Set.of(experiment.id()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        Awaitility.await()
+                .atMost(10, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var aggregatedAfter = experimentAggregatesService
+                            .getExperimentFromAggregates(experiment.id())
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.USER_NAME, USER)
+                                    .put(RequestContext.WORKSPACE_ID, workspaceId))
+                            .block();
+                    assertThat(aggregatedAfter)
+                            .as("Aggregated experiment must be removed by the ExperimentsDeleted event handler")
+                            .isNull();
+                });
     }
 
 }

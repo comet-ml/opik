@@ -9,6 +9,7 @@ import com.comet.opik.api.events.CommentsUpdated;
 import com.comet.opik.api.events.ExperimentItemsCreated;
 import com.comet.opik.api.events.ExperimentItemsDeleted;
 import com.comet.opik.api.events.ExperimentUpdated;
+import com.comet.opik.api.events.ExperimentsDeleted;
 import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.api.events.FeedbackScoresDeleted;
 import com.comet.opik.api.events.SpansCreated;
@@ -20,6 +21,7 @@ import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -45,15 +47,18 @@ public class ExperimentAggregateEventListener {
 
     private final ExperimentItemService experimentItemService;
     private final ExperimentAggregationPublisher publisher;
+    private final ExperimentAggregatesService experimentAggregatesService;
     private final ExperimentDenormalizationConfig config;
 
     @Inject
     public ExperimentAggregateEventListener(
             ExperimentItemService experimentItemService,
             ExperimentAggregationPublisher publisher,
+            ExperimentAggregatesService experimentAggregatesService,
             @Config("experimentDenormalization") ExperimentDenormalizationConfig config) {
         this.experimentItemService = experimentItemService;
         this.publisher = publisher;
+        this.experimentAggregatesService = experimentAggregatesService;
         this.config = config;
     }
 
@@ -83,6 +88,21 @@ public class ExperimentAggregateEventListener {
     public void onExperimentItemsDeleted(ExperimentItemsDeleted event) {
         triggerByExperimentIds(event.experimentIds(), event.workspaceId(), event.userName())
                 .subscribe(null, e -> log.error("Error triggering aggregation for experiment items deleted", e));
+    }
+
+    @Subscribe
+    public void onExperimentsDeleted(ExperimentsDeleted event) {
+        if (CollectionUtils.isEmpty(event.experimentIds())) {
+            return;
+        }
+        experimentAggregatesService.deleteByExperimentIds(event.experimentIds())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.WORKSPACE_ID, event.workspaceId())
+                        .put(RequestContext.USER_NAME, event.userName()))
+                .subscribe(null,
+                        e -> log.error(
+                                "Error deleting aggregated experiments, workspaceId '{}', ids '{}'",
+                                event.workspaceId(), event.experimentIds(), e));
     }
 
     @Subscribe

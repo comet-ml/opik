@@ -277,4 +277,26 @@ public class ExperimentAggregatesService {
                     .orElse(Mono.just(new ProjectStats(List.of())));
         });
     }
+
+    /**
+     * Delete rows from experiment_aggregates and experiment_item_aggregates for the given experiment IDs.
+     *
+     * @param experimentIds the set of experiment IDs whose aggregate rows should be removed
+     * @return Mono emitting the total number of rows deleted across both aggregate tables
+     */
+    public Mono<Long> deleteByExperimentIds(@NonNull Set<UUID> experimentIds) {
+        if (experimentIds.isEmpty()) {
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting aggregated experiment ids: '{}'", experimentIds);
+
+        return experimentAggregatesDAO.deleteByExperimentIds(experimentIds)
+                .doOnSuccess(deleted -> log.info(
+                        "Deleted aggregated experiment ids, size '{}', rowsDeleted '{}'",
+                        experimentIds.size(), deleted))
+                .doOnError(error -> log.error(
+                        "Failed to delete aggregated experiment ids: '{}'",
+                        experimentIds.size(), error));
+    }
 }
