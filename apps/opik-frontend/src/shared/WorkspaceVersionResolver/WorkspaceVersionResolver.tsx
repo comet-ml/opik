@@ -4,7 +4,10 @@ import useAppStore, {
   useWorkspaceVersion,
 } from "@/store/AppStore";
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
-import { getVersionOverride } from "@/lib/workspaceVersion";
+import {
+  clearVersionOverride,
+  getVersionOverride,
+} from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
 const VERSION_RELOAD_PREFIX = "opik-version-reload:";
@@ -22,10 +25,17 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   const workspaceName = useActiveWorkspaceName();
 
   const { data: apiVersion, isLoading } = useWorkspaceVersionQuery();
-  const resolvedVersion = override ?? apiVersion;
+  // The override is only honored when the backend says v1. Once a workspace is
+  // migrated to v2 on the backend, v2 is always rendered and any stale override
+  // is cleared.
+  const resolvedVersion = apiVersion === "v2" ? "v2" : override ?? apiVersion;
 
   useEffect(() => {
     if (!resolvedVersion || !workspaceName) return;
+
+    if (apiVersion === "v2" && override) {
+      clearVersionOverride();
+    }
 
     useAppStore.getState().setWorkspaceVersion(resolvedVersion);
 
@@ -40,7 +50,7 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
     } else {
       sessionStorage.removeItem(reloadKey);
     }
-  }, [resolvedVersion, gateVersion, workspaceName]);
+  }, [apiVersion, override, resolvedVersion, gateVersion, workspaceName]);
 
   if (!override && isLoading) {
     return <Loader />;
