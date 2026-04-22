@@ -179,15 +179,16 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
-      # LLM model registry (see apps/opik-backend/config.yml:1300-1305)
-      # Defaults mirror the backend's config.yml: remote CDN fetch enabled
-      # against cdn.comet.ml so new models reach deployments without a
-      # release. Air-gapped deployments should set
-      # LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false" in their own values.yaml.
+      # LLM model registry (see apps/opik-backend/config.yml:1309-1317).
+      # Remote CDN fetch is opt-in: self-hosted / OSS deployments serve
+      # the classpath YAML shipped with the release by default, no
+      # outbound traffic. Operators who want fresh models between
+      # releases can set LLM_MODEL_REGISTRY_REMOTE_ENABLED: "true" and
+      # point LLM_MODEL_REGISTRY_REMOTE_URL at their preferred source.
       LLM_MODEL_REGISTRY_DEFAULT_RESOURCE: "llm-models-default.yaml"
       LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: ""
-      LLM_MODEL_REGISTRY_REMOTE_ENABLED: "true"
-      LLM_MODEL_REGISTRY_REMOTE_URL: "https://cdn.comet.ml/opik/llm-models-default.yaml"
+      LLM_MODEL_REGISTRY_REMOTE_ENABLED: "false"
+      LLM_MODEL_REGISTRY_REMOTE_URL: ""
       LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS: "300"
     envFrom:
       - configMapRef:

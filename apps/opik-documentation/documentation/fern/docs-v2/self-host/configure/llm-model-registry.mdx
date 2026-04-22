@@ -2,8 +2,8 @@
 
 The list of LLM models that appear in Opik's dropdowns (Playground, LLM-as-Judge, Automation Rules, Optimization Studio) is served by the backend from a YAML registry. The registry is composed from up to three sources, merged in this order:
 
-1. **Classpath defaults** — `llm-models-default.yaml` shipped inside the backend JAR. Always loaded. Acts as the baseline and the air-gapped fallback.
-2. **Remote CDN YAML** — **enabled by default**. Fetched from `https://cdn.comet.ml/opik/llm-models-default.yaml` (regenerated daily by the Opik sync workflow) and refreshed every 5 minutes. This is how new models from providers reach running deployments between Opik releases.
+1. **Classpath defaults** — `llm-models-default.yaml` shipped inside the backend JAR. Always loaded. This is the source every deployment sees out of the box.
+2. **Remote CDN YAML** — **opt-in**. When enabled, the backend fetches a YAML from a URL you configure and refreshes it on a schedule. Self-hosted deployments are not required to use this; it's primarily for operators who want to pick up new models between Opik releases without redeploying.
 3. **Local override YAML** — optional. A YAML file you mount into the backend container; its entries override or extend the defaults and the remote content.
 
 This page describes how to configure these sources for self-hosted deployments.
@@ -15,8 +15,8 @@ All configuration is via env vars on the opik-backend container.
 | Variable | Default | Purpose |
 |---|---|---|
 | `LLM_MODEL_REGISTRY_DEFAULT_RESOURCE` | `llm-models-default.yaml` | Classpath resource name. Rarely changed. |
-| `LLM_MODEL_REGISTRY_REMOTE_ENABLED` | `true` | Set `false` to disable the remote CDN fetch (e.g. air-gapped deployments). |
-| `LLM_MODEL_REGISTRY_REMOTE_URL` | `https://cdn.comet.ml/opik/llm-models-default.yaml` | URL (http/https) of the remote YAML. Override to point at your own mirror. |
+| `LLM_MODEL_REGISTRY_REMOTE_ENABLED` | `false` | Set `true` to enable the optional remote CDN fetch. |
+| `LLM_MODEL_REGISTRY_REMOTE_URL` | empty | URL (http/https) of the remote YAML. Required when `REMOTE_ENABLED=true`. |
 | `LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS` | `300` | How often to re-fetch the remote YAML. |
 | `LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH` | empty | Absolute path to a local override YAML inside the container. |
 
@@ -57,26 +57,23 @@ Models are keyed by `id` across every provider. `qualifiedName` is used for rout
 
 ## Configuration scenarios
 
-### Default behaviour (recommended)
+### Default behaviour
 
-Leave the defaults in place. The backend fetches `https://cdn.comet.ml/opik/llm-models-default.yaml` at startup and every 5 minutes, layering it on top of the classpath YAML shipped in the release. New models added by the Opik sync workflow reach your deployment within minutes, without a redeploy.
+Leave the defaults in place. The backend serves the classpath `llm-models-default.yaml` shipped with your Opik release — no outbound traffic, no extra configuration. Upgrade Opik to pick up new models.
 
-Remote fetch failures are logged but non-fatal: the backend keeps serving the last successful registry (or the classpath defaults if the first fetch fails).
+### Enable the remote CDN fetch (optional)
 
-### Air-gapped deployment
-
-Set `LLM_MODEL_REGISTRY_REMOTE_ENABLED=false` to disable the outbound CDN fetch. The backend will serve only the classpath defaults that ship with your Opik version. Upgrade Opik to pick up new models.
-
-### Point at your own CDN mirror
-
-If corporate policy requires hosting the YAML yourself (e.g. behind an internal proxy), override the URL:
+If you want new models to reach your running deployment between Opik releases — e.g. if you run long-lived stacks on an extended upgrade cadence and want provider-side additions to land automatically — point the backend at a remote YAML:
 
 ```
+LLM_MODEL_REGISTRY_REMOTE_ENABLED=true
 LLM_MODEL_REGISTRY_REMOTE_URL=https://your-cdn.example.com/opik/llm-models-default.yaml
 LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS=3600
 ```
 
-Mirror the Opik CDN content (or your own curated variant) at that URL. The backend fetches on startup and re-fetches every `REFRESH_INTERVAL_SECONDS`.
+Comet SaaS uses `https://cdn.comet.ml/opik/llm-models-default.yaml`, regenerated daily by the Opik sync workflow — you can either mirror that content on your own CDN or point directly at it if your policies allow.
+
+Remote fetch failures are logged but non-fatal: the backend keeps serving the last successful registry (or the classpath defaults if the first fetch fails), so enabling the remote tier never risks losing model routing.
 
 ### Add a private fine-tuned model (Docker Compose)
 

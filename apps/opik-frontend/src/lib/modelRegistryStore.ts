@@ -26,7 +26,7 @@
  *    render 1.
  */
 
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
+import { PROVIDER_MODELS } from "@/constants/providerModels";
 import { REASONING_MODELS } from "@/constants/llm";
 import {
   PROVIDER_MODEL_TYPE,
