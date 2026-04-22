@@ -54,7 +54,7 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import QueueItemActionsPanel from "@/v1/pages/AnnotationQueuePage/QueueItemsTab/QueueItemActionsPanel";
 import QueueItemRowActionsCell from "@/v1/pages/AnnotationQueuePage/QueueItemsTab/QueueItemRowActionsCell";
@@ -66,7 +66,7 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 
 const SHARED_COLUMNS: ColumnData<Thread>[] = [
   {

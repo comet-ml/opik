@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { ErrorInfoWrite } from "./ErrorInfoWrite.js";
 import { JsonListStringWrite } from "./JsonListStringWrite.js";
+import { SpanWriteSource } from "./SpanWriteSource.js";
 import { SpanWriteType } from "./SpanWriteType.js";
 
 export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Raw, OpikApi.SpanWrite> =
@@ -32,6 +33,7 @@ export const SpanWrite: core.serialization.ObjectSchema<serializers.SpanWrite.Ra
             core.serialization.string().optional(),
         ),
         ttft: core.serialization.number().optional(),
+        source: SpanWriteSource.optional(),
     });
 
 export declare namespace SpanWrite {
@@ -56,5 +58,6 @@ export declare namespace SpanWrite {
         total_estimated_cost?: number | null;
         total_estimated_cost_version?: string | null;
         ttft?: number | null;
+        source?: SpanWriteSource.Raw | null;
     }
 }

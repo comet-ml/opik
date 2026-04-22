@@ -24,6 +24,10 @@ target/
 # Python BE related
 /apps/opik-python-backend/images/
 
+# Test suite reports
+opik_evaluation_suite_reports/
+opik_test_suite_reports/
+
 # Opik opimizer related
 /sdks/opik_optimizer/artifacts
 /sdks/opik_optimizer/benchmark_results/
@@ -111,3 +115,6 @@ response.txt
 
 # Generated diagrams (local artifacts from /share-diagram command)
 /diagrams/
+
+# Figma screenshots (local reference images)
+/figma_screenshots/

@@ -1,7 +1,7 @@
 import React, { useRef } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import FeedbackScoresEditor from "@/v1/pages-shared/traces/FeedbackScoresEditor/FeedbackScoresEditor";
-import UserCommentForm from "@/v1/pages-shared/traces/UserComment/UserCommentForm";
+import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";

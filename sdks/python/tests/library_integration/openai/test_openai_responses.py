@@ -94,8 +94,10 @@ def test_openai_client_responses_create__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -158,10 +160,13 @@ def test_openai_responses_create__async_call_made_in_another_tracked_async_funct
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                         provider="openai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -238,8 +243,10 @@ def test_openai_client_responses_create_raises_an_error__span_and_trace_finished
                     "traceback": ANY_STRING,
                 },
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -293,8 +300,10 @@ def test_openai_client_responses_create_stream__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -350,8 +359,10 @@ async def test_openai_client_responses_create_async__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -409,8 +420,10 @@ async def test_openai_client_responses_create_stream_async__happyflow(fake_backe
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -484,8 +497,10 @@ def test_openai_client_responses_parse__happy_flow(
                 project_name=expected_project_name,
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -549,8 +564,10 @@ async def test_openai_client_responses_parse_async__happy_flow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -641,8 +658,10 @@ def test_openai_client_responses_parse_raises_an_error__span_and_trace_finished_
                     traceback=ANY_STRING,
                 ),
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -715,8 +734,10 @@ def test_openai_client_responses_create__opik_args__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL_FOR_TESTS),
                 provider="openai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

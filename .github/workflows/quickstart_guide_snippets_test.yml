@@ -21,7 +21,7 @@ jobs:
 
         steps:
             - name: Checkout repo
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
               with:
                 ref: ${{ github.ref }}
             
@@ -56,8 +56,8 @@ jobs:
                 OPIK_TEST_WORKSPACE: default
                 OPIK_TEST_PROJECT_NAME: Quickstart
                 OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-                AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                AWS_ACCESS_KEY_ID: ${{ secrets.BEDROCK_AWS_ACCESS_KEY_ID }}
+                AWS_SECRET_ACCESS_KEY: ${{ secrets.BEDROCK_AWS_SECRET_ACCESS_KEY }}
                 ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
               run: |
                 cd ${{ github.workspace }}/tests_end_to_end

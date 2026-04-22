@@ -5,7 +5,12 @@ from opik.api_objects.dataset.dataset import Dataset
 def test_insert_deduplication__two_dicts_passed_with_the_same_content__only_one_is_inserted():
     mock_rest_client = Mock()
 
-    dataset = Dataset("test_dataset", "Test description", mock_rest_client)
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
 
     item_dict = {
         "input": {"key": "value", "key2": "value2"},
@@ -29,7 +34,12 @@ def test_insert_deduplication__two_dicts_passed_with_the_same_content__only_one_
 def test_insert_deduplication__two_dicts_passed_with_the_different_content__both_are_inserted():
     mock_rest_client = Mock()
 
-    dataset = Dataset("test_dataset", "Test description", mock_rest_client)
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
 
     item_dict1 = {
         "input": {"key": "value1"},
@@ -58,7 +68,12 @@ def test_insert_deduplication__two_dicts_passed_with_the_different_content__both
 def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__two_different_items_are_inserted():
     mock_rest_client = Mock()
 
-    dataset = Dataset("test_dataset", "Test description", mock_rest_client)
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
 
     item_dict1 = {
         "input": {"key": "value1"},
@@ -87,7 +102,12 @@ def test_insert_deduplication__three_dicts_passed__one_unique__two_duplicates__t
 def test_update__happyflow():
     mock_rest_client = Mock()
 
-    dataset = Dataset("test_dataset", "Test description", mock_rest_client)
+    dataset = Dataset(
+        name="test_dataset",
+        description="Test description",
+        project_name="Test project",
+        rest_client=mock_rest_client,
+    )
 
     initial_item = {
         "input": {"key": "initial_value"},

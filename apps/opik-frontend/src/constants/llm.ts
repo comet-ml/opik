@@ -16,6 +16,15 @@ export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
   "playground-selected-dataset-version";
 
+export const PLAYGROUND_PROMPT_COLORS = [
+  { bg: "#b8e54a", text: "#1a1a1a" },
+  { bg: "#a6ddfe", text: "#1a1a1a" },
+  { bg: "#6e3de8", text: "#ffffff" },
+  { bg: "#be48ea", text: "#ffffff" },
+  { bg: "#df5a40", text: "#ffffff" },
+  { bg: "#5356f1", text: "#ffffff" },
+];
+
 export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.system]: "System",
   [LLM_MESSAGE_ROLE.assistant]: "Assistant",

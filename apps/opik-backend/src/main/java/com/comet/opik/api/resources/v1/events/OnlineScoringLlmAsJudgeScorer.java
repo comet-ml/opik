@@ -6,7 +6,6 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
-import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
@@ -77,9 +76,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
-                var llmProvider = llmProviderFactory.getLlmProvider(modelName);
-                var strategy = StructuredOutputStrategy.getStrategy(llmProvider, modelName);
-                scoreRequest = OnlineScoringEngine.prepareLlmRequest(message.llmAsJudgeCode(), trace, strategy);
+                var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
+                scoreRequest = OnlineScoringEngine.prepareLlmRequest(
+                        message.llmAsJudgeCode(), trace, strategy, message.promptType());
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());
@@ -105,12 +104,21 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             try {
+                // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
                 List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
-                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                                .id(trace.id())
-                                .projectId(trace.projectId())
-                                .projectName(trace.projectName())
-                                .build())
+                        .map(item -> {
+                            String scoreName = item.name();
+                            if (message.scoreNameMapping().containsKey(scoreName)) {
+                                scoreName = message.scoreNameMapping().get(scoreName);
+                            }
+                            return (FeedbackScoreBatchItem) item.toBuilder()
+                                    .name(scoreName)
+                                    .categoryName(message.categoryName())
+                                    .id(trace.id())
+                                    .projectId(trace.projectId())
+                                    .projectName(trace.projectName())
+                                    .build();
+                        })
                         .toList();
                 var loggedScores = storeScores(scores, trace, message.userName(), message.workspaceId());
                 userFacingLogger.info("Scores for traceId '{}' stored successfully:\n\n{}", trace.id(), loggedScores);

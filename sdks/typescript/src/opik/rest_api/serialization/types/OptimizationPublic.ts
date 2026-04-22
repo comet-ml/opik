@@ -15,6 +15,7 @@ export const OptimizationPublic: core.serialization.ObjectSchema<
     id: core.serialization.string().optional(),
     name: core.serialization.string().optional(),
     datasetName: core.serialization.property("dataset_name", core.serialization.string()),
+    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     objectiveName: core.serialization.property("objective_name", core.serialization.string()),
     status: OptimizationPublicStatus,
     metadata: JsonListStringPublic.optional(),
@@ -53,6 +54,7 @@ export declare namespace OptimizationPublic {
         id?: string | null;
         name?: string | null;
         dataset_name: string;
+        project_id?: string | null;
         objective_name: string;
         status: OptimizationPublicStatus.Raw;
         metadata?: JsonListStringPublic.Raw | null;

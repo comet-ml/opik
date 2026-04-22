@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
-import static com.comet.opik.domain.FeedbackScoreDAOImpl.SUITE_ASSERTION_CATEGORY;
+import static com.comet.opik.api.ScoreDestination.ASSERTION_RESULTS;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 import static java.util.stream.Collectors.groupingBy;
 
@@ -59,7 +59,8 @@ public interface FeedbackScoreService {
 
     Mono<FeedbackScoreNames> getSpanFeedbackScoreNames(UUID projectId, SpanType type);
 
-    Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds);
+    Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds,
+            @Nullable UUID projectId);
 
     Mono<FeedbackScoreNames> getProjectsFeedbackScoreNames(Set<UUID> projectIds);
 
@@ -191,7 +192,7 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                         .flatMap(projectDto -> {
                             var partitioned = projectDto.scores().stream()
                                     .collect(Collectors.partitioningBy(
-                                            s -> SUITE_ASSERTION_CATEGORY.equals(s.categoryName())));
+                                            s -> ASSERTION_RESULTS == s.scoreDestination()));
 
                             var assertionScores = partitioned.get(true);
                             var regularScores = partitioned.get(false);
@@ -294,8 +295,8 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
     }
 
     @Override
-    public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds) {
-        return dao.getExperimentsFeedbackScoreNames(experimentIds)
+    public Mono<FeedbackScoreNames> getExperimentsFeedbackScoreNames(Set<UUID> experimentIds, UUID projectId) {
+        return dao.getExperimentsFeedbackScoreNames(experimentIds, projectId)
                 .map(scores -> scores.stream()
                         .map(score -> FeedbackScoreNames.ScoreName.builder()
                                 .name(score.name())

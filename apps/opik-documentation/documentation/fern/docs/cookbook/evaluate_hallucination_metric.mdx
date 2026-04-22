@@ -9,13 +9,17 @@ title: Cookbook - Evaluate hallucination metric
 
 # Evaluating Opik's Hallucination Metric
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 For this guide we will be evaluating the Hallucination metric included in the LLM Evaluation SDK which will showcase both how to use the `evaluation` functionality in the platform as well as the quality of the Hallucination metric included in the SDK.
 
 ## Creating an account on Comet.com
 
 [Comet](https://www.comet.com/site/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) and grab your API Key.
 
-> You can also run the Opik platform locally, see the [installation guide](/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) for more information.
+> You can also run the Opik platform locally, see the [installation guide](/v1/self-host/overview?from=llm&utm_source=opik&utm_medium=colab&utm_content=eval_hall&utm_campaign=opik) for more information.
 
 
 ```python
@@ -55,7 +59,7 @@ import pandas as pd
 client = opik.Opik()
 
 # Create dataset
-dataset = client.get_or_create_dataset(name="HaluEval", description="HaluEval dataset")
+dataset = client.get_or_create_dataset(name="HaluEval", description="HaluEval dataset", project_name="my-project")
 
 # Insert items into dataset
 df = pd.read_parquet(
@@ -130,6 +134,7 @@ res = evaluate(
     task=evaluation_task,
     scoring_metrics=[check_hallucinated_metric],
     experiment_config=experiment_config,
+    project_name="my-project",
     scoring_key_mapping={
         "reference": "expected_hallucination_label",
         "output": "hallucination_score",

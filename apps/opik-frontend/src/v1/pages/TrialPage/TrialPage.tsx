@@ -8,14 +8,14 @@ import TrialConfigurationSection from "@/v1/pages-shared/experiments/TrialConfig
 import TrialKPICards from "@/v1/pages/TrialPage/TrialKPICards";
 import TrialDetails from "@/v1/pages/TrialPage/TrialDetails/TrialDetails";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import useExperimentsByIds from "@/api/datasets/useExperimenstByIds";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import useDeepMemo from "@/hooks/useDeepMemo";
 import { Experiment, EXPERIMENT_TYPE } from "@/types/datasets";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import useAppStore from "@/store/AppStore";
-import { checkIsEvaluationSuite } from "@/lib/optimizations";
+import { checkIsTestSuite } from "@/lib/optimizations";
 import { getObjectiveScoreValue } from "@/lib/feedback-scores";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useParams } from "@tanstack/react-router";
@@ -80,12 +80,12 @@ const TrialPage: React.FunctionComponent = () => {
     return experiments ?? [];
   }, [experiments]);
 
-  const isEvaluationSuite = useMemo(() => {
+  const isTestSuite = useMemo(() => {
     const allExperiments = [
       ...memorizedExperiments,
       ...(optimizationExperimentsData?.content ?? []),
     ];
-    return checkIsEvaluationSuite(allExperiments);
+    return checkIsTestSuite(allExperiments);
   }, [memorizedExperiments, optimizationExperimentsData?.content]);
 
   const { baselineExperimentId, baselineScore } = useMemo(() => {
@@ -183,7 +183,7 @@ const TrialPage: React.FunctionComponent = () => {
                   optimizationExperimentsData?.content ?? []
                 }
                 objectiveName={optimization?.objective_name}
-                isEvaluationSuite={isEvaluationSuite}
+                isTestSuite={isTestSuite}
               />
             </PageBodyStickyContainer>
 
@@ -197,7 +197,7 @@ const TrialPage: React.FunctionComponent = () => {
                   datasetId={optimization?.dataset_id ?? ""}
                   experimentsIds={experimentsIds}
                   experiments={memorizedExperiments}
-                  isEvaluationSuite={isEvaluationSuite}
+                  isTestSuite={isTestSuite}
                 />
               </>
             )}

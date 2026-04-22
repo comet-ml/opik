@@ -15,11 +15,14 @@ from ..errors.bad_request_error import BadRequestError
 from ..errors.conflict_error import ConflictError
 from ..errors.not_found_error import NotFoundError
 from ..errors.unprocessable_entity_error import UnprocessableEntityError
+from ..types.alert_page_public import AlertPagePublic
 from ..types.breakdown_config_public import BreakdownConfigPublic
 from ..types.dashboard_page_public import DashboardPagePublic
 from ..types.dataset_page_public import DatasetPagePublic
 from ..types.experiment_page_public import ExperimentPagePublic
 from ..types.feedback_score_names import FeedbackScoreNames
+from ..types.kpi_card_response import KpiCardResponse
+from ..types.optimization_page_public import OptimizationPagePublic
 from ..types.project_detailed import ProjectDetailed
 from ..types.project_metric_response_public import ProjectMetricResponsePublic
 from ..types.project_page_public import ProjectPagePublic
@@ -30,6 +33,7 @@ from ..types.span_filter_public import SpanFilterPublic
 from ..types.token_usage_names import TokenUsageNames
 from ..types.trace_filter_public import TraceFilterPublic
 from ..types.trace_thread_filter_public import TraceThreadFilterPublic
+from .types.kpi_card_request_entity_type import KpiCardRequestEntityType
 from .types.project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .types.project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
 from .types.project_update_visibility import ProjectUpdateVisibility
@@ -42,6 +46,76 @@ OMIT = typing.cast(typing.Any, ...)
 class RawProjectsClient:
     def __init__(self, *, client_wrapper: SyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    def find_alerts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[AlertPagePublic]:
+        """
+        Find alerts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[AlertPagePublic]
+            Alerts page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/alerts",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AlertPagePublic,
+                    parse_obj_as(
+                        type_=AlertPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     def find_dashboards_by_project(
         self,
@@ -255,6 +329,88 @@ class RawProjectsClient:
                     ExperimentPagePublic,
                     parse_obj_as(
                         type_=ExperimentPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    def find_optimizations_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        dataset_name: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[OptimizationPagePublic]:
+        """
+        Find optimizations scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[OptimizationPagePublic]
+            Optimizations page
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/optimizations",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPagePublic,
+                    parse_obj_as(
+                        type_=OptimizationPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -732,6 +888,80 @@ class RawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> HttpResponse[KpiCardResponse]:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        HttpResponse[KpiCardResponse]
+            KPI Card Metrics
+        """
+        _response = self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/kpi-cards",
+            method="POST",
+            json={
+                "entity_type": entity_type,
+                "filters": filters,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    KpiCardResponse,
+                    parse_obj_as(
+                        type_=KpiCardResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return HttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     def get_project_metrics(
         self,
         id: str,
@@ -847,6 +1077,7 @@ class RawProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[ProjectStatsSummary]:
@@ -860,6 +1091,8 @@ class RawProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -878,6 +1111,7 @@ class RawProjectsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "filters": filters,
                 "sorting": sorting,
             },
             request_options=request_options,
@@ -979,6 +1213,76 @@ class RawProjectsClient:
 class AsyncRawProjectsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
         self._client_wrapper = client_wrapper
+
+    async def find_alerts_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        sorting: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[AlertPagePublic]:
+        """
+        Find alerts scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        sorting : typing.Optional[str]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[AlertPagePublic]
+            Alerts page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/alerts",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "sorting": sorting,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    AlertPagePublic,
+                    parse_obj_as(
+                        type_=AlertPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
     async def find_dashboards_by_project(
         self,
@@ -1192,6 +1496,88 @@ class AsyncRawProjectsClient:
                     ExperimentPagePublic,
                     parse_obj_as(
                         type_=ExperimentPagePublic,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
+    async def find_optimizations_by_project(
+        self,
+        project_id: str,
+        *,
+        page: typing.Optional[int] = None,
+        size: typing.Optional[int] = None,
+        dataset_id: typing.Optional[str] = None,
+        dataset_name: typing.Optional[str] = None,
+        name: typing.Optional[str] = None,
+        dataset_deleted: typing.Optional[bool] = None,
+        filters: typing.Optional[str] = None,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[OptimizationPagePublic]:
+        """
+        Find optimizations scoped to a project
+
+        Parameters
+        ----------
+        project_id : str
+
+        page : typing.Optional[int]
+
+        size : typing.Optional[int]
+
+        dataset_id : typing.Optional[str]
+
+        dataset_name : typing.Optional[str]
+
+        name : typing.Optional[str]
+
+        dataset_deleted : typing.Optional[bool]
+
+        filters : typing.Optional[str]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[OptimizationPagePublic]
+            Optimizations page
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(project_id)}/optimizations",
+            method="GET",
+            params={
+                "page": page,
+                "size": size,
+                "dataset_id": dataset_id,
+                "dataset_name": dataset_name,
+                "name": name,
+                "dataset_deleted": dataset_deleted,
+                "filters": filters,
+            },
+            request_options=request_options,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    OptimizationPagePublic,
+                    parse_obj_as(
+                        type_=OptimizationPagePublic,  # type: ignore
                         object_=_response.json(),
                     ),
                 )
@@ -1669,6 +2055,80 @@ class AsyncRawProjectsClient:
             raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
         raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
 
+    async def get_project_kpi_cards(
+        self,
+        id: str,
+        *,
+        entity_type: KpiCardRequestEntityType,
+        interval_start: dt.datetime,
+        filters: typing.Optional[str] = OMIT,
+        interval_end: typing.Optional[dt.datetime] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> AsyncHttpResponse[KpiCardResponse]:
+        """
+        Gets KPI card metrics for a project
+
+        Parameters
+        ----------
+        id : str
+
+        entity_type : KpiCardRequestEntityType
+
+        interval_start : dt.datetime
+
+        filters : typing.Optional[str]
+
+        interval_end : typing.Optional[dt.datetime]
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        AsyncHttpResponse[KpiCardResponse]
+            KPI Card Metrics
+        """
+        _response = await self._client_wrapper.httpx_client.request(
+            f"v1/private/projects/{jsonable_encoder(id)}/kpi-cards",
+            method="POST",
+            json={
+                "entity_type": entity_type,
+                "filters": filters,
+                "interval_start": interval_start,
+                "interval_end": interval_end,
+            },
+            headers={
+                "content-type": "application/json",
+            },
+            request_options=request_options,
+            omit=OMIT,
+        )
+        try:
+            if 200 <= _response.status_code < 300:
+                _data = typing.cast(
+                    KpiCardResponse,
+                    parse_obj_as(
+                        type_=KpiCardResponse,  # type: ignore
+                        object_=_response.json(),
+                    ),
+                )
+                return AsyncHttpResponse(response=_response, data=_data)
+            if _response.status_code == 400:
+                raise BadRequestError(
+                    headers=dict(_response.headers),
+                    body=typing.cast(
+                        typing.Optional[typing.Any],
+                        parse_obj_as(
+                            type_=typing.Optional[typing.Any],  # type: ignore
+                            object_=_response.json(),
+                        ),
+                    ),
+                )
+            _response_json = _response.json()
+        except JSONDecodeError:
+            raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response.text)
+        raise ApiError(status_code=_response.status_code, headers=dict(_response.headers), body=_response_json)
+
     async def get_project_metrics(
         self,
         id: str,
@@ -1784,6 +2244,7 @@ class AsyncRawProjectsClient:
         page: typing.Optional[int] = None,
         size: typing.Optional[int] = None,
         name: typing.Optional[str] = None,
+        filters: typing.Optional[str] = None,
         sorting: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[ProjectStatsSummary]:
@@ -1797,6 +2258,8 @@ class AsyncRawProjectsClient:
         size : typing.Optional[int]
 
         name : typing.Optional[str]
+
+        filters : typing.Optional[str]
 
         sorting : typing.Optional[str]
 
@@ -1815,6 +2278,7 @@ class AsyncRawProjectsClient:
                 "page": page,
                 "size": size,
                 "name": name,
+                "filters": filters,
                 "sorting": sorting,
             },
             request_options=request_options,

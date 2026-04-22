@@ -11,6 +11,10 @@ on:
         "apps/opik-documentation/documentation/fern/img/**.png",
         "apps/opik-documentation/documentation/fern/img/**.webp",
       ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     # Only run on non-draft PRs within the same repository.
@@ -22,7 +26,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
           
       - name: Compress Images
         uses: calibreapp/image-actions@1.1.0

@@ -7,6 +7,10 @@ export interface DatasetItemBatch {
     datasetName?: string;
     /** If null, dataset_name must be provided */
     datasetId?: string;
+    /** Optional. Associates the batch with a project by name. Ignored if project_id is provided. */
+    projectName?: string;
+    /** Optional. Associates the batch with a project by ID. Takes precedence over project_name. */
+    projectId?: string;
     items: OpikApi.DatasetItem[];
     /** Optional batch group ID to group multiple batches into a single dataset version. If null, mutates the latest version instead of creating a new one. */
     batchGroupId?: string;

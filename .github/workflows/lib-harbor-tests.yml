@@ -24,14 +24,11 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python_version: [
-          "3.12",
-          "3.13"
-        ]
+        python_version: ["3.12", "3.13"]
 
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Python ${{matrix.python_version}}
         uses: actions/setup-python@v5

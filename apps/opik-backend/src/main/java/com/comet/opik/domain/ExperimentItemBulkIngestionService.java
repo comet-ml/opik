@@ -4,6 +4,7 @@ import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkRecord;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.SpanBatch;
 import com.comet.opik.api.Trace;
@@ -199,9 +200,12 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
                         .startTime(now)
                         .endTime(now)
                         .visibilityMode(VisibilityMode.HIDDEN)
+                        .source(Source.EXPERIMENT)
                         .build();
             } else {
-                trace = item.trace();
+                trace = item.trace().toBuilder()
+                        .source(Source.EXPERIMENT)
+                        .build();
             }
 
             traces.add(trace);
@@ -220,7 +224,11 @@ class ExperimentItemBulkIngestionServiceImpl implements ExperimentItemBulkIngest
             experimentItems.add(build);
 
             if (CollectionUtils.isNotEmpty(item.spans())) {
-                spans.addAll(item.spans());
+                List<Span> experimentSpans = item.spans().stream()
+                        .map(span -> span.toBuilder().source(Source.EXPERIMENT).build())
+                        .toList();
+
+                spans.addAll(experimentSpans);
             }
 
             if (CollectionUtils.isNotEmpty(item.feedbackScores())) {

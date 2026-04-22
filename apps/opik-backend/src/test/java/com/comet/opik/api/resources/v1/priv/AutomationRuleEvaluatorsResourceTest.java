@@ -632,6 +632,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1051,6 +1052,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1085,6 +1087,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1142,6 +1145,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
@@ -1197,6 +1201,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
@@ -1255,6 +1260,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1304,6 +1310,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
@@ -1395,6 +1402,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1444,6 +1452,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
@@ -1502,6 +1511,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1537,6 +1547,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .projectId(projectId)
                         .projectName(projectName) // Backend uses projectName, not projectId!
+                        .source(null)
                         .threadId(null)
                         .build();
                 traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);

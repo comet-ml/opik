@@ -7,7 +7,7 @@ import SidebarMenuItem, {
   MENU_ITEM_TYPE,
 } from "@/v1/layout/SideBar/MenuItem/SidebarMenuItem";
 import { DropdownMenu, DropdownMenuTrigger } from "@/ui/dropdown-menu";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import InviteUsersPopover from "./InviteUsersPopover";
 

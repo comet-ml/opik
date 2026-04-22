@@ -14,14 +14,14 @@ import AddTagDialog from "./AddTagDialog";
 import { DATASET_ITEM_DATA_PREFIX } from "@/constants/datasets";
 import { stripColumnPrefix, generateBatchGroupId } from "@/lib/utils";
 import { extractAssertions } from "@/lib/assertion-converters";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Filters } from "@/types/filters";
 import {
   useBulkDeleteItems,
   useBulkAddItems,
   useIsAllItemsSelected,
-} from "@/store/EvaluationSuiteDraftStore";
+} from "@/store/TestSuiteDraftStore";
 import { useToast } from "@/ui/use-toast";
 import { buildDraftItemFromSample } from "@/lib/dataset-item-utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -159,7 +159,7 @@ const DatasetItemsActionsPanel: React.FunctionComponent<
     (extension = "csv") => {
       return `${slugify(datasetName, {
         lower: true,
-      })}-evaluation-suite-items.${extension}`;
+      })}-test-suite-items.${extension}`;
     },
     [datasetName],
   );

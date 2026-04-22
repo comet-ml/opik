@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info import ErrorInfo
 from .json_list_string import JsonListString
+from .span_update_source import SpanUpdateSource
 from .span_update_type import SpanUpdateType
 
 
@@ -50,6 +51,7 @@ class SpanUpdate(UniversalBaseModel):
     total_estimated_cost: typing.Optional[float] = None
     error_info: typing.Optional[ErrorInfo] = None
     ttft: typing.Optional[float] = None
+    source: typing.Optional[SpanUpdateSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

@@ -122,7 +122,7 @@ export class OptimizationsClient {
         request: OpikApi.FindOptimizationsRequest = {},
         requestOptions?: OptimizationsClient.RequestOptions,
     ): Promise<core.WithRawResponse<OpikApi.OptimizationPagePublic>> {
-        const { page, size, datasetId, name, datasetName, datasetDeleted, filters } = request;
+        const { page, size, datasetId, name, datasetName, datasetDeleted, projectId, filters } = request;
         const _queryParams: Record<string, unknown> = {
             page,
             size,
@@ -130,6 +130,7 @@ export class OptimizationsClient {
             name,
             dataset_name: datasetName,
             dataset_deleted: datasetDeleted,
+            project_id: projectId,
             filters,
         };
         const _headers: core.Fetcher.Args["headers"] = mergeHeaders(

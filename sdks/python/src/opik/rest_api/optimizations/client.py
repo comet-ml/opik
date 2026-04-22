@@ -66,6 +66,7 @@ class OptimizationsClient:
         name: typing.Optional[str] = None,
         dataset_name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> OptimizationPagePublic:
@@ -85,6 +86,8 @@ class OptimizationsClient:
         dataset_name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -109,6 +112,7 @@ class OptimizationsClient:
             name=name,
             dataset_name=dataset_name,
             dataset_deleted=dataset_deleted,
+            project_id=project_id,
             filters=filters,
             request_options=request_options,
         )
@@ -122,6 +126,8 @@ class OptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -141,6 +147,12 @@ class OptimizationsClient:
         id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
 
         metadata : typing.Optional[JsonListStringWrite]
 
@@ -167,6 +179,8 @@ class OptimizationsClient:
             status=status,
             id=id,
             name=name,
+            project_name=project_name,
+            project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
             last_updated_at=last_updated_at,
@@ -182,6 +196,8 @@ class OptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -201,6 +217,12 @@ class OptimizationsClient:
         id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
 
         metadata : typing.Optional[JsonListStringWrite]
 
@@ -227,6 +249,8 @@ class OptimizationsClient:
             status=status,
             id=id,
             name=name,
+            project_name=project_name,
+            project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
             last_updated_at=last_updated_at,
@@ -405,6 +429,7 @@ class AsyncOptimizationsClient:
         name: typing.Optional[str] = None,
         dataset_name: typing.Optional[str] = None,
         dataset_deleted: typing.Optional[bool] = None,
+        project_id: typing.Optional[str] = None,
         filters: typing.Optional[str] = None,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> OptimizationPagePublic:
@@ -424,6 +449,8 @@ class AsyncOptimizationsClient:
         dataset_name : typing.Optional[str]
 
         dataset_deleted : typing.Optional[bool]
+
+        project_id : typing.Optional[str]
 
         filters : typing.Optional[str]
 
@@ -451,6 +478,7 @@ class AsyncOptimizationsClient:
             name=name,
             dataset_name=dataset_name,
             dataset_deleted=dataset_deleted,
+            project_id=project_id,
             filters=filters,
             request_options=request_options,
         )
@@ -464,6 +492,8 @@ class AsyncOptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -483,6 +513,12 @@ class AsyncOptimizationsClient:
         id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
 
         metadata : typing.Optional[JsonListStringWrite]
 
@@ -512,6 +548,8 @@ class AsyncOptimizationsClient:
             status=status,
             id=id,
             name=name,
+            project_name=project_name,
+            project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
             last_updated_at=last_updated_at,
@@ -527,6 +565,8 @@ class AsyncOptimizationsClient:
         status: OptimizationWriteStatus,
         id: typing.Optional[str] = OMIT,
         name: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         metadata: typing.Optional[JsonListStringWrite] = OMIT,
         studio_config: typing.Optional[OptimizationStudioConfigWrite] = OMIT,
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
@@ -546,6 +586,12 @@ class AsyncOptimizationsClient:
         id : typing.Optional[str]
 
         name : typing.Optional[str]
+
+        project_name : typing.Optional[str]
+            Project name. Creates project if it doesn't exist. Ignored when project_id is provided.
+
+        project_id : typing.Optional[str]
+            Project ID. Takes precedence over project_name when both are provided.
 
         metadata : typing.Optional[JsonListStringWrite]
 
@@ -575,6 +621,8 @@ class AsyncOptimizationsClient:
             status=status,
             id=id,
             name=name,
+            project_name=project_name,
+            project_id=project_id,
             metadata=metadata,
             studio_config=studio_config,
             last_updated_at=last_updated_at,

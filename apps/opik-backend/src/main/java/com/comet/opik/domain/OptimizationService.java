@@ -13,6 +13,7 @@ import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.google.common.base.Preconditions;
@@ -36,8 +37,10 @@ import reactor.core.scheduler.Schedulers;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.AbstractMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -45,7 +48,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(OptimizationServiceImpl.class)
@@ -76,6 +78,7 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private final @NonNull OptimizationDAO optimizationDAO;
     private final @NonNull DatasetService datasetService;
+    private final @NonNull ProjectService projectService;
     private final @NonNull IdGenerator idGenerator;
     private final @NonNull NameGenerator nameGenerator;
     private final @NonNull EventBus eventBus;
@@ -85,6 +88,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull OpikConfiguration config;
     private final @NonNull OptimizationLogSyncService logSyncService;
     private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull AnalyticsService analyticsService;
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
@@ -129,6 +133,10 @@ class OptimizationServiceImpl implements OptimizationService {
         });
     }
 
+    private Mono<Optional<UUID>> resolveProjectId(Optimization optimization) {
+        return projectService.resolveProjectIdOrCreate(optimization.projectId(), optimization.projectName());
+    }
+
     /**
      * @return resolved criteria, or {@code null} if dataset name filter matched no datasets (caller should return empty results)
      */
@@ -158,8 +166,15 @@ class OptimizationServiceImpl implements OptimizationService {
         // Detect if this is a Studio optimization (has studioConfig in the request)
         boolean isStudioOptimization = optimization.studioConfig() != null;
 
-        return datasetService.getOrCreateDataset(optimization.datasetName())
-                .flatMap(datasetId -> makeMonoContextAware((userName, workspaceId) -> Mono.deferContextual(ctx -> {
+        return resolveProjectId(optimization)
+                .flatMap(resolvedProjectId -> datasetService.getOrCreateDataset(optimization.datasetName(),
+                        resolvedProjectId.orElse(null))
+                        .map(datasetId -> new AbstractMap.SimpleEntry<>(resolvedProjectId.orElse(null), datasetId)))
+                .flatMap(projectAndDataset -> Mono.deferContextual(ctx -> {
+                    UUID resolvedProjectId = projectAndDataset.getKey();
+                    UUID datasetId = projectAndDataset.getValue();
+                    String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    String userName = ctx.get(RequestContext.USER_NAME);
 
                     // Check if optimization already exists to preserve certain fields
                     return optimizationDAO.getById(id)
@@ -168,7 +183,8 @@ class OptimizationServiceImpl implements OptimizationService {
                             .flatMap(existingOpt -> {
                                 var builder = optimization.toBuilder()
                                         .id(id)
-                                        .datasetId(datasetId);
+                                        .datasetId(datasetId)
+                                        .projectId(resolvedProjectId);
 
                                 // Preserve existing fields when updating (SDK doesn't know about studioConfig)
                                 if (existingOpt.isPresent()) {
@@ -176,7 +192,8 @@ class OptimizationServiceImpl implements OptimizationService {
                                     log.info("Optimization '{}' already exists, preserving studioConfig", id);
 
                                     // Preserve studioConfig if not provided in update
-                                    if (optimization.studioConfig() == null && existing.studioConfig() != null) {
+                                    if (optimization.studioConfig() == null
+                                            && existing.studioConfig() != null) {
                                         builder.studioConfig(existing.studioConfig());
                                     }
 
@@ -199,7 +216,8 @@ class OptimizationServiceImpl implements OptimizationService {
                                 // Force INITIALIZED status for NEW Studio optimizations only
                                 if (isStudioOptimization && existingOpt.isEmpty()) {
                                     builder.status(OptimizationStatus.INITIALIZED);
-                                    log.info("Force INITIALIZED (was '{}') status for NEW Studio optimization id '{}'",
+                                    log.info(
+                                            "Force INITIALIZED (was '{}') status for NEW Studio optimization id '{}'",
                                             optimization.status(), id);
                                 }
 
@@ -209,17 +227,39 @@ class OptimizationServiceImpl implements OptimizationService {
                                 return optimizationDAO.upsert(newOptimization)
                                         .thenReturn(newOptimization.id())
                                         .doOnSuccess(__ -> {
-                                            postOptimizationCreatedEvent(newOptimization, workspaceId, userName);
+                                            postOptimizationCreatedEvent(newOptimization, workspaceId,
+                                                    userName);
+                                            if (existingOpt.isEmpty()) {
+                                                Schedulers.boundedElastic().schedule(
+                                                        () -> analyticsService.trackEvent(
+                                                                "opik_optimization_created",
+                                                                Map.of(
+                                                                        "optimization_id",
+                                                                        newOptimization.id().toString(),
+                                                                        "dataset_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.datasetName()),
+                                                                        "objective_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.objectiveName()),
+                                                                        "project_id",
+                                                                        String.valueOf(
+                                                                                newOptimization.projectId()),
+                                                                        "workspace_id", workspaceId),
+                                                                userName));
+                                            }
 
                                             // Only enqueue job for NEW Studio optimizations
                                             if (shouldEnqueueJob) {
-                                                String workspaceName = ctx.getOrDefault(RequestContext.WORKSPACE_NAME,
+                                                String workspaceName = ctx.getOrDefault(
+                                                        RequestContext.WORKSPACE_NAME,
                                                         null);
                                                 if (StringUtils.isBlank(workspaceName)) {
                                                     try {
                                                         workspaceName = workspaceNameService.getWorkspaceName(
                                                                 workspaceId,
-                                                                config.getAuthentication().getReactService().url());
+                                                                config.getAuthentication().getReactService()
+                                                                        .url());
                                                     } catch (Exception e) {
                                                         log.warn(
                                                                 "Failed to get workspace name for workspaceId '{}', using workspaceId as name: {}",
@@ -238,7 +278,7 @@ class OptimizationServiceImpl implements OptimizationService {
                                         });
                             });
                 }))
-                        .subscribeOn(Schedulers.boundedElastic()))
+                .subscribeOn(Schedulers.boundedElastic())
                 // If a conflict occurs, we just return the id of the existing experiment.
                 // If any other error occurs, we throw it. The event is not posted for both cases.
                 .onErrorResume(throwable -> handleCreateError(throwable, id));
@@ -278,6 +318,9 @@ class OptimizationServiceImpl implements OptimizationService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    // USER_NAME is absent on the internal cancelOptimization() path, where only
+                    // WORKSPACE_ID is seeded — fall back and let AnalyticsService resolve identity.
+                    String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
                     boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
@@ -293,11 +336,26 @@ class OptimizationServiceImpl implements OptimizationService {
 
                     return signalCancellationIfNeeded(id, optimization, update)
                             .then(optimizationDAO.update(id, update))
-                            .doOnSuccess(result -> {
+                            .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
+                                    // Only emit completion event on the transition into a terminal state
+                                    if (!optimization.status().isTerminal()) {
+                                        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent(
+                                                "opik_optimization_completed",
+                                                Map.of(
+                                                        "optimization_id", optimization.id().toString(),
+                                                        "status", update.status().getValue(),
+                                                        "workspace_id", workspaceId,
+                                                        "num_trials", String.valueOf(optimization.numTrials()),
+                                                        "baseline_objective_score",
+                                                        String.valueOf(optimization.baselineObjectiveScore()),
+                                                        "best_objective_score",
+                                                        String.valueOf(optimization.bestObjectiveScore())),
+                                                userName));
+                                    }
                                 }
                             });
                 }));

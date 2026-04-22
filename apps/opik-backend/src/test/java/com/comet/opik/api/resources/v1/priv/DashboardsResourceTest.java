@@ -19,6 +19,7 @@ import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.DashboardResourceClient;
+import com.comet.opik.api.resources.utils.resources.DashboardTestDataFactory;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
@@ -150,20 +151,19 @@ class DashboardsResourceTest {
         @ParameterizedTest
         @MethodSource
         @DisplayName("Create dashboard with all fields")
-        void createDashboardWithAllFields(DashboardType type, DashboardScope scope) {
+        void createDashboardWithAllFields(DashboardType type) {
             var uniqueName = "Test Dashboard " + UUID.randomUUID();
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .name(uniqueName)
                     .description("This is a test dashboard")
                     .type(type)
-                    .scope(scope)
                     .build();
 
             var createdDashboard = dashboardResourceClient.createAndGet(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
             var expectedDashboard = dashboard.toBuilder()
                     .type(Optional.ofNullable(type).orElse(DashboardType.MULTI_PROJECT))
-                    .scope(Optional.ofNullable(scope).orElse(DashboardScope.WORKSPACE))
+                    .scope(DashboardScope.WORKSPACE)
                     .build();
             assertDashboard(expectedDashboard, createdDashboard);
             assertThat(createdDashboard.id()).isNotNull();
@@ -172,14 +172,14 @@ class DashboardsResourceTest {
             assertThat(createdDashboard.createdBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedBy()).isEqualTo(USER);
             assertThat(createdDashboard.lastUpdatedAt()).isNotNull();
+            assertThat(createdDashboard.scope()).isEqualTo(DashboardScope.WORKSPACE);
         }
 
         static Stream<Arguments> createDashboardWithAllFields() {
             var randomType = RandomTestUtils.randomEnumValue(DashboardType.class);
-            var randomScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
             return Stream.of(
-                    Arguments.of(randomType, randomScope),
-                    Arguments.of(null, null));
+                    Arguments.of(randomType),
+                    Arguments.of((DashboardType) null));
         }
 
         @Test
@@ -408,15 +408,9 @@ class DashboardsResourceTest {
             var dashboards = List.of(
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.WORKSPACE)
                             .build(),
                     dashboardResourceClient.createPartialDashboard()
                             .type(DashboardType.EXPERIMENTS)
-                            .scope(DashboardScope.INSIGHTS)
-                            .build(),
-                    dashboardResourceClient.createPartialDashboard()
-                            .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.INSIGHTS)
                             .build());
 
             var created = dashboards.stream()
@@ -437,7 +431,7 @@ class DashboardsResourceTest {
 
         static Stream<Arguments> findDashboardsWithFilters() {
             return Stream.of(
-                    // Filter by type
+                    // Filter by type MULTI_PROJECT
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
@@ -446,32 +440,27 @@ class DashboardsResourceTest {
                                             .value(DashboardType.MULTI_PROJECT.getValue())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(0))),
-                    // Filter by scope
-                    Arguments.of(
-                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.SCOPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
-                                            .build()),
-                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(1))),
-                    // Filter by type and scope
+                                    dashboards.get(0))),
+                    // Filter by type EXPERIMENTS
                     Arguments.of(
                             (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.TYPE)
                                             .operator(Operator.EQUAL)
-                                            .value(DashboardType.MULTI_PROJECT.getValue())
-                                            .build(),
+                                            .value(DashboardType.EXPERIMENTS.getValue())
+                                            .build()),
+                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
+                                    dashboards.get(1))),
+                    // Filter by scope WORKSPACE (all dashboards created via this endpoint have WORKSPACE scope)
+                    Arguments.of(
+                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
                                     DashboardFilter.builder()
                                             .field(DashboardField.SCOPE)
                                             .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
+                                            .value(DashboardScope.WORKSPACE.getValue())
                                             .build()),
                             (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2))));
+                                    dashboards.get(1), dashboards.get(0))));
         }
 
         @Test
@@ -488,7 +477,7 @@ class DashboardsResourceTest {
                     .build();
             var dashboard2 = dashboardResourceClient.createPartialDashboard()
                     .type(DashboardType.EXPERIMENTS)
-                    .scope(DashboardScope.INSIGHTS)
+                    .scope(DashboardScope.WORKSPACE)
                     .build();
 
             dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
@@ -690,7 +679,7 @@ class DashboardsResourceTest {
             var dashboard = dashboardResourceClient.createPartialDashboard().build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            var newConfig = dashboardResourceClient.createValidConfig();
+            var newConfig = DashboardTestDataFactory.createValidConfig();
             var update = DashboardUpdate.builder()
                     .config(newConfig)
                     .build();
@@ -701,44 +690,23 @@ class DashboardsResourceTest {
             assertThat(updatedDashboard.lastUpdatedAt()).isNotNull();
         }
 
-        @ParameterizedTest
-        @MethodSource
-        @DisplayName("Update dashboard type and scope")
-        void updateDashboardTypeAndScope(DashboardType initialType, DashboardScope initialScope,
-                DashboardType updatedType, DashboardScope updatedScope) {
+        @Test
+        @DisplayName("Update dashboard type")
+        void updateDashboardType() {
+            var initialType = DashboardType.MULTI_PROJECT;
             var dashboard = dashboardResourceClient.createPartialDashboard()
                     .type(initialType)
-                    .scope(initialScope)
                     .build();
             var id = dashboardResourceClient.create(dashboard, API_KEY, TEST_WORKSPACE_NAME);
 
-            var updateBuilder = DashboardUpdate.builder();
-            if (updatedType != null) {
-                updateBuilder.type(updatedType);
-            }
-            if (updatedScope != null) {
-                updateBuilder.scope(updatedScope);
-            }
-            var update = updateBuilder.build();
+            var update = DashboardUpdate.builder()
+                    .type(DashboardType.EXPERIMENTS)
+                    .build();
 
             var updatedDashboard = dashboardResourceClient.updateAndGet(id, update, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertThat(updatedDashboard.type()).isEqualTo(updatedType != null ? updatedType : initialType);
-            assertThat(updatedDashboard.scope()).isEqualTo(updatedScope != null ? updatedScope : initialScope);
-        }
-
-        static Stream<Arguments> updateDashboardTypeAndScope() {
-            var initialType = RandomTestUtils.randomEnumValue(DashboardType.class);
-            var initialScope = RandomTestUtils.randomEnumValue(DashboardScope.class);
-            var differentType = initialType == DashboardType.MULTI_PROJECT
-                    ? DashboardType.EXPERIMENTS
-                    : DashboardType.MULTI_PROJECT;
-            var differentScope = initialScope == DashboardScope.WORKSPACE
-                    ? DashboardScope.INSIGHTS
-                    : DashboardScope.WORKSPACE;
-            return Stream.of(
-                    Arguments.of(initialType, initialScope, differentType, null),
-                    Arguments.of(initialType, initialScope, null, differentScope));
+            assertThat(updatedDashboard.type()).isEqualTo(DashboardType.EXPERIMENTS);
+            assertThat(updatedDashboard.scope()).isEqualTo(DashboardScope.WORKSPACE);
         }
 
         @Test
@@ -924,409 +892,6 @@ class DashboardsResourceTest {
             dashboardResourceClient.get(id1, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
             dashboardResourceClient.get(id2, API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_OK);
         }
-    }
-
-    @Nested
-    @DisplayName("Find project dashboards")
-    class FindProjectDashboards {
-
-        @Test
-        @DisplayName("Find project dashboards with default parameters")
-        void findProjectDashboardsWithDefaultParameters() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dashboard1 = dashboardResourceClient.createPartialDashboard().projectId(projectId).build();
-            var dashboard2 = dashboardResourceClient.createPartialDashboard().projectId(projectId).build();
-
-            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            var id2 = dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
-
-            dashboard1 = dashboardResourceClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
-            dashboard2 = dashboardResourceClient.get(id2, apiKey, workspaceName, HttpStatus.SC_OK);
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
-                    null);
-
-            assertDashboardPage(page, 1, 2, List.of(dashboard2, dashboard1));
-        }
-
-        @Test
-        @DisplayName("Find project dashboards by name search")
-        void findProjectDashboardsByNameSearch() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var uniqueName = "UniqueSearchName-" + UUID.randomUUID();
-            var dashboard1 = dashboardResourceClient.createPartialDashboard()
-                    .name(uniqueName)
-                    .projectId(projectId)
-                    .build();
-            var dashboard2 = dashboardResourceClient.createPartialDashboard()
-                    .name("Other Dashboard")
-                    .projectId(projectId)
-                    .build();
-
-            var id1 = dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
-
-            dashboard1 = dashboardResourceClient.get(id1, apiKey, workspaceName, HttpStatus.SC_OK);
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10,
-                    "UniqueSearch", null, null);
-
-            assertDashboardPage(page, 1, 1, List.of(dashboard1));
-        }
-
-        @Test
-        @DisplayName("Find project dashboards with pagination")
-        void findProjectDashboardsWithPagination() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dashboards = new ArrayList<Dashboard>();
-            for (int i = 0; i < 5; i++) {
-                var dashboard = dashboardResourceClient.createPartialDashboard()
-                        .name("Pagination Test " + i)
-                        .projectId(projectId)
-                        .build();
-                var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
-                dashboards.add(dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK));
-            }
-
-            var page1 = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 2, null, null,
-                    null);
-            var page2 = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 2, 2, null, null,
-                    null);
-
-            assertDashboardPage(page1, 1, 2, dashboards.reversed().subList(0, 2));
-            assertDashboardPage(page2, 2, 2, dashboards.reversed().subList(2, 4));
-        }
-
-        @ParameterizedTest
-        @MethodSource
-        @DisplayName("Find project dashboards with filters")
-        void findProjectDashboardsWithFilters(
-                Function<List<Dashboard>, List<DashboardFilter>> getFilters,
-                Function<List<Dashboard>, List<Dashboard>> getExpected) {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dashboards = List.of(
-                    dashboardResourceClient.createPartialDashboard()
-                            .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.WORKSPACE)
-                            .projectId(projectId)
-                            .build(),
-                    dashboardResourceClient.createPartialDashboard()
-                            .type(DashboardType.EXPERIMENTS)
-                            .scope(DashboardScope.INSIGHTS)
-                            .projectId(projectId)
-                            .build(),
-                    dashboardResourceClient.createPartialDashboard()
-                            .type(DashboardType.MULTI_PROJECT)
-                            .scope(DashboardScope.INSIGHTS)
-                            .projectId(projectId)
-                            .build());
-
-            var created = dashboards.stream()
-                    .map(d -> {
-                        var id = dashboardResourceClient.create(d, apiKey, workspaceName);
-                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
-                    })
-                    .toList();
-
-            var filters = getFilters.apply(created);
-            var expected = getExpected.apply(created);
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
-                    filters);
-
-            assertDashboardPage(page, 1, expected.size(), expected);
-        }
-
-        static Stream<Arguments> findProjectDashboardsWithFilters() {
-            return Stream.of(
-                    // Filter by type
-                    Arguments.of(
-                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.TYPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardType.MULTI_PROJECT.getValue())
-                                            .build()),
-                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(0))),
-                    // Filter by scope
-                    Arguments.of(
-                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.SCOPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
-                                            .build()),
-                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2), dashboards.get(1))),
-                    // Filter by type and scope
-                    Arguments.of(
-                            (Function<List<Dashboard>, List<DashboardFilter>>) dashboards -> List.of(
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.TYPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardType.MULTI_PROJECT.getValue())
-                                            .build(),
-                                    DashboardFilter.builder()
-                                            .field(DashboardField.SCOPE)
-                                            .operator(Operator.EQUAL)
-                                            .value(DashboardScope.INSIGHTS.getValue())
-                                            .build()),
-                            (Function<List<Dashboard>, List<Dashboard>>) dashboards -> List.of(
-                                    dashboards.get(2))));
-        }
-
-        @Test
-        @DisplayName("Find project dashboards no filters returns all")
-        void findProjectDashboardsNoFiltersReturnsAll() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dashboard1 = dashboardResourceClient.createPartialDashboard()
-                    .type(DashboardType.MULTI_PROJECT)
-                    .scope(DashboardScope.WORKSPACE)
-                    .projectId(projectId)
-                    .build();
-            var dashboard2 = dashboardResourceClient.createPartialDashboard()
-                    .type(DashboardType.EXPERIMENTS)
-                    .scope(DashboardScope.INSIGHTS)
-                    .projectId(projectId)
-                    .build();
-
-            dashboardResourceClient.create(dashboard1, apiKey, workspaceName);
-            dashboardResourceClient.create(dashboard2, apiKey, workspaceName);
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null, null,
-                    null);
-
-            assertThat(page.content()).hasSize(2);
-            assertThat(page.total()).isEqualTo(2);
-        }
-
-        @Test
-        @DisplayName("Find project dashboards with empty result")
-        void findProjectDashboardsWithEmptyResult() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10,
-                    "NonExistentSearch", null, null);
-
-            assertDashboardPage(page, 1, 0, List.of());
-        }
-
-        @ParameterizedTest
-        @MethodSource
-        @DisplayName("Sort project dashboards by valid fields")
-        void findProjectDashboards__whenSortingByValidFields__thenReturnDashboardsSorted(
-                Comparator<Dashboard> comparator, SortingField sorting) {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            List<Dashboard> expectedDashboards = IntStream.range(0, 5)
-                    .mapToObj(i -> dashboardResourceClient.createPartialDashboard()
-                            .name("Dashboard " + (char) ('A' + i))
-                            .projectId(projectId)
-                            .build())
-                    .map(dashboard -> {
-                        var id = dashboardResourceClient.create(dashboard, apiKey, workspaceName);
-                        return dashboardResourceClient.get(id, apiKey, workspaceName, HttpStatus.SC_OK);
-                    })
-                    .sorted(comparator)
-                    .toList();
-
-            var page = dashboardResourceClient.getProjectDashboards(projectId, apiKey, workspaceName, 1, 10, null,
-                    List.of(sorting), null);
-
-            assertThat(page.sortableBy()).isNotEmpty();
-            assertThat(page.content()).hasSize(5);
-            assertThat(page.content())
-                    .extracting(Dashboard::id)
-                    .containsExactlyElementsOf(expectedDashboards.stream().map(Dashboard::id).toList());
-        }
-
-        static Stream<Arguments> findProjectDashboards__whenSortingByValidFields__thenReturnDashboardsSorted() {
-            Comparator<Dashboard> idComparator = Comparator.comparing(Dashboard::id);
-            Comparator<Dashboard> nameComparator = Comparator.comparing(Dashboard::name, String.CASE_INSENSITIVE_ORDER);
-            Comparator<Dashboard> createdAtComparator = Comparator.comparing(Dashboard::createdAt);
-            Comparator<Dashboard> lastUpdatedAtComparator = Comparator.comparing(Dashboard::lastUpdatedAt);
-
-            return Stream.of(
-                    Arguments.of(idComparator,
-                            SortingField.builder().field("id").direction(Direction.ASC).build()),
-                    Arguments.of(idComparator.reversed(),
-                            SortingField.builder().field("id").direction(Direction.DESC).build()),
-                    Arguments.of(nameComparator,
-                            SortingField.builder().field("name").direction(Direction.ASC).build()),
-                    Arguments.of(nameComparator.reversed(),
-                            SortingField.builder().field("name").direction(Direction.DESC).build()),
-                    Arguments.of(createdAtComparator,
-                            SortingField.builder().field("created_at").direction(Direction.ASC).build()),
-                    Arguments.of(createdAtComparator.reversed(),
-                            SortingField.builder().field("created_at").direction(Direction.DESC).build()),
-                    Arguments.of(lastUpdatedAtComparator,
-                            SortingField.builder().field("last_updated_at").direction(Direction.ASC).build()),
-                    Arguments.of(lastUpdatedAtComparator.reversed(),
-                            SortingField.builder().field("last_updated_at").direction(Direction.DESC).build()));
-        }
-    }
-
-    @Nested
-    @DisplayName("Project-scoped dashboard operations")
-    class ProjectScopedDashboards {
-
-        @Test
-        @DisplayName("Create dashboard with project_id persists and returns project_id")
-        void createDashboardWithProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectId(projectId)
-                    .build();
-
-            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
-
-            assertDashboard(dashboard, createdDashboard);
-        }
-
-        @Test
-        @DisplayName("Create dashboard with non-existing project_id returns not found")
-        void createDashboardWithNonExistingProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectId(podamFactory.manufacturePojo(UUID.class))
-                    .build();
-
-            try (var response = dashboardResourceClient.callCreate(dashboard, apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
-            }
-        }
-
-        @Test
-        @DisplayName("Create dashboard with project_name of existing project resolves project_id")
-        void createDashboardWithExistingProjectName() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "project-" + UUID.randomUUID();
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectName(projectName)
-                    .build();
-
-            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
-
-            var expectedDashboard = dashboard.toBuilder()
-                    .projectId(projectId)
-                    .build();
-            assertDashboard(expectedDashboard, createdDashboard);
-        }
-
-        @Test
-        @DisplayName("Create dashboard with project_name of non-existing project creates project and resolves project_id")
-        void createDashboardWithNonExistingProjectName() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "new-project-" + UUID.randomUUID();
-
-            var dashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectName(projectName)
-                    .build();
-
-            var createdDashboard = dashboardResourceClient.createAndGet(dashboard, apiKey, workspaceName);
-
-            // Verify the project was created and the projectId was resolved
-            assertThat(createdDashboard.projectId()).isNotNull();
-
-            var expectedDashboard = dashboard.toBuilder()
-                    .projectId(createdDashboard.projectId())
-                    .build();
-            assertDashboard(expectedDashboard, createdDashboard);
-        }
-
-        @Test
-        @DisplayName("Find dashboards filtered by project_id returns only project dashboards")
-        void findDashboardsByProjectId() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
-            var otherProjectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey,
-                    workspaceName);
-
-            var projectDashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectId(projectId)
-                    .build();
-            dashboardResourceClient.createAndGet(projectDashboard, apiKey, workspaceName);
-
-            var otherProjectDashboard = dashboardResourceClient.createPartialDashboard()
-                    .projectId(otherProjectId)
-                    .build();
-            dashboardResourceClient.createAndGet(otherProjectDashboard, apiKey, workspaceName);
-
-            var workspaceDashboard = dashboardResourceClient.createPartialDashboard().build();
-            dashboardResourceClient.createAndGet(workspaceDashboard, apiKey, workspaceName);
-
-            var page = dashboardResourceClient.find(apiKey, workspaceName, 1, 100, null, projectId,
-                    null, null, HttpStatus.SC_OK);
-
-            assertThat(page.content()).hasSize(1);
-            assertDashboard(projectDashboard, page.content().getFirst());
-        }
-
     }
 
     private void assertDashboardPage(DashboardPage page, int expectedPage, int expectedSize,

@@ -39,7 +39,7 @@ class AgentConfigsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config
+        Creates a new optimizer config with initial blueprint. Fails if the project already has a config.
 
         Parameters
         ----------
@@ -76,6 +76,83 @@ class AgentConfigsClient:
             id=id,
             request_options=request_options,
         )
+        return _response.data
+
+    def update_agent_config(
+        self,
+        *,
+        blueprint: AgentBlueprintWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
+
+        Parameters
+        ----------
+        blueprint : AgentBlueprintWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        id : typing.Optional[str]
+            Agent config ID. Generated automatically if not provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        from Opik import AgentBlueprintWrite
+        from Opik import AgentConfigValueWrite
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.update_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
+        """
+        _response = self._raw_client.update_agent_config(
+            blueprint=blueprint,
+            project_id=project_id,
+            project_name=project_name,
+            id=id,
+            request_options=request_options,
+        )
+        return _response.data
+
+    def create_blueprint_from_mask(
+        self, project_id: str, mask_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.
+
+        Parameters
+        ----------
+        project_id : str
+
+        mask_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.create_blueprint_from_mask(project_id='project_id', mask_id='mask_id', )
+        """
+        _response = self._raw_client.create_blueprint_from_mask(project_id, mask_id, request_options=request_options)
         return _response.data
 
     def create_or_update_envs(
@@ -385,6 +462,45 @@ class AgentConfigsClient:
         _response = self._raw_client.get_latest_blueprint(project_id, mask_id=mask_id, request_options=request_options)
         return _response.data
 
+    def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import OpikApi
+        client = OpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        client.agent_configs.remove_config_keys(keys=['keys'], )
+        """
+        _response = self._raw_client.remove_config_keys(
+            keys=keys, project_id=project_id, project_name=project_name, request_options=request_options
+        )
+        return _response.data
+
 
 class AsyncAgentConfigsClient:
     def __init__(self, *, client_wrapper: AsyncClientWrapper):
@@ -411,7 +527,7 @@ class AsyncAgentConfigsClient:
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
-        Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config
+        Creates a new optimizer config with initial blueprint. Fails if the project already has a config.
 
         Parameters
         ----------
@@ -450,6 +566,91 @@ class AsyncAgentConfigsClient:
             project_name=project_name,
             id=id,
             request_options=request_options,
+        )
+        return _response.data
+
+    async def update_agent_config(
+        self,
+        *,
+        blueprint: AgentBlueprintWrite,
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        id: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.
+
+        Parameters
+        ----------
+        blueprint : AgentBlueprintWrite
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        id : typing.Optional[str]
+            Agent config ID. Generated automatically if not provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        from Opik import AgentBlueprintWrite
+        from Opik import AgentConfigValueWrite
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.update_agent_config(blueprint=AgentBlueprintWrite(type="blueprint", values=[AgentConfigValueWrite(key='key', type="string", )], ), )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.update_agent_config(
+            blueprint=blueprint,
+            project_id=project_id,
+            project_name=project_name,
+            id=id,
+            request_options=request_options,
+        )
+        return _response.data
+
+    async def create_blueprint_from_mask(
+        self, project_id: str, mask_id: str, *, request_options: typing.Optional[RequestOptions] = None
+    ) -> None:
+        """
+        Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.
+
+        Parameters
+        ----------
+        project_id : str
+
+        mask_id : str
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.create_blueprint_from_mask(project_id='project_id', mask_id='mask_id', )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.create_blueprint_from_mask(
+            project_id, mask_id, request_options=request_options
         )
         return _response.data
 
@@ -788,5 +989,47 @@ class AsyncAgentConfigsClient:
         """
         _response = await self._raw_client.get_latest_blueprint(
             project_id, mask_id=mask_id, request_options=request_options
+        )
+        return _response.data
+
+    async def remove_config_keys(
+        self,
+        *,
+        keys: typing.Sequence[str],
+        project_id: typing.Optional[str] = OMIT,
+        project_name: typing.Optional[str] = OMIT,
+        request_options: typing.Optional[RequestOptions] = None,
+    ) -> None:
+        """
+        Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).
+
+        Parameters
+        ----------
+        keys : typing.Sequence[str]
+
+        project_id : typing.Optional[str]
+            Project ID. Either project_id or project_name must be provided
+
+        project_name : typing.Optional[str]
+            Project name. Either project_id or project_name must be provided
+
+        request_options : typing.Optional[RequestOptions]
+            Request-specific configuration.
+
+        Returns
+        -------
+        None
+
+        Examples
+        --------
+        from Opik import AsyncOpikApi
+        import asyncio
+        client = AsyncOpikApi(api_key="YOUR_API_KEY", workspace_name="YOUR_WORKSPACE_NAME", )
+        async def main() -> None:
+            await client.agent_configs.remove_config_keys(keys=['keys'], )
+        asyncio.run(main())
+        """
+        _response = await self._raw_client.remove_config_keys(
+            keys=keys, project_id=project_id, project_name=project_name, request_options=request_options
         )
         return _response.data

@@ -11,7 +11,6 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
@@ -24,8 +23,6 @@ public record CreatePromptVersion(@JsonView( {
         @JsonView({PromptVersion.View.Detail.class}) @NotNull @Valid PromptVersion version,
         @JsonView({
                 PromptVersion.View.Detail.class}) @Schema(description = "Template structure for the prompt: 'text' or 'chat'. Note: This field is only used when creating a new prompt. If a prompt with the given name already exists, this field is ignored and the existing prompt's template structure is used. Template structure is immutable after prompt creation.", defaultValue = "text") TemplateStructure templateStructure,
-        @JsonView({
-                PromptVersion.View.Detail.class}) @Schema(description = "Optional set of project IDs to exclude from automatic blueprint creation when this prompt version is committed.") Set<UUID> excludeBlueprintUpdateForProjects,
         @JsonView({
                 PromptVersion.View.Detail.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({

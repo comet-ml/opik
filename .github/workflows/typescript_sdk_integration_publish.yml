@@ -43,6 +43,10 @@ on:
         required: false
         default: false
 
+
+concurrency:
+  group: ts-sdk-integration-publish-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
@@ -64,7 +68,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref }}
           fetch-depth: 0

@@ -10,7 +10,6 @@ import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScore;
-import com.comet.opik.api.Optimization;
 import com.comet.opik.api.OptimizationStatus;
 import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
@@ -610,7 +609,7 @@ class MultiValueFeedbackScoresE2ETest {
         var traceId = traceResourceClient.createTrace(trace, API_KEY1, TEST_WORKSPACE);
 
         // create dataset items that link to our trace
-        var datasetItem = factory.manufacturePojo(DatasetItem.class).toBuilder()
+        var datasetItem = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
                 .datasetId(datasetId)
                 .traceId(traceId)
                 .spanId(null)
@@ -672,14 +671,11 @@ class MultiValueFeedbackScoresE2ETest {
 
         // create an optimization
         var scoreName = RandomStringUtils.secure().nextAlphanumeric(10);
-        var optimization = factory.manufacturePojo(Optimization.class).toBuilder()
-                .id(null)
+        var optimization = optimizationResourceClient.createPartialOptimization()
                 .datasetId(datasetId)
                 .datasetName(dataset.name())
                 .objectiveName(scoreName)
                 .status(OptimizationStatus.RUNNING)
-                .numTrials(null)
-                .feedbackScores(null)
                 .build();
 
         var optimizationId = optimizationResourceClient.create(optimization, API_KEY1, TEST_WORKSPACE);

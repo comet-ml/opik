@@ -9,6 +9,7 @@ import com.comet.opik.api.filter.AlertFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -40,13 +41,33 @@ public class AlertResourceClient {
         this.baseURI = TestUtils.getBaseUrl(client);
     }
 
+    /**
+     * Converts an Alert to an ObjectNode for HTTP requests, restoring the original (unmasked) secretToken.
+     *
+     * The Webhook.secretToken field has @JsonSerialize(using = MaskedSecretTokenSerializer.class),
+     * which masks the token during serialization. When the test client sends a request, we need
+     * the server to receive the plain secretToken so it can encrypt and store it correctly.
+     * This method restores the original secretToken value in the JSON tree, then uses Entity.json()
+     * so Jersey serializes the ObjectNode directly (not as a quoted JSON string).
+     */
+    private ObjectNode toRequestNode(Alert alert) {
+        var node = (ObjectNode) JsonUtils.valueToTree(alert);
+        if (alert.webhook() != null && alert.webhook().secretToken() != null) {
+            var webhookNode = node.get("webhook");
+            if (webhookNode instanceof ObjectNode webhookObjectNode) {
+                webhookObjectNode.put("secret_token", alert.webhook().secretToken());
+            }
+        }
+        return node;
+    }
+
     public UUID createAlert(Alert alert, String apiKey, String workspaceName, int expectedStatus) {
         try (var actualResponse = client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(alert))) {
+                .post(Entity.json(toRequestNode(alert)))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
 
@@ -67,7 +88,7 @@ public class AlertResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(alert));
+                .post(Entity.entity(toRequestNode(alert), MediaType.APPLICATION_JSON));
     }
 
     public Response createAlertWithResponse(String body, String apiKey, String workspaceName) {
@@ -104,7 +125,7 @@ public class AlertResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .put(Entity.json(alert))) {
+                .put(Entity.entity(toRequestNode(alert), MediaType.APPLICATION_JSON))) {
 
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
         }
@@ -158,6 +179,31 @@ public class AlertResourceClient {
         }
     }
 
+    public Alert.AlertPage findAlertsByProject(UUID projectId, String apiKey, String workspaceName,
+            int page, int size, int expectedStatus) {
+        WebTarget target = client.target(baseURI + "/v1/private/projects/" + projectId + "/alerts")
+                .queryParam("size", size);
+
+        if (page > 1) {
+            target = target.queryParam("page", page);
+        }
+
+        try (var response = target
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get()) {
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(expectedStatus);
+
+            if (expectedStatus == HttpStatus.SC_OK) {
+                return response.readEntity(Alert.AlertPage.class);
+            }
+
+            return null;
+        }
+    }
+
     public WebhookTestResult testWebhook(Alert alert, String apiKey, String workspaceName) {
         try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("webhooks")
@@ -166,7 +212,7 @@ public class AlertResourceClient {
                 .accept(MediaType.APPLICATION_JSON_TYPE)
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(alert))) {
+                .post(Entity.entity(toRequestNode(alert), MediaType.APPLICATION_JSON))) {
             // Then
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
 

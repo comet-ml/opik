@@ -30,7 +30,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import TagCell from "@/shared/DataTableCells/TagCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import AnnotateQueueCell from "@/v1/pages-shared/annotation-queues/AnnotateQueueCell";
 import AnnotationQueueProgressCell from "@/v1/pages-shared/annotation-queues/AnnotationQueueProgressCell";

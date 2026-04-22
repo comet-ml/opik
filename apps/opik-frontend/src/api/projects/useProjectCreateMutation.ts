@@ -14,7 +14,13 @@ type UseProjectCreateMutationParams = {
   project: Partial<Project>;
 };
 
-const useProjectCreateMutation = () => {
+type UseProjectCreateMutationOptions = {
+  showErrorToast?: boolean;
+};
+
+const useProjectCreateMutation = ({
+  showErrorToast = true,
+}: UseProjectCreateMutationOptions = {}) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -30,6 +36,8 @@ const useProjectCreateMutation = () => {
       return { id };
     },
     onError: (error: AxiosError) => {
+      if (!showErrorToast) return;
+
       const message = get(
         error,
         ["response", "data", "message"],

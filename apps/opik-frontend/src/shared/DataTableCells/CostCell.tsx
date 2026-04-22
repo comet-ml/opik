@@ -10,7 +10,7 @@ import { ExperimentItem, ExperimentsCompare } from "@/types/datasets";
 import { isAggregatedItem, getTrialAvgTooltip } from "@/lib/trials";
 import VerticallySplitCellWrapper, {
   SplitCellRenderContent,
-} from "@/v1/pages-shared/experiments/VerticallySplitCellWrapper/VerticallySplitCellWrapper";
+} from "@/shared/DataTableCells/VerticallySplitCellWrapper";
 
 const CostCell = <TData,>(context: CellContext<TData, string>) => {
   const value = context.getValue();

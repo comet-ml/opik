@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import { Monitor, Moon, Sun } from "lucide-react";
 
-import { useTheme } from "@/v1/theme-provider";
+import { useTheme } from "@/contexts/theme-provider";
 import { DropdownOption } from "@/types/shared";
 import { SYSTEM_THEME_MODE, THEME_MODE, ThemeMode } from "@/constants/theme";
 

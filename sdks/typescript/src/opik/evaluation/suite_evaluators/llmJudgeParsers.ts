@@ -8,79 +8,90 @@ const assertionFieldSchema = z.object({
 });
 
 /**
- * Builds a Zod schema that expects one object field per assertion.
- * Each field is an object with { score: boolean, reason: string, confidence: number }.
- */
-export function buildResponseSchema(
-  assertions: string[]
-): z.ZodObject<z.ZodRawShape> {
-  const shape: z.ZodRawShape = {};
-  for (const assertion of assertions) {
-    shape[assertion] = assertionFieldSchema;
-  }
-  return z.object(shape);
-}
-
-/**
- * Parses the LLM response object into an array of EvaluationScoreResult.
+ * Encapsulates the JSON schema for LLMJudge structured output.
  *
- * For each assertion (in order), extracts score/reason/confidence from the response.
- * If a field is missing or malformed, returns a scoringFailed result with value 0.
- * Boolean true maps to value 1, false maps to value 0.
+ * Uses short indexed keys (`assertion_1`, `assertion_2`, ...) that are
+ * compatible with all LLM providers while embedding the original assertion
+ * text as the Zod field description in the JSON schema.
  */
-export function parseResponse(
-  response: Record<string, unknown>,
-  assertions: string[]
-): EvaluationScoreResult[] {
-  const results: EvaluationScoreResult[] = [];
+export class ResponseSchema {
+  private readonly fieldMapping: Map<string, string>;
+  private readonly schema: z.ZodObject<z.ZodRawShape>;
 
-  for (const assertion of assertions) {
-    const field = response[assertion];
+  constructor(assertions: string[]) {
+    this.fieldMapping = new Map(
+      assertions.map((assertion, index) => [
+        `assertion_${index + 1}`,
+        assertion,
+      ])
+    );
 
-    // Missing field
-    if (field === undefined || field === null) {
-      results.push({
-        name: assertion,
-        value: 0,
-        reason: `Assertion field missing from LLM response: "${assertion}"`,
-        scoringFailed: true,
-        categoryName: "suite_assertion",
-      });
-      continue;
+    const shape: z.ZodRawShape = {};
+    for (const [key, assertion] of this.fieldMapping) {
+      shape[key] = assertionFieldSchema.describe(assertion);
     }
-
-    // Malformed field (not an object with the expected shape)
-    if (typeof field !== "object" || Array.isArray(field)) {
-      results.push({
-        name: assertion,
-        value: 0,
-        reason: `Assertion field malformed in LLM response: "${assertion}"`,
-        scoringFailed: true,
-        categoryName: "suite_assertion",
-      });
-      continue;
-    }
-
-    const parsed = assertionFieldSchema.safeParse(field);
-
-    if (!parsed.success) {
-      results.push({
-        name: assertion,
-        value: 0,
-        reason: `Assertion field malformed in LLM response: "${assertion}"`,
-        scoringFailed: true,
-        categoryName: "suite_assertion",
-      });
-      continue;
-    }
-
-    results.push({
-      name: assertion,
-      value: parsed.data.score ? 1 : 0,
-      reason: parsed.data.reason,
-      categoryName: "suite_assertion",
-    });
+    this.schema = z.object(shape);
   }
 
-  return results;
+  get responseSchema(): z.ZodObject<z.ZodRawShape> {
+    return this.schema;
+  }
+
+  formatAssertions(): string {
+    return [...this.fieldMapping.entries()]
+      .map(([key, assertion]) => `- \`${key}\`: ${assertion}`)
+      .join("\n");
+  }
+
+  parse(response: Record<string, unknown>): EvaluationScoreResult[] {
+    const results: EvaluationScoreResult[] = [];
+
+    for (const [fieldKey, assertion] of this.fieldMapping) {
+      const field = response[fieldKey];
+
+      if (field === undefined || field === null) {
+        results.push({
+          name: assertion,
+          value: 0,
+          reason: `Assertion field missing from LLM response: "${fieldKey}"`,
+          scoringFailed: true,
+          categoryName: "suite_assertion",
+        });
+        continue;
+      }
+
+      if (typeof field !== "object" || Array.isArray(field)) {
+        results.push({
+          name: assertion,
+          value: 0,
+          reason: `Assertion field malformed in LLM response: "${fieldKey}"`,
+          scoringFailed: true,
+          categoryName: "suite_assertion",
+        });
+        continue;
+      }
+
+      const parsed = assertionFieldSchema.safeParse(field);
+
+      if (!parsed.success) {
+        results.push({
+          name: assertion,
+          value: 0,
+          reason: `Assertion field malformed in LLM response: "${fieldKey}"`,
+          scoringFailed: true,
+          categoryName: "suite_assertion",
+        });
+        continue;
+      }
+
+      results.push({
+        name: assertion,
+        value: parsed.data.score ? 1 : 0,
+        reason: parsed.data.reason,
+        categoryName: "suite_assertion",
+      });
+    }
+
+    return results;
+  }
 }

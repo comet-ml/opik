@@ -66,7 +66,7 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
 
@@ -117,7 +117,7 @@ public class ChatCompletionService {
             providerError
                     .ifPresent(llmProviderError -> failHandlingLLMProviderError(runtimeException, llmProviderError));
 
-            log.error(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
+            log.warn(UNEXPECTED_ERROR_CALLING_LLM_PROVIDER, runtimeException);
             throw new InternalServerErrorException(buildDetailedErrorMessage(runtimeException), runtimeException);
         }
     }

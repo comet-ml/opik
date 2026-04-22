@@ -17,6 +17,10 @@ on:
 
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
   checks: write
@@ -32,7 +36,7 @@ jobs:
           matrix: ${{ steps.split.outputs.matrix }}
         steps:
             - name: Checkout
-              uses: actions/checkout@v4.1.1
+              uses: actions/checkout@v6
               with:
                 fetch-depth: 1
                 sparse-checkout: |
@@ -57,7 +61,7 @@ jobs:
           matrix: ${{ fromJSON(needs.discover-tests.outputs.matrix) }}
         steps:
             - name: Checkout
-              uses: actions/checkout@v4.1.1
+              uses: actions/checkout@v6
               with:
                 fetch-depth: 1
 

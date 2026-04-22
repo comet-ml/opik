@@ -4,6 +4,7 @@ import com.clickhouse.client.ClickHouseException;
 import com.comet.opik.api.BiInformationResponse;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetLastExperimentCreated;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExecutionPolicy;
 import com.comet.opik.api.Experiment;
@@ -32,6 +33,7 @@ import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPubli
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.google.common.base.Preconditions;
 import com.google.common.eventbus.EventBus;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
@@ -91,6 +93,7 @@ public class ExperimentService {
     private final @NonNull ExperimentGroupEnricher experimentGroupEnricher;
     private final @NonNull ExperimentAggregatesService experimentAggregatesService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
+    private final @NonNull AnalyticsService analyticsService;
 
     @WithSpan
     public Mono<ExperimentPage> find(
@@ -492,42 +495,38 @@ public class ExperimentService {
         var id = experiment.id() == null ? idGenerator.generateId() : experiment.id();
         IdGenerator.validateVersion(id, "Experiment");
         var name = StringUtils.getIfBlank(experiment.name(), nameGenerator::generateName);
-        return Mono.deferContextual(ctx -> {
-            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-            String userName = ctx.get(RequestContext.USER_NAME);
-            return resolveProjectId(experiment, workspaceId, userName)
-                    .flatMap(resolvedExperiment -> datasetService
-                            .getOrCreateDataset(resolvedExperiment.datasetName())
-                            .flatMap(datasetId -> {
-                                // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
-                                if (!featureFlags.isDatasetVersioningEnabled()) {
-                                    return processExperimentCreation(resolvedExperiment, id, name, datasetId, null);
-                                }
+        return resolveProjectId(experiment)
+                .flatMap(resolvedExperiment -> datasetService
+                        .getOrCreateDataset(resolvedExperiment.datasetName(), resolvedExperiment.projectId())
+                        .flatMap(datasetId -> {
+                            // Case 1: Feature toggle OFF - skip version resolution (legacy behavior)
+                            if (!featureFlags.isDatasetVersioningEnabled()) {
+                                return processExperimentCreation(resolvedExperiment, id, name, datasetId, null);
+                            }
 
-                                // Case 2: Feature toggle ON - resolve version and link experiment
-                                return resolveDatasetVersion(resolvedExperiment, datasetId)
-                                        .flatMap(resolved -> {
-                                            var experimentWithVersion = resolvedExperiment.toBuilder()
-                                                    .datasetVersionId(resolved.versionId())
-                                                    .build();
-                                            return processExperimentCreation(experimentWithVersion, id, name,
-                                                    datasetId,
-                                                    resolved.executionPolicy());
-                                        })
-                                        .switchIfEmpty(Mono.defer(() -> {
-                                            log.info(
-                                                    "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
-                                                    datasetId);
-                                            var experimentWithNullVersion = resolvedExperiment.toBuilder()
-                                                    .datasetVersionId(null)
-                                                    .build();
-                                            return processExperimentCreation(experimentWithNullVersion, id, name,
-                                                    datasetId,
-                                                    null);
-                                        }));
-                            }))
-                    .onErrorResume(throwable -> handleCreateError(throwable, id));
-        });
+                            // Case 2: Feature toggle ON - resolve version and link experiment
+                            return resolveDatasetVersion(resolvedExperiment, datasetId)
+                                    .flatMap(resolved -> {
+                                        var experimentWithVersion = resolvedExperiment.toBuilder()
+                                                .datasetVersionId(resolved.versionId())
+                                                .build();
+                                        return processExperimentCreation(experimentWithVersion, id, name,
+                                                datasetId,
+                                                resolved.executionPolicy());
+                                    })
+                                    .switchIfEmpty(Mono.defer(() -> {
+                                        log.info(
+                                                "No dataset version found for dataset '{}', creating experiment with null dataset_version_id",
+                                                datasetId);
+                                        var experimentWithNullVersion = resolvedExperiment.toBuilder()
+                                                .datasetVersionId(null)
+                                                .build();
+                                        return processExperimentCreation(experimentWithNullVersion, id, name,
+                                                datasetId,
+                                                null);
+                                    }));
+                        }))
+                .onErrorResume(throwable -> handleCreateError(throwable, id));
     }
 
     /**
@@ -630,23 +629,11 @@ public class ExperimentService {
         });
     }
 
-    private Mono<Experiment> resolveProjectId(Experiment experiment, String workspaceId, String userName) {
-        return Mono.fromCallable(() -> {
-            UUID resolvedProjectId;
-            if (StringUtils.isNotBlank(experiment.projectName()) && experiment.projectId() == null) {
-                var project = projectService.getOrCreate(workspaceId, experiment.projectName(), userName);
-                resolvedProjectId = project.id();
-            } else {
-                resolvedProjectId = experiment.projectId();
-            }
-
-            if (resolvedProjectId != null) {
-                projectService.validateProjectIdExists(resolvedProjectId, workspaceId);
-                return experiment.toBuilder().projectId(resolvedProjectId).build();
-            }
-
-            return experiment;
-        }).subscribeOn(Schedulers.boundedElastic());
+    private Mono<Experiment> resolveProjectId(Experiment experiment) {
+        return projectService.resolveProjectIdOrCreate(experiment.projectId(), experiment.projectName())
+                .map(resolvedProjectId -> resolvedProjectId
+                        .map(id -> experiment.toBuilder().projectId(id).build())
+                        .orElse(experiment));
     }
 
     private boolean hasPromptVersionLinks(Experiment experiment) {
@@ -706,6 +693,24 @@ public class ExperimentService {
                 Optional.ofNullable(partialExperiment.type()).orElse(ExperimentType.REGULAR)));
         log.info("Posted experiment created event for experiment id '{}', datasetId '{}', workspaceId '{}'",
                 partialExperiment.id(), partialExperiment.datasetId(), workspaceId);
+
+        trackEvalSuiteRunIfApplicable(partialExperiment, workspaceId, userName);
+    }
+
+    private void trackEvalSuiteRunIfApplicable(Experiment experiment, String workspaceId, String userName) {
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                datasetService.getById(experiment.datasetId(), workspaceId)
+                        .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
+                        .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
+                                "eval_suite_id", dataset.id().toString(),
+                                "experiment_id", experiment.id().toString(),
+                                "project_id", String.valueOf(experiment.projectId())), userName));
+            } catch (Exception e) {
+                log.warn("Failed to track eval_suite_run analytics event for experiment '{}'",
+                        experiment.id(), e);
+            }
+        });
     }
 
     private Mono<UUID> handleCreateError(Throwable throwable, UUID id) {
@@ -814,13 +819,17 @@ public class ExperimentService {
                     .doOnNext(experiments -> {
                         if (CollectionUtils.isNotEmpty(experiments)) {
                             log.info("Raising alert event for finished experiments, count '{}'", experiments.size());
-                            eventBus.post(AlertEvent.builder()
-                                    .eventType(EXPERIMENT_FINISHED)
-                                    .workspaceId(workspaceId)
-                                    .workspaceName(workspaceName)
-                                    .userName(userName)
-                                    .payload(experiments)
-                                    .build());
+                            experiments.stream()
+                                    .collect(Collectors.groupingBy(
+                                            e -> Optional.ofNullable(e.projectId())))
+                                    .forEach((projectId, projectExperiments) -> eventBus.post(AlertEvent.builder()
+                                            .eventType(EXPERIMENT_FINISHED)
+                                            .workspaceId(workspaceId)
+                                            .workspaceName(workspaceName)
+                                            .userName(userName)
+                                            .projectId(projectId.orElse(null))
+                                            .payload(projectExperiments)
+                                            .build()));
                         }
                     })
                     .then(Mono.defer(() -> experimentAggregationPublisher.publish(ids, workspaceId, userName)

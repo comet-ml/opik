@@ -11,9 +11,9 @@ title: Custom metrics
 
 Use custom metrics when built-in metrics are not enough (domain-specific scoring, precise safety checks, unique multimodal checks). Start with the core Opik evaluation docs so you know what already exists:
 
-- [Evaluation concepts](/evaluation/concepts) – terminology and lifecycle.
-- [Metrics overview](/evaluation/metrics/overview) – default heuristic metrics (ROUGE, BLEU, Hallucination, etc.).
-- [LLM-as-a-judge patterns](/evaluation/evaluate_agent_trajectory) – how Opik runs judge models against multi-turn traces.
+- [Evaluation concepts](/v1/evaluation/concepts) – terminology and lifecycle.
+- [Metrics overview](/v1/evaluation/metrics/overview) – default heuristic metrics (ROUGE, BLEU, Hallucination, etc.).
+- [LLM-as-a-judge patterns](/v1/evaluation/evaluate_agent_trajectory) – how Opik runs judge models against multi-turn traces.
 
 ## Design principles
 
@@ -47,7 +47,7 @@ def safety_and_completeness(item, output):
 ## Metric building blocks
 
 - **Single metrics** – implement one callable per concern (accuracy, tone, cost). Keep them reusable across prompts.
-- **Multi-metric objectives** – combine single metrics with weights when you need to balance, e.g., accuracy (0.7) + style (0.3). See [Multi-metric optimization](/agent_optimization/best_practices/multi_metric_optimization) for templates.
+- **Multi-metric objectives** – combine single metrics with weights when you need to balance, e.g., accuracy (0.7) + style (0.3). See [Multi-metric optimization](/v1/agent_optimization/best_practices/multi_metric_optimization) for templates.
 - **LLM-as-a-judge** – call out to an evaluation model (OpenAI, Anthropic, etc.) inside the metric. Always include detailed prompts so results stay stable, and understand that reflective optimizers will inherit any noise from these judge calls.
 - **Heuristics** – leverage built-ins from `/evaluation/metrics` instead of reinventing classic scores. You can compose heuristics with custom logic as shown above.
 
@@ -59,7 +59,7 @@ def safety_and_completeness(item, output):
 
 ## Related docs
 
-- [Define metrics](/agent_optimization/optimization/define_metrics)
-- [Evaluation concepts](/evaluation/concepts)
-- [LLM judge workflows](/evaluation/evaluate_agent_trajectory)
-- [Metrics overview](/evaluation/metrics/overview)
+- [Define metrics](/v1/agent_optimization/optimization/define_metrics)
+- [Evaluation concepts](/v1/evaluation/concepts)
+- [LLM judge workflows](/v1/evaluation/evaluate_agent_trajectory)
+- [Metrics overview](/v1/evaluation/metrics/overview)

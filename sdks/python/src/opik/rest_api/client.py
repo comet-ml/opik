@@ -18,16 +18,20 @@ from .environment import OpikApiEnvironment
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
+from .insights_views.client import AsyncInsightsViewsClient, InsightsViewsClient
+from .llm_models.client import AsyncLlmModelsClient, LlmModelsClient
 from .llm_provider_key.client import AsyncLlmProviderKeyClient, LlmProviderKeyClient
 from .manual_evaluation.client import AsyncManualEvaluationClient, ManualEvaluationClient
 from .ollama.client import AsyncOllamaClient, OllamaClient
 from .ollie_state.client import AsyncOllieStateClient, OllieStateClient
 from .open_telemetry_ingestion.client import AsyncOpenTelemetryIngestionClient, OpenTelemetryIngestionClient
 from .optimizations.client import AsyncOptimizationsClient, OptimizationsClient
+from .pairing.client import AsyncPairingClient, PairingClient
 from .projects.client import AsyncProjectsClient, ProjectsClient
 from .prompts.client import AsyncPromptsClient, PromptsClient
 from .raw_client import AsyncRawOpikApi, RawOpikApi
 from .redirect.client import AsyncRedirectClient, RedirectClient
+from .retention_rules.client import AsyncRetentionRulesClient, RetentionRulesClient
 from .runners.client import AsyncRunnersClient, RunnersClient
 from .service_toggles.client import AsyncServiceTogglesClient, ServiceTogglesClient
 from .spans.client import AsyncSpansClient, SpansClient
@@ -110,6 +114,8 @@ class OpikApi:
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
+        self.insights_views = InsightsViewsClient(client_wrapper=self._client_wrapper)
+        self.llm_models = LlmModelsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = LlmProviderKeyClient(client_wrapper=self._client_wrapper)
         self.runners = RunnersClient(client_wrapper=self._client_wrapper)
         self.manual_evaluation = ManualEvaluationClient(client_wrapper=self._client_wrapper)
@@ -117,8 +123,10 @@ class OpikApi:
         self.ollie_state = OllieStateClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = OpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = OptimizationsClient(client_wrapper=self._client_wrapper)
+        self.pairing = PairingClient(client_wrapper=self._client_wrapper)
         self.projects = ProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = PromptsClient(client_wrapper=self._client_wrapper)
+        self.retention_rules = RetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = ServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = SpansClient(client_wrapper=self._client_wrapper)
         self.traces = TracesClient(client_wrapper=self._client_wrapper)
@@ -253,6 +261,8 @@ class AsyncOpikApi:
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
+        self.insights_views = AsyncInsightsViewsClient(client_wrapper=self._client_wrapper)
+        self.llm_models = AsyncLlmModelsClient(client_wrapper=self._client_wrapper)
         self.llm_provider_key = AsyncLlmProviderKeyClient(client_wrapper=self._client_wrapper)
         self.runners = AsyncRunnersClient(client_wrapper=self._client_wrapper)
         self.manual_evaluation = AsyncManualEvaluationClient(client_wrapper=self._client_wrapper)
@@ -260,8 +270,10 @@ class AsyncOpikApi:
         self.ollie_state = AsyncOllieStateClient(client_wrapper=self._client_wrapper)
         self.open_telemetry_ingestion = AsyncOpenTelemetryIngestionClient(client_wrapper=self._client_wrapper)
         self.optimizations = AsyncOptimizationsClient(client_wrapper=self._client_wrapper)
+        self.pairing = AsyncPairingClient(client_wrapper=self._client_wrapper)
         self.projects = AsyncProjectsClient(client_wrapper=self._client_wrapper)
         self.prompts = AsyncPromptsClient(client_wrapper=self._client_wrapper)
+        self.retention_rules = AsyncRetentionRulesClient(client_wrapper=self._client_wrapper)
         self.service_toggles = AsyncServiceTogglesClient(client_wrapper=self._client_wrapper)
         self.spans = AsyncSpansClient(client_wrapper=self._client_wrapper)
         self.traces = AsyncTracesClient(client_wrapper=self._client_wrapper)

@@ -14,7 +14,7 @@ import usePromptVersionsById from "@/api/prompts/usePromptVersionsById";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";

@@ -37,9 +37,9 @@ import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.Streamer;
-import com.comet.opik.domain.ThreadService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.TraceThreadQueryService;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.domain.workspaces.WorkspaceMetadataService;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -109,7 +109,7 @@ import static com.comet.opik.utils.ValidationUtils.validateTimeRangeParameters;
 public class TracesResource {
 
     private final @NonNull TraceService service;
-    private final @NonNull ThreadService threadService;
+    private final @NonNull TraceThreadQueryService traceThreadQueryService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
@@ -126,6 +126,7 @@ public class TracesResource {
     @Operation(operationId = "getTracesByProject", summary = "Get traces by project_name or project_id", description = "Get traces by project_name or project_id", responses = {
             @ApiResponse(responseCode = "200", description = "Trace resource", content = @Content(schema = @Schema(implementation = TracePage.class)))})
     @JsonView(Trace.View.Public.class)
+    @RateLimited(value = "getTraces:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getTracesByProject(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -201,6 +202,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @JsonView(Trace.View.Public.class)
+    @RateLimited(value = "searchTraces:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public ChunkedOutput<JsonNode> searchTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = TraceSearchStreamRequest.class))) @NotNull @Valid TraceSearchStreamRequest request) {
 
@@ -218,6 +220,7 @@ public class TracesResource {
                 .filters(filtersFactory.validateFilter(request.filters()))
                 .truncate(request.truncate())
                 .stripAttachments(request.stripAttachments())
+                .exclude(request.exclude())
                 .sortingFields(List.of())
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
@@ -400,6 +403,7 @@ public class TracesResource {
             @ApiResponse(responseCode = "200", description = "Trace stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    @RateLimited(value = "getTraceStats:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("filters") String filters,
@@ -663,7 +667,7 @@ public class TracesResource {
 
         log.info("Get trace threads by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
-        TraceThreadPage traceThreadPage = threadService.find(page, size, searchCriteria)
+        TraceThreadPage traceThreadPage = traceThreadQueryService.find(page, size, searchCriteria)
                 .map(it -> {
                     // Remove sortableBy fields if dynamic sorting is disabled due to workspace size
                     if (metadata.cannotUseDynamicSorting()) {
@@ -714,7 +718,7 @@ public class TracesResource {
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))
                 .build();
 
-        Flux<TraceThread> items = threadService.search(request.limit(), searchCriteria)
+        Flux<TraceThread> items = traceThreadQueryService.search(request.limit(), searchCriteria)
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                         .put(RequestContext.USER_NAME, userName)
                         .put(RequestContext.VISIBILITY, Optional.ofNullable(visibility).orElse(Visibility.PRIVATE)));
@@ -740,7 +744,7 @@ public class TracesResource {
         log.info("Getting trace thread by id '{}' and project id '{}' on workspace_id '{}' with truncate '{}'",
                 identifier.threadId(), projectId, workspaceId, identifier.truncate());
 
-        TraceThread thread = threadService.getById(projectId, identifier.threadId(), identifier.truncate())
+        TraceThread thread = traceThreadQueryService.getById(projectId, identifier.threadId(), identifier.truncate())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
@@ -907,7 +911,7 @@ public class TracesResource {
 
         log.info("Get trace thread stats by '{}' on workspaceId '{}'", searchCriteria, workspaceId);
 
-        ProjectStats projectStats = threadService.getStats(searchCriteria)
+        ProjectStats projectStats = traceThreadQueryService.getStats(searchCriteria)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 

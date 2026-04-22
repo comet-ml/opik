@@ -1,0 +1,201 @@
+import { COLUMN_TYPE } from "@/types/shared";
+import { Filter, FilterOperator } from "@/types/filters";
+import { BREAKDOWN_FIELD } from "@/types/dashboard";
+
+/**
+ * Display labels for group by fields.
+ */
+export const BREAKDOWN_FIELD_LABELS: Record<BREAKDOWN_FIELD, string> = {
+  [BREAKDOWN_FIELD.NONE]: "No grouping",
+  [BREAKDOWN_FIELD.TAGS]: "Tags",
+  [BREAKDOWN_FIELD.METADATA]: "Metadata",
+  [BREAKDOWN_FIELD.NAME]: "Name",
+  [BREAKDOWN_FIELD.ERROR_INFO]: "Has error",
+  [BREAKDOWN_FIELD.ERROR_TYPE]: "Error type",
+  [BREAKDOWN_FIELD.MODEL]: "Model",
+  [BREAKDOWN_FIELD.PROVIDER]: "Provider",
+  [BREAKDOWN_FIELD.TYPE]: "Span type",
+};
+
+/**
+ * Special group names used in group by results.
+ */
+export const BREAKDOWN_GROUP_NAMES = {
+  OTHERS: "__others__",
+  OTHERS_DISPLAY: "Others",
+  UNKNOWN: "Unknown",
+};
+
+/**
+ * Metric types for compatibility checking.
+ * These values must match METRIC_NAME_TYPE from useProjectMetric.ts
+ */
+const METRIC_TYPES = {
+  // Trace metrics
+  FEEDBACK_SCORES: "FEEDBACK_SCORES",
+  TRACE_COUNT: "TRACE_COUNT",
+  TRACE_DURATION: "DURATION",
+  TOKEN_USAGE: "TOKEN_USAGE",
+  COST: "COST",
+  FAILED_GUARDRAILS: "GUARDRAILS_FAILED_COUNT",
+  // Thread metrics
+  THREAD_COUNT: "THREAD_COUNT",
+  THREAD_DURATION: "THREAD_DURATION",
+  THREAD_FEEDBACK_SCORES: "THREAD_FEEDBACK_SCORES",
+  // Span metrics
+  SPAN_COUNT: "SPAN_COUNT",
+  SPAN_DURATION: "SPAN_DURATION",
+  SPAN_TOKEN_USAGE: "SPAN_TOKEN_USAGE",
+  SPAN_FEEDBACK_SCORES: "SPAN_FEEDBACK_SCORES",
+} as const;
+
+// Group metric types by entity for compatibility rules
+const TRACE_METRICS = [
+  METRIC_TYPES.FEEDBACK_SCORES,
+  METRIC_TYPES.TRACE_COUNT,
+  METRIC_TYPES.TRACE_DURATION,
+  METRIC_TYPES.TOKEN_USAGE,
+  METRIC_TYPES.COST,
+  METRIC_TYPES.FAILED_GUARDRAILS,
+];
+
+const THREAD_METRICS = [
+  METRIC_TYPES.THREAD_COUNT,
+  METRIC_TYPES.THREAD_DURATION,
+  METRIC_TYPES.THREAD_FEEDBACK_SCORES,
+];
+
+const SPAN_METRICS = [
+  METRIC_TYPES.SPAN_COUNT,
+  METRIC_TYPES.SPAN_DURATION,
+  METRIC_TYPES.SPAN_TOKEN_USAGE,
+  METRIC_TYPES.SPAN_FEEDBACK_SCORES,
+];
+
+const ALL_METRIC_TYPES = [...TRACE_METRICS, ...THREAD_METRICS, ...SPAN_METRICS];
+
+export type MetricEntityType = "span" | "thread" | "trace";
+
+export function getMetricEntityType(metricName: string): MetricEntityType {
+  if ((SPAN_METRICS as string[]).includes(metricName)) return "span";
+  if ((THREAD_METRICS as string[]).includes(metricName)) return "thread";
+  return "trace";
+}
+
+/**
+ * Compatibility matrix: which group by fields are compatible with which metric types.
+ * Based on the Jira ticket OPIK-3790 "Supported Breakdown Fields" table:
+ * - NONE: All metrics
+ * - TAGS: Trace, Span, Thread
+ * - METADATA: Trace, Span (not Thread)
+ * - NAME: Trace, Span (not Thread)
+ * - ERROR_INFO: Trace, Span (not Thread)
+ * - MODEL: Spans only
+ * - PROVIDER: Spans only
+ * - TYPE: Spans only
+ *
+ * Note: PROJECT_ID is not supported as metrics are already project-scoped.
+ */
+export const BREAKDOWN_FIELD_COMPATIBILITY: Record<BREAKDOWN_FIELD, string[]> =
+  {
+    [BREAKDOWN_FIELD.NONE]: ALL_METRIC_TYPES,
+    [BREAKDOWN_FIELD.TAGS]: ALL_METRIC_TYPES,
+    [BREAKDOWN_FIELD.METADATA]: [...TRACE_METRICS, ...SPAN_METRICS],
+    [BREAKDOWN_FIELD.NAME]: [...TRACE_METRICS, ...SPAN_METRICS],
+    [BREAKDOWN_FIELD.ERROR_INFO]: [...TRACE_METRICS, ...SPAN_METRICS],
+    [BREAKDOWN_FIELD.ERROR_TYPE]: [...TRACE_METRICS, ...SPAN_METRICS],
+    [BREAKDOWN_FIELD.MODEL]: SPAN_METRICS,
+    [BREAKDOWN_FIELD.PROVIDER]: SPAN_METRICS,
+    [BREAKDOWN_FIELD.TYPE]: SPAN_METRICS,
+  };
+
+/**
+ * Get all compatible group by fields for a given metric type.
+ */
+export function getCompatibleBreakdownFields(
+  metricType: string,
+): BREAKDOWN_FIELD[] {
+  return Object.entries(BREAKDOWN_FIELD_COMPATIBILITY)
+    .filter(([, compatibleMetrics]) => compatibleMetrics.includes(metricType))
+    .map(([field]) => field as BREAKDOWN_FIELD);
+}
+
+/**
+ * Group by field options for use in select components.
+ */
+export function buildBreakdownDrilldownFilter(
+  field: BREAKDOWN_FIELD,
+  label: string,
+  metadataKey?: string,
+): Partial<Filter> | null {
+  const noError = label === "No Error";
+
+  switch (field) {
+    case BREAKDOWN_FIELD.ERROR_TYPE:
+      if (noError) {
+        return {
+          field: "error_info",
+          operator: "is_empty" as FilterOperator,
+          type: COLUMN_TYPE.errors,
+          value: "",
+        };
+      }
+      return {
+        field: "error_type",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.string,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.ERROR_INFO:
+      return {
+        field: "error_info",
+        operator: (label === "Has Error"
+          ? "is_not_empty"
+          : "is_empty") as FilterOperator,
+        type: COLUMN_TYPE.errors,
+        value: "",
+      };
+
+    case BREAKDOWN_FIELD.TAGS:
+      return {
+        field: "tags",
+        operator: "contains" as FilterOperator,
+        type: COLUMN_TYPE.list,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.NAME:
+      return {
+        field: "name",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.string,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.MODEL:
+    case BREAKDOWN_FIELD.PROVIDER:
+      return null;
+
+    case BREAKDOWN_FIELD.TYPE:
+      return {
+        field: "type",
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.category,
+        value: label,
+      };
+
+    case BREAKDOWN_FIELD.METADATA:
+      if (!metadataKey) return null;
+      return {
+        field: "metadata",
+        key: metadataKey,
+        operator: "=" as FilterOperator,
+        type: COLUMN_TYPE.dictionary,
+        value: label,
+      };
+
+    default:
+      return null;
+  }
+}

@@ -12,6 +12,10 @@ on:
     paths: 
       - "deployment/helm_chart/opik/**"
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   
   lint-helm-chart:
@@ -20,7 +24,7 @@ jobs:
 
     steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
 
         - name: Run lint on Helm chart
           run: |

@@ -42,7 +42,7 @@ import AddEditRuleDialog from "@/v1/pages-shared/automations/AddEditRuleDialog/A
 import RulesActionsPanel from "@/v1/pages-shared/automations/RulesActionsPanel";
 import RuleRowActionsCell from "@/v1/pages-shared/automations/RuleRowActionsCell";
 import RuleLogsCell from "@/v1/pages-shared/automations/RuleLogsCell";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import { capitalizeFirstLetter } from "@/lib/utils";
 import { getUIRuleScope } from "@/v1/pages-shared/automations/AddEditRuleDialog/helpers";

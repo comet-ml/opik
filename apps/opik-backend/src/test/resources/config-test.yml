@@ -69,7 +69,10 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1
+  queryParameters: health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=60,async_insert_busy_timeout_min_ms=50,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1
+  #  Default: 1s
+  #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
+  healthCheckTimeout: 1s
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -113,6 +116,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: redis://:opik@localhost:6379/0
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: 1s
 
 openTelemetry:
   # Default: 3h
@@ -197,11 +203,29 @@ usageLimit:
   # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
   errorMessage: "You have exceeded the usage limit for this operation."
 
+# Configuration for product analytics events
+analytics:
+  # Default: false
+  # Description: Whether or not to send product analytics events
+  enabled: false
+  # Default: empty
+  # Description: Environment name included in every analytics event (e.g. "staging", "production")
+  environment:
+  # Default: 1d (minimum allowed, sufficient for test duration)
+  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
+  firstTraceCreatedDedupTtl: 1d
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: false
   # Description: Whether or not to send anonymous usage reports
   enabled: false
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: 5s
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: 10s
 
 # Configuration for application metadata
 metadata:
@@ -530,6 +554,22 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: "false"
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
+  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v2WorkspaceAllowlist: ""
+  # Default: disabled
+  # Description: Forces ALL workspaces to a specific navigation version.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
+  forceWorkspaceVersion: "disabled"
 
 # Local Runner configuration
 localRunner:
@@ -570,9 +610,6 @@ traceThreadConfig:
   # Default: 1s
   # Description: The interval at which the close trace thread job will run to inactive threads
   closeTraceThreadJobInterval: 1500ms
-  # Default: 4s
-  # Description: The time to wait for the close trace threads job to finish before releasing the lock
-  closeTraceThreadJobLockTime: 3s
   # Default: 300ms
   # Description: The time to wait for the close trace threads job to acquire the lock before giving up
   closeTraceThreadJobLockWaitTime: 300ms
@@ -715,3 +752,9 @@ webhook:
     # Default: 2s
     # Description: Fixed delay between metrics alert job executions (waits this duration after completion)
     fixedDelay: 2s
+
+# Agent configuration settings
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: 5000ms

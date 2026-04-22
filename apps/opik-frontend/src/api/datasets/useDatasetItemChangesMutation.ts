@@ -3,7 +3,7 @@ import { AxiosError } from "axios";
 
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem, Evaluator } from "@/types/datasets";
-import { ExecutionPolicy } from "@/types/evaluation-suites";
+import { ExecutionPolicy } from "@/types/test-suites";
 import { useToast } from "@/ui/use-toast";
 import { extractErrorMessage } from "@/lib/tags";
 
@@ -11,7 +11,7 @@ interface DatasetItemChangesPayload {
   added_items: DatasetItem[];
   edited_items: Partial<DatasetItem>[];
   deleted_ids: string[];
-  base_version: string;
+  base_version: string | null;
   tags?: string[];
   change_description?: string;
   evaluators?: Evaluator[];
@@ -60,7 +60,6 @@ const useDatasetItemChangesMutation = (
       }
 
       // For other errors, show toast
-
       toast({
         title: "Error",
         description: extractErrorMessage(error),
@@ -74,6 +73,7 @@ const useDatasetItemChangesMutation = (
       queryClient.invalidateQueries({
         queryKey: ["dataset-items", { datasetId: variables.datasetId }],
       });
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

@@ -4,6 +4,8 @@ import {
   UsageData,
 } from "@/types/shared";
 
+export const DEFAULT_PROJECT_NAME = "Default Project";
+
 export interface Project {
   id: string;
   name: string;

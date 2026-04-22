@@ -10,7 +10,6 @@ import com.comet.opik.api.VisibilityMode;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.collect.Sets;
 import io.r2dbc.spi.Result;
 import io.r2dbc.spi.Row;
 import io.r2dbc.spi.RowMetadata;
@@ -123,12 +122,6 @@ public class DatasetItemResultMapper {
         return JsonUtils.getJsonNodeFromStringWithFallback(field.toString());
     }
 
-    static Map.Entry<Long, Set<Column>> groupResults(Map.Entry<Long, Set<Column>> result1,
-            Map.Entry<Long, Set<Column>> result2) {
-
-        return Map.entry(result1.getKey() + result2.getKey(), Sets.union(result1.getValue(), result2.getValue()));
-    }
-
     private static Set<Column> mapColumnsField(Map<String, String[]> row, String filterField) {
         return Optional.ofNullable(row).orElse(Map.of())
                 .entrySet()
@@ -148,7 +141,6 @@ public class DatasetItemResultMapper {
                     case "Object" -> ColumnType.OBJECT;
                     case "Array" -> ColumnType.ARRAY;
                     case "Bool" -> ColumnType.BOOLEAN;
-                    case "Null" -> ColumnType.NULL;
                     default -> ColumnType.NULL;
                 })
                 .toArray(ColumnType[]::new);
@@ -162,19 +154,21 @@ public class DatasetItemResultMapper {
 
         Map<String, JsonNode> data = getData(row);
 
+        var id = row.get("id", UUID.class);
         // Check if dataset_item_id column exists in the result (only present for versioned items)
-        UUID datasetItemId = null;
+        // Fallback to the id if missing
+        UUID datasetItemId = id;
         if (rowMetadata.contains("dataset_item_id")) {
             datasetItemId = Optional.ofNullable(row.get("dataset_item_id", String.class))
                     .filter(s -> !s.isBlank())
                     .map(UUID::fromString)
-                    .orElse(null);
+                    .orElse(id);
         }
 
         var experimentItems = getExperimentItems(row.get("experiment_items_array", List[].class));
 
         return DatasetItem.builder()
-                .id(row.get("id", UUID.class))
+                .id(id)
                 .data(data)
                 .description(getDescription(row, rowMetadata))
                 .source(Optional.ofNullable(row.get("source", String.class))
@@ -201,11 +195,15 @@ public class DatasetItemResultMapper {
                 .datasetItemId(datasetItemId)
                 .experimentItems(experimentItems)
                 .runSummariesByExperiment(AssertionResultMapper.computeRunSummaries(experimentItems))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdAt(row.get("created_at", Instant.class))
+                .lastUpdatedAt(nullIfEpoch(row.get("last_updated_at", Instant.class)))
+                .createdAt(nullIfEpoch(row.get("created_at", Instant.class)))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build();
+    }
+
+    static Instant nullIfEpoch(Instant instant) {
+        return instant == null || instant.equals(Instant.EPOCH) ? null : instant;
     }
 
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {
@@ -270,14 +268,6 @@ public class DatasetItemResultMapper {
 
     static String getOrDefault(UUID value) {
         return Optional.ofNullable(value).map(UUID::toString).orElse("");
-    }
-
-    static Publisher<Map.Entry<Long, Set<Column>>> mapCountAndColumns(Result result, String filterFieldPrefix) {
-        return result.map((row, rowMetadata) -> {
-            Long count = extractCountFromResult(row);
-            Map<String, String[]> columnsMap = extractColumnsField(row);
-            return Map.entry(count, mapColumnsField(columnsMap, filterFieldPrefix));
-        });
     }
 
     private static Long extractCountFromResult(Row row) {

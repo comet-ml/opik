@@ -15,15 +15,10 @@ import useRulesList from "@/api/automations/useRulesList";
 import useProjectsList from "@/api/projects/useProjectsList";
 import useDatasetsList from "@/api/datasets/useDatasetsList";
 import { ACTIVE_OPTIMIZATION_FILTER } from "@/lib/optimizations";
-import { generateDashboardScopeFilter } from "@/lib/filters";
-import { DASHBOARD_SCOPE } from "@/types/dashboard";
 import getMenuItems from "@/v1/layout/SideBar/helpers/getMenuItems";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const RUNNING_OPTIMIZATION_REFETCH_INTERVAL = 5000;
-const DASHBOARD_FILTERS = generateDashboardScopeFilter(
-  DASHBOARD_SCOPE.WORKSPACE,
-);
 
 interface SideBarMenuItemsProps {
   expanded: boolean;
@@ -32,13 +27,19 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const {
-    permissions: { canViewExperiments, canViewDashboards, canViewDatasets },
+    permissions: {
+      canViewExperiments,
+      canViewDashboards,
+      canViewDatasets,
+      canUsePlayground,
+    },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     canViewExperiments,
     canViewDashboards,
     canViewDatasets,
+    canUsePlayground,
   });
 
   const { data: projectData } = useProjectsList(
@@ -144,7 +145,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
       workspaceName,
       page: 1,
       size: 1,
-      filters: DASHBOARD_FILTERS,
+      filters: [],
     },
     {
       placeholderData: keepPreviousData,
@@ -166,7 +167,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
 
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
-    evaluation_suites: datasetsData?.total,
+    test_suites: datasetsData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
     rules: rulesData?.total,

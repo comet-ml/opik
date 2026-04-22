@@ -59,6 +59,7 @@ def test_tracked_function__happyflow(opik_client, project_name):
         metadata={"outer-metadata-key": "outer-metadata-value"},
         tags=["outer-tag1", "outer-tag2"],
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        source="sdk",
     )
 
     # Verify top level span
@@ -73,6 +74,7 @@ def test_tracked_function__happyflow(opik_client, project_name):
         metadata={"outer-metadata-key": "outer-metadata-value"},
         tags=["outer-tag1", "outer-tag2"],
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        source="sdk",
     )
 
     # Verify nested span
@@ -87,6 +89,7 @@ def test_tracked_function__happyflow(opik_client, project_name):
         metadata={"inner-metadata-key": "inner-metadata-value"},
         tags=["inner-tag1", "inner-tag2"],
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        source="sdk",
     )
 
 
@@ -125,6 +128,7 @@ def test_tracked_function__error_inside_inner_function__caught_in_top_level_span
         input={"x": "outer-input"},
         output={"output": "outer-output"},
         error_info=None,
+        source="sdk",
     )
 
     # Verify top level span
@@ -136,6 +140,7 @@ def test_tracked_function__error_inside_inner_function__caught_in_top_level_span
         name="f_outer",
         input={"x": "outer-input"},
         output={"output": "outer-output"},
+        source="sdk",
     )
 
     # Verify nested span
@@ -152,6 +157,7 @@ def test_tracked_function__error_inside_inner_function__caught_in_top_level_span
             message="inner span error message",
             traceback=ANY_STRING,
         ),
+        source="sdk",
     )
 
 
@@ -191,6 +197,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
             message="inner span error message",
             traceback=ANY_STRING,
         ),
+        source="sdk",
     )
 
     # Verify top level span
@@ -207,6 +214,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
             message="inner span error message",
             traceback=ANY_STRING,
         ),
+        source="sdk",
     )
 
     # Verify nested span
@@ -223,6 +231,7 @@ def test_tracked_function__error_inside_inner_function__error_not_caught__trace_
             message="inner span error message",
             traceback=ANY_STRING,
         ),
+        source="sdk",
     )
 
 
@@ -256,6 +265,7 @@ def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
         input={"x": "f1-input"},
         output={"output": "f1-output"},
         project_name=project_name,
+        source="sdk",
     )
     verifiers.verify_trace(
         opik_client=opik_client,
@@ -264,6 +274,7 @@ def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
         input={"y": "f2-input"},
         output={"output": "f2-output"},
         project_name=project_name,
+        source="sdk",
     )
 
     # Verify spans
@@ -276,6 +287,7 @@ def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
         input={"x": "f1-input"},
         output={"output": "f1-output"},
         project_name=project_name,
+        source="sdk",
     )
     verifiers.verify_span(
         opik_client=opik_client,
@@ -286,6 +298,7 @@ def test_tracked_function__two_traces_and_two_spans__happyflow(opik_client):
         input={"y": "f2-input"},
         output={"output": "f2-output"},
         project_name=project_name,
+        source="sdk",
     )
 
 
@@ -335,6 +348,7 @@ def test_tracked_function__try_different_project_names(opik_client):
         metadata={"outer-metadata-key": "outer-metadata-value"},
         tags=["outer-tag1", "outer-tag2"],
         project_name=project_name,
+        source="sdk",
     )
 
     # Verify top level span
@@ -349,6 +363,7 @@ def test_tracked_function__try_different_project_names(opik_client):
         metadata={"outer-metadata-key": "outer-metadata-value"},
         tags=["outer-tag1", "outer-tag2"],
         project_name=project_name,
+        source="sdk",
     )
 
     # Verify nested span
@@ -363,6 +378,7 @@ def test_tracked_function__try_different_project_names(opik_client):
         metadata={"inner-metadata-key": "inner-metadata-value"},
         tags=["inner-tag1", "inner-tag2"],
         project_name=project_name,
+        source="sdk",
     )
 
 
@@ -415,6 +431,7 @@ def test_manually_created_trace_and_span__happyflow(
             "trace-metadata-key": "trace-metadata-value",
         },
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        source="sdk",
     )
 
     # Verify span
@@ -434,6 +451,7 @@ def test_manually_created_trace_and_span__happyflow(
         project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
         model=model_name,
         provider=provider_name,
+        source="sdk",
     )
 
 
@@ -477,6 +495,7 @@ def test_search_traces__happyflow(opik_client):
         input={"input": f"Some random input - {unique_identifier}"},
         output={"output": "trace-output"},
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        source="sdk",
     )
 
 
@@ -779,6 +798,7 @@ def test_copy_traces__happyflow(opik_client):
             metadata={"value": i},
             tags=["a", "b"],
             project_name=new_project_name,
+            source="sdk",
         )
 
         trace_spans = opik_client.search_spans(
@@ -793,6 +813,7 @@ def test_copy_traces__happyflow(opik_client):
                 input={"input": f"test input - {i} - {j}"},
                 parent_span_id=span.parent_span_id,
                 project_name=new_project_name,
+                source="sdk",
             )
 
 
@@ -838,6 +859,7 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
         output={"span-output": "span-output-value"},
         metadata={"span-metadata-key": "span-metadata-value"},
         total_cost=0.42,
+        source="sdk",
     )
 
     verifiers.verify_trace(
@@ -848,6 +870,7 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
         output={"trace-output": "trace-output-value"},
         metadata={"trace-metadata-key": "trace-metadata-value"},
         thread_id=THREAD_ID,
+        source="sdk",
     )
 
 
@@ -1252,6 +1275,7 @@ def test_opik_client__update_span_with_attachments__original_fields_preserved_bu
         input={"input": "new-span-input"},
         output={"output": "original-span-output"},
         name="child-span-name",
+        source="sdk",
     )
     verifiers.verify_attachments(
         opik_client=opik_client,
@@ -1313,6 +1337,7 @@ def test_opik_client__update_trace__happy_flow(
         metadata=metadata,
         tags=tags,
         thread_id=thread_id,
+        source="sdk",
     )
 
     #
@@ -1347,6 +1372,7 @@ def test_opik_client__update_trace__happy_flow(
         tags=tags,
         metadata=metadata,
         thread_id=thread_id,
+        source="sdk",
     )
 
 
@@ -1498,4 +1524,82 @@ def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
     # Verify is_not_empty and = return the same span
     assert span_ids_not_empty == span_ids_with_value, (
         "is_not_empty and = filters should return the same spans for this test case"
+    )
+
+
+def test_internal_api_trace__source_is_set(opik_client):
+    """__internal_api__trace__ persists the given source to the backend."""
+    trace = opik_client.__internal_api__trace__(
+        name="source-test-trace",
+        input={"x": 1},
+        source="optimization",
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="source-test-trace",
+        source="optimization",
+    )
+
+
+def test_internal_api_trace__default_source_is_sdk(opik_client):
+    """__internal_api__trace__ uses 'sdk' as the default source when none is given."""
+    trace = opik_client.__internal_api__trace__(
+        name="default-source-trace",
+        input={"x": 1},
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_trace(
+        opik_client=opik_client,
+        trace_id=trace.id,
+        name="default-source-trace",
+        source="sdk",
+    )
+
+
+def test_internal_api_span__source_is_set(opik_client):
+    """__internal_api__span__ persists the given source to the backend."""
+    trace = opik_client.__internal_api__trace__(
+        name="span-source-test-trace",
+    )
+    span = opik_client.__internal_api__span__(
+        trace_id=trace.id,
+        name="source-test-span",
+        input={"y": 2},
+        source="optimization",
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span.id,
+        trace_id=trace.id,
+        parent_span_id=None,
+        name="source-test-span",
+        source="optimization",
+    )
+
+
+def test_internal_api_span__default_source_is_sdk(opik_client):
+    """__internal_api__span__ uses 'sdk' as the default source when none is given."""
+    trace = opik_client.__internal_api__trace__(
+        name="span-default-source-trace",
+    )
+    span = opik_client.__internal_api__span__(
+        trace_id=trace.id,
+        name="default-source-span",
+        input={"y": 2},
+    )
+    opik.flush_tracker()
+
+    verifiers.verify_span(
+        opik_client=opik_client,
+        span_id=span.id,
+        trace_id=trace.id,
+        parent_span_id=None,
+        name="default-source-span",
+        source="sdk",
     )

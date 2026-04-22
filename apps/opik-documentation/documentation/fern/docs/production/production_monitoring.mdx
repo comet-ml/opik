@@ -10,7 +10,7 @@ title: Production monitoring
 
 Opik has been designed from the ground up to support high volumes of traces making it the ideal tool for monitoring your production LLM applications.
 
-You can use the **Insights** tab within any project to review your feedback scores, trace count, latency, and cost over time. The built-in Project Overview provides an at-a-glance health check with stats cards and time-series charts. For more details, see [Dashboards](/production/dashboards).
+You can use the **Insights** tab within any project to review your feedback scores, trace count, latency, and cost over time. The built-in Project Overview provides an at-a-glance health check with stats cards and time-series charts. For more details, see [Dashboards](/v1/production/dashboards).
 
 <Frame>
   <img src="/img/production/dashboard_example.png" alt="Project Overview — built-in Insights view" />
@@ -20,11 +20,11 @@ In addition to viewing scores over time, you can also view the average feedback 
 
 ## Logging feedback scores
 
-To monitor the performance of your LLM application, you can log feedback scores using the [Python SDK and through the UI](/tracing/annotate_traces).
+To monitor the performance of your LLM application, you can log feedback scores using the [Python SDK and through the UI](/v1/tracing/annotate_traces).
 
 ### Defining online evaluation metrics
 
-You can define LLM as a Judge metrics in the Opik platform that will automatically score all, or a subset, of your production traces. You can find more information about how to define LLM as a Judge metrics in the [Online evaluation](/production/rules) section.
+You can define LLM as a Judge metrics in the Opik platform that will automatically score all, or a subset, of your production traces. You can find more information about how to define LLM as a Judge metrics in the [Online evaluation](/v1/production/rules) section.
 
 Once a rule is defined, Opik will score all the traces in the project and allow you to track these feedback scores over time.
 
@@ -73,7 +73,7 @@ traces = opik_client.search_traces(
 
 <Tip>
 
-The `search_traces` method allows you to fetch traces based on any of trace attributes, you can learn more about the different search parameters in the [search traces documentation](/tracing/export_data).
+The `search_traces` method allows you to fetch traces based on any of trace attributes, you can learn more about the different search parameters in the [search traces documentation](/v1/tracing/export_data).
 
 </Tip>
 

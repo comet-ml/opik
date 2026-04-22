@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Optional
 
 import click
-from rich.console import Console
 
 import opik
 from .utils import (
+    console,
     debug_print,
     dataset_to_csv_rows,
     should_skip_file,
@@ -17,8 +17,6 @@ from .utils import (
     write_json_data,
     print_export_summary,
 )
-
-console = Console()
 
 
 def export_single_dataset(
@@ -193,6 +191,7 @@ def export_experiment_datasets(
             dataset_obj = opik.Dataset(
                 name=dataset_name,
                 description=None,  # Description not available from experiment
+                project_name=None,
                 rest_client=client.rest_client,
             )
             dataset_items = dataset_obj.get_items()

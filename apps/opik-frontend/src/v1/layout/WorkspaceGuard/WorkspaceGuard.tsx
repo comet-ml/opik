@@ -1,8 +1,8 @@
 import PageLayout from "@/v1/layout/PageLayout/PageLayout";
 import Loader from "@/shared/Loader/Loader";
 import usePluginStore from "@/store/PluginsStore";
-import { FeatureTogglesProvider } from "@/v1/feature-toggles-provider";
-import { ServerSyncProvider } from "@/v1/server-sync-provider";
+import { FeatureTogglesProvider } from "@/contexts/feature-toggles-provider";
+import { ServerSyncProvider } from "@/contexts/server-sync-provider";
 import PermissionsGuard from "@/v1/layout/PermissionsGuard/PermissionsGuard";
 import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";

@@ -21,4 +21,5 @@ export interface TraceUpdate {
     errorInfo?: OpikApi.ErrorInfo;
     threadId?: string;
     ttft?: number;
+    source?: OpikApi.TraceUpdateSource;
 }

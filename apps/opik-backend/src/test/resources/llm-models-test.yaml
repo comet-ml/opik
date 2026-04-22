@@ -1,0 +1,15 @@
+openai:
+  - id: "gpt-4o"
+    structuredOutput: true
+  - id: "gpt-3.5-turbo"
+  - id: "o3"
+    structuredOutput: true
+    reasoning: true
+
+anthropic:
+  - id: "claude-sonnet-4-6"
+
+vertex-ai:
+  - id: "gemini-2.0-flash-001"
+    qualifiedName: "vertex_ai/gemini-2.0-flash-001"
+    structuredOutput: true

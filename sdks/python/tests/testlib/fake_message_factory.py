@@ -138,6 +138,7 @@ def fake_create_trace_message_batch(
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            source="sdk",
         )
 
         dummy_traces.append(trace_message)
@@ -261,6 +262,7 @@ def fake_span_create_message_batch(
             provider=None,
             total_cost=random.random() * 0.01,
             last_updated_at=last_updated_at,
+            source="sdk",
         )
 
         dummy_spans.append(span_message)

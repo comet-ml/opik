@@ -16,11 +16,13 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
 import com.comet.opik.utils.PaginationUtils;
 import com.google.inject.ImplementedBy;
+import jakarta.annotation.Nullable;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
@@ -104,6 +106,8 @@ public interface ProjectService {
 
     void recordLastUpdatedTrace(String workspaceId, Collection<ProjectIdLastUpdated> lastUpdatedTraces);
 
+    Mono<Optional<UUID>> resolveProjectIdOrCreate(@Nullable UUID projectId, @Nullable String projectName);
+
     Mono<UUID> resolveProjectIdAndVerifyVisibility(UUID projectId, String projectName);
 
     UUID validateProjectIdentifier(UUID projectId, String projectName, String workspaceId);
@@ -140,6 +144,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull AnalyticsService analyticsService;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -175,6 +180,13 @@ class ProjectServiceImpl implements ProjectService {
 
                 return newProject;
             });
+
+            analyticsService.trackEvent("project_created", Map.of(
+                    "project_id", newProject.id().toString(),
+                    "project_name", newProject.name(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "date", Instant.now().toString()));
 
             return get(newProject.id(), workspaceId);
         } catch (UnableToExecuteStatementException e) {
@@ -284,7 +296,7 @@ class ProjectServiceImpl implements ProjectService {
                 .map(Project::id)
                 .toList();
 
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId, criteria);
 
         return ProjectStatsSummary.builder()
                 .content(
@@ -394,8 +406,9 @@ class ProjectServiceImpl implements ProjectService {
                 sortingFactory.getSortableFields());
     }
 
-    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId) {
-        return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
+    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId,
+            ProjectCriteria criteria) {
+        return traceDAO.getStatsByProjectIds(projectIds, workspaceId, criteria.filters())
                 .map(stats -> stats.entrySet().stream()
                         .map(entry -> {
                             Map<String, Object> statsMap = entry.getValue().stats()
@@ -530,6 +543,25 @@ class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    public Mono<Optional<UUID>> resolveProjectIdOrCreate(@Nullable UUID projectId, @Nullable String projectName) {
+        if (projectId != null) {
+            return Mono.deferContextual(ctx -> Mono.fromCallable(() -> {
+                validateProjectIdExists(projectId, ctx.get(RequestContext.WORKSPACE_ID));
+                return Optional.of(projectId);
+            }).subscribeOn(Schedulers.boundedElastic()));
+        }
+
+        if (StringUtils.isBlank(projectName)) {
+            return Mono.just(Optional.empty());
+        }
+
+        return Mono.deferContextual(ctx -> Mono.fromCallable(
+                () -> Optional.of(getOrCreate(ctx.get(RequestContext.WORKSPACE_ID),
+                        projectName, ctx.get(RequestContext.USER_NAME)).id()))
+                .subscribeOn(Schedulers.boundedElastic()));
+    }
+
+    @Override
     public Map<UUID, String> findIdToNameByIds(String workspaceId, Set<UUID> ids) {
         return findByIds(workspaceId, ids)
                 .stream()
@@ -598,6 +630,7 @@ class ProjectServiceImpl implements ProjectService {
         });
 
         return projects
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .map(project -> {
                     Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                             .nonTransaction(connection -> {
@@ -606,7 +639,7 @@ class ProjectServiceImpl implements ProjectService {
                             }).block();
 
                     Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
-                            workspaceId);
+                            workspaceId, ProjectCriteria.builder().build());
 
                     return project.toBuilder()
                             .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))

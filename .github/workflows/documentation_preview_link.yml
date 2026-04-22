@@ -5,6 +5,10 @@ on:
     paths:
         - 'apps/opik-documentation/documentation/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
     run:
         runs-on: ubuntu-latest
@@ -12,7 +16,7 @@ jobs:
         permissions: write-all
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v4
+              uses: actions/checkout@v6
                 
             - name: Install Fern
               run: npm install -g fern-api@0.64.26

@@ -68,6 +68,21 @@ public class DatasetResourceClient {
                 .toList();
     }
 
+    public static DatasetItem buildDatasetItem(PodamFactory factory) {
+        return factory.manufacturePojo(DatasetItem.class).toBuilder()
+                .experimentItems(null)
+                .runSummariesByExperiment(null)
+                .datasetId(null)
+                .build();
+    }
+
+    public static DatasetItemBatch buildDatasetItemBatch(PodamFactory factory) {
+        return factory.manufacturePojo(DatasetItemBatch.class).toBuilder()
+                .projectId(null)
+                .projectName(null)
+                .build();
+    }
+
     public Response callCreateDataset(Dataset dataset, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .request()
@@ -867,14 +882,7 @@ public class DatasetResourceClient {
 
     public List<DatasetItem> streamDatasetItems(DatasetItemStreamRequest request, String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("items")
-                .path("stream")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
+        try (var response = callStreamDatasetItems(request, apiKey, workspaceName)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             // Read the chunked output as a string and parse each line as a DatasetItem
@@ -888,5 +896,15 @@ public class DatasetResourceClient {
                     .map(line -> JsonUtils.readValue(line, DatasetItem.class))
                     .toList();
         }
+    }
+
+    public Response callStreamDatasetItems(DatasetItemStreamRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 }

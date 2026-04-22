@@ -18,6 +18,16 @@ class DatasetItemBatch(UniversalBaseModel):
     If null, dataset_name must be provided
     """
 
+    project_name: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional. Associates the batch with a project by name. Ignored if project_id is provided.
+    """
+
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Optional. Associates the batch with a project by ID. Takes precedence over project_name.
+    """
+
     items: typing.List[DatasetItem]
     batch_group_id: typing.Optional[str] = pydantic.Field(default=None)
     """

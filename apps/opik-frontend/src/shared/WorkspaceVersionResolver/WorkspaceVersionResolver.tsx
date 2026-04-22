@@ -4,7 +4,10 @@ import useAppStore, {
   useWorkspaceVersion,
 } from "@/store/AppStore";
 import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
-import { getVersionOverride } from "@/lib/workspaceVersion";
+import {
+  getVersionOverride,
+  setCachedWorkspaceVersion,
+} from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
 const VERSION_RELOAD_PREFIX = "opik-version-reload:";
@@ -28,6 +31,7 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
     if (!resolvedVersion || !workspaceName) return;
 
     useAppStore.getState().setWorkspaceVersion(resolvedVersion);
+    setCachedWorkspaceVersion(workspaceName, resolvedVersion);
 
     const reloadKey = VERSION_RELOAD_PREFIX + workspaceName;
 

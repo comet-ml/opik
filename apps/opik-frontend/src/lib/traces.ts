@@ -8,12 +8,9 @@ import isObject from "lodash/isObject";
 import isString from "lodash/isString";
 import { TAG_VARIANTS } from "@/ui/tag";
 import { ExperimentItem } from "@/types/datasets";
-import { SPAN_TYPE, Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
+import { Thread, TRACE_VISIBILITY_MODE } from "@/types/traces";
 import { safelyParseJSON } from "@/lib/utils";
 import isEmpty from "lodash/isEmpty";
-import { Filter } from "@/types/filters";
-import { createFilter } from "./filters";
-import { SPAN_TYPE_FILTER_COLUMN } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/helpers";
 
 const MESSAGES_DIVIDER = `\n\n  ----------------- \n\n`;
 
@@ -677,41 +674,4 @@ export const prettifyMessage = (
       prettified: false,
     } as PrettifyMessageResponse;
   }
-};
-
-/**
- * Predicate to check if a filter is a tool span filter.
- */
-const isToolFilter = (filter: Filter): boolean => {
-  return (
-    filter.field === SPAN_TYPE_FILTER_COLUMN.id &&
-    filter.value === SPAN_TYPE.tool
-  );
-};
-
-export const manageToolFilter = (
-  currentFilters: Filter[] | null | undefined,
-  shouldFilter: boolean,
-): Filter[] => {
-  const filters = currentFilters || [];
-  const hasToolFilter = filters.some(isToolFilter);
-
-  if (shouldFilter && !hasToolFilter) {
-    return [
-      ...filters,
-      createFilter({
-        id: SPAN_TYPE_FILTER_COLUMN.id,
-        field: SPAN_TYPE_FILTER_COLUMN.id,
-        type: SPAN_TYPE_FILTER_COLUMN.type,
-        operator: "=",
-        value: SPAN_TYPE.tool,
-      }),
-    ];
-  }
-
-  if (!shouldFilter && hasToolFilter) {
-    return filters.filter((filter) => !isToolFilter(filter));
-  }
-
-  return filters;
 };

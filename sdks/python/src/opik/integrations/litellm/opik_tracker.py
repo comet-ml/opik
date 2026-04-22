@@ -2,12 +2,14 @@ from typing import Callable, Optional, TypeVar
 
 from . import litellm_completion_decorator
 from . import completion_chunks_aggregator
+from opik.types import TraceSource
 
 F = TypeVar("F", bound=Callable)
 
 
 def track_completion(
     project_name: Optional[str] = None,
+    source: Optional[TraceSource] = None,
 ) -> Callable[[F], F]:
     """Decorator for tracking LiteLLM function calls with Opik.
 
@@ -28,6 +30,7 @@ def track_completion(
 
     Args:
         project_name: The name of the project to log data.
+        source: The source of the trace (e.g. "sdk", "optimization").
 
     Returns:
         Decorator function that wraps the completion function with Opik tracking.
@@ -40,4 +43,5 @@ def track_completion(
         name=None,  # Use the function's name (completion or acompletion)
         project_name=project_name,
         generations_aggregator=completion_chunks_aggregator.aggregate,
+        source=source,
     )

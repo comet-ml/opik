@@ -130,6 +130,12 @@ class RedissonLockService implements LockService {
     @Override
     public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
             Duration actionTimeout, Duration lockWaitTime) {
+        return bestEffortLock(lock, action, failToAcquireLockAction, actionTimeout, lockWaitTime, false);
+    }
+
+    @Override
+    public <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction,
+            Duration actionTimeout, Duration lockWaitTime, boolean holdUntilExpiry) {
         RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
@@ -141,7 +147,7 @@ class RedissonLockService implements LockService {
                         // If the lock is not acquired, it executes the fallback action and returns empty to make sure the main action is not executed
                         .switchIfEmpty(failToAcquireLockAction.then(Mono.empty()))
                         .flatMap(locked -> expire(actionTimeout, locked, semaphore))
-                        .flatMap(lockInstance -> runAction(lock, action, lockInstance))))
+                        .flatMap(lockInstance -> runAction(lock, action, lockInstance, holdUntilExpiry))))
                 .onErrorResume(RedisException.class,
                         e -> handleError(lock, failToAcquireLockAction, e).then(Mono.empty()))
                 .onErrorResume(IllegalStateException.class,
@@ -158,10 +164,14 @@ class RedissonLockService implements LockService {
         return redisClient.getBucket(lock.key()).delete().then();
     }
 
-    private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance) {
+    private <T> Mono<T> runAction(Lock lock, Mono<T> action, LockInstance lockInstance, boolean holdUntilExpiry) {
         return runAction(lock, action, lockInstance.locked())
                 .subscribeOn(Schedulers.boundedElastic())
-                .doFinally(signalType -> lockInstance.release(lock));
+                .doFinally(signalType -> {
+                    if (!holdUntilExpiry) {
+                        lockInstance.release(lock);
+                    }
+                });
     }
 
     private Mono<LockInstance> expire(Duration actionTimeout, String locked,

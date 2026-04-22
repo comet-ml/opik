@@ -18,12 +18,7 @@ import TagCell from "@/shared/DataTableCells/TagCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import useDashboardsList from "@/api/dashboards/useDashboardsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import {
-  Dashboard,
-  DASHBOARD_SCOPE,
-  DASHBOARD_TYPE_LABELS,
-} from "@/types/dashboard";
-import { generateDashboardScopeFilter } from "@/lib/filters";
+import { Dashboard, DASHBOARD_TYPE_LABELS } from "@/types/dashboard";
 import Loader from "@/shared/Loader/Loader";
 import AddEditCloneDashboardDialog from "@/v1/pages-shared/dashboards/AddEditCloneDashboardDialog/AddEditCloneDashboardDialog";
 import { DashboardRowActionsCell } from "@/v1/pages/DashboardsPage/DashboardRowActionsCell";
@@ -186,7 +181,11 @@ const DashboardsPage: React.FunctionComponent = () => {
   }, []);
 
   const {
-    permissions: { canCreateDashboards },
+    permissions: {
+      canCreateDashboards,
+      canEditDashboards,
+      canDeleteDashboards,
+    },
   } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
@@ -232,20 +231,12 @@ const DashboardsPage: React.FunctionComponent = () => {
     queryParamConfig: JsonParam,
   });
 
-  const processedFilters = useMemo(
-    () => [
-      ...filters!,
-      ...generateDashboardScopeFilter(DASHBOARD_SCOPE.WORKSPACE),
-    ],
-    [filters],
-  );
-
   const { data, isPending, isPlaceholderData, isFetching } = useDashboardsList(
     {
       workspaceName,
       sorting: sortedColumns,
       search: search!,
-      filters: processedFilters,
+      filters,
       page: page!,
       size: size!,
     },
@@ -293,19 +284,33 @@ const DashboardsPage: React.FunctionComponent = () => {
     defaultValue: {},
   });
 
+  const hasActions =
+    canEditDashboards || canCreateDashboards || canDeleteDashboards;
+
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Dashboard>(),
+      ...(canDeleteDashboards ? [generateSelectColumDef<Dashboard>()] : []),
       ...convertColumnDataToColumn<Dashboard, Dashboard>(columnsDef, {
         columnsOrder,
         selectedColumns,
         sortableColumns: sortableBy,
       }),
-      generateActionsColumDef({
-        cell: DashboardRowActionsCell,
-      }),
+      ...(hasActions
+        ? [
+            generateActionsColumDef({
+              cell: DashboardRowActionsCell,
+            }),
+          ]
+        : []),
     ];
-  }, [selectedColumns, columnsOrder, columnsDef, sortableBy]);
+  }, [
+    selectedColumns,
+    columnsOrder,
+    columnsDef,
+    sortableBy,
+    canDeleteDashboards,
+    hasActions,
+  ]);
 
   const sortConfig = useMemo(
     () => ({
@@ -375,8 +380,12 @@ const DashboardsPage: React.FunctionComponent = () => {
           />
         </div>
         <div className="flex items-center gap-2">
-          <DashboardsActionsPanel dashboards={selectedDashboards} />
-          <Separator orientation="vertical" className="mx-2 h-4" />
+          {canDeleteDashboards && (
+            <>
+              <DashboardsActionsPanel dashboards={selectedDashboards} />
+              <Separator orientation="vertical" className="mx-2 h-4" />
+            </>
+          )}
           <ColumnsButton
             columns={columnsDef}
             selectedColumns={selectedColumns}

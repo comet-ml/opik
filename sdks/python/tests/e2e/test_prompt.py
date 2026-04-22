@@ -27,11 +27,13 @@ def test_prompt__create__happyflow(opik_client: opik.Opik):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
+    project_name = f"some-project-name-{unique_identifier}"
 
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
         metadata={"outer-key": {"inner-key": "inner-value"}},
+        project_name=project_name,
     )
     verifiers.verify_prompt_version(
         prompt,
@@ -42,6 +44,7 @@ def test_prompt__create__happyflow(opik_client: opik.Opik):
         version_id=prompt.__internal_api__version_id__,
         prompt_id=prompt.__internal_api__prompt_id__,
         commit=prompt.commit,
+        project_name=project_name,
     )
 
 
@@ -117,10 +120,12 @@ def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
+    project_name = f"some-project-name-{unique_identifier}"
 
     original_prompt_version = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
+        project_name=project_name,
     )
 
     unique_identifier_new = str(uuid.uuid4())[-6:]
@@ -129,10 +134,12 @@ def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
     new_prompt_version = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template_new,
+        project_name=project_name,
     )
 
     new_prompt_version_from_api = opik_client.get_prompt(
-        name=original_prompt_version.name
+        name=original_prompt_version.name,
+        project_name=project_name,
     )
 
     assert (
@@ -147,7 +154,9 @@ def test_prompt__get_by_name__happyflow(opik_client: opik.Opik):
     assert new_prompt_version_from_api.prompt == new_prompt_version.prompt
 
     previous_prompt_from_api = opik_client.get_prompt(
-        name=original_prompt_version.name, commit=original_prompt_version.commit
+        name=original_prompt_version.name,
+        commit=original_prompt_version.commit,
+        project_name=project_name,
     )
 
     assert (
@@ -175,9 +184,14 @@ def test_prompt__get__not_exists(opik_client: opik.Opik):
 def test_prompt__initialize_class_instance(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
     template = "Hello, {name} from {place}! Nice to meet you, {name}."
+    project_name = f"some-project-name-{unique_identifier}"
 
-    prompt = opik.Prompt(name=f"test-{unique_identifier}", prompt=template)
-    prompt_from_api = opik_client.get_prompt(name=prompt.name)
+    prompt = opik.Prompt(
+        name=f"test-{unique_identifier}", prompt=template, project_name=project_name
+    )
+    prompt_from_api = opik_client.get_prompt(
+        name=prompt.name, project_name=project_name
+    )
 
     verifiers.verify_prompt_version(
         prompt_from_api,
@@ -186,6 +200,7 @@ def test_prompt__initialize_class_instance(opik_client: opik.Opik):
         version_id=prompt.__internal_api__version_id__,
         prompt_id=prompt.__internal_api__prompt_id__,
         commit=prompt.commit,
+        project_name=prompt.project_name,
     )
 
 
@@ -206,9 +221,13 @@ def test_prompt__create_with_custom_type(opik_client: opik.Opik):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
+    project_name = f"some-project-name-{unique_identifier}"
 
     prompt = opik_client.create_prompt(
-        name=prompt_name, prompt=prompt_template, type="jinja2"
+        name=prompt_name,
+        prompt=prompt_template,
+        type="jinja2",
+        project_name=project_name,
     )
 
     verifiers.verify_prompt_version(
@@ -216,6 +235,7 @@ def test_prompt__create_with_custom_type(opik_client: opik.Opik):
         name=prompt_name,
         template=prompt_template,
         type=PromptType.JINJA2,
+        project_name=project_name,
     )
 
 
@@ -224,15 +244,24 @@ def test_prompt__type_persists_in_get(opik_client: opik.Opik):
 
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
+    project_name = f"some-project-name-{unique_identifier}"
 
-    opik_client.create_prompt(name=prompt_name, prompt=prompt_template, type="jinja2")
+    opik_client.create_prompt(
+        name=prompt_name,
+        prompt=prompt_template,
+        type="jinja2",
+        project_name=project_name,
+    )
 
-    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
+    retrieved_prompt = opik_client.get_prompt(
+        name=prompt_name, project_name=project_name
+    )
     verifiers.verify_prompt_version(
         retrieved_prompt,
         name=prompt_name,
         template=prompt_template,
         type=PromptType.JINJA2,
+        project_name=project_name,
     )
 
 
@@ -269,12 +298,19 @@ def test_prompt__search_prompts__returns_all_versions(opik_client: opik.Opik):
 
     prompt_name_1 = f"some-prompt-name-{unique_identifier}"
     prompt_name_2 = f"some-prompt-name-{unique_identifier}-v2"
+    project_name = f"some-project-name-{unique_identifier}"
 
-    opik_client.create_prompt(name=prompt_name_1, prompt="old-template-1")
-    opik_client.create_prompt(name=prompt_name_1, prompt="new-template-1")
-    opik_client.create_prompt(name=prompt_name_2, prompt="some-template-2")
+    opik_client.create_prompt(
+        name=prompt_name_1, prompt="old-template-1", project_name=project_name
+    )
+    opik_client.create_prompt(
+        name=prompt_name_1, prompt="new-template-1", project_name=project_name
+    )
+    opik_client.create_prompt(
+        name=prompt_name_2, prompt="some-template-2", project_name=project_name
+    )
 
-    prompts = opik_client.search_prompts()
+    prompts = opik_client.search_prompts(project_name=project_name)
 
     templates = {p.prompt for p in prompts if isinstance(p, opik.Prompt)}
     assert "new-template-1" in templates
@@ -284,14 +320,17 @@ def test_prompt__search_prompts__returns_all_versions(opik_client: opik.Opik):
 def test_prompt__get_prompts__with_filters__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
+    project_name = f"some-project-name-{unique_identifier}"
     prompt_name = f"some-prompt-name-{unique_identifier}"
     prompt_template_1 = f"some-prompt-text-{unique_identifier}"
     prompt_template_2 = f"some-prompt-text-{unique_identifier}-v2"
 
     # Create two versions for the same prompt
-    _ = opik_client.create_prompt(name=prompt_name, prompt=prompt_template_1)
+    _ = opik_client.create_prompt(
+        name=prompt_name, prompt=prompt_template_1, project_name=project_name
+    )
     prompt_version2 = opik_client.create_prompt(
-        name=prompt_name, prompt=prompt_template_2
+        name=prompt_name, prompt=prompt_template_2, project_name=project_name
     )
 
     # Add tags to prompt version 2
@@ -303,6 +342,7 @@ def test_prompt__get_prompts__with_filters__happyflow(opik_client: opik.Opik):
 
     filtered_prompts = opik_client.search_prompts(
         filter_string=f'name contains "{prompt_name}" AND tags contains "alpha" AND tags contains "beta"',
+        project_name=project_name,
     )
 
     assert len(filtered_prompts) == 1
@@ -312,17 +352,27 @@ def test_prompt__get_prompts__with_filters__happyflow(opik_client: opik.Opik):
 def test_prompt__search_prompts__by_name__happyflow(opik_client: opik.Opik):
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    prompt_name_1 = "common-prefix-one"
-    prompt_name_2 = "common-prefix-two"
+    project_name = f"some-project-name-{unique_identifier}"
+    prompt_name_1 = f"common-prefix-{unique_identifier}-one"
+    prompt_name_2 = f"common-prefix-{unique_identifier}-two"
     prompt_name_3 = f"other-group-{unique_identifier}-three"
 
     # Create three prompts with different names
-    opik_client.create_prompt(name=prompt_name_1, prompt="template-1")
-    opik_client.create_prompt(name=prompt_name_2, prompt="template-2")
-    opik_client.create_prompt(name=prompt_name_3, prompt="template-3")
+    opik_client.create_prompt(
+        name=prompt_name_1, prompt="template-1", project_name=project_name
+    )
+    opik_client.create_prompt(
+        name=prompt_name_2, prompt="template-2", project_name=project_name
+    )
+    opik_client.create_prompt(
+        name=prompt_name_3, prompt="template-3", project_name=project_name
+    )
 
     # Search by name substring via OQL (no additional filters) to retrieve only two matching prompts
-    results = opik_client.search_prompts(filter_string='name contains "common-prefix"')
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "common-prefix-{unique_identifier}"',
+        project_name=project_name,
+    )
 
     names = set(p.name for p in results if isinstance(p, opik.Prompt))
     assert len(results) == 2
@@ -394,6 +444,7 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
     """Test that get_prompt() raises an error for chat prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-{unique_id}"
+    project_name = f"chat-project-{unique_id}"
 
     # Create a chat prompt
     chat_prompt = opik_client.create_chat_prompt(
@@ -402,6 +453,7 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "Hello"},
         ],
+        project_name=project_name,
     )
 
     # Try to retrieve it with get_prompt() - should raise an error due to type mismatch
@@ -409,7 +461,9 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
         opik_client.get_prompt(name=prompt_name)
 
     # Verify the chat prompt remains unchanged
-    retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+    retrieved_chat_prompt = opik_client.get_chat_prompt(
+        name=prompt_name, project_name=project_name
+    )
     assert retrieved_chat_prompt is not None
     verifiers.verify_chat_prompt_version(
         retrieved_chat_prompt,
@@ -418,6 +472,7 @@ def test_get_prompt__chat_prompt__returns_none(opik_client: opik.Opik):
         commit=chat_prompt.commit,
         prompt_id=chat_prompt.__internal_api__prompt_id__,
         version_id=chat_prompt.__internal_api__version_id__,
+        project_name=project_name,
     )
 
 
@@ -425,18 +480,28 @@ def test_get_prompt_history__string_prompt__returns_prompts(opik_client: opik.Op
     """Test that get_prompt_history() returns Prompt objects for text prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-history-{unique_id}"
+    project_name = f"text-project-{unique_id}"
 
     # Create multiple versions of a text prompt
-    v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
-    v2 = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
-    v3 = opik_client.create_prompt(name=prompt_name, prompt="Version 3")
+    v1 = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 1", project_name=project_name
+    )
+    v2 = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 2", project_name=project_name
+    )
+    v3 = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 3", project_name=project_name
+    )
 
     # Retrieve history
-    history = opik_client.get_prompt_history(name=prompt_name)
+    history = opik_client.get_prompt_history(
+        name=prompt_name, project_name=project_name
+    )
 
     assert len(history) == 3
     assert all(isinstance(p, opik.Prompt) for p in history)
     assert history[0].name == prompt_name
+    assert history[0].project_name == project_name
 
     # Verify commits are in the history
     commits = {p.commit for p in history}
@@ -449,11 +514,13 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
     """Test that get_prompt_history() raises an error for chat prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-history-{unique_id}"
+    project_name = f"chat-project-{unique_id}"
 
     # Create a chat prompt
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Hello"}],
+        project_name=project_name,
     )
 
     # Try to get history with get_prompt_history() - should raise an error due to type mismatch
@@ -461,8 +528,12 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
         opik_client.get_prompt_history(name=prompt_name)
 
     # Verify the chat prompt remains unchanged
-    retrieved_chat_prompt = opik_client.get_chat_prompt(name=prompt_name)
+    retrieved_chat_prompt = opik_client.get_chat_prompt(
+        name=prompt_name, project_name=project_name
+    )
     assert retrieved_chat_prompt is not None
+    assert retrieved_chat_prompt.name == prompt_name
+    assert retrieved_chat_prompt.project_name == project_name
     verifiers.verify_chat_prompt_version(
         retrieved_chat_prompt,
         name=prompt_name,
@@ -470,35 +541,44 @@ def test_get_prompt_history__chat_prompt__returns_empty_list(opik_client: opik.O
         commit=chat_prompt.commit,
         prompt_id=chat_prompt.__internal_api__prompt_id__,
         version_id=chat_prompt.__internal_api__version_id__,
+        project_name=project_name,
     )
 
 
 def test_search_prompts__returns_both_types(opik_client: opik.Opik):
     """Test that search_prompts() returns both text and chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
+    project_name = f"search-project-{unique_id}"
 
     # Create text prompts
     text_prompt_1 = opik_client.create_prompt(
         name=f"text-search-{unique_id}-1",
         prompt="Text prompt 1",
+        project_name=project_name,
     )
     text_prompt_2 = opik_client.create_prompt(
         name=f"text-search-{unique_id}-2",
         prompt="Text prompt 2",
+        project_name=project_name,
     )
 
     # Create chat prompts with similar names
     chat_prompt_1 = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}-1",
         messages=[{"role": "user", "content": "Chat 1"}],
+        project_name=project_name,
     )
     chat_prompt_2 = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}-2",
         messages=[{"role": "user", "content": "Chat 2"}],
+        project_name=project_name,
     )
 
     # Search for all prompts with the unique_id
-    results = opik_client.search_prompts(filter_string=f'name contains "{unique_id}"')
+    results = opik_client.search_prompts(
+        filter_string=f'name contains "{unique_id}"',
+        project_name=project_name,
+    )
 
     # Should return both text and chat prompts
     assert len(results) == 4
@@ -511,25 +591,30 @@ def test_search_prompts__returns_both_types(opik_client: opik.Opik):
         text_prompt_2.name,
     }
     assert {p.name for p in chat_prompts} == {chat_prompt_1.name, chat_prompt_2.name}
+    assert all(prompt.project_name == project_name for prompt in results)
 
 
 def test_search_prompts__filter_by_template_structure_text(opik_client: opik.Opik):
     """Test that search_prompts() can filter by template_structure='text'."""
     unique_id = str(uuid.uuid4())[-6:]
+    project_name = f"search-project-{unique_id}"
 
     # Create text and chat prompts
     text_prompt = opik_client.create_prompt(
         name=f"text-search-{unique_id}",
         prompt="Text prompt",
+        project_name=project_name,
     )
     _ = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}",
         messages=[{"role": "user", "content": "Chat"}],
+        project_name=project_name,
     )
 
     # Search for only text prompts
     results = opik_client.search_prompts(
-        filter_string=f'name contains "{unique_id}" AND template_structure = "text"'
+        filter_string=f'name contains "{unique_id}" AND template_structure = "text"',
+        project_name=project_name,
     )
 
     # Should only return text prompts
@@ -541,20 +626,24 @@ def test_search_prompts__filter_by_template_structure_text(opik_client: opik.Opi
 def test_search_prompts__filter_by_template_structure_chat(opik_client: opik.Opik):
     """Test that search_prompts() can filter by template_structure='chat'."""
     unique_id = str(uuid.uuid4())[-6:]
+    project_name = f"search-project-{unique_id}"
 
     # Create text and chat prompts
     _ = opik_client.create_prompt(
         name=f"text-search-{unique_id}",
         prompt="Text prompt",
+        project_name=project_name,
     )
     chat_prompt = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}",
         messages=[{"role": "user", "content": "Chat"}],
+        project_name=project_name,
     )
 
     # Search for only chat prompts
     results = opik_client.search_prompts(
-        filter_string=f'name contains "{unique_id}" AND template_structure = "chat"'
+        filter_string=f'name contains "{unique_id}" AND template_structure = "chat"',
+        project_name=project_name,
     )
 
     # Should only return chat prompts
@@ -567,18 +656,27 @@ def test_get_prompt__with_commit__string_prompt(opik_client: opik.Opik):
     """Test that get_prompt() with commit works for text prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"string-prompt-commit-{unique_id}"
+    project_name = f"get_prompt_-project-{unique_id}"
 
     # Create multiple versions
-    v1 = opik_client.create_prompt(name=prompt_name, prompt="Version 1")
-    _ = opik_client.create_prompt(name=prompt_name, prompt="Version 2")
+    v1 = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 1", project_name=project_name
+    )
+    _ = opik_client.create_prompt(
+        name=prompt_name, prompt="Version 2", project_name=project_name
+    )
 
     # Retrieve specific version by commit
-    retrieved_v1 = opik_client.get_prompt(name=prompt_name, commit=v1.commit)
+    retrieved_v1 = opik_client.get_prompt(
+        name=prompt_name, commit=v1.commit, project_name=project_name
+    )
 
     assert retrieved_v1 is not None
     assert isinstance(retrieved_v1, opik.Prompt)
     assert retrieved_v1.commit == v1.commit
     assert retrieved_v1.prompt == "Version 1"
+    assert retrieved_v1.name == prompt_name
+    assert retrieved_v1.project_name == project_name
 
 
 def test_get_prompt__nonexistent__returns_none(opik_client: opik.Opik):
@@ -725,6 +823,7 @@ def test_prompt__create_with_additional_parameters__happyflow(opik_client: opik.
     prompt_template = f"some-prompt-text-{unique_identifier}"
     tags = ["tag1", "tag2", "production"]
     description = "This is a test prompt description"
+    project_name = f"project-with-params-{unique_identifier}"
 
     # Create prompt with tags and description
     prompt = opik_client.create_prompt(
@@ -732,6 +831,7 @@ def test_prompt__create_with_additional_parameters__happyflow(opik_client: opik.
         prompt=prompt_template,
         tags=tags,
         description=description,
+        project_name=project_name,
     )
 
     # Verify prompt was created
@@ -739,19 +839,25 @@ def test_prompt__create_with_additional_parameters__happyflow(opik_client: opik.
         prompt,
         name=prompt_name,
         template=prompt_template,
+        project_name=project_name,
     )
 
     # Verify tags were set by searching for the prompt
     filtered_prompts = opik_client.search_prompts(
         filter_string=f'name = "{prompt_name}" AND tags contains "tag1"',
+        project_name=project_name,
     )
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
+    assert filtered_prompts[0].project_name == project_name
 
     # Retrieve the prompt to verify description was set
-    retrieved_prompt = opik_client.get_prompt(name=prompt_name)
+    retrieved_prompt = opik_client.get_prompt(
+        name=prompt_name, project_name=project_name
+    )
     assert retrieved_prompt is not None
     assert retrieved_prompt.name == prompt_name
+    assert retrieved_prompt.project_name == project_name
 
 
 def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
@@ -761,12 +867,14 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     prompt_name = f"prompt-with-tags-{unique_identifier}"
     prompt_template = f"some-prompt-text-{unique_identifier}"
     tags = ["text-tag1", "text-tag2", "production"]
+    project_name = f"project-with-tags-{unique_identifier}"
 
     # Create text prompt with tags
     prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt=prompt_template,
         tags=tags,
+        project_name=project_name,
     )
 
     # Verify prompt was created
@@ -774,23 +882,29 @@ def test_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
         prompt,
         name=prompt_name,
         template=prompt_template,
+        project_name=project_name,
     )
 
     # Verify tags were set by searching for the prompt and accessing tags property
     filtered_prompts = opik_client.search_prompts(
         filter_string=f'name = "{prompt_name}" AND tags contains "text-tag1"',
+        project_name=project_name,
     )
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
+    assert filtered_prompts[0].project_name == project_name
     assert set(filtered_prompts[0].tags) == set(tags)
 
 
 def test_prompt__filter_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     shared_tag = _generate_random_tag()
+    project_name = f"project-prompt__filter_versions-{_generate_random_suffix()}"
+
     v1 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v1.version_id],
@@ -799,6 +913,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
     v2 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v2.version_id],
@@ -807,6 +922,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
     v3 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v3-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v3.version_id],
@@ -816,6 +932,7 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
     filtered_versions = opik_client.get_prompt_history(
         name=prompt_name,
         filter_string=f'tags contains "{shared_tag}"',
+        project_name=project_name,
     )
 
     assert len(filtered_versions) == 2
@@ -828,21 +945,26 @@ def test_prompt__filter_versions(opik_client: opik.Opik):
 def test_prompt__search_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     search_term = f"unique-search-term-{_generate_random_suffix()}"
+    project_name = f"project-prompt__search_versions-{_generate_random_suffix()}"
+
     v1 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"This template contains {search_term} for testing",
+        project_name=project_name,
     )
     v2 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"This template has different content {_generate_random_suffix()} for testing",
+        project_name=project_name,
     )
     v3 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Another template with {search_term} included",
+        project_name=project_name,
     )
 
     search_results = opik_client.get_prompt_history(
-        name=prompt_name, search=search_term
+        name=prompt_name, search=search_term, project_name=project_name
     )
 
     assert len(search_results) == 2
@@ -855,11 +977,14 @@ def test_prompt__search_versions(opik_client: opik.Opik):
 def test_chat_prompt__filter_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     shared_tag = _generate_random_tag()
+    project_name = f"project-chat_prompt__filter_versions-{_generate_random_suffix()}"
+
     v1 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[
             {"role": "user", "content": f"Message v1-{_generate_random_suffix()}"}
         ],
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v1.version_id],
@@ -870,6 +995,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
         messages=[
             {"role": "user", "content": f"Message v2-{_generate_random_suffix()}"}
         ],
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v2.version_id],
@@ -880,6 +1006,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
         messages=[
             {"role": "user", "content": f"Message v3-{_generate_random_suffix()}"}
         ],
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[v3.version_id],
@@ -889,6 +1016,7 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
     filtered_versions = opik_client.get_chat_prompt_history(
         name=prompt_name,
         filter_string=f'tags contains "{shared_tag}"',
+        project_name=project_name,
     )
 
     assert len(filtered_versions) == 2
@@ -901,6 +1029,8 @@ def test_chat_prompt__filter_versions(opik_client: opik.Opik):
 def test_chat_prompt__search_versions(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
     search_term = f"unique-search-term-{_generate_random_suffix()}"
+    project_name = f"project-chat_prompt__search_versions-{_generate_random_suffix()}"
+
     v1 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[
@@ -909,6 +1039,7 @@ def test_chat_prompt__search_versions(opik_client: opik.Opik):
                 "content": f"This message contains {search_term} for testing",
             }
         ],
+        project_name=project_name,
     )
     v2 = opik_client.create_chat_prompt(
         name=prompt_name,
@@ -918,16 +1049,18 @@ def test_chat_prompt__search_versions(opik_client: opik.Opik):
                 "content": f"This message has different content {_generate_random_suffix()} for testing",
             }
         ],
+        project_name=project_name,
     )
     v3 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[
             {"role": "user", "content": f"Another message with {search_term} included"}
         ],
+        project_name=project_name,
     )
 
     search_results = opik_client.get_chat_prompt_history(
-        name=prompt_name, search=search_term
+        name=prompt_name, search=search_term, project_name=project_name
     )
 
     assert len(search_results) == 2
@@ -939,9 +1072,14 @@ def test_chat_prompt__search_versions(opik_client: opik.Opik):
 
 def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
+    project_name = (
+        f"project-prompt__update_version_tags__replace_mode-{_generate_random_suffix()}"
+    )
+
     version1 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[version1.version_id],
@@ -951,6 +1089,7 @@ def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
     version2 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[version2.version_id],
@@ -965,7 +1104,9 @@ def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
         merge=False,
     )
 
-    history = opik_client.get_prompt_history(name=prompt_name)
+    history = opik_client.get_prompt_history(
+        name=prompt_name, project_name=project_name
+    )
     assert len(history) == 2
     v1_in_history = next(
         (v for v in history if v.version_id == version1.version_id), None
@@ -979,9 +1120,12 @@ def test_prompt__update_version_tags__replace_mode(opik_client: opik.Opik):
 
 def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opik):
     prompt_name = _generate_random_prompt_name()
+    project_name = f"project-prompt__update_version_tags__default_replace_mode-{_generate_random_suffix()}"
+
     version1 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v1-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[version1.version_id],
@@ -990,6 +1134,7 @@ def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opi
     version2 = opik_client.create_prompt(
         name=prompt_name,
         prompt=f"Template v2-{_generate_random_suffix()}",
+        project_name=project_name,
     )
     opik_client.get_prompts_client().batch_update_prompt_version_tags(
         version_ids=[version2.version_id],
@@ -1002,7 +1147,10 @@ def test_prompt__update_version_tags__default_replace_mode(opik_client: opik.Opi
         tags=new_tags,
     )
 
-    history = opik_client.get_prompt_history(name=prompt_name)
+    history = opik_client.get_prompt_history(
+        name=prompt_name, project_name=project_name
+    )
+    assert len(history) == 2
     v1_in_history = next(
         (v for v in history if v.version_id == version1.version_id), None
     )

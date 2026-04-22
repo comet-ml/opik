@@ -10,6 +10,10 @@ on:
     paths:
       - "sdks/typescript/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -19,7 +23,7 @@ jobs:
         working-directory: sdks/typescript
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0

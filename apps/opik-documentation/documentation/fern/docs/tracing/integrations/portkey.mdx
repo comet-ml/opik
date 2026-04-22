@@ -39,7 +39,7 @@ pip install opik openai portkey-ai
 
 ### Configuring Opik
 
-Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/tracing/sdk_configuration) for detailed instructions on:
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/v1/tracing/sdk_configuration) for detailed instructions on:
 
 - **CLI configuration**: `opik configure`
 - **Code configuration**: `opik.configure()`
@@ -72,7 +72,7 @@ if "PORTKEY_VIRTUAL_KEY" not in os.environ:
 
 ## Logging LLM Calls
 
-Since Portkey provides an OpenAI-compatible API, we can use the [Opik OpenAI SDK wrapper](/docs/opik/integrations/openai) to automatically log Portkey calls as generations in Opik.
+Since Portkey provides an OpenAI-compatible API, we can use the [Opik OpenAI SDK wrapper](/v1/integrations/openai) to automatically log Portkey calls as generations in Opik.
 
 ### Simple LLM Call
 

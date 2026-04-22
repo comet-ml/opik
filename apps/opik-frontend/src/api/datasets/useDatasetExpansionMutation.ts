@@ -30,7 +30,7 @@ const useDatasetExpansionMutation = () => {
     },
     onSuccess: () => {
       toast({
-        title: "Evaluation suite expansion successful",
+        title: "Test suite expansion successful",
         description: "Synthetic samples have been generated successfully",
       });
     },
@@ -43,7 +43,7 @@ const useDatasetExpansionMutation = () => {
       let message =
         errorData?.message ||
         errorData?.detail ||
-        "Failed to expand evaluation suite";
+        "Failed to expand test suite";
 
       // Handle specific model not supported error
       if (message.includes("model not supported")) {
@@ -53,7 +53,7 @@ const useDatasetExpansionMutation = () => {
       }
 
       toast({
-        title: "Evaluation suite expansion failed",
+        title: "Test suite expansion failed",
         description: message,
         variant: "destructive",
       });

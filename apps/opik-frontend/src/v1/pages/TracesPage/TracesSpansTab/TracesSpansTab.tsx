@@ -42,7 +42,6 @@ import {
   ColumnData,
   ColumnsStatistic,
   DynamicColumn,
-  HeaderIconType,
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
@@ -78,14 +77,13 @@ import DurationCell from "@/shared/DataTableCells/DurationCell";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
-import ConfigurationVersionCell from "@/shared/DataTableCells/ConfigurationVersionCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ThreadDetailsPanel from "@/v1/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import TracesOrSpansPathsAutocomplete from "@/v1/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v1/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -96,10 +94,8 @@ import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import useTracesOrSpansStatistic from "@/hooks/useTracesOrSpansStatistic";
 import { useDynamicColumnsCache } from "@/hooks/useDynamicColumnsCache";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { isAgentConfigurationMetadata } from "@/v1/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
-import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
@@ -109,10 +105,10 @@ import {
   DetailsActionSectionValue,
 } from "@/v1/pages-shared/traces/DetailsActionSection";
 import { GuardrailResult } from "@/types/guardrails";
-import { getSpanTypeFilterConfig } from "@/lib/spanTypeFilter";
+import { getSpanTypeFilterConfig } from "@/v1/pages-shared/traces/spanTypeFilter";
 import SpanTypeCell from "@/shared/DataTableCells/SpanTypeCell";
 import { Filter, FilterOperator } from "@/types/filters";
-import { useTruncationEnabled } from "@/v1/server-sync-provider";
+import { useTruncationEnabled } from "@/contexts/server-sync-provider";
 import LogsTypeToggle from "@/v1/pages/TracesPage/LogsTab/LogsTypeToggle";
 import { LOGS_TYPE } from "@/constants/traces";
 
@@ -135,8 +131,6 @@ const formatSpanScoreLabel = (scoreName: string): string => {
 const parseSpanScoreName = (label: string): string => {
   return label.replace(SPAN_FEEDBACK_SCORE_SUFFIX, "");
 };
-
-const COLUMN_CONFIGURATION_VERSION_ID = "configuration_version";
 
 const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
   {
@@ -201,7 +195,6 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
-    iconType: "tags",
     cell: ListCell as never,
   },
   {
@@ -308,7 +301,6 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   COLUMN_EXPERIMENT_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
-  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
@@ -329,7 +321,6 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
-  COLUMN_CONFIGURATION_VERSION_ID,
 ];
 
 const SELECTED_COLUMNS_KEY_SUFFIX = "selected-columns";
@@ -432,10 +423,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
     ColumnSort[]
   >({
@@ -549,12 +536,20 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const excludeFields = useMemo(() => {
     const exclude: string[] = [];
 
-    // Only exclude experiment field for traces (not spans) when column is not visible
     if (
       type === TRACE_DATA_TYPE.traces &&
       !selectedColumns.includes(COLUMN_EXPERIMENT_ID)
     ) {
       exclude.push("experiment");
+    }
+
+    const hasFeedbackScoreColumn = selectedColumns.some(
+      (col) =>
+        col.startsWith(COLUMN_FEEDBACK_SCORES_ID) ||
+        col.startsWith(COLUMN_SPAN_FEEDBACK_SCORES_ID),
+    );
+    if (!hasFeedbackScoreColumn) {
+      exclude.push("feedback_scores");
     }
 
     return exclude;
@@ -978,7 +973,6 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
               label: "Guardrails",
               statisticKey: COLUMN_GUARDRAIL_STATISTIC_ID,
               type: COLUMN_TYPE.category,
-              iconType: "guardrails" as HeaderIconType,
               accessorFn: (row: BaseTraceData) =>
                 row.guardrails_validations || [],
               cell: GuardrailsCell as never,
@@ -986,39 +980,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             },
           ]
         : []),
-      ...(isAgentConfigurationEnabled
-        ? [
-            {
-              id: COLUMN_CONFIGURATION_VERSION_ID,
-              label: "Configuration",
-              type: COLUMN_TYPE.string,
-              sortable: false,
-              cell: ConfigurationVersionCell as never,
-              accessorFn: (row: BaseTraceData) => {
-                const agentConfig = (row.metadata as Record<string, unknown>)?.[
-                  AGENT_CONFIGURATION_METADATA_KEY
-                ];
-
-                if (!isAgentConfigurationMetadata(agentConfig))
-                  return undefined;
-                const version = agentConfig.blueprint_version;
-                if (!version) return undefined;
-                return {
-                  version,
-                  maskId: agentConfig._mask_id,
-                };
-              },
-            },
-          ]
-        : []),
       // Note: metadataColumnsData is NOT added here - it goes in columnSections instead
     ];
-  }, [
-    type,
-    handleThreadIdClick,
-    isGuardrailsEnabled,
-    isAgentConfigurationEnabled,
-  ]);
+  }, [type, handleThreadIdClick, isGuardrailsEnabled]);
 
   const filtersColumnData = useMemo(() => {
     return [

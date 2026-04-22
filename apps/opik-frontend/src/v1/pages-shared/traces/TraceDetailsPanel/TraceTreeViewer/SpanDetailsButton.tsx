@@ -15,7 +15,7 @@ import {
   TREE_DATABLOCK_TYPE,
   TreeNodeConfig,
 } from "@/v1/pages-shared/traces/TraceDetailsPanel/TreeDetailsStore";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 

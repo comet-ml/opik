@@ -14,6 +14,7 @@ class TestDatasetRateLimitRetry(unittest.TestCase):
         dataset_obj = dataset.Dataset(
             name="test_dataset",
             description="test",
+            project_name="Test project",
             rest_client=mock_rest_client,
         )
         return dataset_obj, mock_rest_client

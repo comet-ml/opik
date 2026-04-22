@@ -12,11 +12,12 @@ import InsightsViewSelector from "@/v1/pages/TracesPage/InsightsTab/InsightsView
 import ShareDashboardButton from "@/v1/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v1/pages-shared/dashboards/hooks/useDashboardLifecycle";
+import { DASHBOARD_SCOPE } from "@/types/dashboard";
 import {
   useDashboardStore,
   selectSetRuntimeConfig,
 } from "@/store/DashboardStore";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import {
   PROJECT_TEMPLATE_LIST,
   DEPRECATED_PROJECT_METRICS_ID,
@@ -66,6 +67,7 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
   const { dashboard, isPending, saveStatus } = useDashboardLifecycle({
     dashboardId: dashboardId || null,
     enabled: Boolean(dashboardId),
+    scope: DASHBOARD_SCOPE.INSIGHTS,
   });
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);

@@ -15,7 +15,7 @@ import org.redisson.api.RMapReactive;
 import org.redisson.api.RScoredSortedSetReactive;
 import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
-import org.redisson.api.StreamMessageId;
+import org.redisson.api.stream.StreamMessageId;
 import reactor.core.publisher.Mono;
 
 import java.util.List;

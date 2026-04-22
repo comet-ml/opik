@@ -2,12 +2,14 @@
 
 # isort: skip_file
 
+from .kpi_card_request_entity_type import KpiCardRequestEntityType
 from .project_metric_request_public_interval import ProjectMetricRequestPublicInterval
 from .project_metric_request_public_metric_type import ProjectMetricRequestPublicMetricType
 from .project_update_visibility import ProjectUpdateVisibility
 from .project_write_visibility import ProjectWriteVisibility
 
 __all__ = [
+    "KpiCardRequestEntityType",
     "ProjectMetricRequestPublicInterval",
     "ProjectMetricRequestPublicMetricType",
     "ProjectUpdateVisibility",

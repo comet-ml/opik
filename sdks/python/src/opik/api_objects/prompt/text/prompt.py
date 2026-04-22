@@ -2,7 +2,10 @@ import copy
 import json
 import logging
 from typing import Any, Dict, Optional, Union, List
+
+import httpx
 from typing_extensions import override
+from opik.rest_api import core as rest_api_core
 from opik.rest_api import types as rest_api_types
 from . import prompt_template
 from .. import types as prompt_types
@@ -28,6 +31,7 @@ class Prompt(base_prompt.BasePrompt):
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
+        project_name: Optional[str] = None,
     ) -> None:
         """
         Initializes a new instance of the class with the given parameters.
@@ -43,6 +47,7 @@ class Prompt(base_prompt.BasePrompt):
             description: Optional description of the prompt (up to 255 characters).
             change_description: Optional description of changes in this version.
             tags: Optional list of tags to associate with the prompt.
+            project_name: Optional project name for the prompt.
 
         Raises:
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
@@ -58,32 +63,65 @@ class Prompt(base_prompt.BasePrompt):
         self._description = description
         self._change_description = change_description
         self._tags = copy.copy(tags) if tags else []
+        self._project_name = project_name
 
-        self._sync_with_backend()
+        self._commit: Optional[str] = None
+        self.__internal_api__prompt_id__: Optional[str] = None
+        self.__internal_api__version_id__: Optional[str] = None
+        self._synced: bool = False
 
-    def _sync_with_backend(self) -> None:
-        from opik.api_objects import opik_client
+        self.sync_with_backend()
 
-        opik_client_ = opik_client.get_client_cached()
-        prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
-        prompt_version = prompt_client_.create_prompt(
-            name=self._name,
-            prompt=self._template.text,
-            metadata=self._metadata,
-            type=self._type,
-            id=self._id,
-            description=self._description,
-            change_description=self._change_description,
-            tags=self._tags,
-        )
+    @property
+    def synced(self) -> bool:
+        """Whether the prompt has been successfully synced with the backend."""
+        return self._synced
 
-        self._commit = prompt_version.commit
-        self.__internal_api__prompt_id__ = prompt_version.prompt_id
-        self.__internal_api__version_id__ = prompt_version.id
-        # Update fields from backend response to ensure consistency
-        self._id = prompt_version.id
-        self._change_description = prompt_version.change_description
-        self._tags = prompt_version.tags
+    def sync_with_backend(self) -> bool:
+        """Synchronize the prompt with the backend.
+
+        Creates or updates the prompt on the Opik server. If the sync fails,
+        a warning is logged and the prompt continues to work locally.
+
+        Returns:
+            True if the sync succeeded, False otherwise.
+        """
+        try:
+            from opik.api_objects import opik_client
+
+            opik_client_ = opik_client.get_global_client()
+            prompt_client_ = prompt_client.PromptClient(opik_client_.rest_client)
+            prompt_version = prompt_client_.create_prompt(
+                name=self._name,
+                prompt=self._template.text,
+                metadata=self._metadata,
+                type=self._type,
+                id=self._id,
+                description=self._description,
+                change_description=self._change_description,
+                tags=self._tags,
+                project_name=self._project_name,
+            )
+
+            self._commit = prompt_version.commit
+            self.__internal_api__prompt_id__ = prompt_version.prompt_id
+            self.__internal_api__version_id__ = prompt_version.id
+            # Update fields from backend response to ensure consistency
+            self._id = prompt_version.id
+            self._change_description = prompt_version.change_description
+            self._tags = prompt_version.tags
+            self._synced = True
+            return True
+        except (rest_api_core.ApiError, httpx.ConnectError, httpx.TimeoutException):
+            LOGGER.warning(
+                "Failed to sync prompt '%s' with the backend. "
+                "The prompt will work locally but is not persisted on the server. "
+                "You can retry by calling .sync_with_backend().",
+                self._name,
+                exc_info=True,
+            )
+            self._synced = False
+            return False
 
     @property
     @override
@@ -104,7 +142,7 @@ class Prompt(base_prompt.BasePrompt):
 
     @property
     @override
-    def version_id(self) -> str:
+    def version_id(self) -> Optional[str]:
         """The unique identifier of the prompt version."""
         return self.__internal_api__version_id__
 
@@ -143,6 +181,11 @@ class Prompt(base_prompt.BasePrompt):
     def tags(self) -> Optional[List[str]]:
         """The list of tags associated with the prompt."""
         return copy.copy(self._tags) if self._tags else []
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this prompt belongs to."""
+        return self._project_name
 
     @override
     def format(self, **kwargs: Any) -> Union[str, List[Dict[str, Any]]]:
@@ -209,6 +252,7 @@ class Prompt(base_prompt.BasePrompt):
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
     ) -> "Prompt":
         # will not call __init__ to avoid API calls, create new instance with __new__
         prompt = cls.__new__(cls)
@@ -231,4 +275,6 @@ class Prompt(base_prompt.BasePrompt):
         )
         prompt._change_description = prompt_version.change_description
         prompt._tags = copy.copy(prompt_version.tags) if prompt_version.tags else []
+        prompt._project_name = project_name
+        prompt._synced = True
         return prompt

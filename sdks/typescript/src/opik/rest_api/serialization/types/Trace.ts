@@ -9,6 +9,7 @@ import { ExperimentItemReference } from "./ExperimentItemReference.js";
 import { FeedbackScore } from "./FeedbackScore.js";
 import { GuardrailsValidation } from "./GuardrailsValidation.js";
 import { JsonListString } from "./JsonListString.js";
+import { TraceSource } from "./TraceSource.js";
 import { TraceVisibilityMode } from "./TraceVisibilityMode.js";
 
 export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikApi.Trace> = core.serialization.object({
@@ -48,6 +49,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
     providers: core.serialization.list(core.serialization.string()).optional(),
     experiment: ExperimentItemReference.optional(),
+    source: TraceSource.optional(),
 });
 
 export declare namespace Trace {
@@ -82,5 +84,6 @@ export declare namespace Trace {
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
         experiment?: ExperimentItemReference.Raw | null;
+        source?: TraceSource.Raw | null;
     }
 }

@@ -1,6 +1,6 @@
 import { EvaluationResult, EvaluationTestResult } from "../types";
 import {
-  EvaluationSuiteResult,
+  TestSuiteResult,
   ItemResult,
   DEFAULT_EXECUTION_POLICY,
 } from "./types";
@@ -57,7 +57,7 @@ function groupByTrialId(
 }
 
 /**
- * Builds an EvaluationSuiteResult from an EvaluationResult and execution policies.
+ * Builds a TestSuiteResult from an EvaluationResult and execution policies.
  *
  * Pass/fail logic (matching Python exactly):
  * - Group test results by datasetItemId
@@ -65,12 +65,14 @@ function groupByTrialId(
  * - A run passes if: no scoreResults, OR ALL scoreResults have truthy values
  * - Count runsPassed = number of passing runs
  * - Item passes if runsPassed >= passThreshold (from executionPolicies)
- * - allItemsPassed = ALL items pass
- * - passRate = itemsPassed / itemsTotal (1.0 if itemsTotal === 0)
+ * - itemsTotal = ALL items (including those without assertions)
+ * - allItemsPassed = itemsPassed === itemsTotal
+ * - passRate = itemsPassed / itemsWithAssertions (undefined if none have assertions)
  */
 export function buildSuiteResult(
-  evalResult: EvaluationResult
-): EvaluationSuiteResult {
+  evalResult: EvaluationResult,
+  options: { suiteName?: string; totalTime?: number } = {}
+): TestSuiteResult {
   const itemGroups = groupByDatasetItemId(evalResult.testResults);
 
   const itemResults = new Map<string, ItemResult>();
@@ -93,25 +95,39 @@ export function buildSuiteResult(
     const policy =
       firstResult.resolvedExecutionPolicy ?? DEFAULT_EXECUTION_POLICY;
     const passThreshold = policy.passThreshold;
+    const configuredRunsPerItem = policy.runsPerItem;
     const passed = runsPassed >= passThreshold;
+    const hasAssertions = testResults.some((tr) => tr.scoreResults.length > 0);
 
     itemResults.set(itemId, {
       datasetItemId: itemId,
       passed,
+      hasAssertions,
       runsPassed,
       runsTotal,
+      configuredRunsPerItem,
       passThreshold,
       testResults,
     });
   }
 
+  // itemsTotal and allItemsPassed count ALL items (matching Python's items_total / all_items_passed)
   const itemsTotal = itemResults.size;
   const itemsPassed = [...itemResults.values()].filter((r) => r.passed).length;
-
   const allItemsPassed = itemsTotal === 0 || itemsPassed === itemsTotal;
-  const passRate = itemsTotal === 0 ? undefined : itemsPassed / itemsTotal;
 
-  return {
+  // passRate is computed only over items that had at least one assertion evaluated
+  // (matching Python's pass_rate property, which filters by has_assertions)
+  const itemsWithAssertions = [...itemResults.values()].filter(
+    (r) => r.hasAssertions
+  );
+  const passRate =
+    itemsWithAssertions.length === 0
+      ? undefined
+      : itemsWithAssertions.filter((r) => r.passed).length /
+        itemsWithAssertions.length;
+
+  return new TestSuiteResult({
     allItemsPassed,
     itemsPassed,
     itemsTotal,
@@ -120,5 +136,7 @@ export function buildSuiteResult(
     experimentId: evalResult.experimentId,
     experimentName: evalResult.experimentName,
     experimentUrl: evalResult.resultUrl,
-  };
+    suiteName: options.suiteName,
+    totalTime: options.totalTime,
+  });
 }

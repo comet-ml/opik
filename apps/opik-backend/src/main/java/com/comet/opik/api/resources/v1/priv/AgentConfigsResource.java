@@ -4,11 +4,11 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.AgentConfigCreate;
 import com.comet.opik.api.AgentConfigEnvSetByName;
 import com.comet.opik.api.AgentConfigEnvUpdate;
+import com.comet.opik.api.AgentConfigRemoveValues;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentConfig;
 import com.comet.opik.domain.AgentConfigService;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.headers.Header;
@@ -18,7 +18,6 @@ import io.swagger.v3.oas.annotations.parameters.RequestBody;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
-import jakarta.inject.Provider;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -26,6 +25,7 @@ import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.PUT;
 import jakarta.ws.rs.Path;
@@ -53,26 +53,26 @@ import java.util.UUID;
 public class AgentConfigsResource {
 
     private final @NonNull AgentConfigService agentConfigService;
-    private final @NonNull Provider<RequestContext> requestContext;
 
     @POST
     @Path("/blueprints")
     @JsonView(AgentConfig.View.Write.class)
-    @Operation(operationId = "createAgentConfig", summary = "Create optimizer config or add blueprint", description = "Creates a new optimizer config with initial blueprint, or adds a new blueprint to existing config", responses = {
+    @Operation(operationId = "createAgentConfig", summary = "Create optimizer config with initial blueprint", description = "Creates a new optimizer config with initial blueprint. Fails if the project already has a config.", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
-            @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "400", description = "Bad Request (e.g. MASK type not allowed)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "409", description = "Conflict (config already exists)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     public Response createAgentConfig(
             @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigCreate.class))) @NotNull @Valid AgentConfigCreate request,
             @Context UriInfo uriInfo) {
 
-        log.info("Creating blueprint for project '{}'", request.projectName());
+        log.info("Creating config for project '{}'", request.projectName());
 
-        AgentBlueprint createdBlueprint = agentConfigService.createOrUpdateConfig(request);
+        AgentBlueprint createdBlueprint = agentConfigService.createConfig(request).block();
 
-        log.info("Created blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
+        log.info("Created config with blueprint '{}' for project '{}'", createdBlueprint.id(), request.projectName());
 
         URI location = uriInfo.getAbsolutePathBuilder()
                 .path(createdBlueprint.id().toString())
@@ -80,6 +80,98 @@ public class AgentConfigsResource {
 
         return Response.created(location)
                 .entity(createdBlueprint)
+                .build();
+    }
+
+    @POST
+    @Path("/blueprints/projects/{project_id}/masks/{mask_id}")
+    @JsonView(AgentConfig.View.Write.class)
+    @Operation(operationId = "createBlueprintFromMask", summary = "Create blueprint from mask", description = "Creates a new blueprint by applying a mask's changes on top of the latest blueprint for the project.", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "404", description = "Not Found (no config or mask not found)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response createBlueprintFromMask(
+            @PathParam("project_id") UUID projectId,
+            @PathParam("mask_id") UUID maskId,
+            @Context UriInfo uriInfo) {
+
+        log.info("Creating blueprint from mask '{}' for project '{}'", maskId, projectId);
+
+        AgentBlueprint blueprint = agentConfigService.createBlueprintFromMask(projectId, maskId).block();
+
+        log.info("Created blueprint '{}' from mask '{}' for project '{}'", blueprint.id(), maskId, projectId);
+
+        URI location = uriInfo.getBaseUriBuilder()
+                .path("v1/private/agent-configs/blueprints")
+                .path(blueprint.id().toString())
+                .build();
+
+        return Response.created(location)
+                .build();
+    }
+
+    @POST
+    @Path("/blueprints/remove-keys")
+    @Operation(operationId = "removeConfigKeys", summary = "Remove configuration parameters", description = "Removes configuration parameters by creating a new blueprint that closes the specified keys. Returns 204 if no changes were needed (idempotent).", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "204", description = "No changes needed (no config or keys already removed)"),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response removeConfigKeys(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigRemoveValues.class))) @NotNull @Valid AgentConfigRemoveValues request,
+            @Context UriInfo uriInfo) {
+
+        String projectIdentifier = request.projectId() != null
+                ? request.projectId().toString()
+                : request.projectName();
+        log.info("Removing config keys for project '{}'", projectIdentifier);
+
+        AgentBlueprint blueprint = agentConfigService.removeConfigKeys(request).block();
+
+        if (blueprint == null) {
+            log.info("No config keys to remove for project '{}'", projectIdentifier);
+            return Response.noContent().build();
+        }
+
+        log.info("Removed config keys, created blueprint '{}' for project '{}'", blueprint.id(),
+                projectIdentifier);
+
+        URI location = uriInfo.getBaseUriBuilder()
+                .path("v1/private/agent-configs/blueprints")
+                .path(blueprint.id().toString())
+                .build();
+
+        return Response.created(location)
+                .build();
+    }
+
+    @PATCH
+    @Path("/blueprints")
+    @JsonView(AgentConfig.View.Write.class)
+    @Operation(operationId = "updateAgentConfig", summary = "Add blueprint to existing config", description = "Adds a new blueprint to an existing optimizer config. Fails if the project has no config yet.", responses = {
+            @ApiResponse(responseCode = "201", description = "Created", headers = {
+                    @Header(name = "Location", required = true, example = "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}", schema = @Schema(implementation = String.class))}),
+            @ApiResponse(responseCode = "404", description = "Not Found (no config for project)", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
+            @ApiResponse(responseCode = "401", description = "Unauthorized", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
+    })
+    public Response updateAgentConfig(
+            @RequestBody(content = @Content(schema = @Schema(implementation = AgentConfigCreate.class))) @NotNull @Valid AgentConfigCreate request,
+            @Context UriInfo uriInfo) {
+
+        log.info("Adding blueprint to config for project '{}'", request.projectName());
+
+        AgentBlueprint blueprint = agentConfigService.updateConfig(request).block();
+
+        log.info("Added blueprint '{}' to config for project '{}'", blueprint.id(), request.projectName());
+
+        URI location = uriInfo.getAbsolutePathBuilder()
+                .path(blueprint.id().toString())
+                .build();
+
+        return Response.created(location)
                 .build();
     }
 
@@ -190,7 +282,7 @@ public class AgentConfigsResource {
 
         log.info("Creating or updating environments for project '{}'", request.projectId());
 
-        agentConfigService.createOrUpdateEnvs(request);
+        agentConfigService.createOrUpdateEnvs(request).block();
 
         return Response.noContent().build();
     }
@@ -210,7 +302,7 @@ public class AgentConfigsResource {
         log.info("Setting environment '{}' to blueprint '{}' for project '{}'",
                 envName, request.blueprintName(), projectId);
 
-        agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName());
+        agentConfigService.setEnvByBlueprintName(projectId, envName, request.blueprintName()).block();
 
         return Response.noContent().build();
     }

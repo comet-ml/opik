@@ -6,6 +6,10 @@ on:
     pull_request:
         paths:
         - 'sdks/opik_optimizer/**'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
     lint:
         runs-on: ubuntu-latest
@@ -14,7 +18,7 @@ jobs:
             run:
                 working-directory: sdks/opik_optimizer
         steps:
-            - uses: actions/checkout@v4
+            - uses: actions/checkout@v6
 
             - name: install pre-commit
               run: pip install pre-commit

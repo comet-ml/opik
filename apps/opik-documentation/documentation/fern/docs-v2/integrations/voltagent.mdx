@@ -1,0 +1,123 @@
+---
+description: Start here to integrate Opik into your VoltAgent-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: VoltAgent | Opik Documentation
+og:description: Build and manage AI agents effectively with VoltAgent, leveraging
+  modular design for tool integration and memory management.
+og:site_name: Opik Documentation
+og:title: VoltAgent Framework - Build AI Agents with Opik
+title: Observability for VoltAgent with Opik
+---
+
+VoltAgent is an agent framework designed to simplify the creation and management of AI agents with built-in support for tool usage, memory management, and multi-agent coordination. It provides a flexible architecture for building production-ready AI agent systems.
+
+VoltAgent's primary advantage is its modular design that allows developers to easily create, customize, and deploy AI agents with comprehensive tool integration and memory capabilities.
+
+
+## Getting started
+
+To use the VoltAgent integration with Opik, you will need to have VoltAgent and the required OpenTelemetry packages installed:
+
+```bash
+npm install @voltagent/core @opentelemetry/api @opentelemetry/sdk-trace @opentelemetry/exporter-trace-otlp-http
+```
+
+## Environment configuration
+
+Configure your environment variables based on your Opik deployment:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with VoltAgent
+
+Set up OpenTelemetry instrumentation for VoltAgent:
+
+```typescript
+import { trace, SpanStatusCode } from "@opentelemetry/api";
+import { NodeTracerProvider } from "@opentelemetry/sdk-trace-node";
+import { BatchSpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+
+// Configure the OTLP exporter
+const otlpExporter = new OTLPTraceExporter();
+
+// Set up the tracer provider
+const provider = new NodeTracerProvider();
+provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
+provider.register();
+
+// Your VoltAgent code will now automatically send traces to Opik
+import { Agent } from "@voltagent/core";
+
+const agent = new Agent();
+// ... agent configuration
+```
+
+## Further improvements
+
+If you have any questions or suggestions for improving the VoltAgent integration, please [open an issue](https://github.com/comet-ml/opik/issues/new/choose) on our GitHub repository.

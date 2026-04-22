@@ -11,6 +11,10 @@ on:
       - "apps/opik-backend/src/main/resources/liquibase/db-app-analytics/migrations/**"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   check-migration-prefix-conflicts:
     runs-on: ubuntu-latest
@@ -18,7 +22,7 @@ jobs:
     
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0  # Fetch full history to compare with main
       

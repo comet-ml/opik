@@ -19,6 +19,7 @@ from opik.rest_api import client as rest_api_client
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types import (
     dataset_item_write as rest_dataset_item,
+    dataset_public as rest_dataset_public,
     dataset_version_public,
     evaluator_item_write as rest_evaluator_item,
     execution_policy_write as rest_execution_policy,
@@ -162,16 +163,25 @@ class DatasetVersion(DatasetExportOperations):
         dataset_id: str,
         rest_client: rest_api_client.OpikApi,
         version_info: dataset_version_public.DatasetVersionPublic,
+        project_name: Optional[str],
+        client: Optional[Any] = None,
     ) -> None:
         self._dataset_name = dataset_name
         self._dataset_id = dataset_id
         self._rest_client = rest_client
         self._version_info = version_info
+        self._project_name = project_name
+        self.client = client
 
     @property
     def dataset_name(self) -> str:
         """The name of the dataset this version belongs to."""
         return self._dataset_name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
 
     @property
     def name(self) -> str:
@@ -264,6 +274,7 @@ class DatasetVersion(DatasetExportOperations):
         return rest_operations.stream_dataset_items(
             rest_client=self._rest_client,
             dataset_name=self._dataset_name,
+            project_name=self._project_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
@@ -283,7 +294,10 @@ class DatasetVersion(DatasetExportOperations):
         """
         return self._version_info
 
-    def get_evaluators(self) -> List[Any]:
+    def get_evaluators(
+        self,
+        evaluator_model: Optional[str] = None,
+    ) -> List[Any]:
         """
         Get suite-level evaluators for this dataset version.
 
@@ -313,8 +327,10 @@ class Dataset(DatasetExportOperations):
         self,
         name: str,
         description: Optional[str],
+        project_name: Optional[str],
         rest_client: rest_api_client.OpikApi,
         dataset_items_count: Optional[int] = None,
+        client: Optional[Any] = None,
     ) -> None:
         """
         A Dataset object. This object should not be created directly, instead use :meth:`opik.Opik.create_dataset` or :meth:`opik.Opik.get_dataset`.
@@ -323,21 +339,60 @@ class Dataset(DatasetExportOperations):
         self._description = description
         self._rest_client = rest_client
         self._dataset_items_count = dataset_items_count
+        self._project_name = project_name
+        self.client = client
 
         self._id_to_hash: Dict[str, str] = {}
         self._hashes: Set[str] = set()
+
+    @classmethod
+    def from_public(
+        cls,
+        dataset_fern: rest_dataset_public.DatasetPublic,
+        project_name: str,
+        rest_client: rest_api_client.OpikApi,
+        client: Optional[Any] = None,
+    ) -> "Dataset":
+        """Build a Dataset from a backend response, resolving the actual project.
+
+        The backend may find the dataset via workspace-wide fallback even when
+        the caller's project_name doesn't match the dataset's actual project.
+        This method uses project_id from the response to resolve the real
+        project name, so downstream calls target the correct project.
+        """
+        actual_project_name: Optional[str] = None
+        if dataset_fern.project_id is not None:
+            actual_project_name = rest_client.projects.get_project_by_id(
+                dataset_fern.project_id
+            ).name
+
+        dataset_ = cls(
+            name=dataset_fern.name,
+            description=dataset_fern.description,
+            project_name=actual_project_name or project_name,
+            rest_client=rest_client,
+            dataset_items_count=dataset_fern.dataset_items_count,
+            client=client,
+        )
+        dataset_.__internal_api__sync_hashes__()
+        return dataset_
 
     @functools.cached_property
     def id(self) -> str:
         """The id of the dataset"""
         return self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         ).id
 
     @property
     def name(self) -> str:
         """The name of the dataset."""
         return self._name
+
+    @property
+    def project_name(self) -> Optional[str]:
+        """The name of the project this dataset belongs to."""
+        return self._project_name
 
     @property
     def description(self) -> Optional[str]:
@@ -352,10 +407,9 @@ class Dataset(DatasetExportOperations):
         If the count is not cached locally, it will be fetched from the backend.
         """
         if self._dataset_items_count is None:
-            dataset_info = self._rest_client.datasets.get_dataset_by_identifier(
-                dataset_name=self._name
-            )
+            dataset_info = self._rest_client.datasets.get_dataset_by_id(id=self.id)
             self._dataset_items_count = dataset_info.dataset_items_count
+
         return self._dataset_items_count
 
     def get_current_version_name(self) -> Optional[str]:
@@ -479,7 +533,7 @@ class Dataset(DatasetExportOperations):
             List of tag strings.
         """
         dataset_fern = self._rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=self._name
+            dataset_name=self._name, project_name=self._project_name
         )
         return dataset_fern.tags or []
 
@@ -538,7 +592,10 @@ class Dataset(DatasetExportOperations):
         """
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: self._rest_client.datasets.create_or_update_dataset_items(
-                dataset_name=self._name, items=batch, batch_group_id=batch_group_id
+                dataset_name=self._name,
+                items=batch,
+                batch_group_id=batch_group_id,
+                project_name=self._project_name,
             )
         )
         LOGGER.debug("Successfully sent dataset items batch of size %d", len(batch))
@@ -712,6 +769,7 @@ class Dataset(DatasetExportOperations):
         return rest_operations.stream_dataset_items(
             rest_client=self._rest_client,
             dataset_name=self._name,
+            project_name=self._project_name,
             nb_samples=nb_samples,
             batch_size=batch_size,
             dataset_item_ids=dataset_item_ids,
@@ -825,4 +883,6 @@ class Dataset(DatasetExportOperations):
             dataset_id=self.id,
             rest_client=self._rest_client,
             version_info=version_info,
+            project_name=self._project_name,
+            client=self.client,
         )

@@ -34,6 +34,11 @@ def _span_name(openai_span_data: tracing.SpanData) -> str:
         return "Response"
     elif isinstance(openai_span_data, tracing.HandoffSpanData):
         return "Handoff"
+    # TaskSpanData and TurnSpanData appeared in openai-agents 0.14.0
+    elif openai_span_data.type == "task":
+        return "Task"
+    elif openai_span_data.type == "turn":
+        return "Turn"
     else:
         return "Unknown"
 
@@ -83,6 +88,13 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
 
     elif openai_span_data.type == "handoff":
         pass  # No explicit input or output
+
+    # TaskSpanData and TurnSpanData appeared in openai-agents 0.14.0
+    elif openai_span_data.type == "task":
+        pass  # Structural span wrapping the entire agent run
+
+    elif openai_span_data.type == "turn":
+        pass  # Structural span wrapping a single agent turn
 
     elif openai_span_data.type == "custom":
         input_data = openai_span_data.data.get("input")

@@ -1,6 +1,7 @@
 """Project import functionality."""
 
 import json
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -9,6 +10,7 @@ import opik
 from opik import id_helpers
 from rich.console import Console
 
+from .._attachment_path import safe_attachment_path
 from ..migration_manifest import MigrationManifest
 from .experiment import recreate_experiments
 from .utils import (
@@ -17,9 +19,87 @@ from .utils import (
     clean_usage_for_import,
     sort_spans_topologically,
     debug_print,
+    build_import_metadata,
+    _TRACE_IMPORT_FIELDS,
+    _SPAN_IMPORT_FIELDS,
 )
 
 console = Console()
+LOGGER = logging.getLogger(__name__)
+
+
+def _upload_attachments_for_trace(
+    client: opik.Opik,
+    project_dir: Path,
+    attachments: list,
+    new_trace_id: str,
+    span_id_map: Dict[str, str],
+    project_name: str,
+) -> None:
+    """Queue attachment uploads for an imported trace via the background streamer.
+
+    *project_dir* is the per-project directory that contains the
+    ``attachments/<entity_type>/<original_entity_id>/<file_name>`` tree
+    created during export.
+
+    ID translation:
+    - trace attachments  → queued against *new_trace_id*
+    - span attachments   → looked up in *span_id_map*; skipped with a
+                           warning when the mapping is missing.
+
+    Uploads are non-blocking; call ``client.flush()`` after all traces for a
+    project are processed to wait for completion. The streamer handles retries
+    and monitoring automatically.
+    """
+    for att in attachments:
+        entity_type = att.get("entity_type")
+        original_entity_id = att.get("entity_id")
+        file_name = att.get("file_name")
+        mime_type = att.get("mime_type")
+
+        if not all([entity_type, original_entity_id, file_name]):
+            continue
+
+        new_entity_id: Optional[str]
+        if entity_type == "trace":
+            new_entity_id = new_trace_id
+        elif entity_type == "span":
+            new_entity_id = span_id_map.get(original_entity_id)
+            if not new_entity_id:
+                console.print(
+                    f"[yellow]Warning: span {original_entity_id} not in span map; "
+                    f"skipping attachment '{file_name}'[/yellow]"
+                )
+                continue
+        else:
+            continue
+
+        # Use the same basename normalisation as the exporter so that files
+        # saved as e.g. "img.png" (from "dir/img.png") are found correctly.
+        file_path = safe_attachment_path(
+            base_dir=project_dir,
+            entity_type=entity_type,
+            entity_id=original_entity_id,
+            file_name=file_name,
+        )
+        if file_path is None:
+            console.print(
+                f"[yellow]Warning: attachment '{file_name}' has an invalid or unsafe "
+                "path; skipping[/yellow]"
+            )
+            continue
+
+        if not file_path.exists():
+            continue
+
+        client.queue_attachment_upload(
+            entity_type=entity_type,
+            entity_id=new_entity_id,
+            project_name=project_name,
+            file_path=str(file_path),
+            file_name=file_name,
+            mime_type=mime_type,
+        )
 
 
 def import_projects_from_directory(
@@ -30,6 +110,7 @@ def import_projects_from_directory(
     debug: bool,
     recreate_experiments_flag: bool = False,
     manifest: Optional[MigrationManifest] = None,
+    include_attachments: bool = True,
 ) -> Dict[str, int]:
     """Import projects from a directory.
 
@@ -134,7 +215,11 @@ def import_projects_from_directory(
                             ),
                             input=trace_info.get("input", {}),
                             output=trace_info.get("output", {}),
-                            metadata=trace_info.get("metadata"),
+                            metadata=build_import_metadata(
+                                trace_info,
+                                _TRACE_IMPORT_FIELDS,
+                                trace_info.get("metadata"),
+                            ),
                             tags=trace_info.get("tags"),
                             feedback_scores=feedback_scores,
                             error_info=trace_info.get("error_info"),
@@ -196,7 +281,11 @@ def import_projects_from_directory(
                                 ),
                                 input=span_info.get("input", {}),
                                 output=span_info.get("output", {}),
-                                metadata=span_info.get("metadata"),
+                                metadata=build_import_metadata(
+                                    span_info,
+                                    _SPAN_IMPORT_FIELDS,
+                                    span_info.get("metadata"),
+                                ),
                                 tags=span_info.get("tags"),
                                 usage=usage_data,
                                 feedback_scores=span_feedback_scores,
@@ -213,6 +302,22 @@ def import_projects_from_directory(
                             if original_span_id and span.id:
                                 span_id_map[original_span_id] = span.id
 
+                        # Queue attachment uploads while span_id_map is still
+                        # populated. Uploads run in the background via the
+                        # streamer (retries + parallelism); flush() is called
+                        # after all traces for this project are processed.
+                        if include_attachments and not dry_run:
+                            attachments = trace_data.get("attachments", [])
+                            if attachments:
+                                _upload_attachments_for_trace(
+                                    client=client,
+                                    project_dir=project_dir,
+                                    attachments=attachments,
+                                    new_trace_id=trace.id,
+                                    span_id_map=span_id_map,
+                                    project_name=project_name,
+                                )
+
                         traces_imported += 1
 
                         # Mark file as completed and flush trace mapping to disk
@@ -228,11 +333,12 @@ def import_projects_from_directory(
                         traces_errors += 1
                         continue
 
+                # Flush queued attachment uploads (and any other streamed messages)
+                # before proceeding so all data is persisted before we move on.
+                client.flush()
+
                 # Handle experiment recreation if requested
                 if recreate_experiments_flag:
-                    # Flush client before recreating experiments
-                    client.flush()
-
                     experiment_files = list(project_dir.glob("experiment_*.json"))
                     if experiment_files:
                         debug_print(

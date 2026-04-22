@@ -2,17 +2,16 @@ import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import useProjectById from "@/api/projects/useProjectById";
 import PageBodyScrollContainer from "@/v1/layout/PageBodyScrollContainer/PageBodyScrollContainer";
-import PageBodyStickyContainer from "@/v1/layout/PageBodyStickyContainer/PageBodyStickyContainer";
+import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import LogsTab from "@/v1/pages/TracesPage/LogsTab/LogsTab";
 import InsightsTab from "@/v1/pages/TracesPage/InsightsTab/InsightsTab";
 import RulesTab from "@/v1/pages/TracesPage/RulesTab/RulesTab";
 import AnnotationQueuesTab from "@/v1/pages/TracesPage/AnnotationQueuesTab/AnnotationQueuesTab";
-import ConfigurationTab from "@/v1/pages/TracesPage/ConfigurationTab/ConfigurationTab";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { Construction } from "lucide-react";
 import { useState } from "react";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import SetGuardrailDialog from "../HomePageShared/SetGuardrailDialog";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useProjectTabs from "@/v1/pages/TracesPage/useProjectTabs";
@@ -25,10 +24,6 @@ const TracesPage = () => {
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
-  const isAgentConfigurationEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.AGENT_CONFIGURATION_ENABLED,
-  );
-
   const { data: project } = useProjectById(
     {
       projectId,
@@ -68,14 +63,6 @@ const TracesPage = () => {
             <TabsTrigger variant="underline" value={PROJECT_TAB.insights}>
               Insights
             </TabsTrigger>
-            {isAgentConfigurationEnabled && (
-              <TabsTrigger
-                variant="underline"
-                value={PROJECT_TAB.configuration}
-              >
-                Configuration
-              </TabsTrigger>
-            )}
             <TabsTrigger variant="underline" value={PROJECT_TAB.evaluators}>
               Online evaluation
             </TabsTrigger>
@@ -98,11 +85,6 @@ const TracesPage = () => {
         <TabsContent value={PROJECT_TAB.insights}>
           <InsightsTab projectId={projectId} />
         </TabsContent>
-        {isAgentConfigurationEnabled && (
-          <TabsContent value={PROJECT_TAB.configuration}>
-            <ConfigurationTab projectId={projectId} />
-          </TabsContent>
-        )}
         <TabsContent value={PROJECT_TAB.evaluators}>
           <RulesTab projectId={projectId} />
         </TabsContent>

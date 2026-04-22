@@ -44,6 +44,9 @@ public class OpikConfiguration extends JobConfiguration {
     private UsageReportConfig usageReport = new UsageReportConfig();
 
     @Valid @NotNull @JsonProperty
+    private AnalyticsConfig analytics = new AnalyticsConfig();
+
+    @Valid @NotNull @JsonProperty
     private CorsConfig cors = new CorsConfig();
 
     @Valid @NotNull @JsonProperty
@@ -111,6 +114,9 @@ public class OpikConfiguration extends JobConfiguration {
     private OptimizationLogsConfig optimizationLogs = new OptimizationLogsConfig();
 
     @Valid @NotNull @JsonProperty
+    private RetentionConfig retention = new RetentionConfig();
+
+    @Valid @NotNull @JsonProperty
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
@@ -123,5 +129,17 @@ public class OpikConfiguration extends JobConfiguration {
     private ExperimentDenormalizationConfig experimentDenormalization = new ExperimentDenormalizationConfig();
 
     @Valid @NotNull @JsonProperty
+    private LlmModelRegistryConfig llmModelRegistry = new LlmModelRegistryConfig();
+
+    @Valid @NotNull @JsonProperty
     private OllieStateConfig ollieStateConfig = new OllieStateConfig();
+
+    @Valid @NotNull @JsonProperty
+    private TestSuiteConfig testSuite = new TestSuiteConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentExecutionConfig experimentExecution = new ExperimentExecutionConfig();
+
+    @Valid @NotNull @JsonProperty
+    private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
 }

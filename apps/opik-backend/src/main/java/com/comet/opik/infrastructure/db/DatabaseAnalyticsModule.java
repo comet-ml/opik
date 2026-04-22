@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.google.inject.Provides;
+import io.dropwizard.util.Duration;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.instrumentation.r2dbc.v1_0.R2dbcTelemetry;
 import io.r2dbc.spi.ConnectionFactory;
@@ -42,6 +43,13 @@ public class DatabaseAnalyticsModule extends DropwizardAwareModule<OpikConfigura
     @Named("Database Analytics Database Name")
     public String getDatabaseName() {
         return databaseAnalyticsFactory.getDatabaseName();
+    }
+
+    @Provides
+    @Singleton
+    @Named("clickhouse_health_check_timeout")
+    public Duration getHealthCheckTimeout() {
+        return databaseAnalyticsFactory.getHealthCheckTimeout();
     }
 
     @Provides

@@ -7,6 +7,7 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -69,6 +70,8 @@ public interface OptimizationDAO {
     Mono<Optimization.OptimizationPage> find(int page, int size, @NonNull OptimizationSearchCriteria searchCriteria);
 
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
+
+    Mono<Boolean> hasVersion1Optimizations(String workspaceId, List<String> demoOptimizationNames);
 }
 
 @Singleton
@@ -76,12 +79,20 @@ public interface OptimizationDAO {
 @Slf4j
 class OptimizationDAOImpl implements OptimizationDAO {
 
+    private static final String HAS_VERSION1_OPTIMIZATIONS = """
+            SELECT 1 FROM optimizations
+            WHERE workspace_id = :workspace_id AND project_id = ''
+            AND name NOT IN :demo_optimization_names
+            LIMIT 1
+            SETTINGS log_comment = '<log_comment>'""";
+
     private static final String UPSERT = """
             INSERT INTO optimizations (
                 id,
                 dataset_id,
                 name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status,
                 metadata,
@@ -95,6 +106,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 :dataset_id,
                 :name,
                 :workspace_id,
+                :project_id,
                 :objective_name,
                 :status,
                 :metadata,
@@ -117,6 +129,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -148,19 +161,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 AND experiment_id IN (SELECT id FROM experiments_final)
                 ORDER BY id DESC, last_updated_at DESC
                 LIMIT 1 BY id
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       last_updated_by AS author
-                FROM feedback_scores
-                WHERE entity_type = :entity_type
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-                UNION ALL
+            ), feedback_scores_deduped AS (
                 SELECT workspace_id,
                        project_id,
                        entity_id,
@@ -168,48 +169,42 @@ class OptimizationDAOImpl implements OptimizationDAO {
                        value,
                        last_updated_at,
                        author
-                FROM authored_feedback_scores
-                WHERE entity_type = :entity_type
-                  AND workspace_id = :workspace_id
-                  AND entity_id IN (SELECT trace_id FROM experiment_items_final)
-            ), feedback_scores_with_ranking AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value,
-                       last_updated_at,
-                       author,
-                       ROW_NUMBER() OVER (
-                           PARTITION BY workspace_id, project_id, entity_id, name, author
-                           ORDER BY last_updated_at DESC
-                       ) as rn
-                FROM feedback_scores_combined_raw
-            ), feedback_scores_combined AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       value
-                FROM feedback_scores_with_ranking
-                WHERE rn = 1
-            ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values
-                FROM feedback_scores_combined
-                GROUP BY workspace_id, project_id, entity_id, name
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = :entity_type
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                    UNION ALL
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           value,
+                           last_updated_at,
+                           author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = :entity_type
+                      AND workspace_id = :workspace_id
+                      AND entity_id IN (SELECT trace_id FROM experiment_items_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
             ), feedback_scores_final AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value
-                FROM feedback_scores_combined_grouped
+                    if(count() = 1, any(value), toDecimal64(avg(value), 9)) AS value
+                FROM feedback_scores_deduped
+                GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_agg AS (
                 SELECT
                     experiment_id,
@@ -387,6 +382,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                     <if(dataset_id)>AND dataset_id = :dataset_id <endif>
                     <if(dataset_ids)>AND dataset_id IN :dataset_ids <endif>
                     <if(id)>AND id = :id <endif>
+                    <if(project_id)>AND project_id = :project_id <endif>
                     ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY workspace_id, dataset_id, id
                 )
@@ -419,13 +415,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String UPDATE_BY_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_by, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 <if(name)> :name <else> name <endif> as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 <if(status)> :status <else> status <endif> as status,
                 metadata,
@@ -443,13 +440,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
 
     private static final String SET_DATASET_DELETED_TO_TRUE_BY_DATASET_ID = """
             INSERT INTO optimizations (
-            	id, dataset_id, name, workspace_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
+            	id, dataset_id, name, workspace_id, project_id, objective_name, status, metadata, created_at, created_by, last_updated_at, last_updated_by, dataset_deleted, studio_config
             )
             SELECT
                 id,
                 dataset_id,
                 name as name,
                 workspace_id,
+                project_id,
                 objective_name,
                 status as status,
                 metadata,
@@ -697,6 +695,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .filter(Boolean.TRUE::equals)
                 .ifPresent(studioOnly -> template.add("studio_only", "true"));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> template.add("project_id", projectId));
+
         Optional.ofNullable(searchCriteria.filters())
                 .flatMap(filters -> filterQueryBuilder.toAnalyticsDbFilters(filters, FilterStrategy.OPTIMIZATION))
                 .ifPresent(optimizationFilters -> template.add("filters", optimizationFilters));
@@ -720,6 +721,9 @@ class OptimizationDAOImpl implements OptimizationDAO {
         Optional.ofNullable(searchCriteria.name())
                 .ifPresent(name -> statement.bind("name", name));
 
+        Optional.ofNullable(searchCriteria.projectId())
+                .ifPresent(projectId -> statement.bind("project_id", projectId.toString()));
+
         Optional.ofNullable(searchCriteria.filters())
                 .ifPresent(filters -> filterQueryBuilder.bind(statement, filters, FilterStrategy.OPTIMIZATION));
 
@@ -735,6 +739,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 .bind("id", optimization.id())
                 .bind("dataset_id", optimization.datasetId())
                 .bind("name", optimization.name())
+                .bind("project_id", optimization.projectId() != null ? optimization.projectId().toString() : "")
                 .bind("objective_name", optimization.objectiveName())
                 .bind("status", optimization.status().getValue())
                 .bind("metadata", getStringOrDefault(optimization.metadata()));
@@ -786,10 +791,14 @@ class OptimizationDAOImpl implements OptimizationDAO {
                 }
             }
 
+            String projectIdStr = row.get("project_id", String.class);
+            UUID projectId = StringUtils.isNotBlank(projectIdStr) ? UUID.fromString(projectIdStr) : null;
+
             return Optimization.builder()
                     .id(row.get("id", UUID.class))
                     .name(row.get("name", String.class))
                     .datasetId(row.get("dataset_id", UUID.class))
+                    .projectId(projectId)
                     .objectiveName(row.get("objective_name", String.class))
                     .status(OptimizationStatus.fromString(row.get("status", String.class)))
                     .metadata(getJsonNodeOrDefault(row.get("metadata", String.class)))
@@ -863,5 +872,24 @@ class OptimizationDAOImpl implements OptimizationDAO {
         statement.bind("id", id);
 
         return statement;
+    }
+
+    /**
+     * Checks for V1 (workspace-scoped) optimizations excluding known demo names.
+     * ClickHouse string comparison is case-sensitive — every known casing of a demo name
+     * must be listed explicitly in {@link DemoData#OPTIMIZATIONS}.
+     */
+    @Override
+    public Mono<Boolean> hasVersion1Optimizations(
+            @NonNull String workspaceId, @NonNull List<String> demoOptimizationNames) {
+        var template = FilterUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
+                "has_version1_optimizations", workspaceId, "", demoOptimizationNames);
+        return Mono.from(connectionFactory.create())
+                .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
+                        .bind("workspace_id", workspaceId)
+                        .bind("demo_optimization_names", demoOptimizationNames.toArray(String[]::new))
+                        .execute())
+                        .flatMap(result -> Flux.from(result.map((row, metadata) -> true))))
+                .hasElements();
     }
 }

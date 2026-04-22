@@ -1,0 +1,239 @@
+---
+headline: Authentication Overview | Opik Documentation
+og:description: Learn about the authentication options available in Opik, including SAML, OIDC, and JWT, and choose the right one for your organization.
+og:site_name: Opik Documentation
+og:title: 'Opik Authentication: SSO and JWT Configuration Guide'
+subtitle: Understanding authentication options and choosing the right approach
+title: Authentication Overview
+---
+
+Opik supports multiple authentication methods to integrate with your organization's identity management infrastructure. This guide helps you understand the available options and choose the right approach for your needs.
+
+<Note>
+Authentication features are available on Enterprise plans. These features are not available in open-source deployments. [Reach out](https://www.comet.com/site/about-us/contact-us/) if you want to enable SSO or JWT authentication for your Opik deployment.
+</Note>
+
+## Authentication methods
+
+Opik supports multiple authentication methods for enterprise organizations. For configurable UI access, you can set up SAML SSO or OIDC SSO to integrate with your identity provider. Other available methods include base authentication (username/password), Google OAuth, GitHub OAuth, and LDAP (for on-premises deployments).
+JWT Authentication is available separately for SDK and programmatic access. Unlike SAML SSO and OIDC SSO, JWT Authentication is designed for service-to-service and API integrations, not for user interface login.
+
+| Method | Best for | Key features |
+| --- | --- | --- |
+| **SAML SSO** | Organizations with enterprise IdPs (Okta, Azure AD, etc.) | Workspace sync, attribute mapping, broad IdP support |
+| **OIDC SSO** | Organizations using OAuth 2.0 / OpenID Connect | Simpler setup, token-based, modern protocol |
+| **JWT Authentication** | Programmatic access, custom auth flows | Flexible integration, JWKS support, service-to-service auth |
+
+## Choosing an authentication method
+
+Use this decision guide to select the right authentication method:
+
+### Use SAML SSO when:
+
+- Your organization already uses an enterprise identity provider (Okta, Azure AD, OneLogin, etc.)
+- You need automatic workspace assignment based on user attributes/groups
+- You require centralized user lifecycle management (auto-provisioning/deprovisioning)
+- Your security policies mandate SAML-based authentication
+
+### Use OIDC SSO when:
+
+- Your identity provider supports OpenID Connect but not SAML
+- You prefer a simpler, more modern protocol
+- You're using a cloud-native identity solution
+- You don't need attribute-based workspace sync
+
+### Use JWT Authentication when:
+
+- You need programmatic/API access from backend services
+- You're building custom authentication flows
+- You want to integrate with existing JWT-based systems
+- You need service-to-service authentication
+
+<Tip>
+**Multiple methods**: You can configure multiple authentication methods for your organization. For example, use SAML for human users and JWT for service accounts.
+</Tip>
+
+## Common prerequisites
+
+Before configuring any authentication method, ensure you have:
+
+1. **Admin access**: You must be an organization administrator.
+2. **Enterprise plan**: SSO features require an Enterprise subscription.
+3. **Domain ownership**: You should control the email domain(s) you want to use for SSO.
+4. **IdP access** (for SSO): Admin access to your identity provider to configure the integration.
+
+## Glossary
+
+Understanding these terms will help you configure authentication:
+
+### General terms
+
+| Term | Description |
+| --- | --- |
+| **IdP (Identity Provider)** | The system that authenticates users (e.g., Okta, Azure AD, Google Workspace) |
+| **SP (Service Provider)** | The application users are logging into (Opik) |
+| **SSO (Single Sign-On)** | Authentication method allowing users to log in once and access multiple applications |
+| **Domain** | Your organization's email domain (e.g., `company.com`) used to route users to SSO |
+
+### SAML-specific terms
+
+| Term | Description |
+| --- | --- |
+| **Entity ID** | Unique identifier for the IdP or SP in a SAML configuration |
+| **ACS URL (Assertion Consumer Service)** | URL where the IdP sends authentication responses |
+| **IdP SSO URL** | URL where users are redirected to authenticate |
+| **X.509 Certificate** | Public certificate used to verify SAML assertions |
+| **Attribute Mapping** | Configuration that maps IdP user attributes to Opik fields |
+| **Workspace Sync** | Feature that automatically assigns users to workspaces based on IdP attributes |
+
+### OIDC-specific terms
+
+| Term | Description |
+| --- | --- |
+| **Client ID** | Unique identifier for Opik in your IdP |
+| **Client Secret** | Secret key used to authenticate Opik with your IdP |
+| **Authorization URL** | URL where users are redirected to authenticate |
+| **Token URL** | URL where Opik exchanges authorization codes for tokens |
+| **Callback URL** | URL where the IdP redirects users after authentication |
+| **Scope** | Permissions requested from the IdP (e.g., `openid`, `profile`, `email`) |
+
+### JWT-specific terms
+
+| Term | Description |
+| --- | --- |
+| **JWKS (JSON Web Key Set)** | Endpoint providing public keys for JWT verification |
+| **JWKS URI** | URL of the JWKS endpoint |
+| **Static Public Key** | Alternative to JWKS; a fixed public key for verification (on-prem only) |
+| **Issuer** | The entity that issued the JWT token |
+| **Audience** | The intended recipient of the JWT token |
+| **Subject** | The user or entity the token represents |
+| **Subject Mapping** | How Opik identifies users from JWT claims (`EMAIL` or `USER_NAME`) |
+| **Subject Claim Name** | The JWT claim containing the subject (defaults to `sub`) |
+| **kid (Key ID)** | Identifier in the JWT header specifying which key to use for verification |
+
+## Authentication flow comparison
+
+### SAML authentication flow
+
+```
+┌──────┐      ┌──────┐      ┌──────┐
+│ User │      │ Opik │      │  IdP │
+└──┬───┘      └──┬───┘      └──┬───┘
+   │   1. Login   │             │
+   │────────────>│             │
+   │             │ 2. Redirect │
+   │             │────────────>│
+   │             │             │ 3. User authenticates
+   │             │<────────────│
+   │             │ 4. SAML     │
+   │             │   Assertion │
+   │<────────────│             │
+   │ 5. Logged in│             │
+   └─────────────┘             │
+```
+
+### OIDC authentication flow
+
+```
+┌──────┐      ┌──────┐      ┌──────┐
+│ User │      │ Opik │      │  IdP │
+└──┬───┘      └──┬───┘      └──┬───┘
+   │   1. Login   │             │
+   │────────────>│             │
+   │             │ 2. Redirect │
+   │────────────────────────-->│
+   │             │             │ 3. User authenticates
+   │<──────────────────────────│
+   │ 4. Auth code│             │
+   │────────────>│             │
+   │             │ 5. Exchange │
+   │             │    for token│
+   │             │────────────>│
+   │             │<────────────│
+   │             │ 6. Token    │
+   │<────────────│             │
+   │ 7. Logged in│             │
+```
+
+### JWT authentication flow
+
+```
+┌──────────┐      ┌──────┐      ┌──────┐
+│ Service/ │      │ Opik │      │ JWKS │
+│   User   │      │      │      │      │
+└────┬─────┘      └──┬───┘      └──┬───┘
+     │   1. API call │             │
+     │   with JWT    │             │
+     │──────────────>│             │
+     │               │ 2. Fetch    │
+     │               │    keys     │
+     │               │────────────>│
+     │               │<────────────│
+     │               │ 3. Verify   │
+     │               │    JWT      │
+     │<──────────────│             │
+     │ 4. Response   │             │
+```
+
+## Configuration guides
+
+Detailed setup instructions are available for each authentication method:
+
+<CardGroup cols={3}>
+  <Card title="SAML SSO" href="/administration/authentication/saml">
+    Configure SAML-based single sign-on with enterprise identity providers.
+  </Card>
+  <Card title="OIDC SSO" href="/administration/authentication/oidc">
+    Set up OpenID Connect authentication for your organization.
+  </Card>
+  <Card title="JWT Authentication" href="/administration/authentication/jwt">
+    Configure JWT-based authentication for programmatic access.
+  </Card>
+</CardGroup>
+
+## Security considerations
+
+### Domain verification
+
+When configuring SSO, you associate email domains with your organization. This ensures:
+
+- Users with those email domains are directed to your SSO configuration.
+- Only users who authenticate through your IdP can access the organization.
+
+<Warning>
+**Important**: Ensure you only configure domains you own or control. Misconfigured domains could prevent legitimate users from accessing their accounts.
+</Warning>
+
+### Certificate management
+
+For SAML authentication:
+
+- Store IdP certificates securely.
+- Monitor certificate expiration dates.
+- Plan for certificate rotation to avoid authentication disruptions.
+
+### Key rotation
+
+For JWT authentication:
+
+- Use JWKS endpoints when possible for automatic key rotation.
+- If using static keys (on-prem only), establish a key rotation schedule.
+- Monitor JWKS endpoint availability.
+
+## Troubleshooting
+
+Common authentication issues and solutions:
+
+| Issue | Possible causes | Solution |
+| --- | --- | --- |
+| User can't log in via SSO | Domain not configured, IdP misconfigured | Verify domain settings, check IdP configuration |
+| User lands in wrong organization | Multiple SSO configs for same domain | Review domain-to-organization mappings |
+| Workspace sync not working | Attribute mapping incorrect | Verify IdP sends expected attributes |
+| JWT validation fails | Key mismatch, expired token, wrong issuer | Check JWKS endpoint, verify token claims |
+| Certificate errors | Expired or wrong certificate | Update certificate in SSO configuration |
+
+## Next steps
+
+- [Configure SAML SSO](/administration/authentication/saml) for enterprise identity providers.
+- [Set up OIDC](/administration/authentication/oidc) for OpenID Connect authentication.
+- [Configure JWT authentication](/administration/authentication/jwt) for programmatic access.

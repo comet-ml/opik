@@ -15,6 +15,11 @@ class OptimizationPublic(UniversalBaseModel):
     id: typing.Optional[str] = None
     name: typing.Optional[str] = None
     dataset_name: str
+    project_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Project ID. Takes precedence over project_name when both are provided.
+    """
+
     objective_name: str
     status: OptimizationPublicStatus
     metadata: typing.Optional[JsonListStringPublic] = None

@@ -4980,7 +4980,7 @@ MultiMetricObjective(
     weights: list[float] | None = None,
     name: str = 'multi_metric_objective',
     reason: str | None = None,
-    reason_builder: collections.abc.Callable[[list[opik.evaluation.metrics.score_result.ScoreResult], list[float], float], str | None] | None = None
+    reason_builder: collections.abc.Callable[[list[_opik._score_result.ScoreResult], list[float], float], str | None] | None = None
 )
 ```
 
@@ -4991,7 +4991,7 @@ MultiMetricObjective(
 <ParamField path="weights" type="list[float] | None" optional={true} />
 <ParamField path="name" type="str" optional={true} default="multi_metric_objective" />
 <ParamField path="reason" type="str | None" optional={true} />
-<ParamField path="reason_builder" type="collections.abc.Callable[[list[opik.evaluation.metrics.score_result.ScoreResult], list[float], float], str | None] | None" optional={true} />
+<ParamField path="reason_builder" type="collections.abc.Callable[[list[_opik._score_result.ScoreResult], list[float], float], str | None] | None" optional={true} />
 
 ## PromptLibrary
 

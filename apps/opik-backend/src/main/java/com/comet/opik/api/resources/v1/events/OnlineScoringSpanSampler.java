@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
@@ -76,7 +77,6 @@ public class OnlineScoringSpanSampler {
     @Subscribe
     public void onSpansCreated(SpansCreated spansBatch) {
         // Check if feature is enabled before processing spans
-
         var spansByProject = spansBatch.spans().stream().collect(Collectors.groupingBy(Span::projectId));
 
         var countMap = spansByProject.entrySet().stream()
@@ -88,8 +88,17 @@ public class OnlineScoringSpanSampler {
 
         // fetch automation rules per project
         spansByProject.forEach((projectId, spans) -> {
+            // Only score spans from SDK logging source. Non-SDK spans (playground, experiment,
+            // optimization) are skipped from online evaluation.
+            var scorableSpans = spans.stream().filter(span -> Source.isLoggingSource(span.source())).toList();
+            if (scorableSpans.isEmpty()) {
+                log.info("No scorable spans: source is not SDK, projectId '{}', workspaceId '{}'",
+                        projectId, spansBatch.workspaceId());
+                return;
+            }
+
             log.info("Fetching evaluators for '{}' spans, project '{}' on workspace '{}'",
-                    spans.size(), projectId, spansBatch.workspaceId());
+                    scorableSpans.size(), projectId, spansBatch.workspaceId());
 
             // Fetch all span-level evaluators by filtering at database level
             // Only fetch evaluators if their respective feature toggles are enabled
@@ -122,16 +131,15 @@ public class OnlineScoringSpanSampler {
                             return;
                         }
                         // samples spans for this rule
-                        var samples = spans.stream()
+                        var samples = scorableSpans.stream()
                                 .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
                                 .toList();
 
                         var messages = samples.stream()
                                 .map(span -> toLlmAsJudgeMessage(spansBatch, rule, span))
                                 .toList();
-
+                        logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            logSampledSpan(spansBatch, evaluator, messages);
                             onlineScorePublisher.enqueueMessage(messages,
                                     AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE);
                         }
@@ -149,14 +157,14 @@ public class OnlineScoringSpanSampler {
                                     "Span Python evaluator is disabled. This should not happen as evaluators are filtered before fetching.");
                             return;
                         }
-                        var samples = spans.stream()
+                        var samples = scorableSpans.stream()
                                 .filter(span -> shouldSampleSpan(rule, spansBatch.workspaceId(), span))
                                 .toList();
                         var messages = samples.stream()
                                 .map(span -> toUserDefinedMetricPythonMessage(spansBatch, rule, span))
                                 .toList();
+                        logSampledSpan(evaluator, messages, scorableSpans.size());
                         if (!messages.isEmpty()) {
-                            logSampledSpan(spansBatch, evaluator, messages);
                             onlineScorePublisher.enqueueMessage(messages,
                                     AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON);
                         }
@@ -234,12 +242,12 @@ public class OnlineScoringSpanSampler {
                 .build();
     }
 
-    private void logSampledSpan(SpansCreated spansBatch, AutomationRuleEvaluator<?, ?> evaluator, List<?> messages) {
+    private void logSampledSpan(AutomationRuleEvaluator<?, ?> evaluator, List<?> messages, int totalSpans) {
         log.info("[AutomationRule '{}', type '{}'] Sampled '{}/{}' from span batch (expected rate: '{}')",
                 evaluator.getName(),
                 evaluator.getType(),
                 messages.size(),
-                spansBatch.spans().size(),
+                totalSpans,
                 evaluator.getSamplingRate());
     }
 
@@ -252,5 +260,4 @@ public class OnlineScoringSpanSampler {
                 UserLog.RULE_ID, evaluator.getId().toString(),
                 UserLog.SPAN_ID, span.id().toString()));
     }
-
 }

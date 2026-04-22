@@ -7,6 +7,7 @@ from unittest import mock
 import pytest
 import opik
 from opik import Attachment, Prompt, ChatPrompt, synchronization
+from opik.api_objects import rest_helpers
 from opik.api_objects.attachment import decoder_helpers
 from opik.api_objects.dataset import dataset_item
 from opik.rest_api import ExperimentPublic, FeedbackScore, FeedbackScorePublic
@@ -15,7 +16,7 @@ from opik.rest_api.types import (
     span_public,
     trace_public,
 )
-from opik.types import ErrorInfoDict, FeedbackScoreDict
+from opik.types import ErrorInfoDict, FeedbackScoreDict, TraceSource
 from opik import url_helpers
 from .. import testlib
 
@@ -58,6 +59,7 @@ def verify_trace(
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     thread_id: Optional[str] = mock.ANY,  # type: ignore
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_trace_content(id=trace_id) is not None,
@@ -71,6 +73,7 @@ def verify_trace(
     testlib.assert_equal(input, trace.input)
     testlib.assert_equal(output, trace.output)
     testlib.assert_equal(metadata, trace.metadata)
+    testlib.assert_equal(source, trace.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
@@ -138,6 +141,7 @@ def verify_span(
     provider: Optional[str] = mock.ANY,  # type: ignore
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     total_cost: Optional[float] = mock.ANY,  # type: ignore
+    source: Optional[TraceSource] = mock.ANY,  # type: ignore
 ):
     if not synchronization.until(
         lambda: opik_client.get_span_content(id=span_id) is not None,
@@ -162,6 +166,7 @@ def verify_span(
     testlib.assert_equal(input, span.input)
     testlib.assert_equal(output, span.output)
     testlib.assert_equal(metadata, span.metadata)
+    testlib.assert_equal(source, span.source)
 
     if tags is not mock.ANY:
         testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))
@@ -192,6 +197,7 @@ def verify_dataset(
     name: str,
     description: str = mock.ANY,
     dataset_items: List[dataset_item.DatasetItem] = mock.ANY,
+    project_name: Optional[str] = None,
 ):
     if not synchronization.until(
         lambda: opik_client.get_dataset(name=name) is not None,
@@ -199,8 +205,11 @@ def verify_dataset(
     ):
         raise AssertionError(f"Failed to get dataset with name {name}.")
 
-    actual_dataset = opik_client.get_dataset(name=name)
+    actual_dataset = opik_client.get_dataset(name=name, project_name=project_name)
     assert actual_dataset.description == description
+    assert actual_dataset.name == name
+    if project_name is not None:
+        assert actual_dataset.project_name == project_name
 
     actual_dataset_items = list(
         actual_dataset.__internal_api__stream_items_as_dataclasses__()
@@ -234,6 +243,7 @@ def verify_experiment(
     experiment_scores: Optional[Dict[str, float]] = None,
     experiment_tags: Optional[List[str]] = None,
     dataset_version_id: Optional[str] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = mock.ANY,
 ):
     rest_client = (
         opik_client._rest_client
@@ -254,6 +264,8 @@ def verify_experiment(
     assert experiment_content.name == experiment_name, (
         f"{experiment_content.name} != {experiment_name}"
     )
+
+    testlib.assert_equal(project_name, experiment_content.project_name)
 
     actual_scores_count = (
         0
@@ -527,6 +539,7 @@ def verify_optimization(
     dataset_name: Optional[str] = mock.ANY,  # type: ignore
     status: Optional[str] = mock.ANY,  # type: ignore
     objective_name: Optional[str] = mock.ANY,  # type: ignore
+    project_name: Optional[str] = None,
 ) -> None:
     if not synchronization.until(
         lambda: opik_client.get_optimization_by_id(optimization_id) is not None,
@@ -551,6 +564,14 @@ def verify_optimization(
     assert optimization_content.objective_name == objective_name, (
         f"{optimization_content.objective_name} != {objective_name}"
     )
+
+    if project_name is not None:
+        project_id = rest_helpers.resolve_project_id_by_name(
+            rest_client=opik_client.rest_client, project_name=project_name
+        )
+        assert optimization_content.project_id == project_id, (
+            f"{optimization_content.project_id} != {project_id}"
+        )
 
 
 def verify_thread(
@@ -652,8 +673,10 @@ def verify_prompt_version(
     version_id: Any = mock.ANY,  # type: ignore
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
+    project_name: Any = mock.ANY,
 ) -> None:
     testlib.assert_equal(name, prompt.name)
+    testlib.assert_equal(project_name, prompt.project_name)
     testlib.assert_equal(template, prompt.prompt)
     testlib.assert_equal(type, prompt.type)
     testlib.assert_equal(metadata, prompt.metadata)
@@ -676,6 +699,7 @@ def verify_chat_prompt_version(
     version_id: Any = mock.ANY,  # type: ignore
     prompt_id: Any = mock.ANY,  # type: ignore
     commit: Any = mock.ANY,  # type: ignore
+    project_name: Any = mock.ANY,  # type: ignore
 ) -> None:
     """
     Verifies that a ChatPrompt has the expected properties.
@@ -688,6 +712,7 @@ def verify_chat_prompt_version(
     testlib.assert_equal(messages, chat_prompt.template)
     testlib.assert_equal(type, chat_prompt.type)
     testlib.assert_equal(metadata, chat_prompt.metadata)
+    testlib.assert_equal(project_name, chat_prompt.project_name)
     assert version_id == chat_prompt.__internal_api__version_id__, (
         f"{chat_prompt.__internal_api__version_id__} != {version_id}"
     )
@@ -703,6 +728,7 @@ def verify_dataset_filtered_items(
     filter_string: str,
     expected_count: int,
     expected_inputs: Set[str],
+    project_name: Optional[str] = None,
 ) -> None:
     """
     Verifies that filtering dataset items with filter_string returns the expected results.
@@ -713,8 +739,9 @@ def verify_dataset_filtered_items(
         filter_string: The filter string to apply
         expected_count: Expected number of items matching the filter
         expected_inputs: Set of expected question strings from input field
+        project_name: The name of the project to retrieve the dataset from, if any
     """
-    dataset = opik_client.get_dataset(name=dataset_name)
+    dataset = opik_client.get_dataset(name=dataset_name, project_name=project_name)
 
     filtered_items = dataset.get_items(filter_string=filter_string)
     assert len(filtered_items) == expected_count, (
@@ -774,7 +801,7 @@ def verify_threads_annotation_queue(
     testlib.assert_equal(instructions, queue.instructions)
 
 
-def verify_evaluation_suite_result(
+def verify_test_suite_result(
     opik_client: opik.Opik,
     suite_result: Any,
     items_total: int = mock.ANY,  # type: ignore
@@ -782,14 +809,15 @@ def verify_evaluation_suite_result(
     experiment_items_count: int = mock.ANY,  # type: ignore
     total_feedback_scores: int = mock.ANY,  # type: ignore
     expected_score_names: Optional[Set[str]] = None,
+    project_name: Optional[str] = None,
 ):
     """
-    Verify an EvaluationSuiteResult — both in-memory properties and persisted
+    Verify a TestSuiteResult — both in-memory properties and persisted
     experiment data from the backend.
 
     Args:
         opik_client: The Opik client instance.
-        suite_result: The EvaluationSuiteResult returned by suite.run().
+        suite_result: The TestSuiteResult returned by suite.run().
         items_total: Expected total number of dataset items in the suite.
         items_passed: Expected number of dataset items that passed.
         experiment_items_count: Expected number of experiment items (traces)
@@ -799,6 +827,7 @@ def verify_evaluation_suite_result(
             across all experiment items.
         expected_score_names: If provided, the union of all score names
             across all experiment items must equal this set.
+        project_name: The project name associated with the test suite.
     """
     if items_total is not mock.ANY:
         assert suite_result.items_total == items_total, (
@@ -822,8 +851,9 @@ def verify_evaluation_suite_result(
         return
 
     retrieved_experiment = opik_client.get_experiment_by_name(
-        suite_result.experiment_name
+        suite_result.experiment_name, project_name=project_name
     )
+    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
     experiment_items = retrieved_experiment.get_items()
 
     assert len(experiment_items) == experiment_items_count, (

@@ -53,7 +53,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         prompt: "Answer the following question: {{question}}",
         metadata: { version: "1.0", type: "qa" },
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Create dataset
       const dataset = await createQADataset(client);
@@ -79,7 +79,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `test-version-${Date.now()}`,
         prompt: "System: You are helpful.\nUser: {{question}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -102,19 +102,19 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `test-prompt-1-${Date.now()}`,
         prompt: "Question: {{question}}",
       });
-      createdPromptIds.push(prompt1.id);
+      createdPromptIds.push(prompt1.id!);
 
       const prompt2 = await client.createPrompt({
         name: `test-prompt-2-${Date.now()}`,
         prompt: "Context: {{context}}\nQuestion: {{question}}",
       });
-      createdPromptIds.push(prompt2.id);
+      createdPromptIds.push(prompt2.id!);
 
       const prompt3 = await client.createPrompt({
         name: `test-prompt-3-${Date.now()}`,
         prompt: "Answer: {{expected_answer}}",
       });
-      createdPromptIds.push(prompt3.id);
+      createdPromptIds.push(prompt3.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -135,13 +135,13 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `order-test-1-${Date.now()}`,
         prompt: "First prompt",
       });
-      createdPromptIds.push(prompt1.id);
+      createdPromptIds.push(prompt1.id!);
 
       const prompt2 = await client.createPrompt({
         name: `order-test-2-${Date.now()}`,
         prompt: "Second prompt",
       });
-      createdPromptIds.push(prompt2.id);
+      createdPromptIds.push(prompt2.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -163,7 +163,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `base-eval-${Date.now()}`,
         prompt: "Task: {{question}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -189,7 +189,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `conflict-test-${Date.now()}`,
         prompt: "Test prompt",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -231,7 +231,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         name: `solo-prompt-${Date.now()}`,
         prompt: "Solo prompt test",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -260,7 +260,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         prompt: promptTemplate,
         metadata: { author: "test", version: "1.0" },
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);
@@ -285,7 +285,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Linking Integration", () => {
         prompt: "Version 1: {{question}}",
         metadata: { version: "1.0" },
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
 
       // Create version 2
       const v2 = await client.createPrompt({

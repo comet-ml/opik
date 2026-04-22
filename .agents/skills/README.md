@@ -4,6 +4,7 @@ Domain-specific agent skills for the Opik monorepo. Each skill provides patterns
 
 | Skill | Path | Description |
 |-------|------|-------------|
+| analytics-instrumentation | `analytics-instrumentation/` | Add analytics events to Opik features. Use when wiring PostHog events on the frontend or backend for product analytics tracking. |
 | diagram-generation | `diagram-generation/` | Generate self-contained HTML architecture diagrams. Use when creating visual diagrams for PRs, task plans, or architectural explanations. |
 | documentation | `documentation/` | Feature documentation and release notes patterns. Use when documenting changes, writing PR descriptions, or preparing releases. |
 | local-dev | `local-dev/` | Local development environment setup and commands. Use when helping with dev server, Docker, or local testing. |

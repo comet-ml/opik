@@ -18,6 +18,10 @@ on:
       - ".github/workflows/python_backend_tests.yml"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   run-python-backend-tests:
     runs-on: ubuntu-latest
@@ -27,7 +31,7 @@ jobs:
         working-directory: apps/opik-python-backend/
     steps:
       - name: Checkout
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
       

@@ -28,6 +28,14 @@ public interface LockService {
     <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction, Duration actionTimeout,
             Duration lockTimeout);
 
+    /**
+     * Same as {@link #bestEffortLock(Lock, Mono, Mono, Duration, Duration)} but when {@code holdUntilExpiry} is true,
+     * the lock is NOT released when the action completes — it expires naturally via TTL. Use this for periodic jobs
+     * where you want to prevent other instances from running until the next cycle.
+     */
+    <T> Mono<T> bestEffortLock(Lock lock, Mono<T> action, Mono<Void> failToAcquireLockAction, Duration actionTimeout,
+            Duration lockTimeout, boolean holdUntilExpiry);
+
     Mono<Boolean> lockUsingToken(Lock lock, Duration lockDuration);
     Mono<Void> unlockUsingToken(Lock lock);
 }

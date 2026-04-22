@@ -259,7 +259,7 @@ public class ExperimentItemService {
             return Mono.just(true);
         }
 
-        // When versioning is enabled, dataset item IDs are row IDs from dataset_item_versions
+        // When versioning is enabled, dataset item IDs are stable dataset_item_id values from dataset_item_versions
         // When versioning is disabled, dataset item IDs are from dataset_items (legacy table)
         // We need to check both tables to support backward compatibility
         if (featureFlags.isDatasetVersioningEnabled()) {
@@ -335,14 +335,6 @@ public class ExperimentItemService {
             return Flux.empty();
         }
         return experimentItemDAO.getExperimentRefsByTraceIds(traceIds, statuses);
-    }
-
-    public Flux<ExperimentTraceRef> getExperimentRefsByItemIds(@NonNull Set<UUID> itemIds,
-            @NonNull Set<ExperimentStatus> statuses) {
-        if (itemIds.isEmpty()) {
-            return Flux.empty();
-        }
-        return experimentItemDAO.getExperimentRefsByItemIds(itemIds, statuses);
     }
 
     public Flux<ExperimentTraceRef> getExperimentRefsBySpanIds(@NonNull Set<UUID> spanIds,

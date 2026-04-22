@@ -2,7 +2,7 @@ import datetime
 import logging
 from typing import List, Dict, Optional, Any, Union
 
-from opik.types import ErrorInfoDict, SpanType
+from opik.types import ErrorInfoDict, SpanType, TraceSource
 from . import models, emulator_message_processor
 from .. import messages
 from ...rest_api.types import span_write, trace_write
@@ -74,6 +74,7 @@ class LocalEmulatorMessageProcessor(
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
+        source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
     ) -> models.TraceModel:
         if spans is None:
@@ -96,6 +97,7 @@ class LocalEmulatorMessageProcessor(
             error_info=error_info,
             thread_id=thread_id,
             last_updated_at=last_updated_at,
+            source=source,
         )
 
     def create_span_model(
@@ -118,6 +120,7 @@ class LocalEmulatorMessageProcessor(
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        source: TraceSource,
     ) -> models.SpanModel:
         if spans is None:
             spans = []
@@ -143,6 +146,7 @@ class LocalEmulatorMessageProcessor(
             error_info=error_info,
             total_cost=total_cost,
             last_updated_at=last_updated_at,
+            source=source,
         )
 
     def create_feedback_score_model(

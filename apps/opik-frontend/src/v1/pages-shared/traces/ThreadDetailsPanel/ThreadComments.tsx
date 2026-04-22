@@ -7,7 +7,7 @@ import { CommentItem } from "@/types/comment";
 import useCreateThreadCommentMutation from "@/api/traces/useCreateThreadCommentMutation";
 import useThreadCommentsBatchDeleteMutation from "@/api/traces/useThreadCommentsBatchDeleteMutation";
 import useUpdateThreadCommentMutation from "@/api/traces/useUpdateThreadCommentMutation";
-import CommentsSection from "@/v1/pages-shared/traces/UserComment/CommentsSection";
+import CommentsSection from "@/shared/UserComment/CommentsSection";
 
 export type ThreadCommentsProps = {
   activeSection?: DetailsActionSectionValue | null;

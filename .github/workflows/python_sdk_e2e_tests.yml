@@ -18,33 +18,30 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
-  OPIK_GUARDRAILS_URL_OVERRIDE: http://localhost:5000
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
     run-e2e:
         name: Python SDK E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest-m
+        runs-on: ubuntu-latest
         timeout-minutes: 30   
         strategy:
             fail-fast: false
             matrix:
-                python_version: [
-                  "3.10",
-                  "3.11",
-                  "3.12",
-                  "3.13",
-                  "3.14",
-                ]
+                python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
         steps:
         - name: Checkout
-          uses: actions/checkout@v4.1.1
+          uses: actions/checkout@v6
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
@@ -57,10 +54,9 @@ jobs:
             # Avoid Buildx Bake concurrent image export collisions in CI.
             COMPOSE_BAKE: false
             TOGGLE_RUNNERS_ENABLED: "true"
-            TOGGLE_AGENT_CONFIGURATION_ENABLED: "true"
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --backend --port-mapping --guardrails --build
+            ./opik.sh --backend --port-mapping --build
         
         - name: Check Opik server availability
           shell: bash
@@ -91,7 +87,7 @@ jobs:
         - name: Run tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
@@ -109,7 +105,7 @@ jobs:
 
         - name: Attach BE log
           if: failure()
-          uses: actions/upload-artifact@v4
+          uses: actions/upload-artifact@v7
           with:
               name: opik-backend-log-p${{matrix.python_version}}
               path: ${{ github.workspace }}/opik-backend_p${{matrix.python_version}}.log
@@ -118,5 +114,5 @@ jobs:
           if: always()
           run: |
             cd ${{ github.workspace }}
-            ./opik.sh --stop --guardrails
+            ./opik.sh --stop
 

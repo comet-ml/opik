@@ -48,7 +48,7 @@ jobs:
             echo "Version validated: $VERSION"
 
         - name: Checkout
-          uses: actions/checkout@v4
+          uses: actions/checkout@v6
           with:
             ref: ${{inputs.version}}
             fetch-tags: true
@@ -56,7 +56,7 @@ jobs:
             fetch-depth: 0
 
         - name: Checkout GH Pages branch
-          uses: actions/checkout@v4
+          uses: actions/checkout@v6
           with:
             path: 'dest'
             ref: 'gh-pages'

@@ -651,7 +651,7 @@ show_access_information() {
     echo "  • No API key required for local instances"
     echo ""
     echo -e "${BLUE}📖 For complete configuration documentation, visit:${NC}"
-    echo -e "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+    echo -e "   https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 }
 
 create_demo_data() {

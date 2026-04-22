@@ -4,7 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import usePluginsStore from "@/store/PluginsStore";
 import FeedbackDefinitionsTab from "@/v1/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
 

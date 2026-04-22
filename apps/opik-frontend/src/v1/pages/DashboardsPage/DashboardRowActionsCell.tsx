@@ -23,7 +23,11 @@ export const DashboardRowActionsCell: React.FunctionComponent<
   const dashboard = context.row.original;
 
   const {
-    permissions: { canCreateDashboards },
+    permissions: {
+      canCreateDashboards,
+      canEditDashboards,
+      canDeleteDashboards,
+    },
   } = usePermissions();
 
   const { mutate: deleteDashboardMutate } = useDashboardBatchDeleteMutation();
@@ -56,6 +60,10 @@ export const DashboardRowActionsCell: React.FunctionComponent<
     setOpen(false);
   }, []);
 
+  if (!canEditDashboards && !canCreateDashboards && !canDeleteDashboards) {
+    return null;
+  }
+
   return (
     <div
       className="flex items-center justify-end gap-2"
@@ -69,21 +77,26 @@ export const DashboardRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={handleEdit}>
-            <Pencil className="mr-2 size-4" />
-            Edit
-          </DropdownMenuItem>
+          {canEditDashboards && (
+            <DropdownMenuItem onClick={handleEdit}>
+              <Pencil className="mr-2 size-4" />
+              Edit
+            </DropdownMenuItem>
+          )}
           {canCreateDashboards && (
             <DropdownMenuItem onClick={handleClone}>
               <Copy className="mr-2 size-4" />
               Clone
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleDelete} variant="destructive">
-            <Trash className="mr-2 size-4" />
-            Delete
-          </DropdownMenuItem>
+          {(canEditDashboards || canCreateDashboards) &&
+            canDeleteDashboards && <DropdownMenuSeparator />}
+          {canDeleteDashboards && (
+            <DropdownMenuItem onClick={handleDelete} variant="destructive">
+              <Trash className="mr-2 size-4" />
+              Delete
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <AddEditCloneDashboardDialog

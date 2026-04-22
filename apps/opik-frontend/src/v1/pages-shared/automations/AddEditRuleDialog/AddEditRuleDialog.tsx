@@ -69,7 +69,7 @@ import {
   LLM_PROMPT_CUSTOM_TRACE_TEMPLATE,
   LLM_PROMPT_CUSTOM_SPAN_TEMPLATE,
 } from "@/constants/llm";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { Description } from "@/ui/description";

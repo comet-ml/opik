@@ -11,6 +11,10 @@ on:
       - "sdks/typescript/**"
   workflow_dispatch:
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   test:
     name: Test on Node ${{ matrix.node-version }}
@@ -22,11 +26,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node-version: [18, 20, 22]
+        node-version: ${{ fromJSON(vars.NODE_VERSIONS) }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v4.2.0
@@ -37,4 +41,12 @@ jobs:
         run: npm ci
 
       - name: Run tests (npm)
+        run: npm run test
+
+      - name: Install 'configure' tool dependencies
+        working-directory: sdks/typescript/src/opik/configure
+        run: npm install
+
+      - name: Run 'configure' tool tests
+        working-directory: sdks/typescript/src/opik/configure
         run: npm run test

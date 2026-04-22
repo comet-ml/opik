@@ -361,6 +361,7 @@ public class SpansResource {
             @ApiResponse(responseCode = "200", description = "Span stats resource", content = @Content(schema = @Schema(implementation = ProjectStats.class)))
     })
     @JsonView({ProjectStats.ProjectStatItem.View.Public.class})
+    @RateLimited(value = "getSpanStats:{workspaceId}", shouldAffectWorkspaceLimit = false, shouldAffectUserGeneralLimit = false)
     public Response getStats(@QueryParam("project_id") UUID projectId,
             @QueryParam("project_name") String projectName,
             @QueryParam("trace_id") UUID traceId,
@@ -456,6 +457,7 @@ public class SpansResource {
                 .projectName(request.projectName())
                 .projectId(request.projectId())
                 .filters(filtersFactory.validateFilter(request.filters()))
+                .exclude(request.exclude())
                 .sortingFields(List.of())
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(request.fromTime()))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(request.toTime()))

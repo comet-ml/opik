@@ -88,10 +88,13 @@ def test_track_langgraph__happyflow__no_config_passed(
                         output={"output": "processed_test_input"},
                         start_time=ANY_BUT_NONE,
                         end_time=ANY_BUT_NONE,
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
@@ -143,8 +146,10 @@ def test_track_langgraph__multiple_invocations__all_tracked(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE_1, fake_backend.trace_trees[0])
 
@@ -167,8 +172,10 @@ def test_track_langgraph__multiple_invocations__all_tracked(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE_2, fake_backend.trace_trees[1])
 
@@ -191,8 +198,10 @@ def test_track_langgraph__multiple_invocations__all_tracked(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE_3, fake_backend.trace_trees[2])
 
@@ -244,8 +253,10 @@ def test_track_langgraph__tracked_twice__invoked_once__single_trace_created(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
 
@@ -314,12 +325,16 @@ def test_track_langgraph__invoked_from_tracked_function__proper_tracing(
                                 metadata=ANY_DICT,
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
 
@@ -379,8 +394,10 @@ def test_track_langgraph__with_project_name_tags_metadata__all_applied(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])
 
@@ -442,6 +459,7 @@ def test_track_langgraph__graph_visualization_included_in_metadata(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -451,7 +469,9 @@ def test_track_langgraph__graph_visualization_included_in_metadata(
                 metadata=ANY_DICT,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
     assert_equal(EXPECTED_TRACE, fake_backend.trace_trees[0])

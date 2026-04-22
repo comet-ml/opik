@@ -22,7 +22,7 @@ import useTreeDetailsStore, {
 import { cn } from "@/lib/utils";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import BaseTraceDataTypeIcon from "@/v1/pages-shared/traces/TraceDetailsPanel/BaseTraceDataTypeIcon";
+import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import { GuardrailResult } from "@/types/guardrails";
 import get from "lodash/get";
 import { formatDate, formatDuration } from "@/lib/date";
@@ -30,9 +30,9 @@ import isNumber from "lodash/isNumber";
 import isUndefined from "lodash/isUndefined";
 import { formatCost } from "@/lib/money";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
-import UserCommentHoverList from "@/v1/pages-shared/traces/UserComment/UserCommentHoverList";
+import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import TagsHoverCard from "@/shared/TagsHoverCard/TagsHoverCard";
-import { useIsFeatureEnabled } from "@/v1/feature-toggles-provider";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { TRACE_TYPE_FOR_TREE } from "@/constants/traces";
 

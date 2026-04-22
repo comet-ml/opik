@@ -1,9 +1,12 @@
 """Download command for Opik CLI."""
 
+import logging
 from typing import Optional
 
 import click
+from rich.logging import RichHandler
 
+from .all import export_all_command
 from .dataset import export_dataset_command
 from .experiment import export_experiment_command
 from .prompt import export_prompt_command
@@ -34,6 +37,7 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Data Types (ITEM):
+        all          Export everything: datasets, prompts, projects, and experiments
         dataset      Export a dataset by exact name (exports dataset definition and items)
         project      Export a project by name or ID (exports project traces and metadata)
         experiment   Export an experiment by name or ID (exports experiment configuration and results)
@@ -49,6 +53,12 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
+        # Export everything in the workspace
+        opik export my-workspace all
+
+        # Export only datasets and prompts
+        opik export my-workspace all --include datasets,prompts
+
         # Export a specific dataset
         opik export my-workspace dataset "my-dataset"
 
@@ -69,16 +79,59 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
         ctx.parent.obj.get("api_key") if ctx.parent and ctx.parent.obj else None
     )
 
+    # During bulk export the opik SDK emits deprecation warnings via its own
+    # StreamHandler (format "OPIK: <message>"), which writes to stderr and
+    # corrupts the Rich progress bar display.  Replace that handler with a
+    # RichHandler so any SDK log output is routed through the shared console
+    # (and therefore properly interleaved with the progress bars).
+    # Only ERROR and above are shown; WARNING-level deprecation notices are
+    # noise during export and the export code reports real errors itself.
+    from .utils import console as _console
+
+    _opik_logger = logging.getLogger("opik")
+    # Snapshot existing handlers so we can restore them when the CLI command
+    # exits (important: CliRunner-based unit tests share the global logger state
+    # across test cases, so any mutation must be undone on context teardown).
+    _original_handlers = list(_opik_logger.handlers)
+
+    def _restore_opik_handlers() -> None:
+        for _h in list(_opik_logger.handlers):
+            _opik_logger.removeHandler(_h)
+        for _h in _original_handlers:
+            _opik_logger.addHandler(_h)
+
+    ctx.call_on_close(_restore_opik_handlers)
+
+    # Remove existing StreamHandlers (SDK installs one with "OPIK: " prefix).
+    # Also remove any RichHandlers not bound to _console — those would route SDK
+    # logs to a different console and bypass our progress-bar-aware output.
+    for _h in list(_opik_logger.handlers):
+        if isinstance(_h, RichHandler):
+            if getattr(_h, "console", None) is not _console:
+                _opik_logger.removeHandler(_h)
+        elif isinstance(_h, logging.StreamHandler):
+            _opik_logger.removeHandler(_h)
+    if not any(isinstance(h, RichHandler) for h in _opik_logger.handlers):
+        _rich_handler = RichHandler(
+            console=_console,
+            show_time=False,
+            show_path=False,
+            markup=False,
+        )
+        _rich_handler.setLevel(logging.ERROR)
+        _opik_logger.addHandler(_rich_handler)
+
     # If no subcommand was invoked, show helpful error
     if ctx.invoked_subcommand is None:
         available_items = ", ".join(
-            sorted(["dataset", "experiment", "prompt", "project"])
+            sorted(["all", "dataset", "experiment", "prompt", "project"])
         )
         click.echo(
             f"Error: Missing ITEM.\n\n"
             f"Available items: {available_items}\n\n"
             f"Usage: opik export {workspace} ITEM NAME [OPTIONS]\n\n"
             f"Examples:\n"
+            f"  opik export {workspace} all\n"
             f'  opik export {workspace} dataset "my-dataset"\n'
             f'  opik export {workspace} project "my-project"\n'
             f'  opik export {workspace} experiment "my-experiment"\n'
@@ -125,6 +178,7 @@ setattr(
 
 
 # Add the subcommands
+export_group.add_command(export_all_command)
 export_group.add_command(export_dataset_command)
 export_group.add_command(export_experiment_command)
 export_group.add_command(export_prompt_command)

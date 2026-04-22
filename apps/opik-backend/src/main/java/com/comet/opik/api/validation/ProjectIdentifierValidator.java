@@ -1,13 +1,14 @@
 package com.comet.opik.api.validation;
 
-import com.comet.opik.api.AgentConfigCreate;
 import jakarta.validation.ConstraintValidator;
 import jakarta.validation.ConstraintValidatorContext;
 
-public class ProjectIdentifierValidator implements ConstraintValidator<ProjectIdentifierValidation, AgentConfigCreate> {
+public class ProjectIdentifierValidator
+        implements
+            ConstraintValidator<ProjectIdentifierValidation, HasProjectIdentifier> {
 
     @Override
-    public boolean isValid(AgentConfigCreate request, ConstraintValidatorContext context) {
+    public boolean isValid(HasProjectIdentifier request, ConstraintValidatorContext context) {
         if (request == null) {
             return true;
         }

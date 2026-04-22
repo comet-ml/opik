@@ -5,7 +5,16 @@ on:
     pull_request:
         paths:
           - 'sdks/opik_optimizer/**'
+    push:
+        branches:
+          - 'main'
+        paths:
+          - 'sdks/opik_optimizer/**'
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -29,17 +38,11 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                python_version: [
-                  "3.10",
-                  "3.11",
-                  "3.12",
-                  "3.13",
-                  "3.14"
-                ]
+                python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
 
         steps:
         - name: Check out code
-          uses: actions/checkout@v4
+          uses: actions/checkout@v6
             
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5

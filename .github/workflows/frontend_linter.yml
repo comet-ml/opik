@@ -10,6 +10,10 @@ on:
     paths: 
       - "apps/opik-frontend/src/**"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -19,7 +23,7 @@ jobs:
         working-directory: apps/opik-frontend
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4.1.1
+        uses: actions/checkout@v6
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
