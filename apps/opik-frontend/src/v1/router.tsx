@@ -55,6 +55,7 @@ import TestSuitesPage from "@/v1/pages/TestSuitesPage/TestSuitesPage";
 import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
 import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
 import PairV1Page from "@/v1/pages/PairV1Page/PairV1Page";
+import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -111,15 +112,20 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 // "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
 // TODO: make the Python SDK build basepath-aware pairing URLs and drop
 // this alias once shipped CLI versions roll over.
+const PairRouteComponent = () => (
+  <PairRouteVersionGuard>
+    <PairV1Page />
+  </PairRouteVersionGuard>
+);
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/pair/v1",
-  component: PairV1Page,
+  component: PairRouteComponent,
 });
 const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
-  component: PairV1Page,
+  component: PairRouteComponent,
 });
 
 const baseRoute = createRoute({

@@ -41,6 +41,7 @@ import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueueP
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
+import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
@@ -116,15 +117,20 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 // "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
 // TODO: make the Python SDK build basepath-aware pairing URLs and drop
 // this alias once shipped CLI versions roll over.
+const PairRouteComponent = () => (
+  <PairRouteVersionGuard>
+    <PairingPage />
+  </PairRouteVersionGuard>
+);
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/pair/v1",
-  component: PairingPage,
+  component: PairRouteComponent,
 });
 const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
-  component: PairingPage,
+  component: PairRouteComponent,
 });
 
 // ----------- base redirect
