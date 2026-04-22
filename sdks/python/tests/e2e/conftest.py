@@ -6,12 +6,21 @@ import pytest
 
 import opik
 import opik.api_objects.opik_client
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
 from opik.rest_api import core as rest_api_core
 from .. import testlib
 from ..conftest import random_chars
 
 OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
 ATTACHMENT_FILE_SIZE = 2 * 1024 * 1024
+
+
+@pytest.fixture(autouse=True)
+def _fast_llm_judge_reasoning_effort(monkeypatch):
+    """Force LLMJudge's default reasoning_effort to "minimal" for the e2e
+    suite so LLM-bound assertion runs (test_test_suite, etc.) don't burn
+    time on reasoning tokens. Production default stays "low"."""
+    monkeypatch.setattr(llm_judge_config, "DEFAULT_REASONING_EFFORT", "minimal")
 
 
 @pytest.fixture()
