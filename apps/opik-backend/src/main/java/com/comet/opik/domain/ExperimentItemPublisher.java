@@ -14,7 +14,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -24,13 +23,16 @@ public class ExperimentItemPublisher {
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
+    private final AssertionCounterService assertionCounterService;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config) {
+            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
+            @NonNull AssertionCounterService assertionCounterService) {
         this.redisClient = redisClient;
         this.config = config;
+        this.assertionCounterService = assertionCounterService;
     }
 
     /**
@@ -63,16 +65,9 @@ public class ExperimentItemPublisher {
     }
 
     private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
-        Map<UUID, Long> itemsByExperiment = messages.stream()
+        var itemsByExperiment = messages.stream()
                 .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
 
-        return Flux.fromIterable(itemsByExperiment.entrySet())
-                .flatMap(entry -> {
-                    var key = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + entry.getKey();
-                    var assertionCounter = redisClient.getAtomicLong(key);
-                    return assertionCounter.set(entry.getValue())
-                            .then(assertionCounter.expire(config.getBatchCounterTtl().toJavaDuration()));
-                })
-                .then();
+        return assertionCounterService.setCounters(itemsByExperiment);
     }
 }

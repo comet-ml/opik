@@ -4,6 +4,7 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
+import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
@@ -30,6 +31,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private final ExperimentItemProcessor itemProcessor;
     private final ExperimentService experimentService;
+    private final AssertionCounterService assertionCounterService;
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
 
@@ -38,10 +40,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull ExperimentItemProcessor itemProcessor,
-            @NonNull ExperimentService experimentService) {
+            @NonNull ExperimentService experimentService,
+            @NonNull AssertionCounterService assertionCounterService) {
         super(config, redisson, ExperimentExecutionConfig.PAYLOAD_FIELD, SUBSCRIBER_NAMESPACE, METRICS_BASE_NAME);
         this.itemProcessor = itemProcessor;
         this.experimentService = experimentService;
+        this.assertionCounterService = assertionCounterService;
         this.redisClient = redisson;
         this.config = config;
     }
@@ -125,19 +129,16 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     private Mono<Boolean> hasAssertionCounter(ExperimentItemToProcess message) {
-        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
-        return redisClient.getAtomicLong(counterKey).isExists();
+        return assertionCounterService.exists(message.experimentId());
     }
 
     private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
-        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
-        var counter = redisClient.getAtomicLong(counterKey);
-        return counter.isExists()
+        return assertionCounterService.exists(message.experimentId())
                 .flatMap(exists -> {
                     if (!exists) {
                         return Mono.empty();
                     }
-                    return counter.decrementAndGet()
+                    return assertionCounterService.decrement(message.experimentId())
                             .flatMap(remaining -> {
                                 if (remaining <= 0) {
                                     log.info(

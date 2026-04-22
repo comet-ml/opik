@@ -2,7 +2,6 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -43,10 +42,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
-            @NonNull ExperimentService experimentService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, experimentService, USER_DEFINED_METRIC_PYTHON,
-                Constants.USER_DEFINED_METRIC_PYTHON);
+        super(config, redisson, feedbackScoreService, traceService,
+                USER_DEFINED_METRIC_PYTHON, Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
