@@ -22,7 +22,11 @@ const DemoLoadingStep: React.FC = () => {
   const navigate = useNavigate();
   const { goToStep, agentName } = useAgentOnboarding();
 
-  const { data: demoProject, isLoading, pollExpired } = useDemoProject(
+  const {
+    data: demoProject,
+    isLoading,
+    pollExpired,
+  } = useDemoProject(
     { workspaceName, poll: true },
     { refetchOnMount: "always" },
   );
