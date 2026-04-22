@@ -4,10 +4,31 @@ export const DEFAULT_WORKSPACE_VERSION: WorkspaceVersion = "v2";
 
 const OPIK_VERSION_OVERRIDE_KEY = "opik-version-override";
 const OPIK_WORKSPACE_VERSIONS_KEY = "opik-workspace-versions";
+const OPIK_NEW_EXPERIENCE_OPT_IN_KEY = "opik-new-experience-opt-in";
 
 export function getVersionOverride(): WorkspaceVersion | null {
   const override = localStorage.getItem(OPIK_VERSION_OVERRIDE_KEY);
   return override === "v1" || override === "v2" ? override : null;
+}
+
+export function getNewExperienceOptIn(): boolean {
+  try {
+    return localStorage.getItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setNewExperienceOptIn(optIn: boolean): void {
+  try {
+    if (optIn) {
+      localStorage.setItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY, "true");
+    } else {
+      localStorage.removeItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY);
+    }
+  } catch {
+    // localStorage unavailable (private mode, quota) — silently skip
+  }
 }
 
 function readVersionMap(): Record<string, WorkspaceVersion> {
@@ -70,6 +91,7 @@ export function getWorkspaceNameFromUrl(): string | null {
 export function resolveSyncWorkspaceVersion(): WorkspaceVersion {
   const override = getVersionOverride();
   if (override) return override;
+  if (getNewExperienceOptIn()) return "v2";
   const workspaceName = getWorkspaceNameFromUrl();
   if (!workspaceName) return DEFAULT_WORKSPACE_VERSION;
   return getCachedWorkspaceVersion(workspaceName) ?? DEFAULT_WORKSPACE_VERSION;

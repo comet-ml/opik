@@ -262,9 +262,18 @@ experimentDenormalization:
   # Default: 300ms
   # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
   jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1m
+  # Default: 10m
   # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
-  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-10m}
+  # Default: 500ms
+  # Description: Time to wait when trying to acquire the per-experiment aggregation lock before skipping (fail-fast). Must be between 100ms and 5s.
+  lockAcquireWait: ${OPIK_EXPERIMENT_DENORM_LOCK_ACQUIRE_WAIT:-500ms}
+  # Default: 3
+  # Description: Maximum automatic re-trigger attempts per (workspace, experiment) when the aggregation lock TTL is exceeded. Must be between 1 and 10.
+  maxLockExpiryRetries: ${OPIK_EXPERIMENT_DENORM_MAX_LOCK_EXPIRY_RETRIES:-3}
+  # Default: 30m
+  # Description: TTL applied to the per-(workspace, experiment) lock-expiry retry counter in Redis (minimum 1m). Prevents stale counters from accumulating when an experiment stops producing events.
+  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-30m}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
