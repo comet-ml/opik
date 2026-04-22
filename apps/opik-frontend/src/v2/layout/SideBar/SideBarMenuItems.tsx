@@ -16,13 +16,19 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const activeProjectId = useActiveProjectId();
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
   const {
-    permissions: { canViewExperiments, canViewDatasets, canUsePlayground },
+    permissions: {
+      canViewExperiments,
+      canViewDatasets,
+      canViewDashboards,
+      canUsePlayground,
+    },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     projectId: activeProjectId,
     canViewExperiments,
     canViewDatasets,
+    canViewDashboards,
     canUsePlayground,
     showHome: !!AssistantSidebar,
   });
