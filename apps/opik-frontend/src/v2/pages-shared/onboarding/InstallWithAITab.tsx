@@ -22,7 +22,11 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
-  const promptText = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}", project name "${agentName}" and API key "${apiKey}".`;
+  const projectPart = agentName ? `, project name "${agentName}"` : "";
+  const displayPrompt = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart} and API key "<YOUR_API_KEY>".`;
+  const copyPrompt = apiKey
+    ? displayPrompt.replace("<YOUR_API_KEY>", apiKey)
+    : displayPrompt;
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -56,7 +60,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
             </h4>
-            <CodeSnippet title="Prompt" code={promptText} />
+            <CodeSnippet title="Prompt" code={displayPrompt} copyText={copyPrompt} />
           </div>
         </TimelineStep>
 
