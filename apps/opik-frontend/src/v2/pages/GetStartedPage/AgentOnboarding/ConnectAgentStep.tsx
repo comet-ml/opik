@@ -140,7 +140,12 @@ const ConnectAgentStep: React.FC = () => {
         : {
             value: "install-with-ai",
             label: "AI-assisted setup",
-            content: <InstallWithAITab traceReceived={traceReceived} />,
+            content: (
+              <InstallWithAITab
+                traceReceived={traceReceived}
+                agentName={agentName}
+              />
+            ),
           },
       {
         value: "manual-integration",

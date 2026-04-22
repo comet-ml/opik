@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import IntegrationCard from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
@@ -26,13 +26,9 @@ const INTEGRATION_ICON_THEME_MAP = {
 } as const;
 
 const IntegrationQuickInstall: React.FC = () => {
-  const { selectedIntegrationId, setSelectedIntegrationId, source } =
-    useIntegrationExplorer();
+  const { source } = useIntegrationExplorer();
   const { themeMode } = useTheme();
-
-  const handleQuickInstallClick = () => {
-    setSelectedIntegrationId("quick-opik-install");
-  };
+  const [open, setOpen] = useState(false);
 
   return (
     <>
@@ -59,17 +55,14 @@ const IntegrationQuickInstall: React.FC = () => {
             />
           </div>
         }
-        onClick={handleQuickInstallClick}
+        onClick={() => setOpen(true)}
         id={`integration-quick-install-card${source ? `-${source}` : ""}`}
         data-fs-element={`IntegrationQuickInstallCard${
           source ? `-${source}` : ""
         }`}
       />
 
-      <QuickInstallDialog
-        open={selectedIntegrationId === "quick-opik-install"}
-        onClose={() => setSelectedIntegrationId(undefined)}
-      />
+      <QuickInstallDialog open={open} onClose={() => setOpen(false)} />
     </>
   );
 };

@@ -1,5 +1,4 @@
 import React from "react";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
 import { buildDocsUrl } from "@/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
@@ -11,12 +10,15 @@ import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
 
 interface InstallWithAITabProps {
   traceReceived: boolean;
+  agentName?: string;
+  showTraceStep?: boolean;
 }
 
 const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   traceReceived,
+  agentName = "",
+  showTraceStep = true,
 }) => {
-  const { agentName } = useAgentOnboarding();
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
@@ -55,7 +57,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
           </div>
         </TimelineStep>
 
-        <TimelineStep number={2}>
+        <TimelineStep number={2} isLast={!showTraceStep}>
           <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
@@ -68,33 +70,35 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
           </div>
         </TimelineStep>
 
-        <TimelineStep isLast completed={traceReceived}>
-          <div className="flex flex-col gap-1">
-            <h4 className="comet-body-s-accented text-primary">
-              {traceReceived
-                ? "First trace received! You're all set."
-                : "Waiting for first trace\u2026"}
-            </h4>
-            <p className="comet-body-xs text-muted-slate">
-              {traceReceived ? (
-                "Traces are flowing. You can now debug, evaluate, and optimize."
-              ) : (
-                <>
-                  Connect your agent to Opik for observability, evaluation and
-                  optimization.{" "}
-                  <a
-                    href={buildDocsUrl("/faq", "#troubleshooting")}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    Why isn&apos;t my trace showing?
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
-        </TimelineStep>
+        {showTraceStep && (
+          <TimelineStep isLast completed={traceReceived}>
+            <div className="flex flex-col gap-1">
+              <h4 className="comet-body-s-accented text-primary">
+                {traceReceived
+                  ? "First trace received! You're all set."
+                  : "Waiting for first trace\u2026"}
+              </h4>
+              <p className="comet-body-xs text-muted-slate">
+                {traceReceived ? (
+                  "Traces are flowing. You can now debug, evaluate, and optimize."
+                ) : (
+                  <>
+                    Connect your agent to Opik for observability, evaluation and
+                    optimization.{" "}
+                    <a
+                      href={buildDocsUrl("/faq", "#troubleshooting")}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      Why isn&apos;t my trace showing?
+                    </a>
+                  </>
+                )}
+              </p>
+            </div>
+          </TimelineStep>
+        )}
       </div>
     </div>
   );
