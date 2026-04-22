@@ -10,6 +10,7 @@ import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.genai import track_genai
 
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -24,7 +25,7 @@ import tenacity
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
-MODEL = "gemini-2.0-flash"
+MODEL = llm_constants.GEMINI_FLASH
 
 EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = {
     "prompt_tokens": ANY_BUT_NONE,

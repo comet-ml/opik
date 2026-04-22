@@ -1,9 +1,11 @@
 import uuid
 
+from ... import llm_constants
+
 APP_NAME = "ADK_app"
 USER_ID = "ADK_test_user"
 SESSION_ID = "ADK_" + str(uuid.uuid4())
-MODEL_NAME = "gemini-2.0-flash"
+MODEL_NAME = llm_constants.GEMINI_FLASH
 
 EXPECTED_USAGE_KEYS_GOOGLE = [
     "completion_tokens",

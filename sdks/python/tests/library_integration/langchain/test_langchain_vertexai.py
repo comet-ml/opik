@@ -4,6 +4,7 @@ from langchain_core.prompts import PromptTemplate
 
 from opik.integrations.langchain.opik_tracer import OpikTracer
 from . import google_helpers
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -35,7 +36,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 ):
     llm = llm_model(
         max_tokens=10,
-        model_name="gemini-2.0-flash",
+        model_name=llm_constants.GEMINI_FLASH,
         name="custom-google-vertexai-llm-name",
     )
 
@@ -107,7 +108,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 end_time=ANY_BUT_NONE,
                 usage=ANY_DICT,
                 provider="google_vertexai",
-                model=ANY_STRING.starting_with("gemini-2.0-flash"),
+                model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
                 source="sdk",
             ),
         ],
@@ -140,7 +141,7 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
 ):
     llm = llm_model(
         max_tokens=10,
-        model_name="gemini-2.0-flash",
+        model_name=llm_constants.GEMINI_FLASH,
         name="custom-google-vertexai-llm-name",
         streaming=True,
         stream_usage=True,
@@ -214,7 +215,7 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
                 end_time=ANY_BUT_NONE,
                 usage=ANY_DICT,
                 provider="google_vertexai",
-                model=ANY_STRING.starting_with("gemini-2.0-flash"),
+                model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
                 source="sdk",
             ),
         ],

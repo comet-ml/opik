@@ -2,18 +2,23 @@ import pytest
 
 from opik.evaluation.suite_evaluators import LLMJudge
 
+from ... import llm_constants
+
 
 MODEL_PARAMS = [
     pytest.param(
-        ("gpt-4o", ["ensure_openai_configured"]),
+        (llm_constants.OPENAI_GPT, ["ensure_openai_configured"]),
         id="openai",
     ),
     pytest.param(
-        ("anthropic/claude-sonnet-4-20250514", ["ensure_anthropic_configured"]),
+        (
+            f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}",
+            ["ensure_anthropic_configured"],
+        ),
         id="anthropic",
     ),
     pytest.param(
-        ("gemini/gemini-2.0-flash", ["ensure_google_api_configured"]),
+        (f"gemini/{llm_constants.GEMINI_FLASH}", ["ensure_google_api_configured"]),
         id="gemini",
     ),
 ]

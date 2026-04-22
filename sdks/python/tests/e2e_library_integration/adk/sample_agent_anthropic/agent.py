@@ -9,6 +9,8 @@ from google.adk.models.lite_llm import LiteLlm
 
 from opik.integrations.adk import OpikTracer
 
+from .... import llm_constants
+
 
 def get_weather(city: str) -> dict:
     """Retrieves the current weather report for a specified city.
@@ -74,7 +76,7 @@ def after_agent_callback(
 
 root_agent = LlmAgent(
     name="weather_time_agent",
-    model=LiteLlm(model="anthropic/claude-sonnet-4-0"),
+    model=LiteLlm(model=llm_constants.LITELLM_ANTHROPIC_CLAUDE_SONNET),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."

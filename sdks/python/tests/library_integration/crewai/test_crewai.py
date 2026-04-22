@@ -5,6 +5,7 @@ import opik
 from opik.integrations.crewai import opik_tracker
 from opik.integrations.crewai import track_crewai
 from . import constants
+from ... import llm_constants
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -26,13 +27,13 @@ pytestmark = [
 @pytest.mark.parametrize(
     "model, opik_provider",
     [
-        ("openai/gpt-4o-mini", "openai"),
+        (llm_constants.LITELLM_OPENAI_GPT_MINI, "openai"),
         (
-            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/gemini-2.0-flash",
+            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/{llm_constants.GEMINI_FLASH}",
             "google_vertexai",
         ),
-        ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
-        ("anthropic/claude-sonnet-4-0", "anthropic"),
+        (f"bedrock/{llm_constants.BEDROCK_CLAUDE_SONNET}", "bedrock"),
+        (f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}", "anthropic"),
     ],
 )
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(

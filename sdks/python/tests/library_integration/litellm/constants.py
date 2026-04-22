@@ -1,20 +1,24 @@
+from ... import llm_constants
 from ...testlib import ANY_BUT_NONE, ANY_DICT
 
 
-MODEL_FOR_TESTS = "gpt-4o-mini"
+MODEL_FOR_TESTS = llm_constants.OPENAI_GPT_MINI
 
 # Models for parametrized tests - used in streaming and non-streaming tests
 # Only includes models that pass strict usage validation
 TEST_MODELS_PARAMETRIZE = [
-    ("gpt-4o-mini", "openai"),  # OpenAI - fully supported with usage tracking
     (
-        "anthropic/claude-haiku-4-5-20251001",
+        llm_constants.OPENAI_GPT_MINI,
+        "openai",
+    ),  # OpenAI - fully supported with usage tracking
+    (
+        llm_constants.LITELLM_ANTHROPIC_CLAUDE_HAIKU,
         "anthropic",
     ),  # Anthropic - fully supported with usage tracking
     (
-        "openai/gpt-4o-mini",
+        llm_constants.LITELLM_OPENAI_GPT_MINI,
         "openai",
-    ),  # OpenAI - fully supported with usage tracking
+    ),  # OpenAI - same model via LiteLLM provider/model form
 ]
 
 EXPECTED_LITELLM_USAGE_LOGGED_FORMAT = ANY_DICT.containing(
