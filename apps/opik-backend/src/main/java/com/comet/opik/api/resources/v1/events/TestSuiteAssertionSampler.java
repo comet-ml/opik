@@ -2,8 +2,6 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
-import com.comet.opik.api.ExperimentStatus;
-import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ProviderApiKey;
@@ -14,12 +12,11 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper.PreparedEvaluator;
-import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -69,8 +66,7 @@ public class TestSuiteAssertionSampler {
     private final TestSuiteConfig testSuiteConfig;
     private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
-    private final AssertionCounterService assertionCounterService;
-    private final ExperimentService experimentService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
     @Inject
     public TestSuiteAssertionSampler(
@@ -81,8 +77,7 @@ public class TestSuiteAssertionSampler {
             @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
             @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
-            @NonNull AssertionCounterService assertionCounterService,
-            @NonNull ExperimentService experimentService) {
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -90,8 +85,7 @@ public class TestSuiteAssertionSampler {
         this.testSuiteConfig = testSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
-        this.assertionCounterService = assertionCounterService;
-        this.experimentService = experimentService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
     @Subscribe
@@ -99,6 +93,14 @@ public class TestSuiteAssertionSampler {
         var completeTraces = tracesBatch.traces().stream()
                 .filter(trace -> trace.endTime() != null)
                 .toList();
+
+        tracesBatch.traces().stream()
+                .filter(trace -> trace.endTime() == null)
+                .forEach(trace -> getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                        .flatMap(id -> parseUUID(id, trace.id()))
+                        .ifPresent(experimentId -> decrementAssertionCounter(
+                                experimentId, tracesBatch.workspaceId(),
+                                tracesBatch.userName())));
 
         if (completeTraces.isEmpty()) {
             return;
@@ -121,6 +123,12 @@ public class TestSuiteAssertionSampler {
             log.warn("No LLM model resolved for test suite batch in workspace '{}' — "
                     + "no supported provider connected and no test_suite_model in trace metadata",
                     tracesBatch.workspaceId());
+            completeTraces.forEach(trace -> getMetadataString(
+                    trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                    .flatMap(id -> parseUUID(id, trace.id()))
+                    .ifPresent(experimentId -> decrementAssertionCounter(
+                            experimentId, tracesBatch.workspaceId(),
+                            tracesBatch.userName())));
             return;
         }
 
@@ -129,6 +137,10 @@ public class TestSuiteAssertionSampler {
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
+                    var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                            .flatMap(id -> parseUUID(id, trace.id()))
+                            .orElse(null);
+
                     var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
                     if (testSuiteDatasetId.isEmpty()) {
                         return Stream.empty();
@@ -140,6 +152,8 @@ public class TestSuiteAssertionSampler {
                     } catch (IllegalArgumentException e) {
                         log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
                                 testSuiteDatasetId.get());
+                        decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
+                                tracesBatch.userName());
                         return Stream.empty();
                     }
 
@@ -156,10 +170,6 @@ public class TestSuiteAssertionSampler {
                                 .block();
                         return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
                     });
-
-                    var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
-                            .flatMap(id -> parseUUID(id, trace.id()))
-                            .orElse(null);
 
                     var datasetItemId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ITEM_ID);
                     if (datasetItemId.isEmpty()) {
@@ -284,32 +294,13 @@ public class TestSuiteAssertionSampler {
             return;
         }
         try {
-            long remaining = assertionCounterService.decrement(experimentId).block();
-            if (remaining <= 0) {
-                log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
-                finishExperimentAfterAssertions(experimentId, workspaceId, userName);
-            }
-        } catch (Exception e) {
-            log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
-        }
-    }
-
-    private void finishExperimentAfterAssertions(UUID experimentId, String workspaceId, String userName) {
-        try {
-            var statusUpdate = ExperimentUpdate.builder()
-                    .status(ExperimentStatus.COMPLETED)
-                    .build();
-
-            experimentService.update(experimentId, statusUpdate)
-                    .then(experimentService.finishExperiments(Set.of(experimentId)))
+            testSuiteAssertionCounterService.decrementAndFinishIfComplete(experimentId)
                     .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName)
                             .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
                     .block();
-
-            log.info("Finished experiment '{}' after all assertions completed", experimentId);
         } catch (Exception e) {
-            log.error("Failed to finish experiment '{}' after assertions", experimentId, e);
+            log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
         }
     }
 
@@ -318,7 +309,7 @@ public class TestSuiteAssertionSampler {
             return;
         }
         try {
-            assertionCounterService.adjust(experimentId, additionalMessages).block();
+            testSuiteAssertionCounterService.adjust(experimentId, additionalMessages).block();
         } catch (Exception e) {
             log.error("Failed to adjust assertion counter for experiment '{}'", experimentId, e);
         }

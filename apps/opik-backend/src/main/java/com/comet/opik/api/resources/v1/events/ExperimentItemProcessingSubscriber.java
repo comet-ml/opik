@@ -4,9 +4,9 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
-import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
@@ -31,7 +31,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private final ExperimentItemProcessor itemProcessor;
     private final ExperimentService experimentService;
-    private final AssertionCounterService assertionCounterService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
 
@@ -41,11 +41,11 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
             @NonNull RedissonReactiveClient redisson,
             @NonNull ExperimentItemProcessor itemProcessor,
             @NonNull ExperimentService experimentService,
-            @NonNull AssertionCounterService assertionCounterService) {
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         super(config, redisson, ExperimentExecutionConfig.PAYLOAD_FIELD, SUBSCRIBER_NAMESPACE, METRICS_BASE_NAME);
         this.itemProcessor = itemProcessor;
         this.experimentService = experimentService;
-        this.assertionCounterService = assertionCounterService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.redisClient = redisson;
         this.config = config;
     }
@@ -109,9 +109,9 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                         return markExperimentsFailed(message,
                                                 buildReactorContext(message));
                                     }
-                                    return hasAssertionCounter(message)
-                                            .flatMap(hasCounter -> {
-                                                if (hasCounter) {
+                                    return isTestSuiteExperiment(message)
+                                            .flatMap(isTestSuite -> {
+                                                if (isTestSuite) {
                                                     log.info("Batch '{}' complete, waiting for assertions to finish",
                                                             message.batchId());
                                                     return Mono.empty();
@@ -128,26 +128,17 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .then();
     }
 
-    private Mono<Boolean> hasAssertionCounter(ExperimentItemToProcess message) {
-        return assertionCounterService.exists(message.experimentId());
+    private Mono<Boolean> isTestSuiteExperiment(ExperimentItemToProcess message) {
+        return testSuiteAssertionCounterService.exists(message.experimentId());
     }
 
     private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
-        return assertionCounterService.exists(message.experimentId())
-                .flatMap(exists -> {
-                    if (!exists) {
+        return isTestSuiteExperiment(message)
+                .flatMap(isTestSuite -> {
+                    if (!isTestSuite) {
                         return Mono.empty();
                     }
-                    return assertionCounterService.decrement(message.experimentId())
-                            .flatMap(remaining -> {
-                                if (remaining <= 0) {
-                                    log.info(
-                                            "Assertion counter reached zero for experiment '{}' (via failure), finishing",
-                                            message.experimentId());
-                                    return finishExperiments(message);
-                                }
-                                return Mono.<Void>empty();
-                            });
+                    return testSuiteAssertionCounterService.decrementAndFinishIfComplete(message.experimentId());
                 })
                 .then();
     }

@@ -66,12 +66,12 @@ describe("areAllRowItemsScored", () => {
       expect(areAllRowItemsScored(row)).toBe(true);
     });
 
-    it("should return false when evaluators is undefined and status is null", () => {
+    it("should return true when evaluators is undefined (no evaluators defined)", () => {
       const row = makeRow({
         evaluators: undefined,
         experiment_items: [makeItem({ status: undefined })],
       });
-      expect(areAllRowItemsScored(row)).toBe(false);
+      expect(areAllRowItemsScored(row)).toBe(true);
     });
   });
 

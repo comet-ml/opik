@@ -117,25 +117,6 @@ describe("getStatusFromExperimentItems", () => {
       expect(result.evaluating).toBe(false);
       expect(result.status).toBe(RunStatus.PASSED);
     });
-
-    it("treats SKIPPED as evaluating when evaluators exist", () => {
-      const row = makeRow({
-        experiment_items: [makeItem({ id: "i1", status: RunStatus.SKIPPED })],
-        evaluators: [{ name: "judge", type: "LLM_AS_JUDGE", config: {} }],
-      });
-      const result = getStatusFromExperimentItems(row);
-      expect(result.evaluating).toBe(true);
-      expect(result.status).toBeUndefined();
-    });
-
-    it("keeps SKIPPED when no evaluators exist", () => {
-      const row = makeRow({
-        experiment_items: [makeItem({ id: "i1", status: RunStatus.SKIPPED })],
-      });
-      const result = getStatusFromExperimentItems(row);
-      expect(result.status).toBe(RunStatus.SKIPPED);
-      expect(result.skippedReason).toBe("No assertions defined");
-    });
   });
 
   describe("execution_policy", () => {

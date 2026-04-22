@@ -36,7 +36,7 @@ const PlaygroundTestSuiteLastRunOutput: React.FunctionComponent<
               (ei) => ei.dataset_item_id === datasetItemId,
             ),
         );
-        return hasOutput ? false : 5000;
+        return hasOutput ? false : 1000;
       },
     },
   );

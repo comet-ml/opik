@@ -1,11 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.ExperimentStatus;
-import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
-import com.comet.opik.domain.AssertionCounterService;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
@@ -27,7 +24,6 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -46,8 +42,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
-    private final AssertionCounterService assertionCounterService;
-    private final ExperimentService experimentService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -55,60 +50,26 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
-            @NonNull ExperimentService experimentService,
-            @NonNull AssertionCounterService assertionCounterService,
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
             @NonNull LlmProviderFactory llmProviderFactory) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
-        this.assertionCounterService = assertionCounterService;
-        this.experimentService = experimentService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
     @Override
     protected Mono<Void> processEvent(TraceToScoreLlmAsJudge message) {
         UUID experimentId = message.experimentId();
         if (experimentId != null) {
-            return Mono.fromRunnable(() -> score(message))
-                    .thenReturn(true)
-                    .onErrorResume(e -> {
-                        log.error("Failed to score assertion for experiment '{}'", experimentId, e);
-                        return Mono.just(false);
-                    })
-                    .flatMap(success -> decrementAssertionCounter(experimentId, message));
+            return super.processEvent(message)
+                    .then(testSuiteAssertionCounterService.decrementAndFinishIfComplete(experimentId)
+                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                    .put(RequestContext.USER_NAME, message.userName())));
         }
         return super.processEvent(message);
-    }
-
-    private Mono<Void> decrementAssertionCounter(UUID experimentId, TraceToScoreLlmAsJudge message) {
-        return assertionCounterService.decrement(experimentId)
-                .flatMap(remaining -> {
-                    if (remaining <= 0) {
-                        log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
-                        return finishExperimentAfterAssertions(experimentId, message);
-                    }
-                    return Mono.empty();
-                })
-                .then();
-    }
-
-    private Mono<Void> finishExperimentAfterAssertions(UUID experimentId, TraceToScoreLlmAsJudge message) {
-        var statusUpdate = ExperimentUpdate.builder()
-                .status(ExperimentStatus.COMPLETED)
-                .build();
-
-        return experimentService.update(experimentId, statusUpdate)
-                .then(experimentService.finishExperiments(Set.of(experimentId)))
-                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                        .put(RequestContext.USER_NAME, message.userName()))
-                .doOnSuccess(unused -> log.info("Finished experiment '{}' after all assertions completed",
-                        experimentId))
-                .onErrorResume(error -> {
-                    log.error("Failed to finish experiment '{}' after assertions", experimentId, error);
-                    return Mono.empty();
-                });
     }
 
     /**

@@ -15,12 +15,11 @@ import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchemaType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
-import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
-import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.utils.JsonUtils;
@@ -73,10 +72,7 @@ class TestSuiteAssertionSamplerTest {
         LlmProviderApiKeyService llmProviderApiKeyService;
 
         @Mock
-        AssertionCounterService assertionCounterService;
-
-        @Mock
-        ExperimentService experimentService;
+        TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
         private TestSuiteAssertionSampler sampler;
 
@@ -91,8 +87,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, assertionCounterService,
-                    experimentService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, testSuiteAssertionCounterService);
         }
 
         @Test

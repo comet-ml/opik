@@ -68,6 +68,29 @@ const PASS_RATE_TEXT_COLOR: Record<PromptResultStatus, string> = {
   loser: "var(--tag-red-text)",
 };
 
+interface DatasetColumnHeaderProps {
+  header: string | undefined;
+  promptId: string;
+  promptIndex: number;
+}
+
+const DatasetColumnHeader: React.FC<DatasetColumnHeaderProps> = ({
+  header,
+  promptId,
+  promptIndex,
+}) => {
+  const promptColor =
+    PLAYGROUND_PROMPT_COLORS[promptIndex % PLAYGROUND_PROMPT_COLORS.length];
+
+  return (
+    <ColumnHeaderLayout
+      header={header}
+      dotColor={promptColor.bg}
+      promptId={promptId}
+    />
+  );
+};
+
 const TestSuiteColumnHeader: React.FC<TestSuiteColumnHeaderProps> = ({
   header,
   promptId,
@@ -108,19 +131,15 @@ const PlaygroundOutputColumnHeader = <TData,>(
 
   if (isTestSuite) {
     return <TestSuiteColumnHeader header={header} promptId={promptId ?? ""} />;
+  } else {
+    return (
+      <DatasetColumnHeader
+        header={header}
+        promptId={promptId ?? ""}
+        promptIndex={promptIndex ?? 0}
+      />
+    );
   }
-
-  const colorIndex = promptIndex ?? 0;
-  const promptColor =
-    PLAYGROUND_PROMPT_COLORS[colorIndex % PLAYGROUND_PROMPT_COLORS.length];
-
-  return (
-    <ColumnHeaderLayout
-      header={header}
-      dotColor={promptColor.bg}
-      promptId={promptId ?? ""}
-    />
-  );
 };
 
 export default PlaygroundOutputColumnHeader;

@@ -15,10 +15,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AssertionResult,
-  EXPERIMENT_STATUS,
   ExperimentItem,
   ExperimentsCompare,
 } from "@/types/datasets";
+import { isExperimentTerminal } from "@/lib/experiments";
 import { RunStatus } from "@/types/test-suites";
 import { isAggregatedItem } from "@/lib/trials";
 
@@ -221,10 +221,7 @@ const isExperimentFinished = (
   experimentId: string,
 ): boolean => {
   const exp = experiments?.find((e) => e.id === experimentId);
-  return (
-    exp?.status === EXPERIMENT_STATUS.COMPLETED ||
-    exp?.status === EXPERIMENT_STATUS.CANCELLED
-  );
+  return isExperimentTerminal(exp?.status);
 };
 
 const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
