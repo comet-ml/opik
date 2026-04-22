@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo } from "react";
+import first from "lodash/first";
 import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
@@ -17,7 +18,6 @@ import {
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
 } from "@/lib/modelRegistryStore";
-import first from "lodash/first";
 
 export type ProviderResolver = (
   modelName?: PROVIDER_MODEL_TYPE | "",
@@ -2161,6 +2161,21 @@ const useLLMProviderModelsData = () => {
     } as ProviderModelsMap;
   }, [fetched, openAICompatibleModels]);
 
+  // Full registry map (labelled + non-labelled entries) used only for
+  // provider resolution, not for dropdowns. Needed because persisted
+  // prompts can carry a non-curated model id (dated snapshot, removed
+  // model, etc.) and `calculateModelProvider` must still resolve it.
+  const fullProviderModels = useMemo<ProviderModelsMap>(() => {
+    const fromApi = fetched
+      ? transformFetched(fetched, { onlyVisible: false })
+      : {};
+    return {
+      ...MINIMAL_FALLBACK,
+      ...fromApi,
+      ...openAICompatibleModels,
+    } as ProviderModelsMap;
+  }, [fetched, openAICompatibleModels]);
+
   // Compat wrapper for callers that still expect a factory. Returns the
   // memoized map, so invoking this produces a stable reference too.
   const getProviderModels = useCallback(
@@ -2207,7 +2222,17 @@ const useLLMProviderModelsData = () => {
         return "";
       }
 
-      const provider = Object.entries(providerModels).find(
+      // Resolve against the full registry (not just the dropdown-visible
+      // subset) so persisted selections pointing at non-curated models —
+      // dated snapshots, historically-selectable entries that were later
+      // removed from the dropdown — still return the correct provider.
+      //
+      // Also match both the transformed `value` (which is
+      // `qualifiedName ?? id`) and the bare-id suffix of qualified names.
+      // This covers persisted `gemini-2.5-pro` selections that the Vertex AI
+      // entry stores as `vertex_ai/gemini-2.5-pro`, without reshuffling the
+      // rest of the model-matching pipeline.
+      const provider = Object.entries(fullProviderModels).find(
         ([providerName, models]) => {
           // Guard: only accept provider keys whose parsed base type is in the
           // FE's PROVIDER_TYPE enum. Composed keys like `custom-llm:acme` are
@@ -2221,7 +2246,14 @@ const useLLMProviderModelsData = () => {
           if (!KNOWN_PROVIDER_TYPES.has(baseType)) {
             return false;
           }
-          return models.find((pm) => modelName === pm.value) !== undefined;
+          return models.some(
+            (pm) =>
+              modelName === pm.value ||
+              // Match a persisted bare id against a qualified-name value.
+              (typeof pm.value === "string" &&
+                pm.value.includes("/") &&
+                modelName === pm.value.split("/").pop()),
+          );
         },
       );
 
@@ -2231,7 +2263,7 @@ const useLLMProviderModelsData = () => {
 
       return provider[0] as COMPOSED_PROVIDER_TYPE;
     },
-    [providerModels],
+    [fullProviderModels],
   );
 
   const calculateDefaultModel: ModelResolver = useCallback(
