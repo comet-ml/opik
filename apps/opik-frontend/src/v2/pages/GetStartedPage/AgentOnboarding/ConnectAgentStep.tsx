@@ -164,7 +164,7 @@ const ConnectAgentStep: React.FC = () => {
         ),
       },
     ],
-    [showOllieTab, connected, traceReceived, manualCategory],
+    [showOllieTab, connected, traceReceived, manualCategory, agentName],
   );
 
   if (selectedIntegration) {

@@ -85,7 +85,10 @@ const ManualIntegrationList: React.FC<ManualIntegrationListProps> = ({
         </ToggleGroup>
 
         {activeCategory === INSTALL_WITH_AI ? (
-          <InstallWithAITab traceReceived={traceReceived} agentName={agentName} />
+          <InstallWithAITab
+            traceReceived={traceReceived}
+            agentName={agentName}
+          />
         ) : (
           <div className="grid grid-cols-4 gap-2">
             {integrations.map((integration) => (
