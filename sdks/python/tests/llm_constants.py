@@ -32,6 +32,12 @@ OPENAI_SORA = "sora-2"
 LITELLM_OPENAI_GPT_NANO = f"openai/{OPENAI_GPT_NANO}"
 AISUITE_OPENAI_GPT_NANO = f"openai:{OPENAI_GPT_NANO}"
 
+# gpt-5 family members are reasoning models — they spend `max_tokens` on
+# internal reasoning before emitting visible content. Tests that cap
+# `max_tokens` must pass this to leave room for actual output; we use the
+# lowest supported setting so reasoning overhead stays minimal.
+OPENAI_REASONING_EFFORT = "minimal"
+
 # ---------------------------------------------------------------------------
 # Anthropic
 # ---------------------------------------------------------------------------

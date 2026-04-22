@@ -62,7 +62,10 @@ def test_guardrails__trace_and_span_per_one_validation_check(
                 },
                 output=ANY_BUT_NONE,
                 tags=["guardrails", expected_result_tag],
-                metadata={"created_from": "guardrails", "model": llm_constants.OPENAI_GPT_NANO},
+                metadata={
+                    "created_from": "guardrails",
+                    "model": llm_constants.OPENAI_GPT_NANO,
+                },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,

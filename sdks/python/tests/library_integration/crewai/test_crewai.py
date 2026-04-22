@@ -4,6 +4,7 @@ from crewai import Agent, Crew, Process, Task
 import opik
 from opik.integrations.crewai import opik_tracker
 from opik.integrations.crewai import track_crewai
+
 from . import constants
 from ... import llm_constants
 from ...testlib import (

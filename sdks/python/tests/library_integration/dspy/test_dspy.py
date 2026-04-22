@@ -7,6 +7,7 @@ from dspy import __version__ as dspy_version
 import pytest
 
 import opik
+
 from opik import context_storage, opik_context, semantic_version
 from opik.api_objects import opik_client, span, trace
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
@@ -56,6 +57,8 @@ def test_dspy__happyflow(
     lm = dspy.LM(
         cache=False,
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -277,6 +280,8 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
         lm = dspy.LM(
             cache=False,
             model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            temperature=1.0,
         )
         dspy.configure(lm=lm)
 
@@ -344,7 +349,9 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
                                         type="llm",
                                         name=ANY_STRING.starting_with("LM: openai"),
                                         provider="openai",
-                                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
+                                        model=ANY_STRING.starting_with(
+                                            llm_constants.OPENAI_GPT_NANO
+                                        ),
                                         input=ANY_DICT,
                                         output=ANY_DICT,
                                         usage=ANY_USAGE_DICT,
@@ -385,6 +392,8 @@ def test_dspy_callback__used_when_there_was_already_existing_trace_without_span_
         lm = dspy.LM(
             cache=False,
             model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            temperature=1.0,
         )
         dspy.configure(lm=lm)
 
@@ -464,6 +473,8 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
         lm = dspy.LM(
             cache=False,
             model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            temperature=1.0,
         )
         dspy.configure(lm=lm)
 
@@ -532,7 +543,9 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
                                 type="llm",
                                 name=ANY_STRING.starting_with("LM"),
                                 provider="openai",
-                                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
+                                model=ANY_STRING.starting_with(
+                                    llm_constants.OPENAI_GPT_NANO
+                                ),
                                 input=ANY_DICT,
                                 output=ANY_DICT,
                                 usage=ANY_USAGE_DICT,
@@ -576,6 +589,8 @@ def test_dspy_log_graph(
     lm = dspy.LM(
         cache=False,
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -614,6 +629,8 @@ def test_dspy_no_log_graph(
     lm = dspy.LM(
         cache=False,
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -639,6 +656,8 @@ def test_dspy__cache_disabled__usage_present_and_cache_hit_false(
     lm = dspy.LM(
         cache=False,
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -680,6 +699,8 @@ def test_dspy__cache_enabled_and_response_cached__no_usage_and_cache_hit_true(
     lm = dspy.LM(
         cache=True,  # Enable caching
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -726,6 +747,8 @@ def test_dspy__cache_enabled_first_call__has_usage_and_cache_hit_false(
     lm = dspy.LM(
         cache=True,  # Enable caching
         model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        temperature=1.0,
     )
     dspy.configure(lm=lm)
 
@@ -775,7 +798,12 @@ def test_dspy_callback__opik_context_api_accessible_during_execution(
     dspy.LM.__call__ = patched_call
 
     try:
-        lm = dspy.LM(cache=False, model=llm_constants.LITELLM_OPENAI_GPT_NANO)
+        lm = dspy.LM(
+            cache=False,
+            model=llm_constants.LITELLM_OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            temperature=1.0,
+        )
         dspy.configure(lm=lm)
 
         opik_callback = OpikCallback()

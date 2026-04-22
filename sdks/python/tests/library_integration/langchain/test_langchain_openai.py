@@ -31,12 +31,9 @@ LANGCHAIN_OPENAI_VERSION_NEWER_THAN_0_3_35 = (
 @pytest.mark.parametrize(
     "llm_model, expected_input_prompt, expected_usage, stream_usage",
     [
-        (
-            langchain_openai.OpenAI,
-            "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
-            EXPECTED_SHORT_OPENAI_USAGE_LOGGED_FORMAT,
-            False,
-        ),
+        # Legacy langchain_openai.OpenAI is intentionally dropped — it hits the
+        # v1/completions endpoint which doesn't serve chat-only models like
+        # gpt-5-nano.
         (
             langchain_openai.ChatOpenAI,
             "Given the title of play, write a synopsys for that. Title: Documentary about Bigfoot in Paris.",
@@ -81,21 +78,18 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
 
     callback.flush()
 
-    if llm_model == langchain_openai.OpenAI:
-        expected_llm_span_input = {"prompts": [expected_input_prompt]}
-    else:
-        expected_llm_span_input = {
-            "messages": [
-                [
-                    ANY_DICT.containing(
-                        {
-                            "content": expected_input_prompt,
-                            "type": "human",
-                        }
-                    ),
-                ]
+    expected_llm_span_input = {
+        "messages": [
+            [
+                ANY_DICT.containing(
+                    {
+                        "content": expected_input_prompt,
+                        "type": "human",
+                    }
+                ),
             ]
-        }
+        ]
+    }
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,

@@ -493,7 +493,9 @@ def test__usefulness__track_parameter(
     # Override the autouse fixture that disables LiteLLM monitoring
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    usefulness_metric = metrics.Usefulness(model=llm_constants.OPENAI_GPT_NANO, track=track)
+    usefulness_metric = metrics.Usefulness(
+        model=llm_constants.OPENAI_GPT_NANO, track=track
+    )
 
     result = usefulness_metric.score(
         input="What is the capital of France?",

@@ -2,7 +2,6 @@ from typing import Any, Dict
 
 import aisuite
 import pytest
-from aisuite.provider import LLMError
 
 import opik
 from opik.integrations.aisuite import track_aisuite
@@ -37,10 +36,11 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+    # max_tokens / max_completion_tokens is call-specific (OpenAI reasoning
+    # models reject max_tokens; Anthropic takes it) so don't assert on it.
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",
-        "max_tokens",
         "created_from",
         "type",
         "id",
@@ -66,7 +66,8 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
     _ = wrapped_client.chat.completions.create(
         model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         messages=messages,
-        max_tokens=10,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -182,7 +183,10 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         project_name=PROJECT_NAME,
     )
 
-    with pytest.raises(LLMError):
+    # aisuite 0.1.3 stopped wrapping upstream errors in LLMError for the
+    # OpenAI provider — the raw openai.BadRequestError now bubbles up. We
+    # only care that Opik finishes the span gracefully on any failure.
+    with pytest.raises(Exception):
         _ = wrapped_client.chat.completions.create(
             messages=None,
             model=llm_constants.AISUITE_OPENAI_GPT_NANO,
@@ -267,7 +271,8 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         _ = wrapped_client.chat.completions.create(
             model=llm_constants.AISUITE_OPENAI_GPT_NANO,
             messages=messages,
-            max_tokens=10,
+            max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         )
 
     f()
@@ -354,7 +359,8 @@ def test_aisuite__openai_provider__client_chat_completions_create__opik_args__ha
     _ = wrapped_client.chat.completions.create(
         model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         messages=messages,
-        max_tokens=10,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         opik_args=args_dict,
     )
 

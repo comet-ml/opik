@@ -645,7 +645,9 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
                                 end_time=ANY_BUT_NONE,
                                 project_name=expected_project_name,
                                 spans=[],
-                                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
+                                model=ANY_STRING.starting_with(
+                                    llm_constants.OPENAI_GPT_NANO
+                                ),
                                 provider=LLMProvider.OPENAI,
                                 source="sdk",
                             )
@@ -786,7 +788,9 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
                                         end_time=ANY_BUT_NONE,
                                         project_name=expected_project_name,
                                         spans=[],
-                                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
+                                        model=ANY_STRING.starting_with(
+                                            llm_constants.OPENAI_GPT_NANO
+                                        ),
                                         provider=LLMProvider.OPENAI,
                                         source="sdk",
                                     )

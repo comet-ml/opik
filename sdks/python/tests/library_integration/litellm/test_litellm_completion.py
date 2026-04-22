@@ -22,8 +22,12 @@ pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 
 
-@pytest.mark.parametrize("model,expected_provider", constants.TEST_MODELS_PARAMETRIZE)
-def test_litellm_completion_create__happyflow(fake_backend, model, expected_provider):
+@pytest.mark.parametrize(
+    "model,expected_provider,extra_call_kwargs", constants.TEST_MODELS_PARAMETRIZE
+)
+def test_litellm_completion_create__happyflow(
+    fake_backend, model, expected_provider, extra_call_kwargs
+):
     """Test basic LiteLLM completion tracking."""
     tracked_completion = track_completion()(litellm.completion)
 
@@ -36,6 +40,7 @@ def test_litellm_completion_create__happyflow(fake_backend, model, expected_prov
         model=model,
         messages=messages,
         max_tokens=10,
+        **extra_call_kwargs,
     )
 
     opik.flush_tracker()
