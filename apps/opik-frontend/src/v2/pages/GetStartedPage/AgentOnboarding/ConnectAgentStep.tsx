@@ -40,7 +40,7 @@ const ConnectAgentStep: React.FC = () => {
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
 
-  // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "control" to preserve the Opik skills tab as default.
+  // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "connect-to-ollie".
   const aiAssistedOpikSkillsVariant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
     "connect-to-ollie";
