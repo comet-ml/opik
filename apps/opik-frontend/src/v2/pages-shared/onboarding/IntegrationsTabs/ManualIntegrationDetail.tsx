@@ -6,16 +6,16 @@ import useAppStore, { useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 
 type ManualIntegrationDetailProps = {
   integration: Integration;
+  agentName: string;
 };
 
 const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
   integration,
+  agentName,
 }) => {
-  const { agentName } = useAgentOnboarding();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
 

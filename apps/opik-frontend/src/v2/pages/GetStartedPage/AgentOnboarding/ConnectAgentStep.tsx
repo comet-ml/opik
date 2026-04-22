@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, MonitorPlay, Undo2 } from "lucide-react";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
@@ -12,6 +12,10 @@ import useTracesList from "@/api/traces/useTracesList";
 import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
 import { RunnerConnectionStatus } from "@/types/agent-sandbox";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
+import { INTEGRATIONS } from "@/constants/integrations";
+import InstallWithAITab from "@/v2/pages-shared/onboarding/IntegrationsTabs/InstallWithAITab";
+import ManualIntegrationList from "@/v2/pages-shared/onboarding/IntegrationsTabs/ManualIntegrationList";
+import ManualIntegrationDetail from "@/v2/pages-shared/onboarding/IntegrationsTabs/ManualIntegrationDetail";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -20,11 +24,7 @@ import {
 } from "./AgentOnboardingContext";
 import AgentOnboardingCard from "./AgentOnboardingCard";
 import ConnectToOllieTab from "./ConnectToOllieTab";
-import InstallWithAITab from "./InstallWithAITab";
-import ManualIntegrationList from "./ManualIntegrationList";
-import ManualIntegrationDetail from "./ManualIntegrationDetail";
 import ShowDemoProjectButton from "./ShowDemoProjectButton";
-import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,
   VIDEO_TUTORIAL_LINK,
@@ -33,26 +33,40 @@ import {
 const TRACE_POLL_INTERVAL = 5000;
 const FIRST_TRACE_TRACKED_KEY = "agent-onboarding-first-trace-tracked";
 
+const MANUAL_TAB = "manual-integration";
+const INSTALL_WITH_AI_TAB = "install-with-ai";
+const CONNECT_TO_OLLIE_TAB = "connect-to-ollie";
+
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
-  // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "control" to preserve the Opik skills tab as default.
-  const aiAssistedOpikSkillsVariant =
+  const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
     "control";
 
-  const aiAssistedUsesOpikSkills = aiAssistedOpikSkillsVariant === "control";
-  const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
+  const showAiAssistedTab = variant !== "manual";
+  const showOllieTab = !!apiKey && variant !== "control";
 
-  const [activeTab, setActiveTab] = useState(
-    showOllieTab ? "connect-to-ollie" : "install-with-ai",
-  );
-
+  const [activeTab, setActiveTab] = useState(() => {
+    if (!showAiAssistedTab) return MANUAL_TAB;
+    return showOllieTab ? CONNECT_TO_OLLIE_TAB : INSTALL_WITH_AI_TAB;
+  });
   const [manualCategory, setManualCategory] = useState<string | null>(null);
   const [selectedIntegrationId, setSelectedIntegrationId] = useState<
     string | null
   >(null);
+
+  useEffect(() => {
+    setActiveTab((current) => {
+      if (!showAiAssistedTab && current !== MANUAL_TAB) return MANUAL_TAB;
+      if (showOllieTab && current === INSTALL_WITH_AI_TAB)
+        return CONNECT_TO_OLLIE_TAB;
+      if (!showOllieTab && current === CONNECT_TO_OLLIE_TAB)
+        return INSTALL_WITH_AI_TAB;
+      return current;
+    });
+  }, [showAiAssistedTab, showOllieTab]);
 
   const { data: project } = useProjectByName(
     { projectName: agentName },
@@ -82,18 +96,6 @@ const ConnectAgentStep: React.FC = () => {
   >(FIRST_TRACE_TRACKED_KEY, { defaultValue: null });
 
   useEffect(() => {
-    setActiveTab((current) => {
-      if (showOllieTab && current === "install-with-ai") {
-        return "connect-to-ollie";
-      }
-      if (!showOllieTab && current === "connect-to-ollie") {
-        return "install-with-ai";
-      }
-      return current;
-    });
-  }, [showOllieTab]);
-
-  useEffect(() => {
     if (firstTraceId && firstTraceId !== trackedTraceId) {
       trackEvent(OpikEvent.ONBOARDING_FIRST_TRACE_RECEIVED, {
         agent_name: agentName,
@@ -103,13 +105,14 @@ const ConnectAgentStep: React.FC = () => {
     }
   }, [firstTraceId, trackedTraceId, agentName, setTrackedTraceId]);
 
+  const isOllieTab = activeTab === CONNECT_TO_OLLIE_TAB;
+
   const { data: runner } = useSandboxConnectionStatus(
     { projectId: projectId ?? "", runnerType: "connect" },
-    { enabled: !!projectId && activeTab === "connect-to-ollie" },
+    { enabled: !!projectId && isOllieTab },
   );
   const connected = runner?.status === RunnerConnectionStatus.CONNECTED;
 
-  const isOllieTab = activeTab === "connect-to-ollie";
   const primaryReady = isOllieTab ? connected : traceReceived;
 
   const handleViewTraces = () => {
@@ -123,40 +126,55 @@ const ConnectAgentStep: React.FC = () => {
     ? INTEGRATIONS.find((i) => i.id === selectedIntegrationId)
     : undefined;
 
-  const handleTabChange = (value: string) => {
+  const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
     setSelectedIntegrationId(null);
-  };
+  }, []);
 
-  const tabs = useMemo(
-    () => [
-      showOllieTab
-        ? {
-            value: "connect-to-ollie",
-            label: "AI-assisted setup",
-            content: <ConnectToOllieTab connected={connected} />,
-          }
-        : {
-            value: "install-with-ai",
-            label: "AI-assisted setup",
-            content: <InstallWithAITab traceReceived={traceReceived} />,
-          },
-      {
-        value: "manual-integration",
-        label: "Manual setup",
-        content: (
-          <ManualIntegrationList
-            onSelectIntegration={setSelectedIntegrationId}
-            showInstallWithAI={showOllieTab}
-            traceReceived={traceReceived}
-            activeCategory={manualCategory}
-            onCategoryChange={setManualCategory}
-          />
-        ),
-      },
-    ],
-    [showOllieTab, connected, traceReceived, manualCategory],
-  );
+  const tabs = useMemo(() => {
+    const aiAssistedTab = showOllieTab
+      ? {
+          value: CONNECT_TO_OLLIE_TAB,
+          label: "AI-assisted setup",
+          content: (
+            <ConnectToOllieTab agentName={agentName} connected={connected} />
+          ),
+        }
+      : {
+          value: INSTALL_WITH_AI_TAB,
+          label: "AI-assisted setup",
+          content: (
+            <InstallWithAITab
+              agentName={agentName}
+              traceReceived={traceReceived}
+            />
+          ),
+        };
+
+    const manualTab = {
+      value: MANUAL_TAB,
+      label: "Manual setup",
+      content: (
+        <ManualIntegrationList
+          agentName={agentName}
+          onSelectIntegration={setSelectedIntegrationId}
+          showInstallWithAI={showOllieTab}
+          traceReceived={traceReceived}
+          activeCategory={manualCategory}
+          onCategoryChange={setManualCategory}
+        />
+      ),
+    };
+
+    return showAiAssistedTab ? [aiAssistedTab, manualTab] : [manualTab];
+  }, [
+    showAiAssistedTab,
+    showOllieTab,
+    agentName,
+    connected,
+    traceReceived,
+    manualCategory,
+  ]);
 
   if (selectedIntegration) {
     return (
@@ -221,7 +239,10 @@ const ConnectAgentStep: React.FC = () => {
           </div>
         }
       >
-        <ManualIntegrationDetail integration={selectedIntegration} />
+        <ManualIntegrationDetail
+          integration={selectedIntegration}
+          agentName={agentName}
+        />
       </AgentOnboardingCard>
     );
   }

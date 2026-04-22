@@ -1,5 +1,4 @@
 import React from "react";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
 import { buildDocsUrl } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
@@ -9,20 +8,26 @@ import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 const INSTALL_COMMAND = "pip install opik";
 
 interface ConnectToOllieTabProps {
-  connected: boolean;
+  agentName: string;
+  connected?: boolean;
+  showWaitingStep?: boolean;
 }
 
-const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
-  const { agentName } = useAgentOnboarding();
+const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({
+  agentName,
+  connected = false,
+  showWaitingStep = true,
+}) => {
   const apiKey = useUserApiKey();
   const workspaceName = useActiveWorkspaceName();
 
   const buildConnectCommand = () => {
+    const projectArg = agentName ? ` --project "${agentName}"` : "";
     if (apiKey) {
-      return `opik connect --project "${agentName}" --workspace "${workspaceName}" --api-key "${apiKey}"`;
+      return `opik connect${projectArg} --workspace "${workspaceName}" --api-key "${apiKey}"`;
     }
     const url = new URL(BASE_API_URL, window.location.origin).toString();
-    return `OPIK_URL_OVERRIDE="${url}" opik connect --project "${agentName}"`;
+    return `OPIK_URL_OVERRIDE="${url}" opik connect${projectArg}`;
   };
 
   const connectCommandText = buildConnectCommand();
@@ -42,7 +47,7 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
           </div>
         </TimelineStep>
 
-        <TimelineStep number={2}>
+        <TimelineStep number={2} isLast={!showWaitingStep}>
           <div className="flex flex-col gap-2.5">
             <h4 className="comet-body-s-accented">
               Connect your repo to Ollie
@@ -56,36 +61,38 @@ const ConnectToOllieTab: React.FC<ConnectToOllieTabProps> = ({ connected }) => {
           </div>
         </TimelineStep>
 
-        <TimelineStep isLast completed={connected}>
-          <div className="flex flex-col gap-1">
-            <h4 className="comet-body-s-accented text-primary">
-              {connected
-                ? "Repo connected"
-                : "Waiting for your repo to connect\u2026"}
-            </h4>
-            <p className="comet-body-xs text-muted-slate">
-              {connected ? (
-                "Ollie can now inspect your code and help you set up tracing in Opik."
-              ) : (
-                <>
-                  Run the command above in your repo. Once connected, Ollie can
-                  inspect your code and help finish setup.{" "}
-                  <a
-                    href={buildDocsUrl(
-                      "/agents/local-runner",
-                      "#troubleshooting",
-                    )}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline hover:text-foreground"
-                  >
-                    Connect troubleshooting
-                  </a>
-                </>
-              )}
-            </p>
-          </div>
-        </TimelineStep>
+        {showWaitingStep && (
+          <TimelineStep isLast completed={connected}>
+            <div className="flex flex-col gap-1">
+              <h4 className="comet-body-s-accented text-primary">
+                {connected
+                  ? "Repo connected"
+                  : "Waiting for your repo to connect\u2026"}
+              </h4>
+              <p className="comet-body-xs text-muted-slate">
+                {connected ? (
+                  "Ollie can now inspect your code and help you set up tracing in Opik."
+                ) : (
+                  <>
+                    Run the command above in your repo. Once connected, Ollie
+                    can inspect your code and help finish setup.{" "}
+                    <a
+                      href={buildDocsUrl(
+                        "/agents/local-runner",
+                        "#troubleshooting",
+                      )}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline hover:text-foreground"
+                    >
+                      Connect troubleshooting
+                    </a>
+                  </>
+                )}
+              </p>
+            </div>
+          </TimelineStep>
+        )}
       </div>
     </div>
   );
