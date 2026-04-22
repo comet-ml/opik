@@ -21,7 +21,8 @@ public class DemoData {
 
     /** MySQL (utf8mb4_unicode_ci) — matching is case-insensitive, no need for case variants. */
     public static final List<String> DATASETS = List.of("Demo dataset", "Opik Demo Questions",
-            "Demo - Opik Chatbot", "Demo - Jailbreak Password", "Demo - Customer Message Classifier");
+            "Demo - Opik Chatbot", "Demo - Jailbreak Password", "Demo - Customer Message Classifier",
+            "Opik Demo Chatbot Training", "Opik Demo Text to SQL", "Opik Demo Structured Output");
 
     /** ClickHouse — matching is case-sensitive, list every known casing explicitly. */
     public static final List<String> EXPERIMENTS = List.of(
