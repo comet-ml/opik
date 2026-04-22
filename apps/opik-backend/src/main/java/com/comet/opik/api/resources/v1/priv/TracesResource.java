@@ -166,6 +166,8 @@ public class TracesResource {
                 .stripAttachments(stripAttachments)
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .fromTime(startTime)
+                .toTime(endTime)
                 .exclude(ParamsValidator.get(exclude, Trace.TraceField.class, "exclude"))
                 .sortingFields(sortingFields)
                 .searchText(StringUtils.trimToNull(search))
@@ -422,6 +424,8 @@ public class TracesResource {
                 .searchText(StringUtils.trimToNull(search))
                 .uuidFromTime(instantToUUIDMapper.toLowerBound(startTime))
                 .uuidToTime(instantToUUIDMapper.toUpperBound(endTime))
+                .fromTime(startTime)
+                .toTime(endTime)
                 .build();
 
         String workspaceId = requestContext.get().getWorkspaceId();

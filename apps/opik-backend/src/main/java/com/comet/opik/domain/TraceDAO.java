@@ -811,6 +811,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(from_time)> AND start_time >= parseDateTime64BestEffort(:from_time, 9) <endif>
+                <if(to_time)> AND start_time \\<= parseDateTime64BestEffort(:to_time, 9) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
             ), <endif><if(!exclude_feedback_scores)>feedback_scores_deduped AS (
@@ -1234,6 +1236,8 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id = :project_id
                 <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                 <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                <if(from_time)> AND start_time >= parseDateTime64BestEffort(:from_time, 9) <endif>
+                <if(to_time)> AND start_time \\<= parseDateTime64BestEffort(:to_time, 9) <endif>
                 <if(last_received_id)> AND id \\< :last_received_id <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
@@ -1621,6 +1625,8 @@ class TraceDAOImpl implements TraceDAO {
                     AND workspace_id = :workspace_id
                     <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
                     <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(from_time)> AND start_time >= parseDateTime64BestEffort(:from_time, 9) <endif>
+                    <if(to_time)> AND start_time \\<= parseDateTime64BestEffort(:to_time, 9) <endif>
                     <if(filters)> AND <filters> <endif>
                     <if(search_text)> AND <search_text> <endif>
                     <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -2256,6 +2262,8 @@ class TraceDAOImpl implements TraceDAO {
                 AND project_id IN :project_ids
                 <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
                 <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                <if(from_time)> AND start_time >= parseDateTime64BestEffort(:from_time, 9) <endif>
+                <if(to_time)> AND start_time \\<= parseDateTime64BestEffort(:to_time, 9) <endif>
                 <if(filters)> AND <filters> <endif>
                 <if(search_text)> AND <search_text> <endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
@@ -3456,6 +3464,11 @@ class TraceDAOImpl implements TraceDAO {
 
         return asyncTemplate
                 .nonTransaction(connection -> {
+                    // This path bypasses newTraceThreadFindTemplate / bindTraceThreadSearchCriteria and wires
+                    // template attrs + R2DBC binds manually. If time-window filtering (from_time/to_time,
+                    // uuid_from_time/uuid_to_time) is ever added here, the placeholders in SELECT_TRACES_STATS
+                    // must have matching explicit binds below — otherwise the driver will fail with an
+                    // unbound-parameter error at runtime.
                     var template = getSTWithLogComment(SELECT_TRACES_STATS, "get_trace_stats_by_project_ids",
                             workspaceId, "", projectIds.size());
 

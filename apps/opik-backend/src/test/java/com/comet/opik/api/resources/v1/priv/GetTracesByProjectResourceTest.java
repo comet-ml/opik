@@ -8,6 +8,7 @@ import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem.FeedbackScoreBatchItemBuilder;
 import com.comet.opik.api.Guardrail;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.ProjectStats;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Trace.TracePage;
@@ -5366,6 +5367,121 @@ class GetTracesByProjectResourceTest {
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
 
+        // OPIK-5956: from_time must filter by start_time, not by UUIDv7 id creation time.
+        // Customers backfill traces by generating fresh ids at upload time while setting
+        // start_time to the historical event time. With id-based filtering, those traces
+        // leak through even when start_time is well before from_time.
+        @Test
+        @DisplayName("from_time filters by trace start_time, not UUIDv7 id creation time (OPIK-5956)")
+        void whenTraceStartTimeIsBeforeFromTime_butIdIsFresh_thenExcludeFromResults() {
+            var workspace = setupTestWorkspace();
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(Duration.ofDays(3));
+
+            // Backfill scenario: fresh UUIDv7 id (id-time == now) but start_time 7 days ago.
+            Trace backfilledTrace = createTrace().toBuilder()
+                    .projectName(workspace.projectName())
+                    .id(idGenerator.generateId())
+                    .startTime(now.minus(Duration.ofDays(7)))
+                    .endTime(now.minus(Duration.ofDays(7)).plus(Duration.ofMillis(100)))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .spanFeedbackScores(null)
+                    .build();
+
+            // Live scenario: fresh id, recent start_time - should be included.
+            Trace liveTrace = createTrace().toBuilder()
+                    .projectName(workspace.projectName())
+                    .id(idGenerator.generateId())
+                    .startTime(now.minus(Duration.ofHours(1)))
+                    .endTime(now.minus(Duration.ofHours(1)).plus(Duration.ofMillis(100)))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .spanFeedbackScores(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(
+                    List.of(backfilledTrace, liveTrace), workspace.apiKey(), workspace.workspaceName());
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("project_name", workspace.projectName());
+            queryParams.put("from_time", fromTime.toString());
+
+            var actualResponse = traceResourceClient.callGetTracesWithQueryParams(
+                    workspace.apiKey(), workspace.workspaceName(), queryParams);
+
+            assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
+            var tracePage = actualResponse.readEntity(TracePage.class);
+
+            assertThat(tracePage.content())
+                    .as("backfilled trace with start_time=%s must be excluded by from_time=%s",
+                            backfilledTrace.startTime(), fromTime)
+                    .noneSatisfy(t -> assertThat(t.id()).isEqualTo(backfilledTrace.id()));
+
+            assertThat(tracePage.content())
+                    .as("live trace with start_time after from_time must be included")
+                    .anySatisfy(t -> assertThat(t.id()).isEqualTo(liveTrace.id()));
+        }
+
+        // OPIK-5956: /traces/stats must also filter by start_time, not id-time. The list endpoint
+        // and the stats endpoint share the same from_time/to_time contract on the UI.
+        @Test
+        @DisplayName("/traces/stats trace_count excludes backfilled traces whose start_time is before from_time (OPIK-5956)")
+        void whenStatsRequestedWithFromTime_thenBackfilledTraceIsNotCounted() {
+            var workspace = setupTestWorkspace();
+
+            Instant now = Instant.now();
+            Instant fromTime = now.minus(Duration.ofDays(3));
+
+            Trace backfilledTrace = createTrace().toBuilder()
+                    .projectName(workspace.projectName())
+                    .id(idGenerator.generateId())
+                    .startTime(now.minus(Duration.ofDays(7)))
+                    .endTime(now.minus(Duration.ofDays(7)).plus(Duration.ofMillis(100)))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .spanFeedbackScores(null)
+                    .build();
+
+            Trace liveTrace = createTrace().toBuilder()
+                    .projectName(workspace.projectName())
+                    .id(idGenerator.generateId())
+                    .startTime(now.minus(Duration.ofHours(1)))
+                    .endTime(now.minus(Duration.ofHours(1)).plus(Duration.ofMillis(100)))
+                    .spanCount(0)
+                    .llmSpanCount(0)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .spanFeedbackScores(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(
+                    List.of(backfilledTrace, liveTrace), workspace.apiKey(), workspace.workspaceName());
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("from_time", fromTime.toString());
+
+            var stats = traceResourceClient.getTraceStats(
+                    workspace.projectName(), null, workspace.apiKey(), workspace.workspaceName(), null, queryParams);
+
+            var traceCount = stats.stats().stream()
+                    .filter(s -> "trace_count".equals(s.getName()))
+                    .findFirst()
+                    .orElseThrow(() -> new AssertionError("trace_count stat not found"));
+
+            assertThat(((ProjectStats.CountValueStat) traceCount).getValue())
+                    .as("trace_count must exclude backfilled trace (start_time=%s < from_time=%s)",
+                            backfilledTrace.startTime(), fromTime)
+                    .isEqualTo(1L);
+        }
+
         // Helper methods to reduce duplication
         private TestWorkspace setupTestWorkspace() {
             var workspaceName = RandomStringUtils.secure().nextAlphanumeric(10);
@@ -5382,6 +5498,8 @@ class GetTracesByProjectResourceTest {
             return createTrace().toBuilder()
                     .projectName(projectName)
                     .id(idGenerator.generateId(timestamp))
+                    .startTime(timestamp)
+                    .endTime(timestamp.plus(Duration.ofMillis(100)))
                     .spanCount(0)
                     .llmSpanCount(0)
                     .guardrailsValidations(null)

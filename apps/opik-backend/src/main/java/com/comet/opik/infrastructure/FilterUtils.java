@@ -148,6 +148,14 @@ public class FilterUtils {
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> template.add("uuid_to_time", uuid_to_time));
 
+        // start_time bounds: UUIDv7 id-time approximates start_time only for live tracing. Backfills
+        // and imports set historical start_time on freshly-generated ids, so id-based filtering alone
+        // admits rows whose actual event time is outside the window (OPIK-5956).
+        Optional.ofNullable(traceSearchCriteria.fromTime())
+                .ifPresent(from_time -> template.add("from_time", from_time.toString()));
+        Optional.ofNullable(traceSearchCriteria.toTime())
+                .ifPresent(to_time -> template.add("to_time", to_time.toString()));
+
         Optional.ofNullable(traceSearchCriteria.searchText())
                 .ifPresent(searchText -> template.add("search_text", searchClause));
         return template;
@@ -178,6 +186,11 @@ public class FilterUtils {
                 .ifPresent(uuid_from_time -> statement.bind("uuid_from_time", uuid_from_time));
         Optional.ofNullable(traceSearchCriteria.uuidToTime())
                 .ifPresent(uuid_to_time -> statement.bind("uuid_to_time", uuid_to_time));
+
+        Optional.ofNullable(traceSearchCriteria.fromTime())
+                .ifPresent(from_time -> statement.bind("from_time", from_time.toString()));
+        Optional.ofNullable(traceSearchCriteria.toTime())
+                .ifPresent(to_time -> statement.bind("to_time", to_time.toString()));
 
         Optional.ofNullable(traceSearchCriteria.searchText())
                 .ifPresent(searchText -> statement.bind("search_text", "%" + searchText + "%"));

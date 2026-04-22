@@ -5,6 +5,7 @@ import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingField;
 import lombok.Builder;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -21,5 +22,7 @@ public record TraceSearchCriteria(
         Set<Trace.TraceField> exclude,
         UUID uuidFromTime,
         UUID uuidToTime,
+        Instant fromTime,
+        Instant toTime,
         String searchText) {
 }
