@@ -225,7 +225,13 @@ export class InProcessRunnerLoop {
     const blueprintName = job.blueprintName;
 
     const entry = getAll().get(agentName)!;
-    const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
+    const args = entry.params.map((p) => {
+      const value = inputs[p.name];
+      if (p.required === false && (value === undefined || value === null)) {
+        return undefined;
+      }
+      return castInputValue(value, p.type);
+    });
 
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {

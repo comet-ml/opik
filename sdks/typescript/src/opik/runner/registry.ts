@@ -3,6 +3,7 @@
 export interface Param {
   name: string;
   type: string;
+  required?: boolean;
 }
 
 export interface RegistryEntry {
@@ -50,12 +51,13 @@ export function extractParams(fn: Function): Param[] {
     .map((p) => p.trim())
     .filter((p) => p.length > 0)
     .map((p) => {
+      const hasDefault = /=/.test(p) || /\?/.test(p.replace(/:\s*.*$/, ""));
       const name = p
         .replace(/=.*$/, "")
         .replace(/:\s*.*$/, "")
         .replace(/^\.\.\.|[?]$/g, "")
         .trim();
-      return { name, type: "string" };
+      return { name, type: "string", required: !hasDefault };
     })
     .filter((p) => p.name.length > 0);
 }

@@ -89,8 +89,8 @@ describe("runner registry", () => {
       }
       const params = extractParams(myFunc);
       expect(params).toEqual([
-        { name: "a", type: "string" },
-        { name: "b", type: "string" },
+        { name: "a", type: "string", required: true },
+        { name: "b", type: "string", required: true },
       ]);
     });
 
@@ -98,15 +98,15 @@ describe("runner registry", () => {
       const fn = (query: string, context: string) => query + context;
       const params = extractParams(fn);
       expect(params).toEqual([
-        { name: "query", type: "string" },
-        { name: "context", type: "string" },
+        { name: "query", type: "string", required: true },
+        { name: "context", type: "string", required: true },
       ]);
     });
 
     it("extracts params from an async arrow function", () => {
       const fn = async (input: string) => input;
       const params = extractParams(fn);
-      expect(params).toEqual([{ name: "input", type: "string" }]);
+      expect(params).toEqual([{ name: "input", type: "string", required: true }]);
     });
 
     it("extracts params from an async function", () => {
@@ -115,8 +115,8 @@ describe("runner registry", () => {
       }
       const params = extractParams(process);
       expect(params).toEqual([
-        { name: "data", type: "string" },
-        { name: "count", type: "string" },
+        { name: "data", type: "string", required: true },
+        { name: "count", type: "string", required: true },
       ]);
     });
 
@@ -128,17 +128,23 @@ describe("runner registry", () => {
     it("handles single-arg arrow without parens", () => {
       const fn = (x: string) => x;
       const params = extractParams(fn);
-      expect(params).toEqual([{ name: "x", type: "string" }]);
+      expect(params).toEqual([{ name: "x", type: "string", required: true }]);
     });
 
-    it("strips default values from param names", () => {
-      // Default values are visible in fn.toString()
+    it("strips default values and marks param as not required", () => {
       function fn(a: string, b = "hello") {
         return a + b;
       }
       const params = extractParams(fn);
-      expect(params[0].name).toBe("a");
-      expect(params[1].name).toBe("b");
+      expect(params[0]).toEqual({ name: "a", type: "string", required: true });
+      expect(params[1]).toEqual({ name: "b", type: "string", required: false });
+    });
+
+    it("marks params with default values as not required", () => {
+      const fn = (query: string, threadId: string = "") => query + threadId;
+      const params = extractParams(fn);
+      expect(params[0]).toEqual({ name: "query", type: "string", required: true });
+      expect(params[1]).toEqual({ name: "threadId", type: "string", required: false });
     });
 
   });
