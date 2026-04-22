@@ -1,9 +1,10 @@
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 import logging
 
 from agents import tracing
 
+from opik.llm_usage import litellm_provider_mapping
 from opik.types import SpanType, LLMProvider
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
@@ -52,7 +53,7 @@ class ParsedSpanData:
     metadata: Optional[Dict[str, Any]] = None
     usage: Optional[llm_usage.OpikUsage] = None
     model: Optional[str] = None
-    provider: Optional[LLMProvider] = None
+    provider: Optional[Union[LLMProvider, str]] = None
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
@@ -76,9 +77,7 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
         del content["input"], content["output"]
 
     elif openai_span_data.type == "generation":
-        input_data = openai_span_data.input
-        output_data = openai_span_data.output
-        del content["input"], content["output"]
+        return _parse_generation_span_content(openai_span_data)
 
     elif openai_span_data.type == "response":
         return _parse_response_span_content(openai_span_data)
@@ -121,6 +120,53 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     )
 
 
+def _parse_generation_span_content(
+    span_data: tracing.GenerationSpanData,
+) -> ParsedSpanData:
+    # openai-agents 0.14+ routes `LitellmModel` through `generation_span`, so the model
+    # string here carries the LiteLLM "<provider>/<model>" prefix. Usage is recorded in
+    # OpenAI Responses-API shape (input_tokens/output_tokens) regardless of the underlying
+    # provider, so the usage parser stays pinned to OPENAI; only the provider attribution
+    # on the span needs to follow the prefix.
+    model = span_data.model
+    inferred_provider = (
+        litellm_provider_mapping.infer_provider_from_litellm_model_prefix(model)
+        or LLMProvider.OPENAI
+    )
+
+    if span_data.usage is not None:
+        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
+            provider=LLMProvider.OPENAI,
+            usage=span_data.usage,
+            logger=LOGGER,
+            error_message="Failed to log usage in openai agent generation span",
+        )
+    else:
+        opik_usage = None
+
+    input_data = span_data.input
+    output_data = span_data.output
+    if input_data is not None and not isinstance(input_data, dict):
+        input_data = {"input": input_data}
+    if output_data is not None and not isinstance(output_data, dict):
+        output_data = {"output": output_data}
+
+    metadata = span_data.export()
+    for key in ("input", "output", "usage", "model"):
+        metadata.pop(key, None)
+
+    return ParsedSpanData(
+        name="Generation",
+        input=input_data,
+        output=output_data,
+        usage=opik_usage,
+        type="llm",
+        metadata=metadata,
+        model=model,
+        provider=inferred_provider,
+    )
+
+
 def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
     response = span_data.response
 
@@ -137,6 +183,18 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
     _, metadata = dict_utils.split_dict_by_keys(
         input_dict=response_dict,
         keys=["input", "output"],
+    )
+
+    # When `LitellmModel` routes requests through a non-OpenAI provider, `response.model`
+    # carries a LiteLLM-style "<provider>/<model>" prefix (e.g. "gemini/gemini-3.1-flash").
+    # The usage payload on `response.usage` is still OpenAI-shaped — the openai-agents SDK
+    # adapts LiteLLM responses to OpenAI's `Response` type — so we keep OPENAI for usage
+    # parsing but attribute the span to the real provider for backend cost lookup.
+    inferred_provider = (
+        litellm_provider_mapping.infer_provider_from_litellm_model_prefix(
+            response.model
+        )
+        or LLMProvider.OPENAI
     )
 
     if response.usage is not None:
@@ -157,5 +215,5 @@ def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedS
         type="llm",
         metadata=metadata,
         model=response.model,
-        provider=LLMProvider.OPENAI,
+        provider=inferred_provider,
     )
