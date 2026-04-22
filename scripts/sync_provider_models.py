@@ -294,6 +294,7 @@ def model_to_enum_name(model_str: str, provider: str) -> str:
         s = s.removeprefix("vertex_ai/")
     if provider == "openai" and re.match(r"^o\d", s):
         s = "GPT_" + s
+    s = s.lstrip("~")
     s = re.sub(r"[-.:\/]", "_", s)
     return s.upper()
 
