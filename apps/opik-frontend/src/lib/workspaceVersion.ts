@@ -52,6 +52,14 @@ export function getWorkspaceNameFromUrl(): string | null {
   return segments[0] || null;
 }
 
+// URL routes differ between v1 and v2, so after switching versions we can't
+// keep the user on the current path — send them to the workspace root and
+// let the active app re-route them to its home page.
+export function getWorkspaceHomeUrl(workspaceName: string): string {
+  const basePath = (import.meta.env.VITE_BASE_URL || "/").replace(/\/$/, "");
+  return `${basePath}/${workspaceName}`;
+}
+
 // Returns null only when the workspace is in the URL but needs an API fetch
 // to resolve its version — the one case that requires a Loader fallback.
 export function resolveSyncWorkspaceVersion(): WorkspaceVersion | null {

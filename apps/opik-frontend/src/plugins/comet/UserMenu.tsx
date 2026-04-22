@@ -41,6 +41,7 @@ import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
   getNewExperienceOptIn,
   getVersionOverride,
+  getWorkspaceHomeUrl,
   setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
 import api from "./api";
@@ -294,7 +295,7 @@ const UserMenu = () => {
                 onSelect={(e) => {
                   e.preventDefault();
                   setNewExperienceOptIn(!hasOptedIn);
-                  window.location.reload();
+                  window.location.href = getWorkspaceHomeUrl(workspaceName);
                 }}
               >
                 <Sparkles className="mr-2 size-4" />

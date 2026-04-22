@@ -8,6 +8,7 @@ import {
   clearVersionOverride,
   getNewExperienceOptIn,
   getVersionOverride,
+  getWorkspaceHomeUrl,
   setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
@@ -56,7 +57,9 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
       const reloadCount = Number(sessionStorage.getItem(reloadKey) || "0");
       if (reloadCount < MAX_RELOADS) {
         sessionStorage.setItem(reloadKey, String(reloadCount + 1));
-        window.location.reload();
+        // URL structure differs between v1 and v2, so redirect to workspace
+        // home instead of reloading the current path.
+        window.location.href = getWorkspaceHomeUrl(workspaceName);
       }
     } else {
       sessionStorage.removeItem(reloadKey);
