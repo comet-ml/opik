@@ -2458,7 +2458,7 @@ class ExperimentAggregatesIntegrationTest {
                         .put(RequestContext.USER_NAME, USER)
                         .put(RequestContext.WORKSPACE_ID, workspaceId))
                 .block();
-        
+
         var afterDelete = datasetResourceClient.getDatasetItemsWithExperimentItems(
                 dataset.id(), experimentIds, null, null, apiKey, workspaceName);
         assertPageNotEmpty(afterDelete);
