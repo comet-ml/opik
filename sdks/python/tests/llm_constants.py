@@ -44,7 +44,7 @@ OPENAI_REASONING_EFFORT = "minimal"
 # Using Anthropic's moving aliases (e.g. "claude-sonnet-4-0") rather than
 # pinned timestamped releases so upgrades don't require touching this file
 # every few weeks.
-ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-0"
+ANTHROPIC_CLAUDE_SONNET = "claude-sonnet-4-6"
 ANTHROPIC_CLAUDE_HAIKU = "claude-haiku-4-5-20251001"
 
 LITELLM_ANTHROPIC_CLAUDE_SONNET = f"anthropic/{ANTHROPIC_CLAUDE_SONNET}"
@@ -61,7 +61,7 @@ GEMINI_FLASH = "gemini-2.5-flash"
 # ---------------------------------------------------------------------------
 # AWS Bedrock
 # ---------------------------------------------------------------------------
-BEDROCK_CLAUDE_SONNET = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+BEDROCK_CLAUDE_SONNET = "us.anthropic.claude-sonnet-4-6"
 BEDROCK_MISTRAL_PIXTRAL = "us.mistral.pixtral-large-2502-v1:0"
 BEDROCK_MISTRAL_PIXTRAL_REGION = "us-east-2"
 
