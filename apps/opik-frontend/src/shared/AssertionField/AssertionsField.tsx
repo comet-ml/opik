@@ -22,7 +22,7 @@ const VARIANT_CONFIG: Record<
 
 interface AssertionsFieldProps {
   variant: AssertionsVariant;
-  headerContent?: React.ReactNode;
+  footerContent?: React.ReactNode;
   readOnlyAssertions?: string[];
   editableAssertions: string[];
   onChangeEditable: (index: number, value: string) => void;
@@ -33,7 +33,7 @@ interface AssertionsFieldProps {
 
 const AssertionsField: React.FC<AssertionsFieldProps> = ({
   variant,
-  headerContent,
+  footerContent,
   readOnlyAssertions = [],
   editableAssertions,
   onChangeEditable,
@@ -42,9 +42,12 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
   placeholder = "e.g. Response should be factually accurate",
 }) => {
   const prevCountRef = useRef(editableAssertions.length);
-  const shouldAutoFocusLast = editableAssertions.length > prevCountRef.current;
+  const firstFieldRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    if (editableAssertions.length > prevCountRef.current) {
+      firstFieldRef.current?.focus();
+    }
     prevCountRef.current = editableAssertions.length;
   }, [editableAssertions.length]);
 
@@ -68,7 +71,6 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
               Assertion
             </button>
           )}
-          {headerContent}
         </div>
       </div>
 
@@ -77,13 +79,11 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
           <button
             type="button"
             onClick={onAdd}
-            className="flex flex-col items-center justify-center gap-1.5 rounded-md border bg-muted/50 p-4"
+            className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-primary/40 bg-primary/5 p-4"
           >
-            <div className="flex size-6 items-center justify-center rounded-full border">
-              <CheckCheck className="size-3 text-muted-slate" />
-            </div>
+            <CheckCheck className="size-4 text-muted-slate" />
             <span className="comet-body-xs text-muted-slate">
-              No custom assertions added yet
+              No assertions added yet
             </span>
             <span className="comet-body-xs-accented inline-flex items-center text-primary">
               <Plus className="mr-0.5 size-3" />
@@ -97,9 +97,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
             {editableAssertions.map((assertion, index) => (
               <AssertionField
                 key={index}
-                autoFocus={
-                  shouldAutoFocusLast && index === editableAssertions.length - 1
-                }
+                ref={index === 0 ? firstFieldRef : undefined}
                 placeholder={placeholder}
                 value={assertion}
                 onChange={(e) => onChangeEditable(index, e.target.value)}
@@ -120,6 +118,7 @@ const AssertionsField: React.FC<AssertionsFieldProps> = ({
             ))}
           </div>
         )}
+        {footerContent}
       </div>
     </div>
   );
