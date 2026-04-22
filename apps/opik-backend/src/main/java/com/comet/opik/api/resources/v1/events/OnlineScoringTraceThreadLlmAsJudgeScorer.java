@@ -66,8 +66,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService,
-                TRACE_THREAD_LLM_AS_JUDGE, Constants.TRACE_THREAD_LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
+                Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.llmProviderFactory = llmProviderFactory;
         this.traceThreadService = traceThreadService;

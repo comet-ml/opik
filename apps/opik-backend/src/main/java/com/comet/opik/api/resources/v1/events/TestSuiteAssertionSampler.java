@@ -2,10 +2,14 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.EvaluatorItem;
+import com.comet.opik.api.ExperimentStatus;
+import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ProviderApiKey;
+import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
@@ -13,6 +17,7 @@ import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper.PreparedE
 import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
@@ -65,6 +70,7 @@ public class TestSuiteAssertionSampler {
     private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
     private final AssertionCounterService assertionCounterService;
+    private final ExperimentService experimentService;
 
     @Inject
     public TestSuiteAssertionSampler(
@@ -75,7 +81,8 @@ public class TestSuiteAssertionSampler {
             @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
             @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
-            @NonNull AssertionCounterService assertionCounterService) {
+            @NonNull AssertionCounterService assertionCounterService,
+            @NonNull ExperimentService experimentService) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -84,6 +91,7 @@ public class TestSuiteAssertionSampler {
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
         this.assertionCounterService = assertionCounterService;
+        this.experimentService = experimentService;
     }
 
     @Subscribe
@@ -99,14 +107,14 @@ public class TestSuiteAssertionSampler {
         var reactiveContext = Context.of(
                 RequestContext.WORKSPACE_ID, tracesBatch.workspaceId(),
                 RequestContext.USER_NAME, tracesBatch.userName(),
-                RequestContext.VISIBILITY, com.comet.opik.api.Visibility.PRIVATE);
+                RequestContext.VISIBILITY, Visibility.PRIVATE);
 
         Duration fetchTimeout = Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds());
 
         // Resolve model once per batch: prefer connected provider, fall back to first trace's model
         var connectedProviders = getConnectedProviders(tracesBatch.workspaceId());
         String modelName = SupportedJudgeProvider.resolveModel(connectedProviders)
-                .or(() -> getMetadataString(completeTraces.getFirst(), "test_suite_model"))
+                .or(() -> getMetadataString(completeTraces.getFirst(), TestSuiteMetadataKeys.MODEL))
                 .orElse(null);
 
         if (modelName == null) {
@@ -121,7 +129,7 @@ public class TestSuiteAssertionSampler {
 
         List<TraceToScoreLlmAsJudge> messages = completeTraces.stream()
                 .flatMap(trace -> {
-                    var testSuiteDatasetId = getMetadataString(trace, "test_suite_dataset_id");
+                    var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
                     if (testSuiteDatasetId.isEmpty()) {
                         return Stream.empty();
                     }
@@ -135,7 +143,7 @@ public class TestSuiteAssertionSampler {
                         return Stream.empty();
                     }
 
-                    var versionHash = getMetadataString(trace, "test_suite_dataset_version_hash")
+                    var versionHash = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_VERSION_HASH)
                             .orElse(null);
 
                     var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
@@ -149,15 +157,16 @@ public class TestSuiteAssertionSampler {
                         return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
                     });
 
-                    var experimentId = getMetadataString(trace, "test_suite_experiment_id")
+                    var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
                             .flatMap(id -> parseUUID(id, trace.id()))
                             .orElse(null);
 
-                    var datasetItemId = getMetadataString(trace, "test_suite_dataset_item_id");
+                    var datasetItemId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ITEM_ID);
                     if (datasetItemId.isEmpty()) {
                         log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
                                 trace.id());
-                        decrementAssertionCounter(experimentId);
+                        decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
+                                tracesBatch.userName());
                         return Stream.empty();
                     }
 
@@ -171,7 +180,8 @@ public class TestSuiteAssertionSampler {
                                 if (allEvaluators.isEmpty()) {
                                     log.debug("No evaluators found for trace '{}', dataset item '{}'",
                                             trace.id(), datasetItemId.get());
-                                    decrementAssertionCounter(experimentId);
+                                    decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
+                                            tracesBatch.userName());
                                     return Stream.empty();
                                 }
 
@@ -269,14 +279,37 @@ public class TestSuiteAssertionSampler {
         }
     }
 
-    private void decrementAssertionCounter(UUID experimentId) {
+    private void decrementAssertionCounter(UUID experimentId, String workspaceId, String userName) {
         if (experimentId == null) {
             return;
         }
         try {
-            assertionCounterService.decrement(experimentId).block();
+            long remaining = assertionCounterService.decrement(experimentId).block();
+            if (remaining <= 0) {
+                log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
+                finishExperimentAfterAssertions(experimentId, workspaceId, userName);
+            }
         } catch (Exception e) {
             log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
+        }
+    }
+
+    private void finishExperimentAfterAssertions(UUID experimentId, String workspaceId, String userName) {
+        try {
+            var statusUpdate = ExperimentUpdate.builder()
+                    .status(ExperimentStatus.COMPLETED)
+                    .build();
+
+            experimentService.update(experimentId, statusUpdate)
+                    .then(experimentService.finishExperiments(Set.of(experimentId)))
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName)
+                            .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
+                    .block();
+
+            log.info("Finished experiment '{}' after all assertions completed", experimentId);
+        } catch (Exception e) {
+            log.error("Failed to finish experiment '{}' after assertions", experimentId, e);
         }
     }
 

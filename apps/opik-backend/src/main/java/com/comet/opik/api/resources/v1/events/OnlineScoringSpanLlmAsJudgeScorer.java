@@ -49,8 +49,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
             @NonNull LlmProviderFactory llmProviderFactory) {
-        super(config, redisson, feedbackScoreService, traceService,
-                SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
+        super(config, redisson, feedbackScoreService, traceService, SPAN_LLM_AS_JUDGE, Constants.SPAN_LLM_AS_JUDGE);
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSpanLlmAsJudgeScorer.class);
