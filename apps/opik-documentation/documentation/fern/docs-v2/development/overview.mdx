@@ -1,12 +1,12 @@
 ---
 headline: Development Overview | Opik Documentation
-og:description: Configure, test, and deploy your AI agents with Opik — manage prompt versions, run your agent in the sandbox, and deploy new configurations from the UI
+og:description: Configure, test, and deploy your AI agents with Opik — manage prompt versions, run your agent in the playground, and deploy new configurations from the UI
 og:site_name: Opik Documentation
 og:title: Development Overview — Opik
 title: Development Overview
 ---
 
-Opik provides a complete workflow for developing your agent: manage your prompt and model configuration with version control, test changes in the Agent Sandbox with full tracing, and deploy new versions directly from the UI.
+Opik provides a complete workflow for developing your agent: manage your prompt and model configuration with version control, test changes in the Agent Playground with full tracing, and deploy new versions directly from the UI.
 
 ## Manage your agent configuration
 
@@ -18,7 +18,7 @@ Define your agent's system prompt, model, and parameters in Opik. Every change i
 
 Your agent pulls the active configuration at runtime, so you can update prompts and model settings without redeploying code. Guaranteed availability ensures your agent always has a valid configuration, even during updates.
 
-## Test in the Agent Sandbox
+## Test in the Agent Playground
 
 Connect your local agent to Opik with a single command:
 
@@ -32,7 +32,7 @@ Then run your agent from the Opik UI. Enter inputs, hit **Run**, and see the ful
   <img src="/img/v2/development/agent_sandbox.png" />
 </Frame>
 
-Switch to the **Configuration** tab to tweak prompts and parameters without changing code. The sandbox runs your agent against the unsaved configuration so you can test before committing changes.
+Switch to the **Configuration** tab to tweak prompts and parameters without changing code. The playground runs your agent against the unsaved configuration so you can test before committing changes.
 
 ## Deploy new versions
 
