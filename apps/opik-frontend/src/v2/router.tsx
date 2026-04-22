@@ -15,7 +15,9 @@ import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/v2/pages/CompareExperimentsPage/CompareExperimentsPage";
+const CompareExperimentsPage = lazy(
+  () => import("@/v2/pages/CompareExperimentsPage/CompareExperimentsPage"),
+);
 import HomePage from "@/v2/pages/HomePage/HomePage";
 import PartialPageLayout from "@/v2/layout/PartialPageLayout/PartialPageLayout";
 import EmptyPageLayout from "@/v2/layout/EmptyPageLayout/EmptyPageLayout";
@@ -26,7 +28,9 @@ import WorkspacePage from "@/v2/pages/WorkspacePage/WorkspacePage";
 import RedirectProjects from "@/v2/redirect/RedirectProjects";
 import RedirectDatasets from "@/v2/redirect/RedirectDatasets";
 import { createV1RedirectRoutes } from "@/v2/redirect/v1RedirectConfig";
-import PlaygroundPage from "@/v2/pages/PlaygroundPage/PlaygroundPage";
+const PlaygroundPage = lazy(
+  () => import("@/v2/pages/PlaygroundPage/PlaygroundPage"),
+);
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v2/pages/ConfigurationPage/ConfigurationPage";
 import NewQuickstart from "@/v2/pages/GetStartedPage/NewQuickstart";
@@ -37,12 +41,15 @@ import AnnotationQueuePage from "@/v2/pages/AnnotationQueuePage/AnnotationQueueP
 import AgentConfigurationPage from "@/v2/pages/AgentConfigurationPage/AgentConfigurationPage";
 import AgentRunnerPage from "@/v2/pages/AgentRunnerPage/AgentRunnerPage";
 import PairingPage from "@/v2/pages/PairingPage/PairingPage";
+import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 import OptimizationsPage from "@/v2/pages/OptimizationsPage/OptimizationsPage";
 import OptimizationsNewPage from "@/v2/pages/OptimizationsPage/OptimizationsNewPage/OptimizationsNewPage";
 import OptimizationPage from "@/v2/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v2/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v2/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/v2/pages/AlertsPage/AlertsRouteWrapper";
+const AlertsRouteWrapper = lazy(
+  () => import("@/v2/pages/AlertsPage/AlertsRouteWrapper"),
+);
 import AlertEditPageGuard from "@/v2/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v2/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v2/pages/DashboardsPage/DashboardsPage";
@@ -110,15 +117,20 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
 // "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
 // TODO: make the Python SDK build basepath-aware pairing URLs and drop
 // this alias once shipped CLI versions roll over.
+const PairRouteComponent = () => (
+  <PairRouteVersionGuard>
+    <PairingPage />
+  </PairRouteVersionGuard>
+);
 const pairingRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/pair/v1",
-  component: PairingPage,
+  component: PairRouteComponent,
 });
 const pairingRouteOssAlias = createRoute({
   getParentRoute: () => rootRoute,
   path: "/opik/pair/v1",
-  component: PairingPage,
+  component: PairRouteComponent,
 });
 
 // ----------- base redirect
