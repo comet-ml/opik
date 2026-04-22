@@ -9,12 +9,14 @@ import {
   Settings,
   Settings2,
   Shield,
+  Sparkles,
   UserPlus,
 } from "lucide-react";
 
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
+import { Switch } from "@/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,8 +35,13 @@ import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { cn, maskAPIKey } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
+import { buildFullBaseUrl, cn, maskAPIKey } from "@/lib/utils";
+import useAppStore, { useDetectedWorkspaceVersion } from "@/store/AppStore";
+import {
+  getNewExperienceOptIn,
+  getVersionOverride,
+  setNewExperienceOptIn,
+} from "@/lib/workspaceVersion";
 import api from "./api";
 import { ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -52,6 +59,10 @@ const UserMenu = () => {
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const detectedWorkspaceVersion = useDetectedWorkspaceVersion();
+  const hasOptedIn = getNewExperienceOptIn();
+  const showNewExperienceToggle =
+    detectedWorkspaceVersion === "v1" && getVersionOverride() === null;
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -277,6 +288,26 @@ const UserMenu = () => {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
+            {showNewExperienceToggle && (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setNewExperienceOptIn(!hasOptedIn);
+                  const base = buildFullBaseUrl();
+                  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+                  window.location.href = normalizedBase + workspaceName;
+                }}
+              >
+                <Sparkles className="mr-2 size-4" />
+                <span>New Opik experience</span>
+                <Switch
+                  checked={hasOptedIn}
+                  className="pointer-events-none ml-auto"
+                  size="sm"
+                />
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
           {!isLLMOnlyOrganization && (
             <>
