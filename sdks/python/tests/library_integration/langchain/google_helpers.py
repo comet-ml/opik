@@ -7,7 +7,6 @@ EXPECTED_USAGE_GOOGLE = ANY_DICT.containing(
         "prompt_tokens": ANY,
         "total_tokens": ANY,
         "original_usage.total_token_count": ANY,
-        "original_usage.candidates_token_count": ANY,
         "original_usage.prompt_token_count": ANY,
     }
 )

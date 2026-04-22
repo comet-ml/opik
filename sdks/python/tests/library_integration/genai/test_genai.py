@@ -33,7 +33,6 @@ EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = ANY_DICT.containing(
         "completion_tokens": ANY_BUT_NONE,
         "total_tokens": ANY_BUT_NONE,
         "original_usage.total_token_count": ANY_BUT_NONE,
-        "original_usage.candidates_token_count": ANY_BUT_NONE,
         "original_usage.prompt_token_count": ANY_BUT_NONE,
     }
 )

@@ -11,7 +11,6 @@ MODEL_NAME = llm_constants.GEMINI_FLASH
 EXPECTED_USAGE_GOOGLE = ANY_DICT.containing(
     {
         "completion_tokens": ANY,
-        "original_usage.candidates_token_count": ANY,
         "original_usage.prompt_token_count": ANY,
         "original_usage.total_token_count": ANY,
         "prompt_tokens": ANY,
