@@ -18,6 +18,7 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
@@ -74,6 +75,9 @@ class TestSuiteAssertionSamplerTest {
         @Mock
         AssertionCounterService assertionCounterService;
 
+        @Mock
+        ExperimentService experimentService;
+
         private TestSuiteAssertionSampler sampler;
 
         @org.junit.jupiter.api.BeforeEach
@@ -87,7 +91,8 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(new ProviderApiKey.ProviderApiKeyPage(1, 1, 1, List.of(openAiKey), List.of()));
             sampler = new TestSuiteAssertionSampler(
                     datasetItemService, datasetVersionService, onlineScorePublisher, idGenerator,
-                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, assertionCounterService);
+                    testSuiteConfig, evaluatorMapper, llmProviderApiKeyService, assertionCounterService,
+                    experimentService);
         }
 
         @Test

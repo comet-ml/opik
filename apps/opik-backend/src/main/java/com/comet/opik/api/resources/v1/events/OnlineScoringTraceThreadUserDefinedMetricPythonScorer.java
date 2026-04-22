@@ -68,8 +68,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService,
-                TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
+        super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
+                Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
