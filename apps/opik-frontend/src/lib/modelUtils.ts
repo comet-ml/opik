@@ -2,7 +2,7 @@ import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
-import { getLatestModelFlags } from "@/hooks/useLLMProviderModelsData";
+import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.

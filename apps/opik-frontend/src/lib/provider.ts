@@ -9,7 +9,10 @@ import {
   LEGACY_CUSTOM_PROVIDER_NAME,
   PROVIDERS,
 } from "@/constants/providers";
-import { getLatestProviderModelsSnapshot } from "@/hooks/useLLMProviderModelsData";
+import {
+  getLatestProviderModelsSnapshot,
+  KNOWN_PROVIDER_TYPES,
+} from "@/lib/modelRegistryStore";
 
 export const getProviderDisplayName = (providerKey: ProviderObject) => {
   const { provider, provider_name } = providerKey;
@@ -87,8 +90,6 @@ export const convertCustomProviderModel = (
     return model.startsWith(prefix) ? model.replace(prefix, "") : model;
   }
 };
-
-const KNOWN_PROVIDER_TYPES = new Set<string>(Object.values(PROVIDER_TYPE));
 
 export const getProviderFromModel = (
   model: PROVIDER_MODEL_TYPE,

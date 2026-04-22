@@ -42,8 +42,7 @@ const OptimizationModelSelect: React.FC<OptimizationModelSelectProps> = ({
   const [filterValue, setFilterValue] = useState("");
   const [openProviderMenu, setOpenProviderMenu] = useState<string | null>(null);
 
-  const { getProviderModels } = useLLMProviderModelsData();
-  const providerModels = getProviderModels();
+  const { providerModels } = useLLMProviderModelsData();
 
   const groupOptions = useMemo(() => {
     return SUPPORTED_PROVIDERS.map((providerType) => {
