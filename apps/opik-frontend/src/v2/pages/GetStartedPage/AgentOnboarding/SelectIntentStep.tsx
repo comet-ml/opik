@@ -4,6 +4,7 @@ import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import useDemoProject from "@/api/projects/useDemoProject";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
@@ -25,6 +26,7 @@ const SelectIntentStep: React.FC = () => {
       : onboardingImageLightUrl;
 
   const handlePickDemo = () => {
+    trackEvent(OpikEvent.ONBOARDING_INTENT_SELECTED, { intent: "no-app" });
     goToStep(AGENT_ONBOARDING_STEPS.DEMO_LOADING, { agentName: "" });
     if (demoProject) {
       void navigate({
@@ -46,9 +48,12 @@ const SelectIntentStep: React.FC = () => {
 
         <div className="flex flex-col gap-3 pt-6">
           <button
-            onClick={() =>
-              goToStep(AGENT_ONBOARDING_STEPS.AGENT_NAME, { agentName: "" })
-            }
+            onClick={() => {
+              trackEvent(OpikEvent.ONBOARDING_INTENT_SELECTED, {
+                intent: "has-app",
+              });
+              goToStep(AGENT_ONBOARDING_STEPS.AGENT_NAME, { agentName: "" });
+            }}
             className="rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary hover:bg-muted"
           >
             <p className="comet-body-s font-medium">
