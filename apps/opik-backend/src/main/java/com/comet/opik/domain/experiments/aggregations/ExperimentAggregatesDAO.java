@@ -768,7 +768,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 SELECT
                     entity_id,
                     name,
-                    count() AS n,
+                    count(DISTINCT author) AS n,
                     avg(value) AS avg_value,
                     any(value) AS any_value,
                     any(reason) AS any_reason,
