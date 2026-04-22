@@ -316,17 +316,25 @@ class ProjectsResourceTest {
         }
 
         @Test
-        @DisplayName("Find projects returns 403 when permission is denied")
-        void findProjectsReturnsForbiddenWhenPermissionDenied() {
+        @DisplayName("Find projects falls back to public visibility when PROJECT_DATA_VIEW permission is denied")
+        void findProjectsFallsBackToPublicVisibilityWhenPermissionDenied() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
 
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
                     WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
 
+            wireMock.server().resetRequests();
             try (var response = projectResourceClient.callFindProjects(apiKey, workspaceName)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             }
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue()))));
         }
 
         @Test
