@@ -105,6 +105,7 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
+  - id: "gpt-image-2"
 anthropic:
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-haiku-4-5-20251001"
@@ -361,6 +362,7 @@ openrouter:
   - id: "inception/mercury"
   - id: "inception/mercury-2"
   - id: "inception/mercury-coder"
+  - id: "inclusionai/ling-2.6-flash:free"
   - id: "inflection/inflection-3-pi"
   - id: "inflection/inflection-3-productivity"
   - id: "kwaipilot/kat-coder-pro"
@@ -569,6 +571,7 @@ openrouter:
   - id: "openai/gpt-5.3-chat"
   - id: "openai/gpt-5.3-codex"
   - id: "openai/gpt-5.4"
+  - id: "openai/gpt-5.4-image-2"
   - id: "openai/gpt-5.4-mini"
   - id: "openai/gpt-5.4-nano"
   - id: "openai/gpt-5.4-pro"
@@ -614,6 +617,7 @@ openrouter:
     structuredOutput: true
   - id: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
+  - id: "openrouter/pareto-code"
   - id: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"
   - id: "perplexity/sonar-pro"
@@ -755,3 +759,4 @@ openrouter:
   - id: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
   - id: "z-ai/glm-5v-turbo"
+  - id: "~anthropic/claude-opus-latest"
