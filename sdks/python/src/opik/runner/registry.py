@@ -20,6 +20,7 @@ _listeners: List[Callable[[str], None]] = []
 class Param:
     name: str
     type: str = "string"
+    required: bool = True
 
 
 def register(
@@ -77,7 +78,8 @@ def extract_params(fn: Callable) -> List[Param]:
             except TypeError:
                 type_name = "string"
                 unresolved.append(param_name)
-        params.append(Param(name=param_name, type=type_name))
+        is_required = param.default is inspect.Parameter.empty
+        params.append(Param(name=param_name, type=type_name, required=is_required))
     if unresolved:
         logger.warning(
             "Could not resolve type for parameter(s) %s in %r. "

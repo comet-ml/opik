@@ -8,7 +8,7 @@ export interface LocalRunnerAgent {
   name: string;
   description?: string;
   language?: string;
-  params?: { name: string; type: string }[];
+  params?: { name: string; type: string; required?: boolean }[];
 }
 
 export type LocalRunnerType = "connect" | "endpoint";
