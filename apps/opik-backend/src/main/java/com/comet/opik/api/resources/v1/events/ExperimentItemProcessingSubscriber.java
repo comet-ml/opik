@@ -4,6 +4,7 @@ import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.ExperimentUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
+import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
@@ -30,6 +31,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private final ExperimentItemProcessor itemProcessor;
     private final ExperimentService experimentService;
+    private final AssertionCounterService assertionCounterService;
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
 
@@ -38,10 +40,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull ExperimentItemProcessor itemProcessor,
-            @NonNull ExperimentService experimentService) {
+            @NonNull ExperimentService experimentService,
+            @NonNull AssertionCounterService assertionCounterService) {
         super(config, redisson, ExperimentExecutionConfig.PAYLOAD_FIELD, SUBSCRIBER_NAMESPACE, METRICS_BASE_NAME);
         this.itemProcessor = itemProcessor;
         this.experimentService = experimentService;
+        this.assertionCounterService = assertionCounterService;
         this.redisClient = redisson;
         this.config = config;
     }
@@ -90,7 +94,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 ? Mono.empty()
                 : failureCounter.incrementAndGet()
                         .then(failureCounter.expire(config.getBatchCounterTtl().toJavaDuration()))
-                        .then(decrementAssertionCounter(message))
+                        .then(assertionCounterService.decrement(message.experimentId()).then())
+                        .onErrorResume(e -> {
+                            log.error("Failed to decrement assertion counter for experiment '{}'",
+                                    message.experimentId(), e);
+                            return Mono.empty();
+                        })
                         .then();
 
         return trackFailure.then(counter.decrementAndGet())
@@ -105,7 +114,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                         return markExperimentsFailed(message,
                                                 buildReactorContext(message));
                                     }
-                                    return hasAssertionCounter(message)
+                                    return assertionCounterService.exists(message.experimentId())
                                             .flatMap(hasCounter -> {
                                                 if (hasCounter) {
                                                     log.info("Batch '{}' complete, waiting for assertions to finish",
@@ -120,33 +129,6 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                     }
                     log.debug("Batch '{}' has '{}' remaining items", message.batchId(), remaining);
                     return Mono.empty();
-                })
-                .then();
-    }
-
-    private Mono<Boolean> hasAssertionCounter(ExperimentItemToProcess message) {
-        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
-        return redisClient.getAtomicLong(counterKey).isExists();
-    }
-
-    private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
-        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + message.experimentId();
-        var counter = redisClient.getAtomicLong(counterKey);
-        return counter.isExists()
-                .flatMap(exists -> {
-                    if (!exists) {
-                        return Mono.empty();
-                    }
-                    return counter.decrementAndGet()
-                            .flatMap(remaining -> {
-                                if (remaining <= 0) {
-                                    log.info(
-                                            "Assertion counter reached zero for experiment '{}' (via failure), finishing",
-                                            message.experimentId());
-                                    return finishExperiments(message);
-                                }
-                                return Mono.<Void>empty();
-                            });
                 })
                 .then();
     }
@@ -184,13 +166,14 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 .status(ExperimentStatus.CANCELLED)
                 .build();
 
-        return Flux.fromIterable(message.allExperimentIds())
-                .concatMap(experimentId -> experimentService.update(experimentId, failedUpdate)
-                        .onErrorResume(e -> {
-                            log.error("Failed to mark experiment '{}' as FAILED", experimentId, e);
-                            return Mono.empty();
-                        }))
-                .contextWrite(reactorContext)
-                .then();
+        return assertionCounterService.deleteCounters(message.allExperimentIds())
+                .then(Flux.fromIterable(message.allExperimentIds())
+                        .concatMap(experimentId -> experimentService.update(experimentId, failedUpdate)
+                                .onErrorResume(e -> {
+                                    log.error("Failed to mark experiment '{}' as FAILED", experimentId, e);
+                                    return Mono.empty();
+                                }))
+                        .contextWrite(reactorContext)
+                        .then());
     }
 }

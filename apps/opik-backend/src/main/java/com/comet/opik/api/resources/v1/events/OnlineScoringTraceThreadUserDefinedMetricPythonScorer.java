@@ -6,7 +6,7 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
-import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
@@ -66,11 +66,11 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull PythonEvaluatorService pythonEvaluatorService,
             @NonNull TraceService traceService,
-            @NonNull ExperimentService experimentService,
+            @NonNull AssertionCounterService assertionCounterService,
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
-        super(config, redisson, feedbackScoreService, traceService, experimentService,
+        super(config, redisson, feedbackScoreService, traceService, assertionCounterService,
                 TRACE_THREAD_USER_DEFINED_METRIC_PYTHON, Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
