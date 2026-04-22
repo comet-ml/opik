@@ -476,7 +476,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
     Z_AI_GLM_5_1("z-ai/glm-5.1"),
     Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo"),
-    ~ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest");
+    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 

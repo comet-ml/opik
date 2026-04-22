@@ -564,7 +564,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
-  ~ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
+  ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
 
   //   <----- gemini
   AQA = "aqa",

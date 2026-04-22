@@ -1981,7 +1981,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "z-ai/glm-5v-turbo",
     },
     {
-      value: PROVIDER_MODEL_TYPE.~ANTHROPIC_CLAUDE_OPUS_LATEST,
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_LATEST,
       label: "~anthropic/claude-opus-latest",
     },
   ],
