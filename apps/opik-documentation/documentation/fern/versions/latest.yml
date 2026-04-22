@@ -108,7 +108,7 @@ navigation:
           - page: Overview
             path: ../docs-v2/development/overview.mdx
             slug: overview
-          - page: Agent sandbox
+          - page: Agent playground
             path: ../docs-v2/observability/agent_sandbox.mdx
             slug: agent-sandbox
           - page: Prompt playground

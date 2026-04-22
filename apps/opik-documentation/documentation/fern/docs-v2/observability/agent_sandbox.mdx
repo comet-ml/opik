@@ -1,17 +1,17 @@
 ---
-headline: Agent Sandbox | Opik Documentation
+headline: Agent Playground | Opik Documentation
 og:description: Run agents locally while connected to Opik for full tracing, debugging,
   and observability
 og:site_name: Opik Documentation
-og:title: Agent Sandbox — Opik
-title: Agent sandbox
+og:title: Agent Playground — Opik
+title: Agent playground
 ---
 
-The Agent Sandbox lets you run agents on your local machine while connected to Opik. Every agent
+The Agent Playground lets you run agents on your local machine while connected to Opik. Every agent
 execution is fully traced — you get LLM calls, latencies, token usage, and the complete execution
 graph, all visible in the Opik UI.
 
-Beyond running your agent, the sandbox lets you tweak prompts and parameters from
+Beyond running your agent, the playground lets you tweak prompts and parameters from
 [Agent Configuration](/prompt_engineering/agent-configuration) without changing your code. Once
 you're happy with the results, save the new configuration and your agent picks it up automatically.
 
@@ -66,7 +66,7 @@ you're happy with the results, save the new configuration and your agent picks i
     Parameter types are displayed as input fields in the UI. In Python they are inferred from
     type hints; in TypeScript, provide them explicitly via the `params` option.
   </Step>
-  <Step title="Start the sandbox">
+  <Step title="Start the playground">
     ```bash
     opik endpoint --project my-agent -- python3 my_agent.py
     ```
@@ -85,27 +85,27 @@ you're happy with the results, save the new configuration and your agent picks i
     results — along with the full trace — appear in the UI.
   </Step>
   <Step title="Iterate on prompts and parameters">
-    Switch to the **Configuration** tab in the Agent Sandbox page to adjust prompts, model
-    parameters, or tool definitions — without leaving the sandbox and without changing your code.
+    Switch to the **Configuration** tab in the Agent Playground page to adjust prompts, model
+    parameters, or tool definitions — without leaving the playground and without changing your code.
 
-    Your changes aren't saved yet. Run your agent again and the sandbox uses the unsaved
+    Your changes aren't saved yet. Run your agent again and the playground uses the unsaved
     configuration, so you can see the impact immediately. Try different prompts, compare results
     across runs, and only save the configuration once you're satisfied. Your agent picks up the
     new settings automatically.
   </Step>
 </Steps>
 
-## What happens in the sandbox
+## What happens in the playground
 
 <Frame>
-  <img src="/img/v2/observability/agent-sandbox.png" alt="Agent Sandbox UI showing a connected runner with input fields and execution results" />
+  <img src="/img/v2/observability/agent-sandbox.png" alt="Agent Playground UI showing a connected runner with input fields and execution results" />
 </Frame>
 
-Every run in the sandbox produces a full trace — every LLM call, tool invocation, and sub-step is
+Every run in the playground produces a full trace — every LLM call, tool invocation, and sub-step is
 captured as spans with inputs, outputs, latencies, and token costs. Logs from your running agent
 stream to the UI in real time, so you can watch execution as it happens.
 
-The sandbox monitors your runner with a heartbeat and updates its status automatically if it
+The playground monitors your runner with a heartbeat and updates its status automatically if it
 disconnects. When `--watch` is enabled, file changes are detected and your agents are
 re-registered without restarting the process. For CI or programmatic setups, use `--headless` to
 skip the browser pairing flow entirely.
@@ -140,11 +140,11 @@ UI, check that the process is still running locally and that your network connec
       changes, and rerun your agent — all from the Opik UI. It does not run your agent process
       itself.
 
-    - **`opik endpoint`** runs your agent process and connects it to the Agent Sandbox. You can
+    - **`opik endpoint`** runs your agent process and connects it to the Agent Playground. You can
       submit inputs from the UI, see results with full traces, and iterate on your
       [Agent Configuration](/development/agent-configuration/overview) without changing code.
 
-    You can use both at the same time: `opik endpoint` to run and test your agent in the sandbox,
+    You can use both at the same time: `opik endpoint` to run and test your agent in the playground,
     and `opik connect` to let Ollie inspect and edit your code.
   </Accordion>
 </AccordionGroup>

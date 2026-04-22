@@ -21,7 +21,15 @@ public enum WorkspaceUserPermission {
     OPTIMIZATION_RUN_DELETE("optimization_run_delete"),
     WORKSPACE_SETTINGS_CONFIGURE("workspace_settings_configure"),
     AI_PROVIDER_UPDATE("ai_provider_update"),
-    ANNOTATION_QUEUE_ANNOTATE("annotation_queue_annotate");
+    ANNOTATION_QUEUE_ANNOTATE("annotation_queue_annotate"),
+    PROJECT_CREATE("project_create"),
+    PROJECT_DATA_VIEW("project_data_view"),
+    COMMENT_WRITE("comment_write"),
+    TRACE_SPAN_THREAD_ANNOTATE("trace_span_thread_annotate"),
+    TRACE_TAG("trace_tag"),
+    ONLINE_EVALUATION_RULE_UPDATE("online_evaluation_rule_update"),
+    ALERT_UPDATE("alert_update"),
+    ANNOTATION_QUEUE_CREATE("annotation_queue_create");
 
     @JsonValue
     private final String value;

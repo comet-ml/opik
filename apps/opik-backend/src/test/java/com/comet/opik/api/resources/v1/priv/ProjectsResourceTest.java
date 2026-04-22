@@ -22,6 +22,7 @@ import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -90,6 +91,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -296,6 +298,64 @@ class ProjectsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.PROJECT_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create project returns 403 when permission is denied")
+        void createProjectReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_CREATE.getValue());
+
+            try (var response = projectResourceClient.callCreateProject(
+                    factory.manufacturePojo(Project.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Find projects falls back to public visibility when PROJECT_DATA_VIEW permission is denied")
+        void findProjectsFallsBackToPublicVisibilityWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            try (var response = projectResourceClient.callFindProjects(apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get project KPI cards returns 403 when permission is denied")
+        void getProjectKpiCardsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+
+            var request = KpiCardRequest.builder()
+                    .entityType(KpiCardRequest.EntityType.TRACES)
+                    .intervalStart(Instant.now().minus(Duration.ofDays(1)))
+                    .intervalEnd(Instant.now())
+                    .build();
+
+            try (var response = projectResourceClient.getKpiCardsRaw(UUID.randomUUID(), request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 

@@ -129,6 +129,24 @@ public class AnnotationQueuesResourceClient {
         }
     }
 
+    public Response callCreateAnnotationQueue(AnnotationQueue queue, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(queue));
+    }
+
+    public Response callCreateAnnotationQueueBatch(SequencedSet<AnnotationQueue> annotationQueues, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(AnnotationQueueBatch.builder().annotationQueues(annotationQueues).build()));
+    }
+
     public Response callDeleteAnnotationQueueBatch(Set<UUID> queueIds, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("delete")
