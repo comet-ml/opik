@@ -8,9 +8,9 @@ import {
   clearVersionOverride,
   getNewExperienceOptIn,
   getVersionOverride,
-  getWorkspaceHomeUrl,
   setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
+import { buildFullBaseUrl } from "@/lib/utils";
 import Loader from "@/shared/Loader/Loader";
 
 const VERSION_RELOAD_PREFIX = "opik-version-reload:";
@@ -59,7 +59,7 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
         sessionStorage.setItem(reloadKey, String(reloadCount + 1));
         // URL structure differs between v1 and v2, so redirect to workspace
         // home instead of reloading the current path.
-        window.location.href = getWorkspaceHomeUrl(workspaceName);
+        window.location.href = buildFullBaseUrl() + workspaceName;
       }
     } else {
       sessionStorage.removeItem(reloadKey);
