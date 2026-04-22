@@ -9,6 +9,7 @@ import { Label } from "@/ui/label";
 type AgentParam = {
   name: string;
   type: string;
+  required?: boolean;
 };
 
 const NUMERIC_TYPES = new Set(["int", "integer", "float", "double", "number"]);
@@ -35,17 +36,6 @@ const coerceValue = (value: string, type: string): unknown => {
     }
   }
 
-  // Optional types — try JSON first, then number, then string
-  if (lower.startsWith("optional")) {
-    if (value === "") return null;
-    try {
-      return JSON.parse(value);
-    } catch {
-      const num = Number(value);
-      return isNaN(num) ? value : num;
-    }
-  }
-
   return value;
 };
 
@@ -55,9 +45,8 @@ type AgentRunnerInputFormProps = {
   isRunning: boolean;
 };
 
-const isFieldRequired = (type: string): boolean => {
-  const lower = type.toLowerCase();
-  return !BOOL_TYPES.has(lower) && !lower.startsWith("optional");
+const isFieldRequired = (field: AgentParam): boolean => {
+  return field.required !== false;
 };
 
 const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
@@ -85,6 +74,9 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
     const inputs: Record<string, unknown> = {};
     for (const field of fields) {
       const value = data[field.name];
+      if (!isFieldRequired(field) && value.trim() === "") {
+        continue;
+      }
       inputs[field.name] = coerceValue(value, field.type);
     }
     onSubmit(inputs);
@@ -105,6 +97,11 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                 <span className="ml-1 font-normal text-light-slate">
                   {field.type}
                 </span>
+                {!isFieldRequired(field) && (
+                  <span className="ml-1 font-normal text-muted-slate">
+                    (optional)
+                  </span>
+                )}
               </Label>
 
               {field.type === "boolean" ? (
@@ -118,7 +115,7 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
               ) : field.type === "object" || field.type === "json" ? (
                 <Textarea
                   {...register(field.name, {
-                    ...(isFieldRequired(field.type) && {
+                    ...(isFieldRequired(field) && {
                       validate: (v: string) =>
                         v.trim().length > 0 || "This field is required",
                     }),
@@ -130,7 +127,7 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
               ) : (
                 <Input
                   {...register(field.name, {
-                    ...(isFieldRequired(field.type) && {
+                    ...(isFieldRequired(field) && {
                       validate: (v: string) =>
                         v.trim().length > 0 || "This field is required",
                     }),
