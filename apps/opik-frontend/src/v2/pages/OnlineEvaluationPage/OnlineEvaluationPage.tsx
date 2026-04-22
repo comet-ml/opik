@@ -357,7 +357,7 @@ export const OnlineEvaluationPage: React.FC = () => {
     [setEditRuleId, setCloneRuleId],
   );
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && rows.length === 0)) {
     return <Loader />;
   }
 
