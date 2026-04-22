@@ -184,7 +184,7 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
         >
           <div
             className={cn(
-              "h-full w-[300px] transition-opacity",
+              "h-full w-full transition-opacity",
               isExpanded
                 ? "opacity-100 duration-150 delay-75"
                 : "pointer-events-none opacity-0 duration-150",
