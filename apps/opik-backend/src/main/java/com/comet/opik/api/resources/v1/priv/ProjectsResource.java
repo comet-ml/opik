@@ -275,6 +275,7 @@ public class ProjectsResource {
             @ApiResponse(responseCode = "200", description = "KPI Card Metrics", content = @Content(schema = @Schema(implementation = KpiCardResponse.class))),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getProjectKpiCards(
             @PathParam("id") UUID projectId,
             @RequestBody(content = @Content(schema = @Schema(implementation = KpiCardRequest.class))) @Valid KpiCardRequest request) {
