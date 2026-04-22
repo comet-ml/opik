@@ -34,8 +34,10 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
 
     const store = useAppStore.getState();
     store.setWorkspaceVersion(resolvedVersion);
-    if (apiVersion) store.setDetectedWorkspaceVersion(apiVersion);
-    setCachedWorkspaceVersion(workspaceName, resolvedVersion);
+    if (apiVersion) {
+      store.setDetectedWorkspaceVersion(apiVersion);
+      setCachedWorkspaceVersion(workspaceName, apiVersion);
+    }
 
     const reloadKey = VERSION_RELOAD_PREFIX + workspaceName;
 
