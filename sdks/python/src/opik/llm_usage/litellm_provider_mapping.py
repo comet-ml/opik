@@ -18,18 +18,11 @@ LITELLM_PROVIDER_MAPPING: Dict[str, LLMProvider] = {
 def infer_provider_from_litellm_model_prefix(
     model: Optional[str],
 ) -> Optional[Union[LLMProvider, str]]:
-    """Infer a provider from a LiteLLM-style "<provider>/<model>" string.
+    """Resolve the provider for a LiteLLM-style ``"<provider>/<model>"`` string.
 
-    Returns:
-    - an `LLMProvider` enum value when the prefix is in the known mapping,
-    - the raw prefix string when a prefix is present but not mapped (callers can
-      forward it to the backend; unsupported providers resolve to zero cost
-      gracefully, and this preserves the original attribution for future
-      catalog updates),
-    - `None` when the input is empty or has no prefix (callers typically fall
-      back to `LLMProvider.OPENAI` for the native-OpenAI path).
-
-    Unlike `litellm.get_llm_provider`, this does not require the `litellm` package.
+    Returns the mapped :class:`LLMProvider` for known prefixes, the raw prefix
+    string for unknown ones (so the backend can still attempt a lookup), or
+    ``None`` when the model has no prefix.
     """
     if not model or "/" not in model:
         return None

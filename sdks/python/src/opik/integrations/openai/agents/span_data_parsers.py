@@ -120,100 +120,79 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     )
 
 
-def _parse_generation_span_content(
-    span_data: tracing.GenerationSpanData,
-) -> ParsedSpanData:
-    # openai-agents 0.14+ routes `LitellmModel` through `generation_span`, so the model
-    # string here carries the LiteLLM "<provider>/<model>" prefix. Usage is recorded in
-    # OpenAI Responses-API shape (input_tokens/output_tokens) regardless of the underlying
-    # provider, so the usage parser stays pinned to OPENAI; only the provider attribution
-    # on the span needs to follow the prefix.
-    model = span_data.model
-    inferred_provider = (
+def _infer_provider(model: Optional[str]) -> Union[LLMProvider, str]:
+    """Map a model string to a provider, defaulting to OpenAI for un-prefixed models."""
+    return (
         litellm_provider_mapping.infer_provider_from_litellm_model_prefix(model)
         or LLMProvider.OPENAI
     )
 
-    if span_data.usage is not None:
-        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider.OPENAI,
-            usage=span_data.usage,
-            logger=LOGGER,
-            error_message="Failed to log usage in openai agent generation span",
-        )
-    else:
-        opik_usage = None
 
-    input_data = span_data.input
-    output_data = span_data.output
-    if input_data is not None and not isinstance(input_data, dict):
-        input_data = {"input": input_data}
-    if output_data is not None and not isinstance(output_data, dict):
-        output_data = {"output": output_data}
+def _wrap_as_dict(value: Any, key: str) -> Optional[Dict[str, Any]]:
+    if value is None or isinstance(value, dict):
+        return value
+    return {key: value}
 
-    metadata = span_data.export()
-    for key in ("input", "output", "usage", "model"):
-        metadata.pop(key, None)
 
+def _build_opik_usage(
+    usage: Optional[Dict[str, Any]], error_message: str
+) -> Optional[llm_usage.OpikUsage]:
+    # openai-agents always emits usage in the OpenAI Responses shape, even for
+    # LiteLLM-routed calls, so the OpenAI parser handles every provider here.
+    if usage is None:
+        return None
+    return llm_usage.try_build_opik_usage_or_log_error(
+        provider=LLMProvider.OPENAI,
+        usage=usage,
+        logger=LOGGER,
+        error_message=error_message,
+    )
+
+
+_GENERATION_SPAN_HANDLED_KEYS = {"input", "output", "usage", "model"}
+
+
+def _parse_generation_span_content(
+    span_data: tracing.GenerationSpanData,
+) -> ParsedSpanData:
+    metadata = {
+        key: value
+        for key, value in span_data.export().items()
+        if key not in _GENERATION_SPAN_HANDLED_KEYS
+    }
     return ParsedSpanData(
         name="Generation",
-        input=input_data,
-        output=output_data,
-        usage=opik_usage,
         type="llm",
+        input=_wrap_as_dict(span_data.input, "input"),
+        output=_wrap_as_dict(span_data.output, "output"),
+        usage=_build_opik_usage(
+            span_data.usage,
+            "Failed to log usage in openai agent generation span",
+        ),
         metadata=metadata,
-        model=model,
-        provider=inferred_provider,
+        model=span_data.model,
+        provider=_infer_provider(span_data.model),
     )
 
 
 def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
     response = span_data.response
-
     if response is None:
-        return ParsedSpanData(
-            name="Response",
-            type="llm",
-        )
-
-    response_dict = span_data.response.model_dump()
-    input = {"input": span_data.input}
-    output = {"output": response.output}
+        return ParsedSpanData(name="Response", type="llm")
 
     _, metadata = dict_utils.split_dict_by_keys(
-        input_dict=response_dict,
+        input_dict=response.model_dump(),
         keys=["input", "output"],
     )
-
-    # When `LitellmModel` routes requests through a non-OpenAI provider, `response.model`
-    # carries a LiteLLM-style "<provider>/<model>" prefix (e.g. "gemini/gemini-3.1-flash").
-    # The usage payload on `response.usage` is still OpenAI-shaped — the openai-agents SDK
-    # adapts LiteLLM responses to OpenAI's `Response` type — so we keep OPENAI for usage
-    # parsing but attribute the span to the real provider for backend cost lookup.
-    inferred_provider = (
-        litellm_provider_mapping.infer_provider_from_litellm_model_prefix(
-            response.model
-        )
-        or LLMProvider.OPENAI
-    )
-
-    if response.usage is not None:
-        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider.OPENAI,
-            usage=response.usage.model_dump(),
-            logger=LOGGER,
-            error_message="Failed to log usage in openai agent run",
-        )
-    else:
-        opik_usage = None
+    usage = response.usage.model_dump() if response.usage is not None else None
 
     return ParsedSpanData(
         name="Response",
-        input=input,
-        output=output,
-        usage=opik_usage,
         type="llm",
+        input={"input": span_data.input},
+        output={"output": response.output},
+        usage=_build_opik_usage(usage, "Failed to log usage in openai agent run"),
         metadata=metadata,
         model=response.model,
-        provider=inferred_provider,
+        provider=_infer_provider(response.model),
     )
