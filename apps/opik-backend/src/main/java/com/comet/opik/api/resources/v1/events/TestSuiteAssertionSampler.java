@@ -10,12 +10,12 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.resources.v1.events.TestSuiteEvaluatorMapper.PreparedEvaluator;
-import com.comet.opik.domain.AssertionCounterService;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
+import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.TestSuiteConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +23,7 @@ import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.util.context.Context;
@@ -64,7 +65,7 @@ public class TestSuiteAssertionSampler {
     private final TestSuiteConfig testSuiteConfig;
     private final TestSuiteEvaluatorMapper evaluatorMapper;
     private final LlmProviderApiKeyService llmProviderApiKeyService;
-    private final AssertionCounterService assertionCounterService;
+    private final RedissonReactiveClient redisClient;
 
     @Inject
     public TestSuiteAssertionSampler(
@@ -75,7 +76,7 @@ public class TestSuiteAssertionSampler {
             @NonNull @Config("testSuite") TestSuiteConfig testSuiteConfig,
             @NonNull TestSuiteEvaluatorMapper evaluatorMapper,
             @NonNull LlmProviderApiKeyService llmProviderApiKeyService,
-            @NonNull AssertionCounterService assertionCounterService) {
+            @NonNull RedissonReactiveClient redisClient) {
         this.datasetItemService = datasetItemService;
         this.datasetVersionService = datasetVersionService;
         this.onlineScorePublisher = onlineScorePublisher;
@@ -83,7 +84,7 @@ public class TestSuiteAssertionSampler {
         this.testSuiteConfig = testSuiteConfig;
         this.evaluatorMapper = evaluatorMapper;
         this.llmProviderApiKeyService = llmProviderApiKeyService;
-        this.assertionCounterService = assertionCounterService;
+        this.redisClient = redisClient;
     }
 
     @Subscribe
@@ -273,8 +274,9 @@ public class TestSuiteAssertionSampler {
         if (experimentId == null) {
             return;
         }
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + experimentId;
         try {
-            assertionCounterService.decrement(experimentId).block();
+            redisClient.getAtomicLong(counterKey).decrementAndGet().block();
         } catch (Exception e) {
             log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
         }
@@ -284,8 +286,9 @@ public class TestSuiteAssertionSampler {
         if (experimentId == null) {
             return;
         }
+        var counterKey = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + experimentId;
         try {
-            assertionCounterService.adjust(experimentId, additionalMessages).block();
+            redisClient.getAtomicLong(counterKey).addAndGet(additionalMessages).block();
         } catch (Exception e) {
             log.error("Failed to adjust assertion counter for experiment '{}'", experimentId, e);
         }

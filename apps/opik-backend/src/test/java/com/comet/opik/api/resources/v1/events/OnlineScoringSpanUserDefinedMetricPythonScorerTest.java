@@ -3,7 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.events.SpanToScoreUserDefinedMetricPython;
-import com.comet.opik.domain.AssertionCounterService;
+import com.comet.opik.domain.ExperimentService;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
@@ -62,7 +62,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
     private TraceService traceService;
 
     @Mock
-    private AssertionCounterService assertionCounterService;
+    private ExperimentService experimentService;
 
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
@@ -105,7 +105,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                 redissonClient,
                 feedbackScoreService,
                 traceService,
-                assertionCounterService,
+                experimentService,
                 pythonEvaluatorService);
     }
 
