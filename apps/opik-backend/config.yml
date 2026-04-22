@@ -271,9 +271,9 @@ experimentDenormalization:
   # Default: 3
   # Description: Maximum automatic re-trigger attempts per (workspace, experiment) when the aggregation lock TTL is exceeded. Must be between 1 and 10.
   maxLockExpiryRetries: ${OPIK_EXPERIMENT_DENORM_MAX_LOCK_EXPIRY_RETRIES:-3}
-  # Default: 2h
+  # Default: 30m
   # Description: TTL applied to the per-(workspace, experiment) lock-expiry retry counter in Redis (minimum 1m). Prevents stale counters from accumulating when an experiment stops producing events.
-  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-2h}
+  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-30m}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}

@@ -108,8 +108,7 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
     }
 
     private Mono<Void> retriggerIfBelowMaxRetries(ExperimentAggregationMessage message) {
-        String retryKey = AGGREGATION_RETRY_COUNT_KEY.formatted(message.workspaceId(), message.experimentId());
-        var counter = redissonClient.getAtomicLong(retryKey);
+        var counter = redissonClient.getAtomicLong(buildRetryCountKey(message));
 
         return counter.incrementAndGet()
                 .flatMap(retryCount -> {
@@ -134,8 +133,11 @@ public class ExperimentAggregatesSubscriber extends BaseRedisSubscriber<Experime
     }
 
     private Mono<Void> resetRetryCounter(ExperimentAggregationMessage message) {
-        String retryKey = AGGREGATION_RETRY_COUNT_KEY.formatted(message.workspaceId(), message.experimentId());
-        return redissonClient.getAtomicLong(retryKey).delete().then();
+        return redissonClient.getAtomicLong(buildRetryCountKey(message)).delete().then();
+    }
+
+    private static String buildRetryCountKey(ExperimentAggregationMessage message) {
+        return AGGREGATION_RETRY_COUNT_KEY.formatted(message.workspaceId(), message.experimentId());
     }
 
 }

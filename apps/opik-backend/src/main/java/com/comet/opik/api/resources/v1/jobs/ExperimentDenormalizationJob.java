@@ -85,7 +85,7 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
                     var processedCount = new AtomicInteger();
                     return getExperimentsReadyToProcess()
                             .flatMap(member -> processExperiment(member)
-                                    .doOnSuccess(__ -> processedCount.incrementAndGet()))
+                                    .doOnNext(__ -> processedCount.incrementAndGet()))
                             .onErrorContinue((throwable, experimentId) -> log.error(
                                     "Failed to process pending experiment '{}'",
                                     experimentId, throwable))
@@ -155,7 +155,7 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
      * ensures experiments with the same UUID in different workspaces are handled independently.
      * If the hash bucket has already expired (stale ZSET entry), only the ZSET entry is removed.
      */
-    private Mono<Void> processExperiment(String member) {
+    private Mono<String> processExperiment(String member) {
         int separatorIndex = member.indexOf(ExperimentDenormalizationConfig.MEMBER_SEPARATOR);
         String workspaceId = member.substring(0, separatorIndex);
         String experimentIdStr = member.substring(separatorIndex + 1);
@@ -187,9 +187,8 @@ public class ExperimentDenormalizationJob extends Job implements InterruptableJo
                     log.warn("Stale index entry found with no bucket data, removing member: '{}'", member);
                     return index.remove(member);
                 }))
-                .then()
-                .doOnSuccess(__ -> log.info("Successfully processed and removed pending experiment: '{}'",
-                        experimentIdStr));
+                .thenReturn(experimentIdStr)
+                .doOnNext(id -> log.info("Successfully processed and removed pending experiment: '{}'", id));
     }
 
     @Override
