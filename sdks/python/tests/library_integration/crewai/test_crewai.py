@@ -1,5 +1,5 @@
 import pytest
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 
 import opik
 from opik.integrations.crewai import opik_tracker
@@ -42,12 +42,17 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
     model,
     opik_provider,
 ):
+    # gpt-5 reasoning models only support temperature=1; every other provider
+    # accepts it, so pinning the value across rows keeps the parametrization
+    # uniform.
+    agent_llm = LLM(model=model, temperature=1.0)
+
     researcher = Agent(
         role="Test Researcher",
         goal="Find basic information",
         backstory="You are a test agent for unit testing.",
         verbose=True,
-        llm=model,
+        llm=agent_llm,
     )
 
     writer = Agent(
@@ -55,7 +60,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         goal="Write summaries based on research",
         backstory="You are a test writer for unit testing.",
         verbose=True,
-        llm=model,
+        llm=agent_llm,
     )
 
     research_task = Task(

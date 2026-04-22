@@ -90,6 +90,7 @@ class TestLLMJudgeScore:
             assertions=[assertion],
             model=llm_model,
             track=False,
+            reasoning_effort="minimal",
         )
 
         results = evaluator.score(

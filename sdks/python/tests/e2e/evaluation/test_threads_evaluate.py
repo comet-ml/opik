@@ -76,7 +76,7 @@ def test_evaluate_threads__happy_path(
     ):
         raise AssertionError(f"Failed to create threads in project '{project_name}'")
 
-    judge_model = LiteLLMChatModel(reasoning_effort="low")
+    judge_model = LiteLLMChatModel(reasoning_effort="minimal")
 
     metrics_ = [
         metrics.ConversationalCoherenceMetric(model=judge_model),

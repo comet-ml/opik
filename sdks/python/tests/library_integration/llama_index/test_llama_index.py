@@ -14,9 +14,16 @@ from ...testlib import (
     ANY_STRING,
     ANY_DICT,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
     SpanModel,
+)
+
+EXPECTED_LLAMAINDEX_LLM_USAGE = ANY_DICT.containing(
+    {
+        "completion_tokens": ANY_BUT_NONE,
+        "prompt_tokens": ANY_BUT_NONE,
+        "total_tokens": ANY_BUT_NONE,
+    }
 )
 
 EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
@@ -120,9 +127,7 @@ def test_llama_index__happyflow(
 
     # check token usage info (now one level less deep due to removed duplicate span)
     llm_response = fake_backend.trace_trees[1].spans[1].spans[3].usage
-    assert_dict_has_keys(
-        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
-    )
+    assert llm_response == EXPECTED_LLAMAINDEX_LLM_USAGE
 
 
 @pytest.mark.parametrize(
@@ -185,9 +190,7 @@ def test_llama_index__no_index_construction_logging_happyflow(
 
     # check token usage info (now one level less deep due to removed duplicate span)
     llm_response = fake_backend.trace_trees[0].spans[1].spans[3].usage
-    assert_dict_has_keys(
-        llm_response, ["completion_tokens", "prompt_tokens", "total_tokens"]
-    )
+    assert llm_response == EXPECTED_LLAMAINDEX_LLM_USAGE
 
 
 @pytest.mark.parametrize(

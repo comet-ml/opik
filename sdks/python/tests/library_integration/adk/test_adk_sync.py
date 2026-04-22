@@ -22,7 +22,9 @@ from .constants import (
     USER_ID,
     SESSION_ID,
     MODEL_NAME,
-    EXPECTED_USAGE_KEYS_GOOGLE,
+    EXPECTED_USAGE_GOOGLE,
+    EXPECTED_USAGE_ADK_LITELLM_OPENAI,
+    EXPECTED_USAGE_ADK_LITELLM_OPENAI_STREAMING,
 )
 from ...testlib import (
     ANY_BUT_NONE,
@@ -30,7 +32,6 @@ from ...testlib import (
     ANY_STRING,
     SpanModel,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
 )
 
@@ -132,7 +133,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -164,7 +165,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -173,8 +174,6 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_with_the_same_thread_id(
@@ -265,7 +264,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
             SpanModel(
@@ -295,7 +294,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
         ],
@@ -336,7 +335,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
             SpanModel(
@@ -368,7 +367,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
         ],
@@ -380,12 +379,8 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
     time_trace_tree = fake_backend.trace_trees[1]
 
     assert_equal(EXPECTED_WEATHER_QUESTION_TRACE_TREE, weather_trace_tree)
-    assert_dict_has_keys(weather_trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(weather_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
     assert_equal(EXPECTED_TIME_QUESTION_TRACE_TREE, time_trace_tree)
-    assert_dict_has_keys(time_trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(time_trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
@@ -455,7 +450,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -484,7 +479,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -495,8 +490,6 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the_tool_span(
@@ -593,7 +586,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
             SpanModel(
@@ -636,7 +629,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
         ],
@@ -644,8 +637,6 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
@@ -716,16 +707,8 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         assert tool_span.name == "get_weather"
         assert tool_span.input == {"city": "New York"}
 
-    EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT = [
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        "original_usage.prompt_tokens",
-        "original_usage.completion_tokens",
-        "original_usage.total_tokens",
-    ]
     for llm_span in llm_spans:
-        assert_dict_has_keys(llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
+        assert llm_span.usage == EXPECTED_USAGE_ADK_LITELLM_OPENAI
 
 
 def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged_in_openai_format(
@@ -797,17 +780,8 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         assert tool_span.name == "get_weather"
         assert tool_span.input == {"city": "New York"}
 
-    EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT = [
-        "prompt_tokens",
-        "completion_tokens",
-        "total_tokens",
-        # TODO: add back when ADK will support it. For now ADK converts LiteLLM usage to Google format
-        # "original_usage.prompt_tokens",
-        # "original_usage.completion_tokens",
-        # "original_usage.total_tokens",
-    ]
     for llm_span in llm_spans:
-        assert_dict_has_keys(llm_span.usage, EXPECTED_USAGE_KEYS_IN_OPENAI_FORMAT)
+        assert llm_span.usage == EXPECTED_USAGE_ADK_LITELLM_OPENAI_STREAMING
 
 
 def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_subagent_is_tracked(
@@ -893,7 +867,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -922,7 +896,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -933,8 +907,6 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -1007,7 +979,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
             SpanModel(  # from tool callback
@@ -1044,7 +1016,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                                 output=ANY_DICT,
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
-                                usage=ANY_DICT,
+                                usage=EXPECTED_USAGE_GOOGLE,
                                 source="sdk",
                             )
                         ],
@@ -1065,7 +1037,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             ),
         ],
@@ -1073,12 +1045,6 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(
-        trace_tree.spans[1].spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE
-    )
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_callbacks():
@@ -1230,7 +1196,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -1262,7 +1228,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -1271,8 +1237,6 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 def test_adk__agent_with_response_schema__happyflow(
@@ -1343,7 +1307,7 @@ def test_adk__agent_with_response_schema__happyflow(
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 source="sdk",
             )
         ],
@@ -1351,7 +1315,6 @@ def test_adk__agent_with_response_schema__happyflow(
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -1552,7 +1515,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -1646,7 +1609,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                 output=ANY_DICT,
                 metadata=ANY_DICT,
                 type="llm",
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 end_time=ANY_BUT_NONE,
                 project_name=project_name,
                 model=MODEL_NAME,
@@ -1686,7 +1649,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
                         output=ANY_DICT,
                         metadata=ANY_DICT,
                         type="llm",
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         end_time=ANY_BUT_NONE,
                         project_name=project_name,
                         model=MODEL_NAME,
@@ -1708,8 +1671,6 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @pytest.fixture

@@ -176,6 +176,7 @@ def test__g_eval(model):
         track=False,
         task_introduction="You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context.",
         evaluation_criteria="In provided text the OUTPUT must not introduce new information beyond what's provided in the CONTEXT.",
+        reasoning_effort="minimal",
     )
 
     result = g_eval_metric.score(

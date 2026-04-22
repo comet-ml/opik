@@ -12,7 +12,7 @@ from .constants import (
     USER_ID,
     SESSION_ID,
     MODEL_NAME,
-    EXPECTED_USAGE_KEYS_GOOGLE,
+    EXPECTED_USAGE_GOOGLE,
 )
 from ...testlib import (
     ANY_BUT_NONE,
@@ -20,7 +20,6 @@ from ...testlib import (
     ANY_STRING,
     SpanModel,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
 )
 
@@ -105,7 +104,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -137,7 +136,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -146,8 +145,6 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @pytest.mark.asyncio
@@ -218,7 +215,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -247,7 +244,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -258,8 +255,6 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -404,7 +399,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 output=ANY_DICT,
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
-                                usage=ANY_DICT,
+                                usage=EXPECTED_USAGE_GOOGLE,
                                 project_name=project_name,
                                 source="sdk",
                             ),
@@ -436,7 +431,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 output=ANY_DICT,
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
-                                usage=ANY_DICT,
+                                usage=EXPECTED_USAGE_GOOGLE,
                                 project_name=project_name,
                                 source="sdk",
                             ),
@@ -467,7 +462,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 output=ANY_DICT,
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
-                                usage=ANY_DICT,
+                                usage=EXPECTED_USAGE_GOOGLE,
                                 project_name=project_name,
                                 source="sdk",
                             ),
@@ -501,7 +496,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                                 output=ANY_DICT,
                                 provider=opik_adk_helpers.get_adk_provider(),
                                 model=MODEL_NAME,
-                                usage=ANY_DICT,
+                                usage=EXPECTED_USAGE_GOOGLE,
                                 project_name=project_name,
                                 source="sdk",
                             ),
@@ -535,7 +530,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         project_name=project_name,
                         source="sdk",
                     ),

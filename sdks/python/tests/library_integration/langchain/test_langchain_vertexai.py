@@ -106,7 +106,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                usage=ANY_DICT,
+                usage=google_helpers.EXPECTED_USAGE_GOOGLE,
                 provider="google_vertexai",
                 model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
                 source="sdk",
@@ -117,9 +117,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
-    google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
 
 
@@ -213,7 +211,7 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
                 ),
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
-                usage=ANY_DICT,
+                usage=google_helpers.EXPECTED_USAGE_GOOGLE,
                 provider="google_vertexai",
                 model=ANY_STRING.starting_with(llm_constants.GEMINI_FLASH),
                 source="sdk",
@@ -224,7 +222,5 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
 
     assert len(fake_backend.trace_trees) == 1
     assert len(callback.created_traces()) == 1
-    llm_call_span = fake_backend.trace_trees[0].spans[-1]
 
-    google_helpers.assert_usage_validity(llm_call_span.usage)
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
