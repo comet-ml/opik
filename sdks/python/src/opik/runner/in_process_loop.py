@@ -258,6 +258,11 @@ class InProcessRunnerLoop:
                         inputs[key], params_by_name[key].type
                     )
 
+            for key in list(inputs.keys()):
+                if key in params_by_name and not params_by_name[key].required:
+                    if inputs[key] is None:
+                        del inputs[key]
+
             _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
