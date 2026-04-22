@@ -24,6 +24,7 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 
@@ -276,5 +277,44 @@ public class ExperimentAggregatesService {
                             versionId, experimentIds, filters))
                     .orElse(Mono.just(new ProjectStats(List.of())));
         });
+    }
+
+    /**
+     * Delete rows from experiment_aggregates and experiment_item_aggregates for the given experiment IDs.
+     *
+     * @param experimentIds the set of experiment IDs whose aggregate rows should be removed
+     * @return Mono emitting the total number of rows deleted across both aggregate tables
+     */
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting aggregated experiments, size '{}'", experimentIds.size());
+
+        return experimentAggregatesDAO.deleteByExperimentIds(experimentIds)
+                .doOnNext(deleted -> log.info(
+                        "Deleted aggregated experiments, size '{}', rowsDeleted '{}'",
+                        experimentIds.size(), deleted))
+                .doOnError(error -> log.error(
+                        "Failed to delete aggregated experiments, size '{}'",
+                        experimentIds.size(), error));
+    }
+
+    public Mono<Long> deleteItemAggregatesByItemIds(@NonNull UUID experimentId, Set<UUID> itemIds) {
+        if (CollectionUtils.isEmpty(itemIds)) {
+            return Mono.just(0L);
+        }
+
+        log.info("Deleting aggregated experiment items, experimentId '{}', size '{}'",
+                experimentId, itemIds.size());
+
+        return experimentAggregatesDAO.deleteItemAggregatesByItemIds(experimentId, itemIds)
+                .doOnNext(deleted -> log.info(
+                        "Deleted aggregated experiment items, experimentId '{}', size '{}', rowsDeleted '{}'",
+                        experimentId, itemIds.size(), deleted))
+                .doOnError(error -> log.error(
+                        "Failed to delete aggregated experiment items, experimentId '{}', size '{}'",
+                        experimentId, itemIds.size(), error));
     }
 }

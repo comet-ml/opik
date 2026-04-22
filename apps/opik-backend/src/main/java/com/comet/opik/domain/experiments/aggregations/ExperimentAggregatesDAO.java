@@ -38,6 +38,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
 import io.r2dbc.spi.Connection;
 import io.r2dbc.spi.Result;
@@ -109,6 +110,10 @@ public interface ExperimentAggregatesDAO {
             List<ExperimentsComparisonFilter> filters);
 
     Mono<AggregatedExperimentCounts> getAggregationBranchCounts(AggregationBranchCountsCriteria criteria);
+
+    Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds);
+
+    Mono<Long> deleteItemAggregatesByItemIds(UUID experimentId, Set<UUID> itemIds);
 }
 
 @Singleton
@@ -527,6 +532,31 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             SELECT
                 :experiment_id as experiment_id,
                 (SELECT mapFromArrays(groupArray(name), groupArray(avg_value)) FROM assertion_avg) AS assertion_scores_avg
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_EXPERIMENT_AGGREGATES_BY_IDS = """
+            DELETE FROM experiment_aggregates
+            WHERE id IN :experiment_ids
+            AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_EXPERIMENT_IDS = """
+            DELETE FROM experiment_item_aggregates
+            WHERE experiment_id IN :experiment_ids
+            AND workspace_id = :workspace_id
+            SETTINGS log_comment = '<log_comment>'
+            ;
+            """;
+
+    private static final String DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_ITEM_IDS = """
+            DELETE FROM experiment_item_aggregates
+            WHERE id IN :item_ids
+            AND experiment_id = :experiment_id
+            AND workspace_id = :workspace_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -2757,5 +2787,48 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     .next()
                     .defaultIfEmpty(AggregatedExperimentCounts.BOTH_BRANCHES);
         }));
+    }
+
+    @Override
+    public Mono<Long> deleteByExperimentIds(Set<UUID> experimentIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(experimentIds),
+                "Argument 'experimentIds' must not be empty");
+
+        return executeAggregatesDelete(DELETE_EXPERIMENT_AGGREGATES_BY_IDS,
+                "deleteExperimentAggregatesByIds", experimentIds)
+                .flatMap(aggregatesDeleted -> executeAggregatesDelete(
+                        DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_EXPERIMENT_IDS,
+                        "deleteExperimentItemAggregatesByExperimentIds", experimentIds)
+                        .map(itemAggregatesDeleted -> aggregatesDeleted + itemAggregatesDeleted));
+    }
+
+    private Mono<Long> executeAggregatesDelete(String query, String queryName, Set<UUID> experimentIds) {
+        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var details = experimentIds.stream().map(UUID::toString).collect(Collectors.joining(","));
+            var template = getSTWithLogComment(query, queryName, workspaceId, userName, details);
+            var statement = connection.createStatement(template.render())
+                    .bind("experiment_ids", experimentIds.toArray(UUID[]::new))
+                    .bind("workspace_id", workspaceId);
+
+            return Flux.from(statement.execute());
+        }).flatMap(Result::getRowsUpdated).reduce(0L, Long::sum));
+    }
+
+    @Override
+    public Mono<Long> deleteItemAggregatesByItemIds(@NonNull UUID experimentId, Set<UUID> itemIds) {
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(itemIds),
+                "Argument 'itemIds' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var details = experimentId.toString();
+            var template = getSTWithLogComment(DELETE_EXPERIMENT_ITEM_AGGREGATES_BY_ITEM_IDS,
+                    "deleteExperimentItemAggregatesByItemIds", workspaceId, userName, details);
+            var statement = connection.createStatement(template.render())
+                    .bind("item_ids", itemIds.toArray(UUID[]::new))
+                    .bind("experiment_id", experimentId)
+                    .bind("workspace_id", workspaceId);
+
+            return Flux.from(statement.execute());
+        }).flatMap(Result::getRowsUpdated).reduce(0L, Long::sum));
     }
 }
