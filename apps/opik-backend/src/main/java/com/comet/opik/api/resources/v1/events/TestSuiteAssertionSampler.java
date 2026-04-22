@@ -96,11 +96,8 @@ public class TestSuiteAssertionSampler {
 
         tracesBatch.traces().stream()
                 .filter(trace -> trace.endTime() == null)
-                .forEach(trace -> getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
-                        .flatMap(id -> parseUUID(id, trace.id()))
-                        .ifPresent(experimentId -> decrementAssertionCounter(
-                                experimentId, tracesBatch.workspaceId(),
-                                tracesBatch.userName())));
+                .forEach(trace -> decrementAssertionCounterForTrace(trace,
+                        tracesBatch.workspaceId(), tracesBatch.userName()));
 
         if (completeTraces.isEmpty()) {
             return;
@@ -123,12 +120,8 @@ public class TestSuiteAssertionSampler {
             log.warn("No LLM model resolved for test suite batch in workspace '{}' — "
                     + "no supported provider connected and no test_suite_model in trace metadata",
                     tracesBatch.workspaceId());
-            completeTraces.forEach(trace -> getMetadataString(
-                    trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
-                    .flatMap(id -> parseUUID(id, trace.id()))
-                    .ifPresent(experimentId -> decrementAssertionCounter(
-                            experimentId, tracesBatch.workspaceId(),
-                            tracesBatch.userName())));
+            completeTraces.forEach(trace -> decrementAssertionCounterForTrace(trace,
+                    tracesBatch.workspaceId(), tracesBatch.userName()));
             return;
         }
 
@@ -141,78 +134,96 @@ public class TestSuiteAssertionSampler {
                             .flatMap(id -> parseUUID(id, trace.id()))
                             .orElse(null);
 
-                    var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
-                    if (testSuiteDatasetId.isEmpty()) {
-                        return Stream.empty();
-                    }
-
-                    UUID datasetId;
                     try {
-                        datasetId = UUID.fromString(testSuiteDatasetId.get());
-                    } catch (IllegalArgumentException e) {
-                        log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
-                                testSuiteDatasetId.get());
+                        var testSuiteDatasetId = getMetadataString(trace,
+                                TestSuiteMetadataKeys.DATASET_ID);
+                        if (testSuiteDatasetId.isEmpty()) {
+                            return Stream.empty();
+                        }
+
+                        UUID datasetId;
+                        try {
+                            datasetId = UUID.fromString(testSuiteDatasetId.get());
+                        } catch (IllegalArgumentException e) {
+                            log.warn("Invalid test_suite_dataset_id '{}' in trace metadata",
+                                    testSuiteDatasetId.get());
+                            decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
+                                    tracesBatch.userName());
+                            return Stream.empty();
+                        }
+
+                        var versionHash = getMetadataString(trace,
+                                TestSuiteMetadataKeys.DATASET_VERSION_HASH)
+                                .orElse(null);
+
+                        var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
+                        var preparedDatasetEvaluators = datasetEvaluatorsCache
+                                .computeIfAbsent(cacheKey, k -> {
+                                    log.info("Fetching test suite evaluators for dataset '{}', "
+                                            + "version hash '{}'",
+                                            datasetId, versionHash != null ? versionHash : "latest");
+                                    DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId,
+                                            versionHash)
+                                            .contextWrite(reactiveContext)
+                                            .timeout(fetchTimeout)
+                                            .block();
+                                    return evaluatorMapper.prepareEvaluators(result.evaluators(),
+                                            modelName);
+                                });
+
+                        var datasetItemId = getMetadataString(trace,
+                                TestSuiteMetadataKeys.DATASET_ITEM_ID);
+                        if (datasetItemId.isEmpty()) {
+                            log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
+                                    trace.id());
+                            decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
+                                    tracesBatch.userName());
+                            return Stream.empty();
+                        }
+
+                        return parseUUID(datasetItemId.get(), trace.id()).stream()
+                                .flatMap(itemId -> {
+                                    List<PreparedEvaluator> allEvaluators = new ArrayList<>(
+                                            preparedDatasetEvaluators);
+                                    allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext,
+                                            modelName));
+
+                                    if (allEvaluators.isEmpty()) {
+                                        log.debug(
+                                                "No evaluators found for trace '{}', dataset item '{}'",
+                                                trace.id(), datasetItemId.get());
+                                        decrementAssertionCounter(experimentId,
+                                                tracesBatch.workspaceId(),
+                                                tracesBatch.userName());
+                                        return Stream.empty();
+                                    }
+
+                                    if (allEvaluators.size() > 1) {
+                                        adjustAssertionCounter(experimentId,
+                                                allEvaluators.size() - 1);
+                                    }
+
+                                    return allEvaluators.stream()
+                                            .map(prepared -> TraceToScoreLlmAsJudge.builder()
+                                                    .trace(trace)
+                                                    .ruleId(idGenerator.generateId())
+                                                    .ruleName(prepared.name())
+                                                    .llmAsJudgeCode(prepared.code())
+                                                    .workspaceId(tracesBatch.workspaceId())
+                                                    .userName(tracesBatch.userName())
+                                                    .categoryName(SUITE_ASSERTION_CATEGORY)
+                                                    .scoreNameMapping(prepared.scoreNameMapping())
+                                                    .promptType(PromptType.PYTHON)
+                                                    .experimentId(experimentId)
+                                                    .build());
+                                });
+                    } catch (Exception e) {
+                        log.error("Failed to fetch evaluators for trace '{}', "
+                                + "decrementing counter and skipping scoring", trace.id(), e);
                         decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
                                 tracesBatch.userName());
                         return Stream.empty();
                     }
-
-                    var versionHash = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_VERSION_HASH)
-                            .orElse(null);
-
-                    var cacheKey = datasetId + ":" + (versionHash != null ? versionHash : "");
-                    var preparedDatasetEvaluators = datasetEvaluatorsCache.computeIfAbsent(cacheKey, k -> {
-                        log.info("Fetching test suite evaluators for dataset '{}', version hash '{}'",
-                                datasetId, versionHash != null ? versionHash : "latest");
-                        DatasetEvaluatorsResult result = fetchDatasetEvaluators(datasetId, versionHash)
-                                .contextWrite(reactiveContext)
-                                .timeout(fetchTimeout)
-                                .block();
-                        return evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
-                    });
-
-                    var datasetItemId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ITEM_ID);
-                    if (datasetItemId.isEmpty()) {
-                        log.debug("Skipping trace '{}' — no test_suite_dataset_item_id in metadata",
-                                trace.id());
-                        decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
-                                tracesBatch.userName());
-                        return Stream.empty();
-                    }
-
-                    return parseUUID(datasetItemId.get(), trace.id()).stream()
-                            .flatMap(itemId -> {
-                                List<PreparedEvaluator> allEvaluators = new ArrayList<>(
-                                        preparedDatasetEvaluators);
-                                allEvaluators.addAll(fetchItemEvaluators(itemId, reactiveContext,
-                                        modelName));
-
-                                if (allEvaluators.isEmpty()) {
-                                    log.debug("No evaluators found for trace '{}', dataset item '{}'",
-                                            trace.id(), datasetItemId.get());
-                                    decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
-                                            tracesBatch.userName());
-                                    return Stream.empty();
-                                }
-
-                                if (allEvaluators.size() > 1) {
-                                    adjustAssertionCounter(experimentId, allEvaluators.size() - 1);
-                                }
-
-                                return allEvaluators.stream()
-                                        .map(prepared -> TraceToScoreLlmAsJudge.builder()
-                                                .trace(trace)
-                                                .ruleId(idGenerator.generateId())
-                                                .ruleName(prepared.name())
-                                                .llmAsJudgeCode(prepared.code())
-                                                .workspaceId(tracesBatch.workspaceId())
-                                                .userName(tracesBatch.userName())
-                                                .categoryName(SUITE_ASSERTION_CATEGORY)
-                                                .scoreNameMapping(prepared.scoreNameMapping())
-                                                .promptType(PromptType.PYTHON)
-                                                .experimentId(experimentId)
-                                                .build());
-                            });
                 })
                 .toList();
 
@@ -240,32 +251,23 @@ public class TestSuiteAssertionSampler {
                                 .evaluators(v.evaluators() != null ? v.evaluators() : List.of())
                                 .build())
                         .orElse(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-            }).subscribeOn(Schedulers.boundedElastic())
-                    .onErrorResume(e -> {
-                        log.error("Failed to fetch dataset evaluators for dataset '{}'", datasetId, e);
-                        return Mono.just(DatasetEvaluatorsResult.builder().evaluators(List.of()).build());
-                    });
+            }).subscribeOn(Schedulers.boundedElastic());
         });
     }
 
     private List<PreparedEvaluator> fetchItemEvaluators(
             UUID itemId, Context reactiveContext,
             String modelName) {
-        try {
-            var item = datasetItemService.get(itemId)
-                    .contextWrite(reactiveContext)
-                    .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
-                    .block();
+        var item = datasetItemService.get(itemId)
+                .contextWrite(reactiveContext)
+                .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
+                .block();
 
-            if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
-                return List.of();
-            }
-
-            return evaluatorMapper.prepareEvaluators(item.evaluators(), modelName);
-        } catch (Exception e) {
-            log.error("Failed to fetch evaluators for item '{}'", itemId, e);
+        if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
             return List.of();
         }
+
+        return evaluatorMapper.prepareEvaluators(item.evaluators(), modelName);
     }
 
     @lombok.Builder(toBuilder = true)
@@ -287,6 +289,13 @@ public class TestSuiteAssertionSampler {
             log.warn("Invalid UUID for test_suite_dataset_item_id '{}' in trace '{}'", id, traceId);
             return Optional.empty();
         }
+    }
+
+    private void decrementAssertionCounterForTrace(Trace trace, String workspaceId, String userName) {
+        getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
+                .flatMap(id -> parseUUID(id, trace.id()))
+                .ifPresent(experimentId -> decrementAssertionCounter(
+                        experimentId, workspaceId, userName));
     }
 
     private void decrementAssertionCounter(UUID experimentId, String workspaceId, String userName) {

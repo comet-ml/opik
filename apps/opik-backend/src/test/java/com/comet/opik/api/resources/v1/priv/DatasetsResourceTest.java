@@ -6440,6 +6440,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
@@ -6459,6 +6460,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
@@ -6477,6 +6479,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
@@ -6655,6 +6658,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
@@ -6673,6 +6677,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
@@ -6857,6 +6862,7 @@ class DatasetsResourceTest {
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatchWithImage.items().get(i).description())
                             .build())
                     .toList();
@@ -7157,6 +7163,7 @@ class DatasetsResourceTest {
                     .traceId(trace.id())
                     .input(trace.input())
                     .output(trace.output())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -7228,6 +7235,7 @@ class DatasetsResourceTest {
                         .input(trace.input())
                         .output(trace.output())
                         .traceVisibilityMode(VisibilityMode.DEFAULT)
+                        .executionPolicy(ExecutionPolicy.DEFAULT)
                         .feedbackScores(score == null
                                 ? null
                                 : Stream.of(score)
@@ -7757,6 +7765,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .build();
 
@@ -7836,6 +7845,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .assertionResults(List.of(expectedAssertionResult))
                     .status(RunStatus.PASSED)
