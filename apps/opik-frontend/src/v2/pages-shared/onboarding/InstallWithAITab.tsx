@@ -60,7 +60,11 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
             </h4>
-            <CodeSnippet title="Prompt" code={displayPrompt} copyText={copyPrompt} />
+            <CodeSnippet
+              title="Prompt"
+              code={displayPrompt}
+              copyText={copyPrompt}
+            />
           </div>
         </TimelineStep>
 
