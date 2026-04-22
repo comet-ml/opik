@@ -418,7 +418,7 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     ],
   );
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && datasets.length === 0)) {
     return <Loader />;
   }
 

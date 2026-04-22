@@ -894,7 +894,7 @@ function Show-AccessInformation {
     Write-Host "  • No API key required for local instances"
     Write-Host ""
     Write-Host "📖 For complete configuration documentation, visit:" -ForegroundColor Blue
-    Write-Host "   https://www.comet.com/docs/opik/tracing/sdk_configuration"
+    Write-Host "   https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 }
 
 function New-DemoData {

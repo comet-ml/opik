@@ -1,4 +1,6 @@
 import type { ExecutionPolicyWrite } from "@/rest_api/api/types/ExecutionPolicyWrite";
+import type { EvaluatorItemWrite } from "@/rest_api/api/types/EvaluatorItemWrite";
+import type { DatasetItemData } from "@/dataset/DatasetItem";
 import type { EvaluationTestResult, EvaluationScoreResult } from "../types";
 
 /**
@@ -6,6 +8,29 @@ import type { EvaluationTestResult, EvaluationScoreResult } from "../types";
  * Mirrors the Fern-generated ExecutionPolicyWrite type.
  */
 export type ExecutionPolicy = ExecutionPolicyWrite;
+
+/**
+ * A raw test suite item as returned by {@link TestSuite.getRawItems}.
+ *
+ * Unlike the view returned by {@link TestSuite.getItems}, this preserves:
+ * - `evaluators` as raw {@link EvaluatorItemWrite} objects (not decoded to assertion strings)
+ * - `executionPolicy` as the item-level value only (not merged with the suite-level default)
+ *
+ * `data` is the full stored payload exactly as returned by the dataset
+ * (so if an item was stored with a `description`, it will be present in
+ * `data` as well). `description` is additionally exposed as a top-level
+ * field for ergonomic access.
+ *
+ * Use this when you need to introspect or forward the stored evaluator
+ * config or per-item execution policy verbatim.
+ */
+export interface RawTestSuiteItem {
+  id: string;
+  data: DatasetItemData;
+  description?: string;
+  evaluators?: EvaluatorItemWrite[];
+  executionPolicy?: ExecutionPolicy;
+}
 
 export const DEFAULT_EXECUTION_POLICY: Required<ExecutionPolicy> = {
   runsPerItem: 1,
