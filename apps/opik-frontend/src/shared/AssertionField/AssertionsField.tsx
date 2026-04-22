@@ -11,7 +11,7 @@ const VARIANT_CONFIG: Record<
 > = {
   item: {
     title: "Assertions",
-    description: "Define the conditions for this test to pass",
+    description: "Define the conditions for this test to pass.",
   },
   global: {
     title: "Global assertions",

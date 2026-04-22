@@ -14,7 +14,9 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Singleton
 @Slf4j
@@ -48,6 +50,7 @@ public class ExperimentItemPublisher {
 
         return counter.set(messages.size())
                 .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()))
+                .then(setAssertionCounters(messages))
                 .thenMany(Flux.fromIterable(messages)
                         .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                                 ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
@@ -57,5 +60,19 @@ public class ExperimentItemPublisher {
                 .then()
                 .doOnSuccess(v -> log.info("Published '{}' experiment item messages for batch '{}'",
                         messages.size(), batchId));
+    }
+
+    private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
+        Map<UUID, Long> itemsByExperiment = messages.stream()
+                .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
+
+        return Flux.fromIterable(itemsByExperiment.entrySet())
+                .flatMap(entry -> {
+                    var key = ExperimentExecutionConfig.ASSERTION_COUNTER_KEY_PREFIX + entry.getKey();
+                    var assertionCounter = redisClient.getAtomicLong(key);
+                    return assertionCounter.set(entry.getValue())
+                            .then(assertionCounter.expire(config.getBatchCounterTtl().toJavaDuration()));
+                })
+                .then();
     }
 }
