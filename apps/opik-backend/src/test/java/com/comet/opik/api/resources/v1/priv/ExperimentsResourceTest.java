@@ -5763,6 +5763,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject1.startTime(), traceProject1.endTime()))
                             .build())
@@ -5777,6 +5778,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject2.startTime(), traceProject2.endTime()))
                             .build())
