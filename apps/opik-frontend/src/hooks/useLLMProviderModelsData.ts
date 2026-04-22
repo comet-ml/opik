@@ -10,6 +10,8 @@ import useLlmModels, { LlmModelsByProvider } from "@/api/llm/useLlmModels";
 import { parseComposedProviderType } from "@/lib/provider";
 import { PROVIDERS } from "@/constants/providers";
 import {
+  getLatestProviderModelsSnapshot,
+  KNOWN_PROVIDER_TYPES,
   ModelFlags,
   setLatestModelFlags,
   setLatestProviderModelsSnapshot,
@@ -56,10 +58,19 @@ const MINIMAL_FALLBACK: ProviderModelsMap = {
   [PROVIDER_TYPE.BEDROCK]: [],
 };
 
-const transformFetched = (fetched: LlmModelsByProvider): ProviderModelsMap => {
+// Convention enforced by scripts/sync_provider_models.py:
+// dropdown-curated models carry a `label`, everything else doesn't.
+const isDropdownVisible = (m: LlmModelsByProvider[string][number]): boolean =>
+  Boolean(m.label);
+
+const transformFetched = (
+  fetched: LlmModelsByProvider,
+  { onlyVisible }: { onlyVisible: boolean },
+): ProviderModelsMap => {
   const out: ProviderModelsMap = {};
   for (const [provider, models] of Object.entries(fetched)) {
-    out[provider] = models.map((m) => ({
+    const filtered = onlyVisible ? models.filter(isDropdownVisible) : models;
+    out[provider] = filtered.map((m) => ({
       value: (m.qualifiedName ?? m.id) as PROVIDER_MODEL_TYPE,
       label: m.label ?? m.id,
     }));
@@ -90,12 +101,12 @@ const useLLMProviderModelsData = () => {
   const { data: fetched, isPending, isError, error } = useLlmModels();
   const openAICompatibleModels = useOpenAICompatibleModels();
 
-  // Stable reference across renders: only rebuilds when the underlying
-  // fetched registry or the OpenAI-compatible provider map actually
-  // changes. Consumers can safely include `providerModels` in useMemo
-  // dependency arrays.
+  // Dropdown-facing map: only entries that are flagged as visible (i.e.
+  // carry a label) appear here. Stable reference across renders.
   const providerModels = useMemo<ProviderModelsMap>(() => {
-    const fromApi = fetched ? transformFetched(fetched) : {};
+    const fromApi = fetched
+      ? transformFetched(fetched, { onlyVisible: true })
+      : {};
     return {
       ...MINIMAL_FALLBACK,
       ...fromApi,
@@ -112,15 +123,36 @@ const useLLMProviderModelsData = () => {
 
   // Keep the module-level store in sync with the latest data so pure
   // utilities (getProviderFromModel, isReasoningModel) read current
-  // values. The store is seeded from static constants at init, so reads
-  // before this effect runs still return correct answers for models
-  // known at release time (see lib/modelRegistryStore.ts).
+  // values. Two subtleties:
+  //
+  // 1. The store receives the FULL registry (including non-dropdown
+  //    entries like dated snapshots) because `getProviderFromModel` must
+  //    resolve every routable model, not just the curated ones.
+  //
+  // 2. Before `fetched` resolves, we merge onto the existing seeded
+  //    snapshot from the store instead of replacing it — otherwise the
+  //    first render would clobber the PROVIDER_MODELS-seeded catalog
+  //    with an empty map (MINIMAL_FALLBACK + openAICompatibleModels) and
+  //    `getProviderFromModel` would fall through to OPEN_AI for every
+  //    persisted non-OpenAI model during the hydration window. Once
+  //    `fetched` is defined we overwrite the seeded entries with the
+  //    CDN-fresh registry, and per-workspace openAICompatibleModels is
+  //    always layered on top.
   useEffect(() => {
-    setLatestProviderModelsSnapshot(providerModels);
+    const base = fetched
+      ? {
+          ...MINIMAL_FALLBACK,
+          ...transformFetched(fetched, { onlyVisible: false }),
+        }
+      : getLatestProviderModelsSnapshot();
+    setLatestProviderModelsSnapshot({
+      ...base,
+      ...openAICompatibleModels,
+    });
     if (fetched) {
       setLatestModelFlags(buildFlagsIndex(fetched));
     }
-  }, [providerModels, fetched]);
+  }, [fetched, openAICompatibleModels]);
 
   const calculateModelProvider: ProviderResolver = useCallback(
     (modelName) => {
@@ -130,11 +162,19 @@ const useLLMProviderModelsData = () => {
 
       const provider = Object.entries(providerModels).find(
         ([providerName, models]) => {
-          if (models.find((pm) => modelName === pm.value)) {
-            return providerName;
+          // Guard: only accept provider keys whose parsed base type is in the
+          // FE's PROVIDER_TYPE enum. Composed keys like `custom-llm:acme` are
+          // fine because parseComposedProviderType extracts the prefix.
+          // Unknown YAML-backed keys must not leak downstream where
+          // `PROVIDERS[providerType]` and `getDefaultConfigByProvider` would
+          // silently fall through.
+          const baseType = parseComposedProviderType(
+            providerName as COMPOSED_PROVIDER_TYPE,
+          );
+          if (!KNOWN_PROVIDER_TYPES.has(baseType)) {
+            return false;
           }
-
-          return false;
+          return models.find((pm) => modelName === pm.value) !== undefined;
         },
       );
 
