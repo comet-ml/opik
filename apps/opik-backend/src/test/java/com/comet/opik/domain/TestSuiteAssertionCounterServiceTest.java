@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -74,7 +75,9 @@ class TestSuiteAssertionCounterServiceTest {
     void decrementAndFinishIfCompleteWhenCounterAboveZero() {
         var experimentId = UUID.randomUUID();
 
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(2L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
@@ -87,7 +90,9 @@ class TestSuiteAssertionCounterServiceTest {
     void decrementAndFinishIfCompleteWhenCounterReachesZero() {
         var experimentId = UUID.randomUUID();
 
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
         when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
@@ -103,7 +108,9 @@ class TestSuiteAssertionCounterServiceTest {
     void decrementAndFinishIfCompleteWhenCounterGoesBelowZero() {
         var experimentId = UUID.randomUUID();
 
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(-1L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
         when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
@@ -111,6 +118,35 @@ class TestSuiteAssertionCounterServiceTest {
 
         verify(experimentService).update(eq(experimentId), any(ExperimentUpdate.class));
         verify(experimentService).finishExperiments(Set.of(experimentId));
+    }
+
+    @Test
+    void decrementAndFinishIfCompleteWhenKeyDoesNotExist() {
+        var experimentId = UUID.randomUUID();
+
+        when(atomicLong.isExists()).thenReturn(Mono.just(false));
+
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
+
+        verify(atomicLong, never()).decrementAndGet();
+        verify(experimentService, never()).update(any(), any());
+        verify(experimentService, never()).finishExperiments(any());
+    }
+
+    @Test
+    void decrementAndFinishIfCompleteWhenFinishFailsPropagatesError() {
+        var experimentId = UUID.randomUUID();
+
+        when(atomicLong.isExists()).thenReturn(Mono.just(true));
+        when(atomicLong.decrementAndGet()).thenReturn(Mono.just(0L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
+        when(experimentService.update(eq(experimentId), any(ExperimentUpdate.class)))
+                .thenReturn(Mono.error(new RuntimeException("update failed")));
+        when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
+
+        assertThatThrownBy(() -> service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block())
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("update failed");
     }
 
     @Test
@@ -140,6 +176,7 @@ class TestSuiteAssertionCounterServiceTest {
         var experimentId = UUID.randomUUID();
 
         when(atomicLong.addAndGet(5L)).thenReturn(Mono.just(8L));
+        when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
 
         var result = service.adjust(WORKSPACE_ID, experimentId, 5L).block();
 

@@ -259,16 +259,14 @@ public class TestSuiteAssertionSampler {
     private List<PreparedEvaluator> fetchItemEvaluators(
             UUID itemId, Context reactiveContext,
             String modelName) {
-        var item = datasetItemService.get(itemId)
+        return Optional.ofNullable(datasetItemService.get(itemId)
                 .contextWrite(reactiveContext)
                 .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
-                .block();
-
-        if (item == null || item.evaluators() == null || item.evaluators().isEmpty()) {
-            return List.of();
-        }
-
-        return evaluatorMapper.prepareEvaluators(item.evaluators(), modelName);
+                .block())
+                .map(item -> item.evaluators())
+                .filter(evaluators -> !evaluators.isEmpty())
+                .map(evaluators -> evaluatorMapper.prepareEvaluators(evaluators, modelName))
+                .orElse(List.of());
     }
 
     @lombok.Builder(toBuilder = true)
