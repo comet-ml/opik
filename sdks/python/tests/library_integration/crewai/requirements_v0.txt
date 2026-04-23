@@ -3,3 +3,10 @@ crewai-tools
 boto3
 google-auth
 google-cloud-aiplatform
+# crewai 0.186.1 hard-pins litellm==1.74.9, whose model catalog incorrectly
+# reports `stop` as a supported param for gpt-5 reasoning models. CrewAI's
+# `supports_stop_words()` reads that catalog and injects "\nObservation:"
+# as a stop token, which the OpenAI API rejects. litellm 1.80.7+ has the
+# corrected catalog; installing it after crewai upgrades past crewai's pin
+# without breaking crewai at runtime (tested locally).
+litellm>=1.80.7
