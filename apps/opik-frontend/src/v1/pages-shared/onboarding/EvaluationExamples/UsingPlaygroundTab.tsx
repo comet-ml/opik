@@ -3,8 +3,7 @@ import { SheetClose } from "@/ui/sheet";
 import useAppStore from "@/store/AppStore";
 import { Link } from "@tanstack/react-router";
 import evaluationGifUrl from "/images/playground_evaluation.gif";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v1/lib/utils";
 const UsingPlaygroundTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
@@ -29,7 +28,7 @@ const UsingPlaygroundTab = () => {
           >
             <a
               href={buildDocsUrl(
-                "/v1/prompt_engineering/playground#running-experiments-in-the-playground",
+                "/prompt_engineering/playground#running-experiments-in-the-playground",
               )}
               target="_blank"
               rel="noreferrer"

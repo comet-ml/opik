@@ -6,7 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAlertsLightUrl from "/images/empty-alerts-light.svg";
 import emptyAlertsDarkUrl from "/images/empty-alerts-dark.svg";
 import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";

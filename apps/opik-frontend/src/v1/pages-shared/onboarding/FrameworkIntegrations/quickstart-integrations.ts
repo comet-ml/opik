@@ -1,4 +1,4 @@
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import pythonLogoUrl from "/images/integrations/python.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
 import liteLLMLogoUrl from "/images/integrations/litellm.png";
@@ -49,7 +49,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb",
     documentation: buildDocsUrl(
-      "/v1/tracing/log_traces",
+      "/tracing/log_traces",
       "#using-function-decorators",
     ),
     code: functionDecoratorsCode,
@@ -61,7 +61,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logoWhite: openAIWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/openai.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: openAiCode,
     // executionUrl: "openai/run_stream",
     executionLogs: integrationLogsMap.OpenAI,
@@ -71,7 +71,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: anthropicLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/anthropic.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: anthropicCode,
     // executionUrl: "anthropic/run_stream",
     executionLogs: integrationLogsMap.Anthropic,
@@ -82,7 +82,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logoWhite: bedrockWhiteLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/bedrock.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: bedrockCode,
     executionLogs: integrationLogsMap.Bedrock,
   },
@@ -91,7 +91,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: geminiLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/gemini.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/openai"),
+    documentation: buildDocsUrl("/integrations/openai"),
     code: geminiCode,
     executionLogs: integrationLogsMap.Gemini,
   },
@@ -100,7 +100,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: langChainLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langchain.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: langChainCode,
     executionLogs: integrationLogsMap.LangChain,
   },
@@ -109,7 +109,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: langGraphLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/langgraph.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: langGraphCode,
     executionLogs: integrationLogsMap.LangGraph,
   },
@@ -118,7 +118,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: llamaIndexLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/llama-index.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: llamaIndexCode,
     executionLogs: integrationLogsMap.LlamaIndex,
   },
@@ -127,7 +127,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: haystackLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/haystack.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/langchain"),
+    documentation: buildDocsUrl("/integrations/langchain"),
     code: haystackCode,
     executionLogs: integrationLogsMap.Haystack,
   },
@@ -136,7 +136,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: liteLLMLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/litellm.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/litellm"),
+    documentation: buildDocsUrl("/integrations/litellm"),
     code: liteLLMCode,
     executionLogs: integrationLogsMap.LiteLLM,
   },
@@ -145,7 +145,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: ragasLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/ragas.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: ragasCode,
     executionLogs: integrationLogsMap.Ragas,
   },
@@ -154,7 +154,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: groqLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/groq.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: groqCode,
     executionLogs: integrationLogsMap.Groq,
   },
@@ -163,7 +163,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     logo: dspyLogoUrl,
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/dspy.ipynb",
-    documentation: buildDocsUrl("/v1/integrations/ragas"),
+    documentation: buildDocsUrl("/integrations/ragas"),
     code: dspyCode,
     executionLogs: integrationLogsMap.DSPy,
   },

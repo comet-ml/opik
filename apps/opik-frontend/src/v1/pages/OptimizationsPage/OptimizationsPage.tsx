@@ -43,7 +43,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import StudioTemplates from "@/v1/pages-shared/optimizations/StudioTemplates";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";

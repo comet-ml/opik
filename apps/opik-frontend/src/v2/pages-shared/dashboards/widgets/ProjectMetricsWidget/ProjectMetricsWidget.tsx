@@ -34,7 +34,7 @@ import {
 import { renderScoreTooltipValue } from "@/lib/feedback-scores";
 import { calculateIntervalConfig } from "@/v2/pages-shared/traces/MetricDateRangeSelect/utils";
 import { DEFAULT_DATE_PRESET } from "@/v2/pages-shared/traces/MetricDateRangeSelect/constants";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { BREAKDOWN_FIELD } from "@/types/dashboard";
 import {
   BREAKDOWN_GROUP_NAMES,

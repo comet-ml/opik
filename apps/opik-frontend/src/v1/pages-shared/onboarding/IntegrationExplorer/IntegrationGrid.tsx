@@ -8,8 +8,8 @@ import RequestIntegrationDialog from "@/v1/pages-shared/onboarding/IntegrationEx
 import IntegrationDetailsDialog from "@/v1/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog";
 import { useIntegrationExplorer } from "@/v1/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import { getIntegrationsByCategory } from "@/constants/integrations";
-import { buildDocsUrl, cn } from "@/lib/utils";
-
+import { cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 type IntegrationGridProps = {
   className?: string;
 };
@@ -128,7 +128,7 @@ const IntegrationGrid: React.FunctionComponent<IntegrationGridProps> = ({
 
         <a
           href={buildDocsUrl(
-            "/v1/integrations/overview",
+            "/integrations/overview",
             "&utm_source=opik_frontend&utm_medium=integration_grid&utm_campaign=integrations_docs&utm_content=integration_card",
           )}
           target="_blank"

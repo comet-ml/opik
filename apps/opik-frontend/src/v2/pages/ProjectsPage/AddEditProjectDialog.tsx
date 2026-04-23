@@ -20,7 +20,6 @@ import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useToast } from "@/ui/use-toast";
 import { ToastAction } from "@/ui/toast";
-import { buildDocsUrl } from "@/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type AddEditProjectDialogProps = {
@@ -70,11 +69,7 @@ const AddEditProjectDialog: React.FC<AddEditProjectDialogProps> = ({
             altText="Log traces to your project"
             key="Log traces to your project"
           >
-            <a
-              href={buildDocsUrl(explainer.docLink)}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <a href={explainer.docLink} target="_blank" rel="noreferrer">
               Log traces to your project
             </a>
           </ToastAction>,

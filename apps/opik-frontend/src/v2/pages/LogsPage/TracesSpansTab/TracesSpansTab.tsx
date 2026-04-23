@@ -52,7 +52,8 @@ import {
 } from "@/lib/metadata";
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { getJSONPaths, buildDocsUrl } from "@/lib/utils";
+import { getJSONPaths } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";

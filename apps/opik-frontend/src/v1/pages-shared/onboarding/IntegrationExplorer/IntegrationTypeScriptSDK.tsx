@@ -1,7 +1,7 @@
 import React from "react";
 import IntegrationCard from "@/v1/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import tsLogo from "@/icons/ts-logo.svg";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { useIntegrationExplorer } from "@/v1/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 
 const IntegrationTypeScriptSDK: React.FC = () => {
@@ -10,7 +10,7 @@ const IntegrationTypeScriptSDK: React.FC = () => {
   return (
     <a
       href={buildDocsUrl(
-        "/v1/reference/typescript-sdk/overview",
+        "/reference/typescript-sdk/overview",
         "&utm_source=opik_frontend&utm_medium=integration_explorer&utm_campaign=typescript_sdk&utm_content=integration_card",
       )}
       target="_blank"

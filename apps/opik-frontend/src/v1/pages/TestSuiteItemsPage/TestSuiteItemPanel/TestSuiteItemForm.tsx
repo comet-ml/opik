@@ -15,7 +15,7 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import { Description } from "@/ui/description";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/test-suites";
 import {
   PASS_CRITERIA_TITLE,

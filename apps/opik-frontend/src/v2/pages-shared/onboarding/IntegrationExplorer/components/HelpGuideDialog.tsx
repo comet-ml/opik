@@ -12,7 +12,7 @@ import { Separator } from "@/ui/separator";
 import usePluginsStore from "@/store/PluginsStore";
 import PlayButton from "@/icons/play-button.svg?react";
 import HelpLinks, { VIDEO_TUTORIAL_LINK } from "./HelpLinks";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 
 type HelpGuideDialogProps = {
   open: boolean;
@@ -36,7 +36,7 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
           <div className="comet-body-s mb-3 pb-2 text-muted-slate">
             Need help getting started? Find useful resources here, or{" "}
             <a
-              href="https://www.comet.com/docs/opik/quickstart"
+              href={buildDocsUrl("/quickstart")}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
@@ -92,15 +92,6 @@ const HelpGuideDialog: React.FunctionComponent<HelpGuideDialogProps> = ({
               </div>
 
               <div className="space-y-2">
-                <a
-                  href="https://www.comet.com/docs/opik/v1/opik-university/overview"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="comet-body-s flex items-center gap-1 text-primary hover:underline dark:text-primary-hover"
-                >
-                  Opik University
-                  <ExternalLink className="size-4" />
-                </a>
                 <a
                   href={buildDocsUrl("/quickstart")}
                   target="_blank"

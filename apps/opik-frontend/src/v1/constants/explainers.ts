@@ -1,5 +1,5 @@
 import { Explainer } from "@/types/shared";
-import { buildDocsUrl } from "@/v2/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import {
   EXPLAINER_ID,
   EXPLAINERS_MAP as BASE_EXPLAINERS,
@@ -11,19 +11,19 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   ...BASE_EXPLAINERS,
   [EXPLAINER_ID.i_created_a_project_now_what]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.i_created_a_project_now_what],
-    docLink: buildDocsUrl("/tracing/advanced/log_traces"),
+    docLink: buildDocsUrl("/tracing/log_traces"),
   },
   [EXPLAINER_ID.what_are_traces]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_traces],
-    docLink: buildDocsUrl("/tracing/advanced/log_traces"),
+    docLink: buildDocsUrl("/tracing/log_traces"),
   },
   [EXPLAINER_ID.what_are_threads]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_threads],
-    docLink: buildDocsUrl("/tracing/advanced/log_chat_conversations"),
+    docLink: buildDocsUrl("/tracing/log_chat_conversations"),
   },
   [EXPLAINER_ID.whats_online_evaluation]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_online_evaluation],
-    docLink: buildDocsUrl("/production/online-evaluation/rules"),
+    docLink: buildDocsUrl("/production/rules"),
   },
   [EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what],
@@ -33,24 +33,29 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     ...BASE_EXPLAINERS[EXPLAINER_ID.i_added_items_to_a_dataset_now_what],
     docLink: buildDocsUrl("/evaluation/overview", "#running-an-evaluation"),
   },
+  [EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite]: {
+    id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite,
+    description:
+      "Add traces to a test suite to evaluate your agent's performance using real production data.",
+  },
   [EXPLAINER_ID.hows_the_cost_estimated]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.hows_the_cost_estimated],
-    docLink: buildDocsUrl("/tracing/advanced/cost_tracking"),
+    docLink: buildDocsUrl("/tracing/cost_tracking"),
   },
   [EXPLAINER_ID.hows_the_thread_cost_estimated]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.hows_the_thread_cost_estimated],
-    docLink: buildDocsUrl("/tracing/advanced/cost_tracking"),
+    docLink: buildDocsUrl("/tracing/cost_tracking"),
   },
   [EXPLAINER_ID.whats_that_prompt_select]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_that_prompt_select],
     docLink: buildDocsUrl(
-      "/production/online-evaluation/rules",
+      "/production/rules",
       "#writing-your-own-llm-as-a-judge-metric",
     ),
   },
   [EXPLAINER_ID.what_are_annotation_queues]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_annotation_queues],
-    docLink: buildDocsUrl("/evaluation/advanced/annotation_queues"),
+    docLink: buildDocsUrl("/evaluation/annotation_queues"),
   },
   [EXPLAINER_ID.whats_an_experiment]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_an_experiment],
@@ -58,7 +63,7 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_a_prompt_commit]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_a_prompt_commit],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/prompt_engineering/prompt_management"),
   },
   [EXPLAINER_ID.what_are_experiment_items]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_experiment_items],
@@ -90,53 +95,49 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_the_prompt_library]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_prompt_library],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/prompt_engineering/prompt_management"),
   },
   [EXPLAINER_ID.how_do_i_use_this_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.how_do_i_use_this_prompt],
     docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
+      "/prompt_engineering/prompt_management",
       "#linking-prompts-to-experiments",
     ),
   },
   [EXPLAINER_ID.what_are_commits]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_commits],
     docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
+      "/prompt_engineering/prompt_management",
       "#managing-prompts-stored-in-code",
     ),
   },
   [EXPLAINER_ID.how_do_i_write_my_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.how_do_i_write_my_prompt],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/prompt_engineering/prompt_management"),
   },
   [EXPLAINER_ID.what_happens_if_i_edit_my_prompt]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_happens_if_i_edit_my_prompt],
-    docLink: buildDocsUrl("/development/agent-configuration/overview"),
+    docLink: buildDocsUrl("/prompt_engineering/prompt_management"),
   },
   [EXPLAINER_ID.whats_the_playground]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_playground],
-    docLink: buildDocsUrl("/development/playground"),
+    docLink: buildDocsUrl("/prompt_engineering/playground"),
   },
   [EXPLAINER_ID.whats_an_optimization_run]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_an_optimization_run],
-    docLink: buildDocsUrl("/development/optimization-runs/overview"),
+    docLink: buildDocsUrl("/agent_optimization/overview"),
   },
   [EXPLAINER_ID.why_would_i_compare_commits]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.why_would_i_compare_commits],
-    docLink: buildDocsUrl("/evaluation/advanced/evaluate_your_llm"),
+    docLink: buildDocsUrl("/evaluation/evaluate_prompt"),
   },
   [EXPLAINER_ID.whats_the_optimizer]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_optimizer],
-    docLink: buildDocsUrl(
-      "/development/optimization-runs/optimization/concepts",
-    ),
+    docLink: buildDocsUrl("/agent_optimization/optimization/concepts"),
   },
   [EXPLAINER_ID.what_are_trial_items]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_trial_items],
-    docLink: buildDocsUrl(
-      "/development/optimization-runs/optimization/concepts",
-    ),
+    docLink: buildDocsUrl("/agent_optimization/optimization/concepts"),
   },
   [EXPLAINER_ID.metric_equals]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.metric_equals],
@@ -206,33 +207,27 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.prompt_generation_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_generation_learn_more],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#generate",
-    ),
+    docLink: buildDocsUrl("/prompt_engineering/improve", "#generate"),
   },
   [EXPLAINER_ID.prompt_improvement_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_learn_more],
-    docLink: buildDocsUrl(
-      "/development/agent-configuration/overview",
-      "#improve",
-    ),
+    docLink: buildDocsUrl("/prompt_engineering/improve", "#improve"),
   },
   [EXPLAINER_ID.prompt_improvement_optimizer]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_optimizer],
-    docLink: buildDocsUrl("/development/optimization-runs/overview"),
+    docLink: buildDocsUrl("/agent_optimization/overview"),
   },
   [EXPLAINER_ID.whats_an_alert]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_an_alert],
-    docLink: buildDocsUrl("/production/alerts/alerts"),
+    docLink: buildDocsUrl("/production/alerts"),
   },
   [EXPLAINER_ID.what_are_dashboards]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.what_are_dashboards],
-    docLink: buildDocsUrl("/tracing/dashboards/dashboards"),
+    docLink: buildDocsUrl("/production/dashboards"),
   },
   [EXPLAINER_ID.whats_the_optimization_config]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_optimization_config],
-    docLink: buildDocsUrl("/development/optimization-runs/optimization_studio"),
+    docLink: buildDocsUrl("/agent_optimization/optimization_studio"),
   },
   [EXPLAINER_ID.whats_the_metric_settings]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_metric_settings],
@@ -240,8 +235,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_the_algorithm_settings]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_algorithm_settings],
-    docLink: buildDocsUrl(
-      "/development/optimization-runs/optimization/concepts",
-    ),
+    docLink: buildDocsUrl("/agent_optimization/optimization/concepts"),
   },
 };

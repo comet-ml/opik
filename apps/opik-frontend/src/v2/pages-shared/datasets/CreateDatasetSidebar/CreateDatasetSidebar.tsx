@@ -8,7 +8,8 @@ import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
-import { cn, buildDocsUrl, escapeJsString } from "@/lib/utils";
+import { cn, escapeJsString } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   Accordion,
   AccordionContent,

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { ExternalLink } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";

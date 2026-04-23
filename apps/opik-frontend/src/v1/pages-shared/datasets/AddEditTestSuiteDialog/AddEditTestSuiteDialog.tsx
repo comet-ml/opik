@@ -28,7 +28,7 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import Loader from "@/shared/Loader/Loader";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
@@ -440,7 +440,7 @@ const AddEditTestSuiteDialog = ({
                 )}
                 <Button variant="link" size="sm" className="h-5 px-1" asChild>
                   <a
-                    href={buildDocsUrl("/v1/evaluation/manage_datasets")}
+                    href={buildDocsUrl("/evaluation/manage_datasets")}
                     target="_blank"
                     rel="noopener noreferrer"
                   >

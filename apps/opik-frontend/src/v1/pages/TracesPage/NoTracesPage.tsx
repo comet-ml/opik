@@ -3,7 +3,7 @@ import { Book, GraduationCap } from "lucide-react";
 import noDataTracesImageUrl from "/images/no-data-traces.png";
 import noDataSpansImageUrl from "/images/no-data-spans.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { useOpenQuickStartDialog } from "@/v1/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
@@ -39,7 +39,7 @@ const NoTracesPage: React.FC<NoTracesPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/v1/tracing/log_traces")}
+              href={buildDocsUrl("/tracing/log_traces")}
               target="_blank"
               rel="noreferrer"
             >

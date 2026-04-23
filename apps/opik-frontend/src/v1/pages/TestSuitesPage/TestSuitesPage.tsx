@@ -20,7 +20,7 @@ import DatasetActionsPanel from "@/v1/pages-shared/datasets/DatasetActionsPanel/
 import { createDatasetRowActionsCell } from "@/v1/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -359,7 +359,7 @@ const TestSuitesPage: React.FunctionComponent = () => {
         A dataset is a collection of inputs and expected outputs used to
         evaluate your LLM application.{" "}
         <a
-          href={buildDocsUrl("/v1/evaluation/manage_datasets")}
+          href={buildDocsUrl("/evaluation/manage_datasets")}
           target="_blank"
           rel="noreferrer"
           className="text-primary"

@@ -2,8 +2,7 @@ import React from "react";
 import { Book, Plus } from "lucide-react";
 import noDataRulesImageUrl from "/images/no-data-rules.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v1/lib/utils";
 type NoDataWrapperProps = {
   title: string;
   description: string;
@@ -37,7 +36,7 @@ const NoRulesPage: React.FC<NoRulesPageProps> = ({
         <>
           <Button variant="secondary" asChild>
             <a
-              href={buildDocsUrl("/v1/production/rules")}
+              href={buildDocsUrl("/production/rules")}
               target="_blank"
               rel="noreferrer"
             >
