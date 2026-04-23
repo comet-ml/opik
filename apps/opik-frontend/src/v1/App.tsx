@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/v1/router";
@@ -10,7 +11,12 @@ import SentryErrorBoundary from "@/v1/layout/SentryErrorBoundary/SentryErrorBoun
 import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
-import DatasetExportPanel from "@/v1/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
+
+// Lazy-loaded — see v2/App.tsx for rationale. Same ~980 KB chunk issue.
+const DatasetExportPanel = lazy(
+  () =>
+    import("@/v1/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel"),
+);
 
 const TOOLTIP_DELAY_DURATION = 500;
 const TOOLTIP_SKIP__DELAY_DURATION = 0;
@@ -37,7 +43,9 @@ function App() {
                 skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
               >
                 <RouterProvider router={router} />
-                <DatasetExportPanel />
+                <Suspense fallback={null}>
+                  <DatasetExportPanel />
+                </Suspense>
               </TooltipProvider>
               <Toaster />
             </ThemeProvider>

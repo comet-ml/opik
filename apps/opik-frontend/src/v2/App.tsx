@@ -1,3 +1,5 @@
+import { lazy, Suspense } from "react";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/v2/router";
@@ -10,7 +12,16 @@ import SentryErrorBoundary from "@/v2/layout/SentryErrorBoundary/SentryErrorBoun
 import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
-import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
+
+// Lazy-loaded because DatasetExportPanel's transitive deps compile to a
+// ~980 KB chunk. Eager-importing it from App.tsx put that chunk on the
+// cold-boot critical path for every page load — including the
+// get-started page where export is never used. Suspense fallback={null}
+// matches the panel's own null-render when there are no active jobs.
+const DatasetExportPanel = lazy(
+  () =>
+    import("@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel"),
+);
 
 const TOOLTIP_DELAY_DURATION = 500;
 const TOOLTIP_SKIP__DELAY_DURATION = 0;
@@ -37,7 +48,9 @@ function App() {
                 skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
               >
                 <RouterProvider router={router} />
-                <DatasetExportPanel />
+                <Suspense fallback={null}>
+                  <DatasetExportPanel />
+                </Suspense>
               </TooltipProvider>
               <Toaster />
             </ThemeProvider>
