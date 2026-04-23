@@ -64,6 +64,7 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAG
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
@@ -541,6 +542,51 @@ class ChatCompletionsResourceTest {
             assertThat(status).isEqualTo(HttpStatus.SC_INTERNAL_SERVER_ERROR);
             assertThat(body).contains("InvalidAPIVersion");
             assertThat(body).contains("The API version 2024-08-01-preview is not supported");
+        }
+
+        @Test
+        @DisplayName("url_query_params configuration is appended to upstream request URL")
+        void urlQueryParamsAreAppendedToUpstreamRequest() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(CUSTOM_PROVIDER_NAME)
+                    .apiKey("dummy-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .configuration(Map.of(
+                            "provider_name", CUSTOM_PROVIDER_NAME,
+                            "models", MODEL,
+                            "url_query_params",
+                            "{\"api-version\":\"2024-08-01-preview\",\"other\":\"value\"}"))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(".*/chat/completions.*"))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(SUCCESS_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(MODEL)
+                    .addUserMessage("ping")
+                    .build();
+
+            var raw = postChatCompletion(workspaceName, request);
+            assertThat(raw.getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            var received = WIRE_MOCK.server().findAll(postRequestedFor(
+                    urlPathMatching(".*/chat/completions.*"))).getFirst();
+            System.out.printf("[queryParamsApplied] upstreamUrl=%s%n", received.getUrl());
+
+            WIRE_MOCK.server().verify(postRequestedFor(urlPathMatching(".*/chat/completions.*"))
+                    .withQueryParam("api-version", equalTo("2024-08-01-preview"))
+                    .withQueryParam("other", equalTo("value")));
         }
 
         @Test
