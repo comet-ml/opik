@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
@@ -40,8 +41,8 @@ public class ExperimentItemPublisher {
      * The counter is set BEFORE publishing to prevent the race where a fast consumer
      * decrements to zero before all messages are published.
      */
-    public Mono<Void> publish(@NonNull UUID batchId, @NonNull List<ExperimentItemToProcess> messages) {
-        if (messages.isEmpty()) {
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
+        if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
 

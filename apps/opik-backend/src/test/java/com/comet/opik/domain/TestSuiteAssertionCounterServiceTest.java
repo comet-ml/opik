@@ -23,6 +23,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -63,7 +64,7 @@ class TestSuiteAssertionCounterServiceTest {
         service.setCounters(WORKSPACE_ID, Map.of(experimentA, 3L, experimentB, 2L)).block();
 
         var keyCaptor = ArgumentCaptor.forClass(String.class);
-        verify(redisClient, org.mockito.Mockito.atLeast(2)).getAtomicLong(keyCaptor.capture());
+        verify(redisClient, atLeast(2)).getAtomicLong(keyCaptor.capture());
 
         var keys = keyCaptor.getAllValues();
         assertThat(keys).contains(
@@ -98,9 +99,8 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        var updateCaptor = ArgumentCaptor.forClass(ExperimentUpdate.class);
-        verify(experimentService).update(eq(experimentId), updateCaptor.capture());
-        assertThat(updateCaptor.getValue().status()).isEqualTo(ExperimentStatus.COMPLETED);
+        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
+        verify(experimentService).update(experimentId, expectedUpdate);
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 
@@ -116,7 +116,8 @@ class TestSuiteAssertionCounterServiceTest {
 
         service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
-        verify(experimentService).update(eq(experimentId), any(ExperimentUpdate.class));
+        var expectedUpdate = ExperimentUpdate.builder().status(ExperimentStatus.COMPLETED).build();
+        verify(experimentService).update(experimentId, expectedUpdate);
         verify(experimentService).finishExperiments(Set.of(experimentId));
     }
 

@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.MapUtils;
 import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
@@ -35,7 +36,10 @@ public class TestSuiteAssertionCounterService {
         this.experimentService = experimentService;
     }
 
-    public Mono<Void> setCounters(@NonNull String workspaceId, @NonNull Map<UUID, Long> itemsByExperiment) {
+    public Mono<Void> setCounters(@NonNull String workspaceId, Map<UUID, Long> itemsByExperiment) {
+        if (MapUtils.isEmpty(itemsByExperiment)) {
+            return Mono.empty();
+        }
         return Flux.fromIterable(itemsByExperiment.entrySet())
                 .flatMap(entry -> {
                     var counter = redisClient.getAtomicLong(counterKey(workspaceId, entry.getKey()));
