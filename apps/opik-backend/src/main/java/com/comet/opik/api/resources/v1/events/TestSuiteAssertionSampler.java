@@ -165,7 +165,8 @@ public class TestSuiteAssertionSampler {
 
         var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
         if (testSuiteDatasetId.isEmpty()) {
-            return Mono.empty();
+            return decrementAssertionCounter(experimentId, tracesBatch.workspaceId())
+                    .then(Mono.empty());
         }
 
         UUID datasetId;
