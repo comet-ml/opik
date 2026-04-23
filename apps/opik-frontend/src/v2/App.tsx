@@ -1,3 +1,5 @@
+import { lazy, Suspense } from "react";
+
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { router } from "@/v2/router";
@@ -10,7 +12,11 @@ import SentryErrorBoundary from "@/v2/layout/SentryErrorBoundary/SentryErrorBoun
 import { TooltipProvider } from "@/ui/tooltip";
 import { PostHogProvider } from "posthog-js/react";
 import posthog from "posthog-js";
-import DatasetExportPanel from "@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel";
+
+const DatasetExportPanel = lazy(
+  () =>
+    import("@/v2/pages-shared/datasets/DatasetExportPanel/DatasetExportPanel"),
+);
 
 const TOOLTIP_DELAY_DURATION = 500;
 const TOOLTIP_SKIP__DELAY_DURATION = 0;
@@ -37,7 +43,9 @@ function App() {
                 skipDelayDuration={TOOLTIP_SKIP__DELAY_DURATION}
               >
                 <RouterProvider router={router} />
-                <DatasetExportPanel />
+                <Suspense fallback={null}>
+                  <DatasetExportPanel />
+                </Suspense>
               </TooltipProvider>
               <Toaster />
             </ThemeProvider>
