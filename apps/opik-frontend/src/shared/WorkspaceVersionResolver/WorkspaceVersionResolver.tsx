@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import useAppStore, {
   useActiveWorkspaceName,
   useWorkspaceVersion,
@@ -7,7 +7,6 @@ import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
   getNewExperienceOptIn,
   getVersionOverride,
-  navigateToWorkspaceRoot,
   setCachedWorkspaceVersion,
 } from "@/lib/workspaceVersion";
 
@@ -21,17 +20,26 @@ type WorkspaceVersionResolverProps = {
 /**
  * Renders children immediately using the Gate's optimistic version guess
  * (override > opt-in > per-workspace cache > default v2) and verifies
- * against `/workspaces/versions` asynchronously. On mismatch, the
- * `useEffect` below reloads so the Gate picks the correct App next time
- * (bounded by MAX_RELOADS).
+ * against `/workspaces/versions` asynchronously. On mismatch, reloads to
+ * the URL the user originally landed on so the Gate mounts the correct
+ * App with the original deep-link intact (bounded by MAX_RELOADS).
  *
  * We deliberately do NOT gate rendering on `isLoading`. Doing so used to
  * hide the whole tree behind a Loader for 600-2000ms on every load, which
- * sat on the LCP critical path. The mismatch window is the same either
- * way — today's Loader vs. tomorrow's brief wrong-version render — so
- * we'd rather pay that cost only when mismatch actually happens (rare:
- * cache is correct for ~95% of returning users, and new signups default
- * to v2 which is the only version new workspaces get). See OPIK-6150.
+ * sat on the LCP critical path. See OPIK-6150.
+ *
+ * Why `window.location.replace(originalUrl)` and not `reload()`:
+ * the wrong-version App mounted under us can contain redirect components
+ * (e.g. V1CompatRedirect) whose useEffects `navigate({ replace: true })`
+ * to a version-specific path before `/versions` returns. A plain
+ * `reload()` would rehydrate that mutated URL; replacing with the URL we
+ * captured on first render restores the user's original deep-link.
+ *
+ * Capture is in render (not useEffect) because child-component effects
+ * fire after the parent renders — so at capture time no redirect has run.
+ * The captured URL is keyed by workspace (so switching workspaces doesn't
+ * leak stale URLs) and cleared once verification succeeds (so a later
+ * mismatch re-captures fresh rather than reloading to an outdated URL).
  */
 const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   children,
@@ -40,6 +48,14 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
   const optIn = getNewExperienceOptIn();
   const gateVersion = useWorkspaceVersion();
   const workspaceName = useActiveWorkspaceName();
+
+  const originalUrlByWorkspaceRef = useRef<Record<string, string>>({});
+  if (
+    workspaceName &&
+    originalUrlByWorkspaceRef.current[workspaceName] === undefined
+  ) {
+    originalUrlByWorkspaceRef.current[workspaceName] = window.location.href;
+  }
 
   const { data: apiVersion } = useWorkspaceVersionQuery();
   const resolvedVersion = override ?? (optIn ? "v2" : apiVersion);
@@ -60,14 +76,14 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
       const reloadCount = Number(sessionStorage.getItem(reloadKey) || "0");
       if (reloadCount < MAX_RELOADS) {
         sessionStorage.setItem(reloadKey, String(reloadCount + 1));
-        // Navigate to the workspace root rather than reloading the current
-        // URL: the other App's router may have already rewritten the URL to
-        // something that only makes sense in its version. Landing on the
-        // workspace root lets the correct version's router route to home.
-        navigateToWorkspaceRoot(workspaceName);
+        const target =
+          originalUrlByWorkspaceRef.current[workspaceName] ??
+          window.location.href;
+        window.location.replace(target);
       }
     } else {
       sessionStorage.removeItem(reloadKey);
+      delete originalUrlByWorkspaceRef.current[workspaceName];
     }
   }, [apiVersion, resolvedVersion, gateVersion, workspaceName]);
 
