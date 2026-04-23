@@ -1528,7 +1528,7 @@ def test_adk__transfer_to_agent__tracked_and_span_created(
     root_agent = adk_agents.Agent(
         name="Text_Assistant",
         model=MODEL_NAME,
-        instruction="Translate text to English.",
+        instruction="Always transfer the user's message to the Translator sub-agent. Do not translate yourself.",
         sub_agents=[translator_to_english],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
