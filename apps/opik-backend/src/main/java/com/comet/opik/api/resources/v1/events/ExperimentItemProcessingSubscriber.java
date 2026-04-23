@@ -152,6 +152,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 RequestContext.VISIBILITY, Visibility.PRIVATE);
     }
 
+    // TODO: deduplicate with TestSuiteAssertionCounterService.finishExperiment — extract into
+    //  a shared ExperimentFinishListener triggered by an ExperimentProcessed event
     private Mono<Void> finishExperiments(ExperimentItemToProcess message) {
         var reactorContext = buildReactorContext(message);
 

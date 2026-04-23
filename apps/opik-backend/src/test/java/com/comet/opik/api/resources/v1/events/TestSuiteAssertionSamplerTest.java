@@ -346,11 +346,6 @@ class TestSuiteAssertionSamplerTest {
                     .evaluators(List.of(datasetEvaluator))
                     .build();
 
-            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, versionHash))
-                    .thenReturn(versionId);
-            when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
-                    .thenReturn(datasetVersion);
-
             var metadata = JsonUtils.getJsonNodeFromString(
                     "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\"}"
                             .formatted(datasetId, versionHash));
