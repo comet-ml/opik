@@ -44,8 +44,10 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
 ):
     # gpt-5 reasoning models only support temperature=1; every other provider
     # accepts it, so pinning the value across rows keeps the parametrization
-    # uniform.
-    agent_llm = LLM(model=model, temperature=1.0)
+    # uniform. drop_params=True tells litellm to strip params the model
+    # rejects (CrewAI v0 injects stop=["\nObservation:"] for its ReAct loop;
+    # gpt-5-nano rejects stop → litellm drops it when drop_params is set).
+    agent_llm = LLM(model=model, temperature=1.0, drop_params=True)
 
     researcher = Agent(
         role="Test Researcher",
