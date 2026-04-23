@@ -13,6 +13,7 @@ import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
@@ -20,6 +21,10 @@ const AgentOnboardingQuickstart: React.FC = () => {
     step: unknown;
     agentName?: string;
   }>(`${AGENT_ONBOARDING_KEY}-${workspaceName}`);
+
+  const {
+    permissions: { canCreateProjects },
+  } = usePermissions();
 
   const isOnboardingDone =
     agentOnboardingState?.step === AGENT_ONBOARDING_STEPS.DONE;
@@ -30,7 +35,7 @@ const AgentOnboardingQuickstart: React.FC = () => {
     { enabled: isOnboardingDone && !!agentName },
   );
 
-  if (!isOnboardingDone) {
+  if (!isOnboardingDone && canCreateProjects) {
     return <AgentOnboardingOverlay />;
   }
 

@@ -373,8 +373,12 @@ const DashboardsPage: React.FunctionComponent = () => {
           description={
             "Build a cross-project dashboard to get a real-time view of your agents, metrics,\nand costs. Or explore a project to see detailed insights."
           }
-          primaryActionLabel="Create your first dashboard"
-          onPrimaryAction={handleNewDashboardClick}
+          primaryActionLabel={
+            canCreateDashboards ? "Create your first dashboard" : undefined
+          }
+          onPrimaryAction={
+            canCreateDashboards ? handleNewDashboardClick : undefined
+          }
           docsUrl={buildDocsUrl("/production/dashboards")}
         />
       ) : (
