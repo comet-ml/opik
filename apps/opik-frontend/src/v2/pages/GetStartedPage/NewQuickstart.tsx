@@ -1,5 +1,5 @@
-import React from "react";
-import { Navigate } from "@tanstack/react-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Navigate, useNavigate } from "@tanstack/react-router";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import useLocalStorageState from "use-local-storage-state";
 import AgentOnboardingOverlay from "./AgentOnboarding/AgentOnboardingOverlay";
@@ -8,12 +8,16 @@ import {
   AGENT_ONBOARDING_STEPS,
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
   DEFAULT_ONBOARDING_FLOW,
+  MANUAL_ONBOARDING_KEY,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
 import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
 import OnboardingIntegrationsPage from "@/shared/OnboardingIntegrationsPage/OnboardingIntegrationsPage";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import DemoLoadingContent from "./AgentOnboarding/DemoLoadingContent";
+import LoggedDataStatus from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/LoggedDataStatus";
+import useFirstTraceReceived from "@/api/projects/useFirstTraceReceived";
 
 const AgentOnboardingQuickstart: React.FC = () => {
   const workspaceName = useActiveWorkspaceName();
@@ -60,12 +64,71 @@ const NewQuickstart: React.FC = () => {
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
     DEFAULT_ONBOARDING_FLOW;
+  const [showDemoLoading, setShowDemoLoading] = useState(false);
+  const workspaceName = useActiveWorkspaceName();
+  const navigate = useNavigate();
+
+  const [manualOnboardingDone, setManualOnboardingDone] =
+    useLocalStorageState<boolean>(`${MANUAL_ONBOARDING_KEY}-${workspaceName}`, {
+      defaultValue: false,
+    });
+
+  // Capture done state at mount — the re-entry guard should only redirect when
+  // the user arrives already done, not when done flips mid-session (where
+  // explicit navigation from handleExplore / DemoLoadingContent is in flight).
+  const wasDoneOnMount = useRef(manualOnboardingDone);
+
+  const isManualActive =
+    variant === "manual" && !showDemoLoading && !manualOnboardingDone;
+  const { hasTraces, firstTraceProjectId, pollExpired } = useFirstTraceReceived(
+    {
+      workspaceName,
+      enabled: isManualActive,
+      poll: isManualActive,
+    },
+  );
+
+  useEffect(() => {
+    if (variant === "manual" && !manualOnboardingDone) {
+      window.history.replaceState(null, "", "#manual");
+    }
+  }, [variant, manualOnboardingDone]);
+
+  const handleExplore = useCallback(() => {
+    if (!firstTraceProjectId) return;
+    setManualOnboardingDone(true);
+    navigate({
+      to: "/$workspaceName/projects/$projectId/logs",
+      params: { workspaceName, projectId: firstTraceProjectId },
+    });
+  }, [navigate, workspaceName, firstTraceProjectId, setManualOnboardingDone]);
 
   if (variant === "manual") {
+    if (wasDoneOnMount.current) {
+      return <Navigate to="/$workspaceName/home" params={{ workspaceName }} />;
+    }
+    if (showDemoLoading) {
+      return (
+        <DemoLoadingContent
+          onRetry={() => setShowDemoLoading(false)}
+          retryLabel="Back to setup"
+          onComplete={() => setManualOnboardingDone(true)}
+        />
+      );
+    }
     return (
       <OnboardingIntegrationsPage
         IntegrationExplorer={IntegrationExplorer}
         source="get-started"
+        banner={
+          !pollExpired || hasTraces ? (
+            <LoggedDataStatus
+              status={hasTraces ? "logged" : "waiting"}
+              onExplore={handleExplore}
+            />
+          ) : undefined
+        }
+        onSkip={() => setShowDemoLoading(true)}
       />
     );
   }

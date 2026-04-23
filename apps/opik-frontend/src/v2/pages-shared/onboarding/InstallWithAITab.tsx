@@ -7,6 +7,7 @@ import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
 import cursorLogo from "/images/integrations/cursor.svg";
 import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
+import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 
 interface InstallWithAITabProps {
   traceReceived: boolean;
@@ -23,10 +24,9 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   const workspaceName = useActiveWorkspaceName();
 
   const projectPart = agentName ? `, project name "${agentName}"` : "";
-  const displayPrompt = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart} and API key "<YOUR_API_KEY>".`;
-  const copyPrompt = apiKey
-    ? displayPrompt.replace("<YOUR_API_KEY>", apiKey)
-    : displayPrompt;
+  const prompt = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart} and API key "${
+    apiKey ?? "<YOUR_API_KEY>"
+  }".`;
 
   return (
     <div className="flex flex-col gap-4 px-1">
@@ -47,6 +47,8 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
         <span className="comet-body-xs text-muted-slate">+34 more</span>
       </div>
 
+      <AgentCopyButtons agentName={agentName} />
+
       <div className="flex flex-col">
         <TimelineStep number={1}>
           <div className="flex flex-col gap-2.5">
@@ -60,11 +62,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
             <h4 className="comet-body-s-accented">
               Open your coding agent and paste this prompt
             </h4>
-            <CodeSnippet
-              title="Prompt"
-              code={displayPrompt}
-              copyText={copyPrompt}
-            />
+            <CodeSnippet title="Prompt" code={prompt} />
           </div>
         </TimelineStep>
 
@@ -74,7 +72,7 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
               <h4 className="comet-body-s-accented text-primary">
                 {traceReceived
                   ? "First trace received! You're all set."
-                  : "Waiting for first trace\u2026"}
+                  : "Waiting for first trace…"}
               </h4>
               <p className="comet-body-xs text-muted-slate">
                 {traceReceived ? (

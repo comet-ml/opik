@@ -43,7 +43,7 @@ const SelectIntentStep: React.FC = () => {
           <p className="comet-body-s text-muted-slate">
             Welcome to Opik - let&apos;s get you set up
           </p>
-          <h2 className="comet-title-m">How would you like to start?</h2>
+          <h2 className="comet-title-m">Where are you right now?</h2>
         </div>
 
         <div className="flex flex-col gap-3 pt-6">
@@ -60,7 +60,7 @@ const SelectIntentStep: React.FC = () => {
               I have an AI agent or LLM app
             </p>
             <p className="comet-body-s mt-1 text-muted-slate">
-              Instrument your agent and start tracing right away
+              Connect it and track exactly what your agent does on every run.
             </p>
           </button>
 
@@ -69,10 +69,7 @@ const SelectIntentStep: React.FC = () => {
             className="rounded-lg border border-border bg-background p-4 text-left transition-colors hover:border-primary hover:bg-muted"
           >
             <p className="comet-body-s font-medium">
-              I don&apos;t have an app yet
-            </p>
-            <p className="comet-body-s mt-1 text-muted-slate">
-              Explore a demo project to see Opik in action
+              I don&apos;t have an AI agent yet
             </p>
           </button>
         </div>
