@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -50,23 +51,38 @@ public class TestSuiteAssertionCounterService {
     }
 
     public Mono<Long> decrement(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(counterKey(workspaceId, experimentId)).decrementAndGet();
+        var counter = redisClient.getAtomicLong(counterKey(workspaceId, experimentId));
+        return withExpiryRenewal(counter, counter.decrementAndGet());
     }
 
     public Mono<Long> adjust(@NonNull String workspaceId, @NonNull UUID experimentId, long delta) {
-        return redisClient.getAtomicLong(counterKey(workspaceId, experimentId)).addAndGet(delta);
+        var counter = redisClient.getAtomicLong(counterKey(workspaceId, experimentId));
+        return withExpiryRenewal(counter, counter.addAndGet(delta));
+    }
+
+    private Mono<Long> withExpiryRenewal(RAtomicLongReactive counter, Mono<Long> operation) {
+        return operation.flatMap(result -> counter.expire(config.getBatchCounterTtl().toJavaDuration())
+                .thenReturn(result));
     }
 
     public Mono<Void> decrementAndFinishIfComplete(@NonNull String workspaceId, @NonNull UUID experimentId) {
-        return decrement(workspaceId, experimentId)
-                .flatMap(remaining -> {
-                    if (remaining <= 0) {
-                        log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
-                        return finishExperiment(experimentId);
+        return exists(workspaceId, experimentId)
+                .flatMap(keyExists -> {
+                    if (!keyExists) {
+                        log.warn("Assertion counter key not found for experiment '{}', skipping", experimentId);
+                        return Mono.<Void>empty();
                     }
-                    return Mono.empty();
-                })
-                .then();
+                    return decrement(workspaceId, experimentId)
+                            .flatMap(remaining -> {
+                                if (remaining <= 0) {
+                                    log.info("Assertion counter reached zero for experiment '{}', finishing",
+                                            experimentId);
+                                    return finishExperiment(experimentId);
+                                }
+                                return Mono.<Void>empty();
+                            })
+                            .then();
+                });
     }
 
     private Mono<Void> finishExperiment(UUID experimentId) {
@@ -77,11 +93,7 @@ public class TestSuiteAssertionCounterService {
         return experimentService.update(experimentId, statusUpdate)
                 .then(experimentService.finishExperiments(Set.of(experimentId)))
                 .doOnSuccess(unused -> log.info("Finished experiment '{}' after all assertions completed",
-                        experimentId))
-                .onErrorResume(error -> {
-                    log.error("Failed to finish experiment '{}' after assertions", experimentId, error);
-                    return Mono.empty();
-                });
+                        experimentId));
     }
 
     public Mono<Void> deleteCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
