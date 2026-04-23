@@ -26,6 +26,8 @@ export interface EvaluationCriteriaSectionProps {
   useGlobalPolicy: boolean;
   onRevertToDefaults: () => void;
   onOpenSettings?: () => void;
+  defaultRunsPerItem: number;
+  defaultPassThreshold: number;
 }
 
 const EvaluationCriteriaSection: React.FunctionComponent<
@@ -43,6 +45,8 @@ const EvaluationCriteriaSection: React.FunctionComponent<
   useGlobalPolicy,
   onRevertToDefaults,
   onOpenSettings,
+  defaultRunsPerItem,
+  defaultPassThreshold,
 }) => {
   const runsInput = useClampedIntegerInput({
     value: runsPerItem,
@@ -64,7 +68,7 @@ const EvaluationCriteriaSection: React.FunctionComponent<
   const manageSettingsButton = onOpenSettings ? (
     <button
       type="button"
-      className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
+      className="comet-body-xs inline-flex shrink-0 items-center gap-1 text-foreground underline"
       onClick={onOpenSettings}
     >
       <Settings2 className="size-3.5 shrink-0" />
@@ -76,7 +80,7 @@ const EvaluationCriteriaSection: React.FunctionComponent<
     <div>
       <AssertionsField
         variant="item"
-        headerContent={manageSettingsButton}
+        footerContent={manageSettingsButton}
         readOnlyAssertions={suiteAssertions}
         editableAssertions={editableAssertions}
         onChangeEditable={onChangeAssertion}
@@ -136,7 +140,7 @@ const EvaluationCriteriaSection: React.FunctionComponent<
           content={
             useGlobalPolicy
               ? "Already using the suite's defaults"
-              : "Revert to the default values for this test suite"
+              : `Revert to suite defaults (runs: ${defaultRunsPerItem}, threshold: ${defaultPassThreshold})`
           }
         >
           <button
