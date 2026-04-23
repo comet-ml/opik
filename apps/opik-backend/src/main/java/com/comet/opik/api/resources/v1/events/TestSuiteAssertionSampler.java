@@ -200,6 +200,7 @@ public class TestSuiteAssertionSampler {
 
                                     if (allEvaluators.size() > 1) {
                                         adjustAssertionCounter(experimentId,
+                                                tracesBatch.workspaceId(),
                                                 allEvaluators.size() - 1);
                                     }
 
@@ -303,7 +304,7 @@ public class TestSuiteAssertionSampler {
             return;
         }
         try {
-            testSuiteAssertionCounterService.decrementAndFinishIfComplete(experimentId)
+            testSuiteAssertionCounterService.decrementAndFinishIfComplete(workspaceId, experimentId)
                     .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
                             .put(RequestContext.USER_NAME, userName)
                             .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
@@ -313,12 +314,12 @@ public class TestSuiteAssertionSampler {
         }
     }
 
-    private void adjustAssertionCounter(UUID experimentId, long additionalMessages) {
+    private void adjustAssertionCounter(UUID experimentId, String workspaceId, long additionalMessages) {
         if (experimentId == null) {
             return;
         }
         try {
-            testSuiteAssertionCounterService.adjust(experimentId, additionalMessages).block();
+            testSuiteAssertionCounterService.adjust(workspaceId, experimentId, additionalMessages).block();
         } catch (Exception e) {
             log.error("Failed to adjust assertion counter for experiment '{}'", experimentId, e);
         }

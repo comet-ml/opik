@@ -35,30 +35,30 @@ public class TestSuiteAssertionCounterService {
         this.experimentService = experimentService;
     }
 
-    public Mono<Void> setCounters(@NonNull Map<UUID, Long> itemsByExperiment) {
+    public Mono<Void> setCounters(@NonNull String workspaceId, @NonNull Map<UUID, Long> itemsByExperiment) {
         return Flux.fromIterable(itemsByExperiment.entrySet())
                 .flatMap(entry -> {
-                    var counter = redisClient.getAtomicLong(counterKey(entry.getKey()));
+                    var counter = redisClient.getAtomicLong(counterKey(workspaceId, entry.getKey()));
                     return counter.set(entry.getValue())
                             .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()));
                 })
                 .then();
     }
 
-    public Mono<Boolean> exists(@NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(counterKey(experimentId)).isExists();
+    public Mono<Boolean> exists(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(counterKey(workspaceId, experimentId)).isExists();
     }
 
-    public Mono<Long> decrement(@NonNull UUID experimentId) {
-        return redisClient.getAtomicLong(counterKey(experimentId)).decrementAndGet();
+    public Mono<Long> decrement(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return redisClient.getAtomicLong(counterKey(workspaceId, experimentId)).decrementAndGet();
     }
 
-    public Mono<Long> adjust(@NonNull UUID experimentId, long delta) {
-        return redisClient.getAtomicLong(counterKey(experimentId)).addAndGet(delta);
+    public Mono<Long> adjust(@NonNull String workspaceId, @NonNull UUID experimentId, long delta) {
+        return redisClient.getAtomicLong(counterKey(workspaceId, experimentId)).addAndGet(delta);
     }
 
-    public Mono<Void> decrementAndFinishIfComplete(@NonNull UUID experimentId) {
-        return decrement(experimentId)
+    public Mono<Void> decrementAndFinishIfComplete(@NonNull String workspaceId, @NonNull UUID experimentId) {
+        return decrement(workspaceId, experimentId)
                 .flatMap(remaining -> {
                     if (remaining <= 0) {
                         log.info("Assertion counter reached zero for experiment '{}', finishing", experimentId);
@@ -84,13 +84,13 @@ public class TestSuiteAssertionCounterService {
                 });
     }
 
-    public Mono<Void> deleteCounters(@NonNull Collection<UUID> experimentIds) {
+    public Mono<Void> deleteCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
         return Flux.fromIterable(experimentIds)
-                .flatMap(id -> redisClient.getAtomicLong(counterKey(id)).delete())
+                .flatMap(id -> redisClient.getAtomicLong(counterKey(workspaceId, id)).delete())
                 .then();
     }
 
-    private static String counterKey(UUID experimentId) {
-        return ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + experimentId;
+    private static String counterKey(String workspaceId, UUID experimentId) {
+        return ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + workspaceId + ":" + experimentId;
     }
 }

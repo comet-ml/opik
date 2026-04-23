@@ -129,7 +129,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
     }
 
     private Mono<Boolean> isTestSuiteExperiment(ExperimentItemToProcess message) {
-        return testSuiteAssertionCounterService.exists(message.experimentId());
+        return testSuiteAssertionCounterService.exists(message.workspaceId(), message.experimentId());
     }
 
     private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
@@ -138,7 +138,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                     if (!isTestSuite) {
                         return Mono.empty();
                     }
-                    return testSuiteAssertionCounterService.decrementAndFinishIfComplete(message.experimentId());
+                    return testSuiteAssertionCounterService.decrementAndFinishIfComplete(
+                            message.workspaceId(), message.experimentId());
                 })
                 .then();
     }
