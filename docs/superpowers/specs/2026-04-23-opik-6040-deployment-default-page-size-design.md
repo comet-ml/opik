@@ -94,7 +94,7 @@ Helm values.yaml: UI_DEFAULT_PAGE_SIZE=25
   ```
 
 - `apps/opik-frontend/src/api/ui-config/useUIConfig.ts`
-  - React Query wrapper. `queryKey: ["ui-config"]`. Workspace-wide cache with standard staleTime.
+  - React Query wrapper. `queryKey: ["ui-config"]`. Cached globally (value is deployment-wide, same across workspaces). StaleTime follows the convention used by `useFeatureToggle`.
   - Calls `UI_CONFIG_REST_ENDPOINT` via the shared API client.
 
 - `apps/opik-frontend/src/contexts/ui-config-provider.tsx`
