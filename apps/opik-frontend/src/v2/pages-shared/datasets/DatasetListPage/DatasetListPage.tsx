@@ -423,7 +423,7 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
   }
 
   return (
-    <div className="pt-4">
+    <div className="flex min-h-full flex-col pt-4">
       <div className="mb-4 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
           {config.title}
