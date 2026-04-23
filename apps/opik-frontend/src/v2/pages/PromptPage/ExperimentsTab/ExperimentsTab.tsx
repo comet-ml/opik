@@ -55,7 +55,7 @@ import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { useUIConfigValue } from "@/contexts/ui-config-provider";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
 import {
   FILTER_AND_GROUP_COLUMNS,
@@ -69,7 +69,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
-const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
 const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
@@ -126,15 +125,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
+  const { default_page_size: defaultPageSize } = useUIConfigValue();
+  const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
+    updateType: "replaceIn",
   });
+  const size = sizeParam ?? defaultPageSize;
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
