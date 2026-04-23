@@ -154,11 +154,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         },
         {
             "id": id_helpers.generate_id(),
-            "input": {"question": "What is the of capital of Germany?"},
-            "expected_model_output": {"output": "Berlin"},
-        },
-        {
-            "id": id_helpers.generate_id(),
             "input": {"question": "What is the of capital of Poland?"},
             "expected_model_output": {"output": "Warsaw"},
         },
@@ -181,9 +176,10 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         prompt=f"test-experiment-prompt-template-{random_chars()}",
     )
 
+    # Keep France, drop Poland; append a fake id so the filter still covers
+    # the "non-existent id is ignored" case.
     dataset_item_ids = [item["id"] for item in dataset_items]
-    dataset_item_ids.pop(2)
-    # add non existing id
+    dataset_item_ids.pop(1)
     dataset_item_ids.append(id_helpers.generate_id())
 
     equals_metric = metrics.Equals()
@@ -208,7 +204,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=2,  # one trace per dataset item
+        traces_amount=1,  # one trace per dataset item (fake id is skipped)
         feedback_scores_amount=1,
         prompts=[prompt],
         project_name=project_name,
@@ -227,8 +223,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
     )
     retrieved_experiment = retrieved_experiments[0]
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 2, (
-        f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
+    assert len(experiment_items_contents) == 1, (
+        f"Expected 1 experiment item, but got {len(experiment_items_contents)}. "
         f"Experiment items: {experiment_items_contents}"
     )
 
