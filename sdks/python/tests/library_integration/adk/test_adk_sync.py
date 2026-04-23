@@ -650,7 +650,7 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name),
+        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
@@ -722,7 +722,7 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
 
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name),
+        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),

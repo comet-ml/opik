@@ -53,7 +53,15 @@ def test_haystack__happyflow(
     pipe = Pipeline()
     pipe.add_component("tracer", opik_connector)  # not necessary to add
     pipe.add_component("prompt_builder", ChatPromptBuilder())
-    pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
+    pipe.add_component(
+        "llm",
+        OpenAIChatGenerator(
+            model=MODEL_NAME,
+            generation_kwargs={
+                "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+            },
+        ),
+    )
 
     pipe.connect("prompt_builder.prompt", "llm.messages")
 
@@ -173,7 +181,15 @@ def test_haystack__context_aware_tracing(fake_backend):
         pipe = Pipeline()
         pipe.add_component("tracer", opik_connector)
         pipe.add_component("prompt_builder", ChatPromptBuilder())
-        pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
+        pipe.add_component(
+        "llm",
+        OpenAIChatGenerator(
+            model=MODEL_NAME,
+            generation_kwargs={
+                "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+            },
+        ),
+    )
 
         pipe.connect("prompt_builder.prompt", "llm.messages")
 

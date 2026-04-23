@@ -19,6 +19,7 @@ def test__langchain_chat_model__happyflow():
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
             model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=False,
     )
@@ -40,6 +41,7 @@ def test__langchain_chat_model__response_format_is_used():
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
             model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=False,
     )
@@ -61,6 +63,7 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
             model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=True,
     )

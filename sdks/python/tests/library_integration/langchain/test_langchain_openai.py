@@ -59,6 +59,7 @@ def test_langchain__openai_llm_is_used__token_usage_is_logged__happyflow(
     llm_args = {
         "model": llm_constants.OPENAI_GPT_NANO,
         "max_tokens": 10,
+        "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
         "name": "custom-openai-llm-name",
     }
     if stream_usage is True:
@@ -150,6 +151,7 @@ def test_langchain__openai_llm_is_used__sync_stream__token_usage_is_logged__happ
     model = langchain_openai.ChatOpenAI(
         model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         name="custom-openai-llm-name",
         callbacks=[callback],
         streaming=True,
@@ -263,6 +265,7 @@ def test_langchain__openai_llm_is_used__async_astream__no_token_usage_is_logged_
     model = langchain_openai.ChatOpenAI(
         model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         name="custom-openai-llm-name",
         callbacks=[callback],
         # `stream_usage` param is VERY IMPORTANT!
@@ -373,6 +376,7 @@ def test_langchain__openai_llm_is_used__sync_stream__no_token_usage_is_logged__h
     model = langchain_openai.ChatOpenAI(
         model=llm_constants.OPENAI_GPT_NANO,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         name="custom-openai-llm-name",
         callbacks=[callback],
         streaming=True,

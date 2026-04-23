@@ -81,6 +81,7 @@ def test_openai_client_chat_completions_create__happyflow(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -221,6 +222,7 @@ def test_openai_client_chat_completions_create__openai_call_made_in_another_trac
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         )
 
     f()
@@ -298,6 +300,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         )
 
     asyncio.run(async_f())
@@ -372,6 +375,7 @@ def test_openai_client_chat_completions_create__stream_mode_is_on__generator_tra
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         stream=True,
         stream_options={"include_usage": True},
     )
@@ -439,6 +443,7 @@ def test_openai_client_chat_completions_create__async_openai_call_made_in_anothe
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             stream=True,
             stream_options={"include_usage": True},
         )
@@ -673,6 +678,7 @@ def test_openai_chat_completion_stream__generator_tracked_correctly(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         stream_options={"include_usage": True},
     )
     with chat_completion_stream_manager as stream:
@@ -741,6 +747,7 @@ def test_openai_chat_completion_stream__include_usage_is_not_enabled__usage_not_
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
     with chat_completion_stream_manager as stream:
         for _ in stream:
@@ -796,6 +803,7 @@ def test_openai_chat_completion_stream__stream_called_2_times__generator_tracked
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             stream_options={"include_usage": True},
         )
         with chat_completion_stream_manager as stream:
@@ -1053,6 +1061,7 @@ def test_async_openai_chat_completion_stream__data_tracked_correctly(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             stream_options={"include_usage": True},
         )
         async with chat_completion_stream_manager as stream:
@@ -1219,6 +1228,7 @@ def test_openai_client_chat_completions_create__opik_args__happyflow(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         opik_args=args_dict,
     )
 

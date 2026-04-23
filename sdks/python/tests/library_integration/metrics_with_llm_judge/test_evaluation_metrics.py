@@ -1,5 +1,6 @@
 import pytest
 from opik.evaluation import metrics
+from opik.evaluation.models.litellm import litellm_chat_model
 from opik import exceptions
 import opik
 from ... import llm_constants
@@ -35,6 +36,7 @@ g_eval_model_parametrizer = pytest.mark.parametrize(
         langchain_chat_model.LangchainChatModel(
             chat_model=langchain_openai.ChatOpenAI(
                 model=llm_constants.OPENAI_GPT_NANO,
+                reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             )
         ),
     ],
@@ -42,8 +44,14 @@ g_eval_model_parametrizer = pytest.mark.parametrize(
 
 
 @pytest.fixture
-def model() -> str:
-    return llm_constants.OPENAI_GPT_NANO
+def model() -> litellm_chat_model.LiteLLMChatModel:
+    # Return a preconfigured LiteLLMChatModel so every metric that accepts an
+    # OpikBaseModel instance picks up reasoning_effort=minimal — cuts reasoning
+    # token overhead (and wall-clock) on gpt-5-nano.
+    return litellm_chat_model.LiteLLMChatModel(
+        model_name=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
 
 
 def test__answer_relevance__context_provided_happyflow(model):
@@ -465,7 +473,9 @@ def test__ragas_llm_context_precision():
     # models.
     llm_evaluator = ragas_llms.LangchainLLMWrapper(
         langchain_openai.ChatOpenAI(
-            model=llm_constants.OPENAI_GPT_NANO, temperature=1.0
+            model=llm_constants.OPENAI_GPT_NANO,
+            temperature=1.0,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         bypass_temperature=True,
     )
@@ -501,7 +511,12 @@ def test__usefulness__track_parameter(
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
     usefulness_metric = metrics.Usefulness(
-        model=llm_constants.OPENAI_GPT_NANO, track=track
+        model=litellm_chat_model.LiteLLMChatModel(
+            model_name=llm_constants.OPENAI_GPT_NANO,
+            track=track,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        ),
+        track=track,
     )
 
     result = usefulness_metric.score(

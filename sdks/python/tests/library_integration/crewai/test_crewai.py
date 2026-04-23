@@ -41,7 +41,12 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
     model,
     opik_provider,
 ):
-    agent_llm = LLM(model=model)
+    llm_kwargs = (
+        {"reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT}
+        if model.startswith("openai/")
+        else {}
+    )
+    agent_llm = LLM(model=model, **llm_kwargs)
 
     researcher = Agent(
         role="Test Researcher",

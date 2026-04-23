@@ -221,6 +221,7 @@ def test_openai_beta_chat_completion_stream__generator_tracked_correctly(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         stream_options={"include_usage": True},
     )
     with chat_completion_stream_manager as stream:
@@ -288,6 +289,7 @@ def test_openai_beta_chat_completion_stream__include_usage_is_not_enabled__usage
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
     with chat_completion_stream_manager as stream:
         for _ in stream:
@@ -342,6 +344,7 @@ def test_openai_beta_chat_completion_stream__stream_called_2_times__generator_tr
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             stream_options={"include_usage": True},
         )
         with chat_completion_stream_manager as stream:
@@ -596,6 +599,7 @@ def test_async_openai_beta_chat_completion_stream__data_tracked_correctly(
             model=MODEL_FOR_TESTS,
             messages=messages,
             max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             stream_options={"include_usage": True},
         )
         async with chat_completion_stream_manager as stream:

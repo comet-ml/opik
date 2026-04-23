@@ -5,6 +5,7 @@ import litellm.types.utils
 
 import opik
 from opik.integrations.litellm import track_completion
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -107,6 +108,7 @@ async def test_litellm_acompletion_create__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -243,6 +245,7 @@ def test_litellm_completion_with_tools__tools_logged(fake_backend):
         messages=messages,
         tools=tools,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -317,6 +320,7 @@ def test_litellm_completion_create__opik_args__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         opik_args=args_dict,
     )
 
@@ -392,6 +396,7 @@ async def test_litellm_acompletion_create__opik_args__happyflow(fake_backend):
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         opik_args=args_dict,
     )
 
@@ -456,6 +461,7 @@ def test_litellm_completion_create__with_source__source_set_on_trace(fake_backen
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -513,6 +519,7 @@ async def test_litellm_acompletion_create__with_source__source_set_on_trace(
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -571,6 +578,7 @@ def test_litellm_completion_double_decoration__idempotent(fake_backend):
         model=MODEL_FOR_TESTS,
         messages=messages,
         max_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()

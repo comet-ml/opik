@@ -1,6 +1,7 @@
 import litellm
 
 from opik import Opik, synchronization
+from ... import llm_constants
 from ...e2e import verifiers
 from ...testlib import ANY_DICT, ANY_STRING
 
@@ -20,6 +21,7 @@ def test_litellm_opik_logging__happyflow(
         response = litellm.completion(
             model=constants.MODEL_NAME,
             messages=messages,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
             metadata={
                 "opik": {
                     "tags": ["streaming-test"],

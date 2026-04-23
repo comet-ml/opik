@@ -222,7 +222,10 @@ def test_llama_index_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -312,6 +315,7 @@ def test_llama_index_stream_chat__happyflow(
     # Configure OpenAI LLM with stream_options to include usage information
     llm = OpenAI(
         model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         additional_kwargs={"stream_options": {"include_usage": True}},
     )
     messages = [
@@ -398,7 +402,10 @@ async def test_llama_index_async_chat__happyflow(
     from llama_index.llms.openai import OpenAI
     from llama_index.core.llms import ChatMessage
 
-    llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     messages = [
         ChatMessage(
             role="system", content="You are a pirate with a colorful personality."
@@ -478,6 +485,7 @@ async def test_llama_index_async_stream_chat__happyflow(
     # Configure OpenAI LLM with stream_options to include usage information
     llm = OpenAI(
         model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         additional_kwargs={"stream_options": {"include_usage": True}},
     )
     messages = [
@@ -564,7 +572,10 @@ def test_llama_index__used_inside_tracked_function__attached_to_existing_trace(
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(
                 role="system", content="You are a pirate with a colorful personality."
@@ -700,7 +711,10 @@ def test_llama_index__used_inside_tracked_function_with_existing_span__attached_
             Settings.callback_manager = opik_callback_manager
             Settings.transformations = None
 
-            llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+            llm = OpenAI(
+                model=llm_constants.OPENAI_GPT_NANO,
+                reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+            )
             messages = [
                 ChatMessage(role="user", content="Say hello"),
             ]
@@ -830,7 +844,10 @@ def test_llama_index__callback_reused_multiple_times__creates_separate_traces(
     Settings.callback_manager = opik_callback_manager
     Settings.transformations = None
 
-    llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+    llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
 
     # First call
     messages1 = [ChatMessage(role="user", content="Say one")]
@@ -944,7 +961,10 @@ def test_llama_index__used_with_start_as_current_trace__attached_to_external_tra
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content="Say hello"),
         ]
@@ -1042,7 +1062,10 @@ async def test_llama_index_async__used_with_start_as_current_trace__attached_to_
         Settings.callback_manager = opik_callback_manager
         Settings.transformations = None
 
-        llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content="Say hello in 3 words"),
         ]
@@ -1137,7 +1160,10 @@ def test_llama_index__query_engine_with_complex_spans__creates_embedding_retriev
     Settings.callback_manager = opik_callback_manager
 
     # Use OpenAI for both LLM and embeddings
-    Settings.llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+    Settings.llm = OpenAI(
+        model=llm_constants.OPENAI_GPT_NANO,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     Settings.embed_model = OpenAIEmbedding(model="text-embedding-3-small")
 
     # Load documents and create index
@@ -1312,7 +1338,10 @@ def test_llama_index__concurrent_pipelines__thread_safe(
 
     def run_pipeline(pipeline_id: int):
         """Run a LlamaIndex pipeline with unique messages"""
-        llm = OpenAI(model=llm_constants.OPENAI_GPT_NANO)
+        llm = OpenAI(
+            model=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+        )
         messages = [
             ChatMessage(role="user", content=f"Say pipeline {pipeline_id} in one word"),
         ]
