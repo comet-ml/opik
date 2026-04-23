@@ -1,6 +1,7 @@
 import React from "react";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import useThreadUpdateMutation from "@/api/traces/useThreadUpdateMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ThreadDetailsTagsProps = {
   tags: string[];
@@ -13,6 +14,9 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
   threadId,
   projectId,
 }) => {
+  const {
+    permissions: { canTagTrace },
+  } = usePermissions();
   const threadUpdateMutation = useThreadUpdateMutation();
 
   const mutateTags = (tags: string[]) => {
@@ -35,9 +39,11 @@ const ThreadDetailsTags: React.FunctionComponent<ThreadDetailsTagsProps> = ({
 
   return (
     <TagListRenderer
-      tags={tags}
+      tags={canTagTrace ? tags : []}
+      immutableTags={canTagTrace ? [] : tags}
       onAddTag={handleAddTag}
       onDeleteTag={handleDeleteTag}
+      canAdd={canTagTrace}
     />
   );
 };

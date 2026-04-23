@@ -6,7 +6,11 @@ import { ServerSyncProvider } from "@/contexts/server-sync-provider";
 import PermissionsGuard from "@/v1/layout/PermissionsGuard/PermissionsGuard";
 import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
 import { PermissionsProvider } from "@/contexts/PermissionsContext";
-import { DEFAULT_PERMISSIONS } from "@/types/permissions";
+import {
+  DEFAULT_PERMISSIONS,
+  READ_ONLY_PERMISSIONS,
+} from "@/types/permissions";
+import { WRITE_ACTIONS_ENABLED } from "@/config";
 
 const WorkspaceGuard = ({
   Layout = PageLayout,
@@ -40,7 +44,13 @@ const WorkspaceGuard = ({
             <PermissionsGuard>{layout}</PermissionsGuard>
           </PermissionsProviderPlugin>
         ) : (
-          <PermissionsProvider value={DEFAULT_PERMISSIONS}>
+          <PermissionsProvider
+            value={
+              WRITE_ACTIONS_ENABLED
+                ? DEFAULT_PERMISSIONS
+                : READ_ONLY_PERMISSIONS
+            }
+          >
             {layout}
           </PermissionsProvider>
         )}

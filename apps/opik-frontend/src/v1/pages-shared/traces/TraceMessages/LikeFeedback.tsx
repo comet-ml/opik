@@ -8,6 +8,7 @@ import { USER_FEEDBACK_NAME } from "@/constants/shared";
 import useTraceFeedbackScoreSetMutation from "@/api/traces/useTraceFeedbackScoreSetMutation";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import { Button } from "@/ui/button";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type LikeFeedbackProps = {
   state?: USER_FEEDBACK_SCORE;
@@ -15,6 +16,9 @@ type LikeFeedbackProps = {
 };
 
 const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
   const { mutate: updateMutation } = useTraceFeedbackScoreSetMutation();
   const { mutate: deleteMutation } = useTraceFeedbackScoreDeleteMutation();
 
@@ -35,6 +39,8 @@ const LikeFeedback: React.FC<LikeFeedbackProps> = ({ state, traceId }) => {
       name: USER_FEEDBACK_NAME,
     });
   }, [traceId, deleteMutation]);
+
+  if (!canAnnotateTraceSpanThread) return null;
 
   return (
     <div className="flex flex-nowrap items-center gap-0.5">
