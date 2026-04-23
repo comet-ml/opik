@@ -80,14 +80,12 @@ import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/P
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v1/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { useDefaultPageSize } from "@/contexts/feature-toggles-provider";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
-const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
@@ -146,16 +144,7 @@ const GeneralDatasetsTab: React.FC = () => {
     updateType: "replaceIn",
   });
 
-  const defaultPageSize = useDefaultPageSize();
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: defaultPageSize,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize();
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
