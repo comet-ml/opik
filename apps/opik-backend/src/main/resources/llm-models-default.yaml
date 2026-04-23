@@ -109,16 +109,24 @@ openai:
   - id: "o1"
     reasoning: true
   - id: "o1-2024-12-17"
+    reasoning: true
   - id: "o1-mini"
+    reasoning: true
   - id: "o1-mini-2024-09-12"
+    reasoning: true
   - id: "o1-preview"
+    reasoning: true
   - id: "o1-preview-2024-09-12"
+    reasoning: true
   - id: "o1-pro"
     structuredOutput: true
+    reasoning: true
   - id: "o3-deep-research"
     structuredOutput: true
+    reasoning: true
   - id: "o3-pro"
     structuredOutput: true
+    reasoning: true
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
