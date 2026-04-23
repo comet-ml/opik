@@ -340,11 +340,9 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
 
     opik.flush_tracker()
 
-    # ADK's ParallelAgent runs sub-agents in asyncio tasks whose contextvar
-    # span stack inherits from (instead of isolating from) the parent task,
-    # so Opik's ADK OTel patcher collapses the sub-agent wrapper spans and
-    # attaches each sub-agent's tool/llm spans directly under parallel_agent.
-    # The tree below matches that observed shape deterministically.
+    # ADK emits a wrapper span for each sub-agent under parallel_agent, and
+    # each sub-agent wrapper contains two LLM calls (function_call request +
+    # function_response handling) plus the tool span.
     _llm_span = SpanModel(
         id=ANY_BUT_NONE,
         name=MODEL_NAME,
@@ -361,6 +359,38 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
         project_name=project_name,
         source="sdk",
     )
+
+    def _sub_agent_wrapper(agent_name: str, tool_name: str) -> SpanModel:
+        return SpanModel(
+            id=ANY_BUT_NONE,
+            name=agent_name,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            metadata=ANY_DICT,
+            type="general",
+            input=ANY_DICT,
+            output=ANY_DICT,
+            project_name=project_name,
+            spans=[
+                _llm_span,
+                _llm_span,
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name=tool_name,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    last_updated_at=ANY_BUT_NONE,
+                    metadata=ANY_DICT,
+                    type="tool",
+                    input={"city": "New York"},
+                    output=ANY_DICT.containing({"status": "success"}),
+                    project_name=project_name,
+                    source="sdk",
+                ),
+            ],
+            source="sdk",
+        )
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -397,34 +427,8 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                 output=ANY_DICT,
                 project_name=project_name,
                 spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="get_weather",
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        last_updated_at=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="tool",
-                        input={"city": "New York"},
-                        output=ANY_DICT.containing({"status": "success"}),
-                        project_name=project_name,
-                        source="sdk",
-                    ),
-                    _llm_span,
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="get_current_time",
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        last_updated_at=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="tool",
-                        input={"city": "New York"},
-                        output=ANY_DICT.containing({"status": "success"}),
-                        project_name=project_name,
-                        source="sdk",
-                    ),
-                    _llm_span,
+                    _sub_agent_wrapper("timezone_agent", "get_current_time"),
+                    _sub_agent_wrapper("weather_agent", "get_weather"),
                 ],
                 source="sdk",
             ),
