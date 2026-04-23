@@ -138,6 +138,13 @@ vi.mock("@/v2/pages-shared/onboarding/IntegrationExplorer", () => ({
   IntegrationExplorer: () => null,
 }));
 
+vi.mock("@/contexts/PermissionsContext", () => ({
+  usePermissions: vi.fn(() => ({
+    permissions: { canCreateProjects: true },
+    isPending: false,
+  })),
+}));
+
 vi.mock("./AgentOnboarding/AgentOnboardingContext", () => ({
   AGENT_ONBOARDING_KEY: "agent-onboarding",
   MANUAL_ONBOARDING_KEY: "manual-onboarding",
