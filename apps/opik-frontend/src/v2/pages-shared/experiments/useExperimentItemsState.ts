@@ -10,6 +10,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { ROW_HEIGHT } from "@/types/shared";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { useUIConfigValue } from "@/contexts/ui-config-provider";
 
 type UseExperimentItemsStateParams = {
   storagePrefix: string;
@@ -24,15 +25,11 @@ const useExperimentItemsState = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: `${storagePrefix}-pagination-size`,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
+  const { default_page_size: defaultPageSize } = useUIConfigValue();
+  const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
+    updateType: "replaceIn",
   });
+  const size = sizeParam ?? defaultPageSize;
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
