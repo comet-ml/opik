@@ -24,6 +24,7 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/ui/use-toast";
 import { Button } from "@/ui/button";
+import { HotkeyDisplay } from "@/ui/hotkey-display";
 import { Separator } from "@/ui/separator";
 import {
   DropdownMenu,
@@ -229,7 +230,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
     <div className="flex flex-auto items-center justify-between">
       <div className="flex items-center gap-1 overflow-hidden">
         <TooltipWrapper content="Close panel">
-          <Button variant="ghost" size="icon-xs" onClick={onClose}>
+          <Button variant="ghost" size="icon-2xs" onClick={onClose}>
             <ChevronsRight />
           </Button>
         </TooltipWrapper>
@@ -242,7 +243,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               onClick={() =>
                 setActiveSection(DetailsActionSection.AIAssistants)
               }
@@ -255,7 +256,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-xs">
+            <Button variant="outline" size="icon-2xs">
               <span className="sr-only">Actions menu</span>
               <MoreHorizontal />
             </Button>
@@ -351,27 +352,23 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
             <Separator orientation="vertical" className="mx-1 h-4" />
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               disabled={!horizontalNavigation.hasPrevious}
               onClick={() => horizontalNavigation.onChange(-1)}
-              className="gap-2"
+              className="gap-1"
             >
               Previous
-              <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                J
-              </kbd>
+              <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
             </Button>
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               disabled={!horizontalNavigation.hasNext}
               onClick={() => horizontalNavigation.onChange(1)}
-              className="gap-2"
+              className="gap-1"
             >
               Next
-              <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                K
-              </kbd>
+              <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
             </Button>
           </>
         )}
@@ -382,7 +379,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           >
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               onClick={() =>
                 navigate({
                   to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
@@ -408,7 +405,7 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
           <TooltipWrapper content="Go to thread">
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               onClick={() => setThreadId!(threadId)}
             >
               Thread

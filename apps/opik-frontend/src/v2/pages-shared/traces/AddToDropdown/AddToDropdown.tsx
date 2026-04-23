@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Span, Trace, Thread } from "@/types/traces";
+import { cn } from "@/lib/utils";
 import AddToDatasetDialog from "@/v2/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/v2/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -102,7 +103,7 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
             variant={buttonVariant}
             size={buttonSize}
             disabled={disabled}
-            className="font-normal"
+            className={cn("font-normal", buttonVariant === "ghost" && "px-0")}
           >
             Add to
             <ChevronDown className="ml-2 size-4" />
