@@ -113,7 +113,7 @@ navigation:
             slug: agent-playground
           - page: Prompt playground
             path: ../docs-v2/prompt_engineering/advanced/playground.mdx
-            slug: playground
+            slug: prompt-playground
           - section: Agent configuration
             slug: /agent-configuration
             contents:
