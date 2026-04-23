@@ -16,7 +16,19 @@ from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema impor
 pytestmark = pytest.mark.usefixtures("ensure_openai_configured")
 
 
-model_parametrizer = pytest.mark.parametrize(
+# GEval is the only test we run against both the direct LiteLLM path and
+# the LangchainChatModel bridge — it exercises the most prompt surface
+# (task_introduction + evaluation_criteria + reasoning_effort), so
+# cross-path coverage there has the highest payoff. Every other metric
+# test uses the `model` fixture below, which resolves to the LiteLLM
+# path via models_factory; the LangChain bridge is still exercised by
+# test__ragas_llm_context_precision, which wraps ChatOpenAI via ragas'
+# LangchainLLMWrapper.
+#
+# The `@g_eval_model_parametrizer` decorator on test__g_eval shadows the
+# `model` fixture for that test — pytest's parametrize takes precedence
+# over a fixture with the same name.
+g_eval_model_parametrizer = pytest.mark.parametrize(
     argnames="model",
     argvalues=[
         llm_constants.OPENAI_GPT_NANO,
@@ -29,7 +41,11 @@ model_parametrizer = pytest.mark.parametrize(
 )
 
 
-@model_parametrizer
+@pytest.fixture
+def model() -> str:
+    return llm_constants.OPENAI_GPT_NANO
+
+
 def test__answer_relevance__context_provided_happyflow(model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
 
@@ -42,7 +58,6 @@ def test__answer_relevance__context_provided_happyflow(model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__answer_relevance__no_context_provided__error_raised(model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
 
@@ -67,10 +82,7 @@ def test__answer_relevance__no_context_provided__error_raised(model):
         )
 
 
-@model_parametrizer
-def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(
-    model,
-):
+def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(model):
     answer_relevance_metric = metrics.AnswerRelevance(
         model=model, require_context=False, track=False
     )
@@ -83,7 +95,6 @@ def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__hap
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__no_opik_configured__answer_relevance(configure_opik_not_configured, model):
     answer_relevance_metric = metrics.AnswerRelevance(model=model, track=False)
 
@@ -103,8 +114,7 @@ def test__no_opik_configured__answer_relevance(configure_opik_not_configured, mo
         ["France is a country in Europe."],
     ],
 )
-@model_parametrizer
-def test__context_precision(context, model):
+def test__context_precision(model, context):
     context_precision_metric = metrics.ContextPrecision(model=model, track=False)
 
     result = context_precision_metric.score(
@@ -124,8 +134,7 @@ def test__context_precision(context, model):
         ["France is a country in Europe."],
     ],
 )
-@model_parametrizer
-def test__context_recall(context, model):
+def test__context_recall(model, context):
     context_precision_metric = metrics.ContextRecall(model=model, track=False)
 
     result = context_precision_metric.score(
@@ -145,8 +154,7 @@ def test__context_recall(context, model):
         ["The capital of France is Paris."],
     ],
 )
-@model_parametrizer
-def test__hallucination(context, model):
+def test__hallucination(model, context):
     hallucination_metric = metrics.Hallucination(model=model, track=False)
 
     result = hallucination_metric.score(
@@ -158,7 +166,6 @@ def test__hallucination(context, model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__moderation(model):
     moderation_metric = metrics.Moderation(model=model, track=False)
 
@@ -169,7 +176,7 @@ def test__moderation(model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
+@g_eval_model_parametrizer
 def test__g_eval(model):
     g_eval_metric = metrics.GEval(
         model=model,
@@ -189,7 +196,6 @@ def test__g_eval(model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__syc_eval__happyflow(model):
     syc_eval_metric = metrics.SycEval(model=model, track=False)
     result = syc_eval_metric.score(
@@ -198,7 +204,6 @@ def test__syc_eval__happyflow(model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__syc_eval__invalid_score(model):
     syc_eval_metric = metrics.SycEval(model=model, track=False)
 
@@ -285,7 +290,6 @@ async def test__trajectory_accuracy__async():
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__trajectory_accuracy__poor_quality(model):
     """Test trajectory accuracy with a poorly executed trajectory."""
     trajectory_accuracy_metric = metrics.TrajectoryAccuracy(model=model, track=False)
@@ -312,7 +316,6 @@ def test__trajectory_accuracy__poor_quality(model):
     assert result.value <= 0.61  # Should get a low score for poor trajectory
 
 
-@model_parametrizer
 def test__structured_output_compliance__valid_json(model):
     """Test structured output compliance with valid JSON."""
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -327,7 +330,6 @@ def test__structured_output_compliance__valid_json(model):
     assert result.value > 0.5
 
 
-@model_parametrizer
 def test__structured_output_compliance__invalid_json(model):
     """Test structured output compliance with invalid JSON."""
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -343,7 +345,6 @@ def test__structured_output_compliance__invalid_json(model):
     assert result.value < 0.5
 
 
-@model_parametrizer
 def test__structured_output_compliance__with_schema(model):
     """Test structured output compliance with schema validation."""
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -358,7 +359,6 @@ def test__structured_output_compliance__with_schema(model):
     assert result.value > 0.5
 
 
-@model_parametrizer
 def test__structured_output_compliance__with_few_shot_examples(model):
     """Test structured output compliance with few-shot examples."""
     few_shot_examples = [
@@ -388,7 +388,6 @@ def test__structured_output_compliance__with_few_shot_examples(model):
     assert result.value > 0.5
 
 
-@model_parametrizer
 def test__structured_output_compliance__with_json_schema(model):
     """Test structured output compliance with JSON schema validation."""
     structured_output_metric = metrics.StructuredOutputCompliance(
@@ -418,7 +417,6 @@ async def test__structured_output_compliance__async():
     assert 0.0 <= result.value <= 1.0
 
 
-@model_parametrizer
 def test__usefulness(model):
     usefulness_metric = metrics.Usefulness(model=model, track=False)
 
@@ -430,7 +428,6 @@ def test__usefulness(model):
     assert_helpers.assert_score_result(result)
 
 
-@model_parametrizer
 def test__llm_juries_judge(model):
     usefulness_judge = metrics.Usefulness(model=model, track=False)
     jury_metric = metrics.LLMJuriesJudge(judges=[usefulness_judge], track=False)
