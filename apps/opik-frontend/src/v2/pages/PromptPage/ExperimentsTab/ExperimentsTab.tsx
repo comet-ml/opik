@@ -55,7 +55,7 @@ import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
-import { useUIConfigValue } from "@/contexts/ui-config-provider";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
 import {
   FILTER_AND_GROUP_COLUMNS,
@@ -125,11 +125,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     updateType: "replaceIn",
   });
 
-  const { default_page_size: defaultPageSize } = useUIConfigValue();
-  const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
-  });
-  const size = sizeParam ?? defaultPageSize;
+  const [size, setSize] = useTablePageSize();
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",

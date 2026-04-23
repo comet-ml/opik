@@ -1010,6 +1010,12 @@ serviceToggles:
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  # NOTE: The default literal below (100) must stay in sync with the Helm default in
+  #       deployment/helm_chart/opik/values.yaml (components.backend.env.UI_DEFAULT_PAGE_SIZE).
+  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
 
 # Local Runner configuration
 localRunner:
@@ -1318,14 +1324,3 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}
-
-# UI Config configuration
-uiConfig:
-  # Default: 100
-  # Description: Deployment-level default rows-per-page for UI tables.
-  #              Lower this value to reduce initial render cost for
-  #              high-volume workspaces.
-  # NOTE: The default literal below (100) must stay in sync with the
-  #       Helm default in deployment/helm_chart/opik/values.yaml
-  #       (components.backend.env.UI_DEFAULT_PAGE_SIZE). Change both.
-  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}

@@ -10,6 +10,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { ROW_HEIGHT } from "@/types/shared";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { useDefaultPageSize } from "@/contexts/feature-toggles-provider";
 
 type UseExperimentItemsStateParams = {
   storagePrefix: string;
@@ -24,12 +25,13 @@ const useExperimentItemsState = ({
     updateType: "replaceIn",
   });
 
+  const defaultPageSize = useDefaultPageSize();
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
     localStorageKey: `${storagePrefix}-pagination-size`,
     queryKey: "size",
-    defaultValue: 100,
+    defaultValue: defaultPageSize,
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });

@@ -10,7 +10,7 @@ import useLocalStorageState from "use-local-storage-state";
 
 import { ROW_HEIGHT } from "@/types/shared";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { useUIConfigValue } from "@/contexts/ui-config-provider";
+import useTablePageSize from "@/hooks/useTablePageSize";
 
 type UseExperimentItemsStateParams = {
   storagePrefix: string;
@@ -25,11 +25,7 @@ const useExperimentItemsState = ({
     updateType: "replaceIn",
   });
 
-  const { default_page_size: defaultPageSize } = useUIConfigValue();
-  const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
-  });
-  const size = sizeParam ?? defaultPageSize;
+  const [size, setSize] = useTablePageSize();
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined

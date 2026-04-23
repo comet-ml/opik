@@ -2,7 +2,6 @@ import PageLayout from "@/v2/layout/PageLayout/PageLayout";
 import Loader from "@/shared/Loader/Loader";
 import usePluginStore from "@/store/PluginsStore";
 import { FeatureTogglesProvider } from "@/contexts/feature-toggles-provider";
-import { UIConfigProvider } from "@/contexts/ui-config-provider";
 import { ServerSyncProvider } from "@/contexts/server-sync-provider";
 import PermissionsGuard from "@/v2/layout/PermissionsGuard/PermissionsGuard";
 import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
@@ -33,11 +32,9 @@ const WorkspaceGuard = ({
 
   const layout = (
     <FeatureTogglesProvider>
-      <UIConfigProvider>
-        <ServerSyncProvider>
-          <Layout />
-        </ServerSyncProvider>
-      </UIConfigProvider>
+      <ServerSyncProvider>
+        <Layout />
+      </ServerSyncProvider>
     </FeatureTogglesProvider>
   );
 

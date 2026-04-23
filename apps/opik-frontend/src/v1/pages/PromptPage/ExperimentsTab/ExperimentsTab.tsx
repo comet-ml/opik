@@ -57,6 +57,7 @@ import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { useDefaultPageSize } from "@/contexts/feature-toggles-provider";
 import { useExperimentsTableConfig } from "@/v1/pages-shared/experiments/useExperimentsTableConfig";
 import {
   FILTER_AND_GROUP_COLUMNS,
@@ -126,12 +127,13 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     updateType: "replaceIn",
   });
 
+  const defaultPageSize = useDefaultPageSize();
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
     localStorageKey: PAGINATION_SIZE_KEY,
     queryKey: "size",
-    defaultValue: 100,
+    defaultValue: defaultPageSize,
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });

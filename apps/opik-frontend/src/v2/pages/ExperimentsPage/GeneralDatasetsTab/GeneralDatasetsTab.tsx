@@ -14,6 +14,7 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 import isNumber from "lodash/isNumber";
@@ -82,7 +83,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import { useUIConfigValue } from "@/contexts/ui-config-provider";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
@@ -168,11 +168,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const { default_page_size: defaultPageSize } = useUIConfigValue();
-  const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
-    updateType: "replaceIn",
-  });
-  const size = sizeParam ?? defaultPageSize;
+  const [size, setSize] = useTablePageSize();
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",

@@ -81,6 +81,7 @@ import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v1/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import { useDefaultPageSize } from "@/contexts/feature-toggles-provider";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 const PASS_RATE_LABEL = "Pass rate";
@@ -145,12 +146,13 @@ const GeneralDatasetsTab: React.FC = () => {
     updateType: "replaceIn",
   });
 
+  const defaultPageSize = useDefaultPageSize();
   const [size, setSize] = useQueryParamAndLocalStorageState<
     number | null | undefined
   >({
     localStorageKey: PAGINATION_SIZE_KEY,
     queryKey: "size",
-    defaultValue: 100,
+    defaultValue: defaultPageSize,
     queryParamConfig: NumberParam,
     syncQueryWithLocalStorageOnInit: true,
   });
