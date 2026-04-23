@@ -7,6 +7,7 @@ import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
 import {
   getNewExperienceOptIn,
   getVersionOverride,
+  navigateToWorkspaceRoot,
   setCachedWorkspaceVersion,
 } from "@/lib/workspaceVersion";
 
@@ -59,7 +60,11 @@ const WorkspaceVersionResolver: React.FC<WorkspaceVersionResolverProps> = ({
       const reloadCount = Number(sessionStorage.getItem(reloadKey) || "0");
       if (reloadCount < MAX_RELOADS) {
         sessionStorage.setItem(reloadKey, String(reloadCount + 1));
-        window.location.reload();
+        // Navigate to the workspace root rather than reloading the current
+        // URL: the other App's router may have already rewritten the URL to
+        // something that only makes sense in its version. Landing on the
+        // workspace root lets the correct version's router route to home.
+        navigateToWorkspaceRoot(workspaceName);
       }
     } else {
       sessionStorage.removeItem(reloadKey);
