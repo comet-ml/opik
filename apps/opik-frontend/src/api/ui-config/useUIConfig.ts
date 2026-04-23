@@ -1,5 +1,5 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import api, { QueryConfig, UI_CONFIG_REST_ENDPOINT } from "@/api/api";
+import api, { UI_CONFIG_REST_ENDPOINT } from "@/api/api";
 import { UIConfig } from "@/types/ui-config";
 
 const getUIConfig = async ({ signal }: QueryFunctionContext) => {
@@ -10,10 +10,9 @@ const getUIConfig = async ({ signal }: QueryFunctionContext) => {
   return data;
 };
 
-export default function useUIConfig(options?: QueryConfig<UIConfig>) {
+export default function useUIConfig() {
   return useQuery({
-    queryKey: ["ui-config", {}],
-    queryFn: (context) => getUIConfig(context),
-    ...options,
+    queryKey: ["ui-config"],
+    queryFn: getUIConfig,
   });
 }
