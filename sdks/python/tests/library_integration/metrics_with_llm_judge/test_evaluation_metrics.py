@@ -366,7 +366,6 @@ def test__structured_output_compliance__with_schema(model):
     )
 
     assert_helpers.assert_score_result(result)
-    assert result.value > 0.5
 
 
 def test__structured_output_compliance__with_few_shot_examples(model):

@@ -68,7 +68,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -188,7 +188,9 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
+            "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
+            "Always call the matching tool first and reply using its response."
         ),
         tools=[
             agent_tools.get_weather,
@@ -522,7 +524,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -648,17 +650,14 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
-    # No reasoning_effort="minimal" here — the test asserts the agent calls
-    # get_weather, and gpt-5-nano with minimal reasoning answers directly
-    # instead of invoking the tool.
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name),
+        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -723,16 +722,14 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
-    # See the note on the non-streaming twin above — keep default reasoning so
-    # the agent actually calls get_weather.
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name),
+        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1067,6 +1064,7 @@ def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_cal
         name="Translator",
         model=MODEL_NAME,
         description="Translates text to English.",
+        instruction="Translate the input text to English.",
     )
 
     root_agent = adk_agents.Agent(
@@ -1074,6 +1072,11 @@ def test_adk__track_adk_agent_recursive__idempotent_calls_make_no_duplicated_cal
         model=MODEL_NAME,
         tools=[adk_agent_tool.AgentTool(agent=translator_to_english)],
         description="Agent responsible for translating text to english by invoking a special tool for that.",
+        instruction=(
+            "You MUST call the Translator tool with the user's text. "
+            "Then return the tool's result verbatim. "
+            "Never answer directly without calling the tool."
+        ),
     )
 
     track_adk_agent_recursive(root_agent, opik_tracer)
@@ -1144,7 +1147,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1346,7 +1349,7 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1410,7 +1413,7 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1663,7 +1666,7 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1708,7 +1711,7 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1773,7 +1776,7 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1839,7 +1842,9 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
+            "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
+            "Always call the matching tool first and reply using its response."
         ),
         tools=[agent_tools.get_weather, agent_tools.get_current_time],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1911,7 +1916,7 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,

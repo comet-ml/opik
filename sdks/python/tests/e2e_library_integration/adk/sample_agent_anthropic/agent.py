@@ -81,7 +81,9 @@ root_agent = LlmAgent(
     model=LiteLlm(model=MODEL),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
-        "You are a helpful agent who can answer user questions about the time and weather in a city."
+        "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
+        "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
+        "Always call the matching tool first and reply using its response."
     ),
     tools=[get_weather, get_current_time],
     before_agent_callback=opik_tracer.before_agent_callback,

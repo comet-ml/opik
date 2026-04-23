@@ -39,7 +39,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
+            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
