@@ -2,7 +2,6 @@ import pytest
 from crewai import Agent, Crew, LLM, Process, Task
 
 import opik
-from opik.integrations.crewai import opik_tracker
 from opik.integrations.crewai import track_crewai
 
 from . import constants
@@ -30,7 +29,7 @@ pytestmark = [
     [
         (llm_constants.LITELLM_OPENAI_GPT_NANO, "openai"),
         (
-            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/{llm_constants.GEMINI_FLASH}",
+            f"gemini/{llm_constants.GEMINI_FLASH}",
             "google_vertexai",
         ),
         (f"bedrock/{llm_constants.BEDROCK_CLAUDE_SONNET}", "bedrock"),
@@ -42,12 +41,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
     model,
     opik_provider,
 ):
-    # gpt-5 reasoning models only support temperature=1; every other provider
-    # accepts it, so pinning the value across rows keeps the parametrization
-    # uniform. drop_params=True tells litellm to strip params the model
-    # rejects (CrewAI v0 injects stop=["\nObservation:"] for its ReAct loop;
-    # gpt-5-nano rejects stop → litellm drops it when drop_params is set).
-    agent_llm = LLM(model=model, temperature=1.0, drop_params=True)
+    agent_llm = LLM(model=model)
 
     researcher = Agent(
         role="Test Researcher",
