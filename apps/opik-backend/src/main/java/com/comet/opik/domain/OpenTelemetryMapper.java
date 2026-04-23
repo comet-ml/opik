@@ -70,6 +70,11 @@ public class OpenTelemetryMapper {
             // (span connects directly to the trace as a root span)
             opikParentSpanId = opikParentSpanIdOverride.orElse(null);
         } else {
+            if (opikParentSpanIdOverride.isPresent()) {
+                log.warn("Span '{}' has '{}' without '{}', ignoring parent span ID override",
+                        otelSpan.getName(), GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR,
+                        GeneralMappingRules.OPIK_TRACE_ID_ATTR);
+            }
             effectiveTraceId = opikTraceId;
             var otelParentSpanId = otelSpan.getParentSpanId();
             opikParentSpanId = otelParentSpanId.isEmpty()
