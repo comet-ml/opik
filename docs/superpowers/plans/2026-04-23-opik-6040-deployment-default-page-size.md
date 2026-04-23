@@ -313,9 +313,11 @@ Create `apps/opik-frontend/src/types/ui-config.ts`:
 
 ```ts
 export type UIConfig = {
-  defaultPageSize: number;
+  default_page_size: number;
 };
 ```
+
+Note: snake_case on the wire because the backend's global `ObjectMapper` uses `SnakeCaseStrategy` (see `OpikApplication.java:120`). Every other API type in `apps/opik-frontend/src/types/` uses snake_case property names for the same reason (e.g. `created_at`, `last_updated_at`).
 
 - [ ] **Step 3: Add the React Query hook**
 
@@ -376,7 +378,7 @@ import useUIConfig from "@/api/ui-config/useUIConfig";
 import { UIConfig } from "@/types/ui-config";
 
 const DEFAULT_UI_CONFIG: UIConfig = {
-  defaultPageSize: 100,
+  default_page_size: 100,
 };
 
 const UIConfigContext = createContext<UIConfig>(DEFAULT_UI_CONFIG);
@@ -448,8 +450,8 @@ vi.mock("@/api/ui-config/useUIConfig", () => ({
 }));
 
 function Consumer() {
-  const { defaultPageSize } = useUIConfigValue();
-  return <span data-testid="size">{defaultPageSize}</span>;
+  const { default_page_size } = useUIConfigValue();
+  return <span data-testid="size">{default_page_size}</span>;
 }
 
 function renderWithProviders(ui: ReactNode) {
@@ -468,8 +470,8 @@ describe("UIConfigProvider", () => {
     mockUseUIConfig.mockReset();
   });
 
-  it("exposes the fetched defaultPageSize when the hook returns data", async () => {
-    mockUseUIConfig.mockReturnValue({ data: { defaultPageSize: 25 } });
+  it("exposes the fetched default_page_size when the hook returns data", async () => {
+    mockUseUIConfig.mockReturnValue({ data: { default_page_size: 25 } });
 
     renderWithProviders(<Consumer />);
 
@@ -608,7 +610,7 @@ Inside `GeneralDatasetsTab`, read the deployment default and swap the hook. Find
 Replace with:
 
 ```tsx
-  const { defaultPageSize } = useUIConfigValue();
+  const { default_page_size: defaultPageSize } = useUIConfigValue();
   const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
     updateType: "replaceIn",
   });
@@ -669,7 +671,7 @@ Find the block at line ~27:
 Replace with:
 
 ```ts
-  const { defaultPageSize } = useUIConfigValue();
+  const { default_page_size: defaultPageSize } = useUIConfigValue();
   const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
     updateType: "replaceIn",
   });
@@ -737,7 +739,7 @@ Find the block at line ~129:
 Replace with:
 
 ```tsx
-  const { defaultPageSize } = useUIConfigValue();
+  const { default_page_size: defaultPageSize } = useUIConfigValue();
   const [sizeParam, setSize] = useQueryParam("size", NumberParam, {
     updateType: "replaceIn",
   });
@@ -832,7 +834,7 @@ In a second shell:
 curl -s -b "cookie-file" http://localhost:8080/api/v1/private/ui-config/ | jq
 ```
 
-Expected: `{ "defaultPageSize": 25 }`.
+Expected: `{ "default_page_size": 25 }`.
 
 If auth is required, use whatever login cookie your local dev account has; matches the exact same auth profile as `/v1/private/toggles/`.
 
@@ -864,7 +866,7 @@ If anything is off (e.g. a lingering `syncQueryWithLocalStorageOnInit` writing l
 
 - ✅ **Spec coverage:** all three v2 Experiments tables updated (Tasks 9, 10, 11); backend endpoint (Tasks 1–4); frontend plumbing (Tasks 5–8); Helm value (Task 12); manual verification of override / fallback / no-localStorage flows (Task 13). No spec item left unmapped.
 - ✅ **Placeholder scan:** no TBD / TODO strings; every code block is complete; every test has real assertions.
-- ✅ **Type consistency:** `UIConfig` (Java, `int defaultPageSize`) ↔ `UIConfig` (TS, `{ defaultPageSize: number }`) ↔ `useUIConfigValue()` returns `UIConfig` ↔ consumers destructure `{ defaultPageSize }`. Cache key is `["ui-config"]` in the single place that uses it.
+- ✅ **Type consistency:** `UIConfig` (Java, `int defaultPageSize`) → JSON wire `default_page_size` (Jackson SnakeCaseStrategy) → `UIConfig` (TS, `{ default_page_size: number }`). Consumers rename on destructure (`{ default_page_size: defaultPageSize }`) so the internal variable stays idiomatic camelCase. Cache key is `["ui-config"]` in the single place that uses it.
 - ✅ **Scope:** single-session-implementable, no decomposition needed.
 
 ---
