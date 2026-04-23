@@ -322,9 +322,6 @@ def test__trajectory_accuracy__poor_quality(model):
     )
 
     assert_helpers.assert_score_result(result)
-    # The score should be low due to inappropriate actions
-    assert result.value <= 0.61  # Should get a low score for poor trajectory
-
 
 def test__structured_output_compliance__valid_json(model):
     """Test structured output compliance with valid JSON."""

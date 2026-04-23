@@ -71,7 +71,8 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -195,7 +196,8 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
             "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[
             agent_tools.get_weather,
@@ -532,7 +534,8 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -668,7 +671,8 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -743,7 +747,8 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1164,7 +1169,8 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1369,7 +1375,8 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1436,7 +1443,8 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1692,7 +1700,8 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1740,7 +1749,8 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1808,7 +1818,8 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1878,7 +1889,8 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             "never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
             "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather, agent_tools.get_current_time],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1953,7 +1965,8 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
             "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
             "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
-            "After the tool returns, reply using only the information from the tool's response."
+            "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+            "Always produce this reply even if the tool's output is already self-contained."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,

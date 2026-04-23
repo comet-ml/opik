@@ -85,7 +85,8 @@ root_agent = LlmAgent(
         "never describe a fake tool call in plain text, never paste invented JSON. "
         "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
         "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
-        "After the tool returns, reply using only the information from the tool's response."
+        "After the tool returns, write a short natural-language reply to the user that reports what the tool said. "
+        "Always produce this reply even if the tool's output is already self-contained."
     ),
     tools=[get_weather, get_current_time],
     before_agent_callback=opik_tracer.before_agent_callback,
