@@ -310,6 +310,37 @@ class TestSuiteAssertionSamplerTest {
         }
 
         @Test
+        @DisplayName("decrements counter when test_suite_dataset_id is missing from metadata")
+        void decrementsCounterWhenDatasetIdMissing() {
+            UUID experimentId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+
+            when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
+                    .thenReturn(Mono.empty());
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_experiment_id\": \"%s\"}".formatted(experimentId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            verify(testSuiteAssertionCounterService).decrementAndFinishIfComplete(workspaceId, experimentId);
+            verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
+        }
+
+        @Test
         @DisplayName("skips trace when test_suite_dataset_item_id is missing from metadata")
         void skipsTraceWhenDatasetItemIdMissing() {
             UUID datasetId = Generators.timeBasedEpochGenerator().generate();
