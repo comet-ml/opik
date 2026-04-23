@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.exception.HttpException;
 import dev.langchain4j.http.client.HttpClient;
 import dev.langchain4j.http.client.HttpRequest;
@@ -23,6 +24,10 @@ import java.util.Map;
 /// requests based on optional configuration keys.
 ///
 /// Current responsibilities:
+///   - Substitutes a `{model}` placeholder in the base URL with the model
+///     name from the outgoing request body. Lets a single provider entry
+///     serve many deployments on gateways that bake the deployment into
+///     the path (e.g. Azure APIM `/deployments/{deployment}/chat/completions`).
 ///   - Appends entries from `configuration["url_query_params"]` (JSON-encoded
 ///     `Map<String, String>`) to the outgoing URL as query parameters.
 ///   - Adds a custom auth header `{name}: {apiKey}` when
@@ -32,10 +37,10 @@ import java.util.Map;
 ///     `configuration["suppress_default_auth"]` is `"true"`. Used by
 ///     gateways whose policy rejects an `Authorization` header.
 ///
-/// Later revisions will extend this decorator with `{model}` URL substitution.
-/// When none of its config keys are set, it is a pure no-op — preserving the
-/// existing Custom LLM provider contract and anything byte-exact that
-/// LangChain4j's `OpenAiClient` already produced.
+/// When none of the relevant config keys are set and no `{model}` placeholder
+/// is present, the decorator is a pure no-op — preserving the existing Custom
+/// LLM provider contract byte-for-byte with what LangChain4j's `OpenAiClient`
+/// already produced.
 @RequiredArgsConstructor
 @Slf4j
 class InterceptingHttpClient implements HttpClient {
@@ -43,6 +48,7 @@ class InterceptingHttpClient implements HttpClient {
     static final String URL_QUERY_PARAMS_CONFIG_KEY = "url_query_params";
     static final String AUTH_HEADER_NAME_CONFIG_KEY = "auth_header_name";
     static final String SUPPRESS_DEFAULT_AUTH_CONFIG_KEY = "suppress_default_auth";
+    static final String MODEL_PLACEHOLDER = "{model}";
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
 
@@ -65,14 +71,16 @@ class InterceptingHttpClient implements HttpClient {
     }
 
     private HttpRequest mutate(HttpRequest request) {
-        if (configuration == null || configuration.isEmpty()) {
+        boolean hasPlaceholder = request.url() != null && request.url().contains(MODEL_PLACEHOLDER);
+        if ((configuration == null || configuration.isEmpty()) && !hasPlaceholder) {
             return request;
         }
 
-        String mutatedUrl = applyQueryParams(request.url());
+        String url = applyModelPlaceholder(request.url(), request.body());
+        url = applyQueryParams(url);
         Map<String, List<String>> mutatedHeaders = applyAuthHeaders(request.headers());
 
-        boolean urlChanged = !mutatedUrl.equals(request.url());
+        boolean urlChanged = !url.equals(request.url());
         boolean headersChanged = mutatedHeaders != request.headers();
         if (!urlChanged && !headersChanged) {
             return request;
@@ -80,10 +88,37 @@ class InterceptingHttpClient implements HttpClient {
 
         return HttpRequest.builder()
                 .method(request.method())
-                .url(mutatedUrl)
+                .url(url)
                 .headers(mutatedHeaders)
                 .body(request.body())
                 .build();
+    }
+
+    private String applyModelPlaceholder(String url, String body) {
+        if (url == null || !url.contains(MODEL_PLACEHOLDER)) {
+            return url;
+        }
+        if (StringUtils.isBlank(body)) {
+            log.warn("Base URL contains '{}' but request body is empty; forwarding URL unchanged",
+                    MODEL_PLACEHOLDER);
+            return url;
+        }
+        try {
+            JsonNode root = JsonUtils.getJsonNodeFromString(body);
+            JsonNode modelNode = root == null ? null : root.get("model");
+            if (modelNode == null || !modelNode.isTextual() || StringUtils.isBlank(modelNode.asText())) {
+                log.warn(
+                        "Base URL contains '{}' but request body has no string 'model' field; forwarding URL unchanged",
+                        MODEL_PLACEHOLDER);
+                return url;
+            }
+            String model = modelNode.asText();
+            return url.replace(MODEL_PLACEHOLDER, model);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to parse request body for '{}' substitution; forwarding URL unchanged",
+                    MODEL_PLACEHOLDER, exception);
+            return url;
+        }
     }
 
     private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {

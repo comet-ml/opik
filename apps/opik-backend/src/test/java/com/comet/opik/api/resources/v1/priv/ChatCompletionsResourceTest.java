@@ -545,6 +545,66 @@ class ChatCompletionsResourceTest {
         }
 
         @Test
+        @DisplayName("{model} placeholder in base URL is substituted with the stripped model name at request time")
+        void modelPlaceholderIsSubstitutedInUrl() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+
+            var firstDeployment = "gpt-4o-mini-ZA";
+            var secondDeployment = "gpt-4o-ZA";
+            var firstModel = "custom-llm/" + CUSTOM_PROVIDER_NAME + "/" + firstDeployment;
+            var secondModel = "custom-llm/" + CUSTOM_PROVIDER_NAME + "/" + secondDeployment;
+            var baseUrl = WIRE_MOCK.runtimeInfo().getHttpBaseUrl() + "/openai/deployments/{model}";
+
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(CUSTOM_PROVIDER_NAME)
+                    .apiKey("dummy-key")
+                    .baseUrl(baseUrl)
+                    .configuration(Map.of(
+                            "provider_name", CUSTOM_PROVIDER_NAME,
+                            "models", firstModel + "," + secondModel))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching("/openai/deployments/.*/chat/completions"))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(SUCCESS_BODY)));
+
+            // Request 1 — first deployment
+            var firstRequest = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(firstModel)
+                    .addUserMessage("ping-1")
+                    .build();
+            assertThat(postChatCompletion(workspaceName, firstRequest).getStatus())
+                    .isEqualTo(HttpStatus.SC_OK);
+
+            // Request 2 — second deployment, same provider entry
+            var secondRequest = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(secondModel)
+                    .addUserMessage("ping-2")
+                    .build();
+            assertThat(postChatCompletion(workspaceName, secondRequest).getStatus())
+                    .isEqualTo(HttpStatus.SC_OK);
+
+            WIRE_MOCK.server().verify(postRequestedFor(
+                    urlPathMatching("/openai/deployments/" + firstDeployment + "/chat/completions")));
+            WIRE_MOCK.server().verify(postRequestedFor(
+                    urlPathMatching("/openai/deployments/" + secondDeployment + "/chat/completions")));
+            // Literal placeholder must not leak through.
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(
+                    urlPathMatching(".*%7Bmodel%7D.*")))).isEmpty();
+            assertThat(WIRE_MOCK.server().findAll(postRequestedFor(
+                    urlPathMatching(".*\\{model\\}.*")))).isEmpty();
+        }
+
+        @Test
         @DisplayName("auth_header_name adds a custom header alongside the default Authorization: Bearer")
         void authHeaderNameAddsCustomHeaderAlongsideBearer() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
