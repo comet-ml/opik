@@ -182,6 +182,10 @@ component:
       # Default: 100
       # Deployment-level default rows-per-page for UI tables in v2.
       # Lower this to reduce initial render cost on trace-heavy workspaces.
+      # NOTE: The default literal below (100) must stay in sync with the
+      #       backend fallback in apps/opik-backend/config.yml
+      #       (uiConfig.defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}).
+      #       Change both.
       UI_DEFAULT_PAGE_SIZE: "100"
     envFrom:
       - configMapRef:
