@@ -408,8 +408,12 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    // Filter out empty/incomplete filters using the existing utility
-    const validFilters = formData.filters.filter(isFilterValid);
+    const validFilters = formData.filters.filter(isFilterValid).map((f) => {
+      if ((f.field === "input" || f.field === "output") && f.key) {
+        return { ...f, field: `${f.field}_json` };
+      }
+      return f;
+    });
 
     const ruleData = {
       name: formData.ruleName,
