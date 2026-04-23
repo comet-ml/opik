@@ -4972,405 +4972,7 @@ demo_spans = [
             "openai"
         ]
     },
-    {
-        "id": "0198eca8-73a1-7788-836c-a69098b05a3e",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a2-7915-a2fb-7416e66bba9b",
-        "name": "chat_completion_create",
-        "type": "llm",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 59, 960398),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 11, 2, 598677),
-        "input": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "\nYou are a CRM assistant. A backend tool returned the following raw output:\n\nThe next contact with Jessica Lau should focus on following up on the proposal sent and addressing her interest in predictive maintenance features. Given that she has decision authority but is awaiting CFO sign-off, it may also be beneficial to offer additional resources or insights that could help facilitate that discussion. A suggested approach could be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of the solution in relation to her implementation timeline for Q3.\n\nYour job is to rephrase this nicely for the user, based on their question:\n\nWhat should our next contact with her be?\n\nReturn a clear and helpful response.\n"
-                }
-            ]
-        },
-        "output": {
-            "choices": [
-                {
-                    "finish_reason": "stop",
-                    "index": 0,
-                    "logprobs": None,
-                    "message": {
-                        "content": "For your next contact with Jessica Lau, I recommend focusing on following up regarding the proposal you sent her. It's important to address her interest in predictive maintenance features as well. Since she has decision-making authority but is currently waiting for CFO approval, it might be helpful to offer additional resources or insights that could assist her in that discussion. A good approach would be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of your solution, particularly in relation to her implementation timeline for Q3.",
-                        "refusal": None,
-                        "role": "assistant",
-                        "annotations": [],
-                        "audio": None,
-                        "function_call": None,
-                        "tool_calls": None
-                    }
-                }
-            ]
-        },
-        "metadata": {
-            "model": "gpt-4o-mini-2024-07-18",
-            "temperature": 0.5,
-            "created_from": "openai",
-            "type": "openai_chat",
-            "id": "chatcmpl-C9DxkI3z2ZCgpcTJW7KMNhX0NQqGN",
-            "created": 1756314660,
-            "object": "chat.completion",
-            "service_tier": "default",
-            "system_fingerprint": "fp_560af6e559",
-            "usage": {
-                "completion_tokens": 104,
-                "prompt_tokens": 147,
-                "total_tokens": 251,
-                "original_usage.completion_tokens": 104,
-                "original_usage.prompt_tokens": 147,
-                "original_usage.total_tokens": 251,
-                "original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-                "original_usage.completion_tokens_details.audio_tokens": 0,
-                "original_usage.completion_tokens_details.reasoning_tokens": 0,
-                "original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-                "original_usage.prompt_tokens_details.audio_tokens": 0,
-                "original_usage.prompt_tokens_details.cached_tokens": 0
-            }
-        },
-        "usage": {
-            "completion_tokens": 104,
-            "prompt_tokens": 147,
-            "total_tokens": 251,
-            "original_usage.completion_tokens": 104,
-            "original_usage.prompt_tokens": 147,
-            "original_usage.total_tokens": 251,
-            "original_usage.original_usage.completion_tokens": 104,
-            "original_usage.original_usage.prompt_tokens": 147,
-            "original_usage.original_usage.total_tokens": 251,
-            "original_usage.original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.reasoning_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.cached_tokens": 0
-        },
-        "model": "gpt-4o-mini-2024-07-18",
-        "provider": "openai",
-        "tags": [
-            "openai"
-        ]
-    },
-    {
-        "id": "0198eca8-73a2-7915-a2fb-7416e66bba9b",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a8-7d26-86c3-6ebba4905482",
-        "name": "format_response",
-        "type": "general",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 59, 960334),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 11, 2, 598936),
-        "input": {
-            "user_query": "What should our next contact with her be?",
-            "raw_tool_output": "The next contact with Jessica Lau should focus on following up on the proposal sent and addressing her interest in predictive maintenance features. Given that she has decision authority but is awaiting CFO sign-off, it may also be beneficial to offer additional resources or insights that could help facilitate that discussion. A suggested approach could be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of the solution in relation to her implementation timeline for Q3.",
-            "model": "gpt-4o-mini",
-            "temperature": 0.5
-        },
-        "output": {
-            "output": "For your next contact with Jessica Lau, I recommend focusing on following up regarding the proposal you sent her. It's important to address her interest in predictive maintenance features as well. Since she has decision-making authority but is currently waiting for CFO approval, it might be helpful to offer additional resources or insights that could assist her in that discussion. A good approach would be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of your solution, particularly in relation to her implementation timeline for Q3."
-        },
-        "tags": []
-    },
-    {
-        "id": "0198eca8-73a3-7977-ab30-2bd6df188f79",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a5-7301-8bff-1223b15aded8",
-        "name": "chat_completion_create",
-        "type": "llm",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 182175),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 10, 59, 959841),
-        "input": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Who is our main contact at greenleaf tech?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Your main contact at Greenleaf Tech is Jessica Lau, the Head of IT Procurement. You can reach her at jessica.lau@greenleaftech.com."
-                },
-                {
-                    "role": "user",
-                    "content": "How many emails has she opened in the last year?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Jessica Lau has opened a total of 6 emails in the past year."
-                },
-                {
-                    "role": "user",
-                    "content": "What should our next contact with her be?"
-                },
-                {
-                    "role": "user",
-                    "content": "\nYou are a CRM contact tool and need to simulate a response to a query using realistic but invented data.\nThe goal is to return raw insights related to the query, don't add anything to the response that is not related to the query.\n\nQuery: \"What should our next contact with her be?\"\n\nContext: {\n    \"customer\": {\n        \"contact\": {\n            \"name\": \"Jessica Lau\",\n            \"title\": \"Head of IT Procurement\",\n            \"email\": \"jessica.lau@greenleaftech.com\",\n            \"status\": \"High-value prospect\"\n        },\n        \"company\": \"Greenleaf Tech\",\n        \"industry\": \"Renewable Energy Tech\",\n        \"deal_stage\": \"Proposal Sent\",\n        \"deal_size_estimate\": 85000,\n        \"lead_source\": \"Webinar sign-up\",\n        \"lead_source_date\": \"2025-03-15\",\n        \"last_contacted\": \"2025-05-12\",\n        \"engagement\": {\n            \"emails_opened\": 6,\n            \"emails_sent\": 7,\n            \"average_email_open_time_hours\": 2,\n            \"outreach_responses\": 3,\n            \"outreach_sent\": 5,\n            \"demos_attended\": [\n                \"2025-04-04\",\n                \"2025-05-09\"\n            ],\n            \"downloads\": [\n                {\n                    \"title\": \"Energy Grid Optimization\",\n                    \"date\": \"2025-04-17\"\n                }\n            ]\n        },\n        \"internal_notes\": [\n            \"Interested in predictive maintenance features\",\n            \"Has decision authority but awaiting CFO sign-off\",\n            \"Expressed need to implement Q3 (starting July)\"\n        ]\n    }\n}\n"
-                }
-            ]
-        },
-        "output": {
-            "choices": [
-                {
-                    "finish_reason": "stop",
-                    "index": 0,
-                    "logprobs": None,
-                    "message": {
-                        "content": "The next contact with Jessica Lau should focus on following up on the proposal sent and addressing her interest in predictive maintenance features. Given that she has decision authority but is awaiting CFO sign-off, it may also be beneficial to offer additional resources or insights that could help facilitate that discussion. A suggested approach could be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of the solution in relation to her implementation timeline for Q3.",
-                        "refusal": None,
-                        "role": "assistant",
-                        "annotations": [],
-                        "audio": None,
-                        "function_call": None,
-                        "tool_calls": None
-                    }
-                }
-            ]
-        },
-        "metadata": {
-            "model": "gpt-4o-mini-2024-07-18",
-            "temperature": 0.5,
-            "created_from": "openai",
-            "type": "openai_chat",
-            "id": "chatcmpl-C9DxiO7R3Rp8NuqV7RQGCZLvoiIrU",
-            "created": 1756314658,
-            "object": "chat.completion",
-            "service_tier": "default",
-            "system_fingerprint": "fp_560af6e559",
-            "usage": {
-                "completion_tokens": 91,
-                "prompt_tokens": 459,
-                "total_tokens": 550,
-                "original_usage.completion_tokens": 91,
-                "original_usage.prompt_tokens": 459,
-                "original_usage.total_tokens": 550,
-                "original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-                "original_usage.completion_tokens_details.audio_tokens": 0,
-                "original_usage.completion_tokens_details.reasoning_tokens": 0,
-                "original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-                "original_usage.prompt_tokens_details.audio_tokens": 0,
-                "original_usage.prompt_tokens_details.cached_tokens": 0
-            }
-        },
-        "usage": {
-            "completion_tokens": 91,
-            "prompt_tokens": 459,
-            "total_tokens": 550,
-            "original_usage.completion_tokens": 91,
-            "original_usage.prompt_tokens": 459,
-            "original_usage.total_tokens": 550,
-            "original_usage.original_usage.completion_tokens": 91,
-            "original_usage.original_usage.prompt_tokens": 459,
-            "original_usage.original_usage.total_tokens": 550,
-            "original_usage.original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.reasoning_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.cached_tokens": 0
-        },
-        "model": "gpt-4o-mini-2024-07-18",
-        "provider": "openai",
-        "tags": [
-            "openai"
-        ]
-    },
-    {
-        "id": "0198eca8-73a4-7137-9550-48f864937d7b",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a5-7301-8bff-1223b15aded8",
-        "name": "retrieve_documents_rag",
-        "type": "general",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 182092),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 182136),
-        "input": {
-            "category": "contact"
-        },
-        "output": {
-            "output": '{\n    "customer": {\n        "contact": {\n            "name": "Jessica Lau",\n            "title": "Head of IT Procurement",\n            "email": "jessica.lau@greenleaftech.com",\n            "status": "High-value prospect"\n        },\n        "company": "Greenleaf Tech",\n        "industry": "Renewable Energy Tech",\n        "deal_stage": "Proposal Sent",\n        "deal_size_estimate": 85000,\n        "lead_source": "Webinar sign-up",\n        "lead_source_date": "2025-03-15",\n        "last_contacted": "2025-05-12",\n        "engagement": {\n            "emails_opened": 6,\n            "emails_sent": 7,\n            "average_email_open_time_hours": 2,\n            "outreach_responses": 3,\n            "outreach_sent": 5,\n            "demos_attended": [\n                "2025-04-04",\n                "2025-05-09"\n            ],\n            "downloads": [\n                {\n                    "title": "Energy Grid Optimization",\n                    "date": "2025-04-17"\n                }\n            ]\n        },\n        "internal_notes": [\n            "Interested in predictive maintenance features",\n            "Has decision authority but awaiting CFO sign-off",\n            "Expressed need to implement Q3 (starting July)"\n        ]\n    }\n}'
-        },
-        "tags": []
-    },
-    {
-        "id": "0198eca8-73a5-7301-8bff-1223b15aded8",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a8-7d26-86c3-6ebba4905482",
-        "name": "contact_insight_tool",
-        "type": "tool",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 182035),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 10, 59, 960060),
-        "input": {
-            "query": "What should our next contact with her be?",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Who is our main contact at greenleaf tech?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Your main contact at Greenleaf Tech is Jessica Lau, the Head of IT Procurement. You can reach her at jessica.lau@greenleaftech.com."
-                },
-                {
-                    "role": "user",
-                    "content": "How many emails has she opened in the last year?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Jessica Lau has opened a total of 6 emails in the past year."
-                },
-                {
-                    "role": "user",
-                    "content": "What should our next contact with her be?"
-                }
-            ],
-            "model": "gpt-4o-mini",
-            "temperature": 0.5
-        },
-        "output": {
-            "output": "The next contact with Jessica Lau should focus on following up on the proposal sent and addressing her interest in predictive maintenance features. Given that she has decision authority but is awaiting CFO sign-off, it may also be beneficial to offer additional resources or insights that could help facilitate that discussion. A suggested approach could be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of the solution in relation to her implementation timeline for Q3."
-        },
-        "tags": []
-    },
-    {
-        "id": "0198eca8-73a6-734a-80b0-014edc8e4279",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a7-7d1b-9f11-920f9bf6c33e",
-        "name": "chat_completion_create",
-        "type": "llm",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 57, 832500),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 181786),
-        "input": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "\nYou are a routing assistant. Classify the following CRM query into one of:\n\n- \"contact\" for information about people, accounts, contact information or engagement\n- \"sales\" for information about forecasts, KPIs, Deals, pipeline or performance\n- \"other\" for anything else\n\nRespond with only one word: contact, sales or other.\n\nQuery: What should our next contact with her be?\nCategory:"
-                }
-            ]
-        },
-        "output": {
-            "choices": [
-                {
-                    "finish_reason": "stop",
-                    "index": 0,
-                    "logprobs": None,
-                    "message": {
-                        "content": "contact",
-                        "refusal": None,
-                        "role": "assistant",
-                        "annotations": [],
-                        "audio": None,
-                        "function_call": None,
-                        "tool_calls": None
-                    }
-                }
-            ]
-        },
-        "metadata": {
-            "model": "gpt-4o-mini-2024-07-18",
-            "temperature": 0,
-            "created_from": "openai",
-            "type": "openai_chat",
-            "id": "chatcmpl-C9DxiATf9x05zNL7VqhHVqf0swnPC",
-            "created": 1756314658,
-            "object": "chat.completion",
-            "service_tier": "default",
-            "system_fingerprint": "fp_560af6e559",
-            "usage": {
-                "completion_tokens": 1,
-                "prompt_tokens": 91,
-                "total_tokens": 92,
-                "original_usage.completion_tokens": 1,
-                "original_usage.prompt_tokens": 91,
-                "original_usage.total_tokens": 92,
-                "original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-                "original_usage.completion_tokens_details.audio_tokens": 0,
-                "original_usage.completion_tokens_details.reasoning_tokens": 0,
-                "original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-                "original_usage.prompt_tokens_details.audio_tokens": 0,
-                "original_usage.prompt_tokens_details.cached_tokens": 0
-            }
-        },
-        "usage": {
-            "completion_tokens": 1,
-            "prompt_tokens": 91,
-            "total_tokens": 92,
-            "original_usage.completion_tokens": 1,
-            "original_usage.prompt_tokens": 91,
-            "original_usage.total_tokens": 92,
-            "original_usage.original_usage.completion_tokens": 1,
-            "original_usage.original_usage.prompt_tokens": 91,
-            "original_usage.original_usage.total_tokens": 92,
-            "original_usage.original_usage.completion_tokens_details.accepted_prediction_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.reasoning_tokens": 0,
-            "original_usage.original_usage.completion_tokens_details.rejected_prediction_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.audio_tokens": 0,
-            "original_usage.original_usage.prompt_tokens_details.cached_tokens": 0
-        },
-        "model": "gpt-4o-mini-2024-07-18",
-        "provider": "openai",
-        "tags": [
-            "openai"
-        ]
-    },
-    {
-        "id": "0198eca8-73a7-7d1b-9f11-920f9bf6c33e",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "parent_span_id": "0198eca8-73a8-7d26-86c3-6ebba4905482",
-        "name": "classify_query",
-        "type": "general",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 57, 832451),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 10, 58, 181898),
-        "input": {
-            "query": "What should our next contact with her be?",
-            "model": "gpt-4o-mini"
-        },
-        "output": {
-            "output": "contact"
-        },
-        "tags": []
-    },
-    {
-        "id": "0198eca8-73a8-7d26-86c3-6ebba4905482",
-        "trace_id": "0198eca8-732b-7c7e-94d6-3e2d431f4e22",
-        "name": "handle_query",
-        "type": "general",
-        "start_time": datetime.datetime(2025, 8, 27, 17, 10, 57, 832386),
-        "end_time": datetime.datetime(2025, 8, 27, 17, 11, 2, 598984),
-        "input": {
-            "thread_id": "653280c1-0f2b-42a1-bb8d-7f4023a35752",
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "Who is our main contact at greenleaf tech?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Your main contact at Greenleaf Tech is Jessica Lau, the Head of IT Procurement. You can reach her at jessica.lau@greenleaftech.com."
-                },
-                {
-                    "role": "user",
-                    "content": "How many emails has she opened in the last year?"
-                },
-                {
-                    "role": "assistant",
-                    "content": "Jessica Lau has opened a total of 6 emails in the past year."
-                },
-                {
-                    "role": "user",
-                    "content": "What should our next contact with her be?"
-                }
-            ],
-            "query": "What should our next contact with her be?"
-        },
-        "output": {
-            "tool": "contact",
-            "tool_response": "The next contact with Jessica Lau should focus on following up on the proposal sent and addressing her interest in predictive maintenance features. Given that she has decision authority but is awaiting CFO sign-off, it may also be beneficial to offer additional resources or insights that could help facilitate that discussion. A suggested approach could be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of the solution in relation to her implementation timeline for Q3.",
-            "response": "For your next contact with Jessica Lau, I recommend focusing on following up regarding the proposal you sent her. It's important to address her interest in predictive maintenance features as well. Since she has decision-making authority but is currently waiting for CFO approval, it might be helpful to offer additional resources or insights that could assist her in that discussion. A good approach would be to schedule a call or meeting to discuss any questions she may have and to reinforce the value of your solution, particularly in relation to her implementation timeline for Q3."
-        },
-        "tags": []
-    },
-    {
+                                    {
         "id": "0198ecb0-4b6f-7286-ad89-18efdbfdc0d3",
         "trace_id": "0198ecb0-4aed-7cff-8e33-cfaf0711abec",
         "parent_span_id": "0198ecb0-4b70-7934-9b3d-f6f0840051aa",
@@ -52563,3 +52165,451 @@ demo_thread_feedback_scores = {
     ]
 }
 
+
+# ---------------------------------------------------------------------------
+# Test suite + agent config + experiments demo data
+# ---------------------------------------------------------------------------
+
+demo_test_suite_global_assertion = "Response is written in clear English"
+
+# 20 items. `assertions` holds per-item assertions (1-3 each). `pass_mask_prod`
+# is a parallel list of booleans shaping the prod experiment pass rate: 16 items
+# pass all assertions, 4 items have a single False → 80% pass rate. Staging uses
+# an implicit all-pass mask (no failures).
+demo_test_suite_items = [
+    {
+        "id": "0199a000-0001-7000-8000-000000000001",
+        "question": "How do I create a project in Opik?",
+        "answer_staging": (
+            "Two paths work:\n\n"
+            "- UI: open the sidebar, click 'Projects', then 'New project' and give it a name.\n"
+            "- SDK: instantiate a client with the project name, e.g. "
+            "`opik.Opik(project_name='my-project')` — Opik creates the project on first write if it doesn't exist.\n\n"
+            "Both are equivalent; pick whichever fits your workflow."
+        ),
+        "answer_prod": "From the UI click Projects in the side nav and hit 'New project', or call `opik.Opik(project_name='...')` from the SDK — both create the project.",
+        "assertions": [
+            "Mentions either the UI path or the SDK",
+            "Is helpful and actionable",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000002",
+        "question": "What is a trace in Opik?",
+        "answer_staging": (
+            "A trace represents a single top-level interaction with your agent — usually one request from a user. "
+            "Inside each trace, individual operations (LLM calls, tool calls, retrieval, etc.) are recorded as spans, "
+            "which can be nested to mirror the structure of your agent's control flow. "
+            "Traces are the unit you filter, score, and compare in Opik."
+        ),
+        "answer_prod": "A trace is the top-level record of one interaction with your agent. It groups together all the spans that represent the individual steps inside that interaction.",
+        "assertions": [
+            "Defines what a trace represents",
+            "Mentions that traces group spans",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000003",
+        "question": "How do I log a trace from Python?",
+        # staging uses the richer prompt and returns a full example.
+        "answer_staging": (
+            "In Python you have two options:\n\n"
+            "1. Decorate a function with `@opik.track` — every call is automatically logged as a trace.\n"
+            "2. Call `client.trace(...)` directly on an `opik.Opik()` instance when you want to build the trace manually.\n\n"
+            "Example:\n"
+            "```python\n"
+            "import opik\n\n"
+            "@opik.track\n"
+            "def answer(question: str) -> str:\n"
+            "    return chat(question)\n"
+            "```"
+        ),
+        # prod (simpler prompt, cheaper model) — names the APIs but skips the example.
+        "answer_prod": "Use the `@opik.track` decorator on a function, or create an `opik.Opik()` client and call `client.trace(...)`.",
+        "assertions": [
+            "Mentions @opik.track or client.trace",
+            "Is specific to Python",
+            "Provides a working example",
+        ],
+        "pass_mask_prod": [True, True, False],
+        "fail_reasons_prod": {
+            2: "The response lists the two entry points (decorator and client.trace) but stops short of providing a complete, runnable code snippet the user can copy-paste.",
+        },
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000004",
+        "question": "What's the difference between a trace and a span?",
+        "answer_staging": (
+            "Think of it as two levels of detail: a **trace** is the full interaction (one request "
+            "end-to-end), while **spans** are the individual steps inside that interaction "
+            "— an LLM call, a tool invocation, a retrieval query, a guardrail check. "
+            "Spans can have child spans, so the whole trace forms a nested tree that mirrors how the agent actually executed."
+        ),
+        "answer_prod": "A trace is the full interaction from start to finish. Spans are the individual steps inside that interaction and can be nested under each other.",
+        "assertions": [
+            "Contrasts trace and span",
+            "Mentions that spans can be nested",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000005",
+        "question": "How do I add feedback scores to a trace?",
+        "answer_staging": (
+            "You have two options. From the SDK call `client.log_traces_feedback_scores([{id: trace_id, name: 'helpfulness', value: 1}])` "
+            "to batch-log scores for one or many traces. From the UI, open the trace detail panel and add a score on the "
+            "Feedback tab — useful for manual review."
+        ),
+        "answer_prod": "Use the SDK method `client.log_traces_feedback_scores([...])`, or open a trace in the UI and add a score on the Feedback tab.",
+        "assertions": [
+            "Mentions the SDK or UI",
+            "Is concrete about the method name",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000006",
+        "question": "Does Opik support self-hosting?",
+        "answer_staging": (
+            "Yes. Opik is open source and can run entirely on your own infrastructure. "
+            "For local or small setups, use the Docker Compose stack (`./opik.sh` from "
+            "`deployment/docker-compose`). For production, there's a Helm chart for "
+            "Kubernetes in `deployment/helm_chart/opik`."
+        ),
+        "answer_prod": "Yes — you can self-host Opik with Docker Compose for local setups or the Helm chart for Kubernetes in production.",
+        "assertions": [
+            "Answers yes/no clearly",
+            "Mentions Docker or Kubernetes",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000007",
+        "question": "How do I filter traces by tag?",
+        "answer_staging": (
+            "In the Traces view, open the filter panel above the table, add a filter on the 'Tags' "
+            "column, and pick the tag value(s) you want. The filter combines with any other "
+            "active filters, so you can narrow by tag *and* date *and* feedback score in one query."
+        ),
+        "answer_prod": "Open the Traces view, click the filter panel, pick the Tags column, and select the tag values you want.",
+        "assertions": [
+            "Mentions the filter UI",
+        ],
+        "pass_mask_prod": [True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000008",
+        "question": "Can Opik track token usage and cost?",
+        "answer_staging": (
+            "Yes. When your LLM spans include `usage` fields (prompt/completion/total tokens), "
+            "Opik aggregates those into per-trace totals and rolls them up into per-project cost estimates "
+            "using provider price tables. Official integrations (OpenAI, Anthropic, LiteLLM, …) populate these fields automatically."
+        ),
+        "answer_prod": "Yes — Opik aggregates token usage from spans into per-trace totals and estimates cost at the trace and project level.",
+        "assertions": [
+            "Confirms usage/cost tracking",
+            "Mentions aggregation or per-trace view",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000009",
+        "question": "What LLM integrations does Opik support?",
+        # staging links to the integrations docs URL (grounded prompt).
+        "answer_staging": (
+            "Opik supports OpenAI, Anthropic, Google Gemini, AWS Bedrock, LangChain, "
+            "LlamaIndex, LiteLLM, Ollama, DSPy, CrewAI, AutoGen, and more. "
+            "Full catalog with setup snippets: https://www.comet.com/docs/opik/integrations/overview"
+        ),
+        # prod — lists providers but mentions docs only by name (no URL).
+        "answer_prod": "OpenAI, Anthropic, LangChain, LlamaIndex, LiteLLM, Ollama, Bedrock, and more — see the integrations docs.",
+        "assertions": [
+            "Lists multiple providers",
+            "Points to the integrations docs",
+        ],
+        "pass_mask_prod": [True, False],
+        "fail_reasons_prod": {
+            1: "The response mentions the integrations docs generically but does not include a link or a concrete docs URL, which the assertion asks for.",
+        },
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000010",
+        "question": "How do I create a dataset?",
+        "answer_staging": (
+            "Two steps. First, get or create the dataset: "
+            "`ds = client.get_or_create_dataset(name='my-dataset')`. Then add items with "
+            "`ds.insert([{'input': '...', 'expected_output': '...'}, ...])`. "
+            "`get_or_create_dataset` is idempotent, so re-running the same script won't duplicate the dataset."
+        ),
+        "answer_prod": "Call `client.get_or_create_dataset(name='...')` to get or create the dataset, then `dataset.insert([{...}, {...}])` to add items.",
+        "assertions": [
+            "Mentions get_or_create_dataset",
+            "Mentions how to insert items",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000011",
+        "question": "What is a test suite in Opik?",
+        "answer_staging": (
+            "A test suite is the regression-testing construct in Opik. It's a specialized dataset "
+            "where each item carries a set of natural-language assertions. When you run the suite "
+            "against a task (a function that takes an item and returns an output), Opik scores every "
+            "assertion with an LLM judge and reports pass/fail per item plus a rolled-up pass rate — "
+            "so you know immediately whether a prompt or model change broke anything."
+        ),
+        "answer_prod": "A test suite is a regression test set: a dataset of inputs plus assertions. You run it against a task, and Opik scores each item and reports pass/fail results.",
+        "assertions": [
+            "Explains regression testing",
+            "Mentions assertions",
+            "Mentions pass/fail results",
+        ],
+        "pass_mask_prod": [True, True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000012",
+        "question": "How do I run a test suite?",
+        "answer_staging": (
+            "Call `opik.run_tests(test_suite=suite, task=my_task_fn)`. Your `task` callable receives "
+            "each dataset item's data dict and returns either a string or a dict with `input`/`output` keys. "
+            "Opik invokes the task for every item, records a trace, and automatically scores each assertion "
+            "with the configured LLM judge."
+        ),
+        "answer_prod": "Use `opik.run_tests(test_suite=suite, task=my_fn)`. Your task callback runs on each item and Opik scores the assertions automatically.",
+        "assertions": [
+            "Names the run_tests function",
+            "Describes the task callback",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000013",
+        "question": "What does an experiment group together?",
+        "answer_staging": (
+            "An experiment is the record of one evaluation run against a specific dataset version. "
+            "It owns a set of traces (one per dataset item), links each trace back to its dataset item, "
+            "and stores the resulting feedback and assertion scores. That shape is exactly what lets you "
+            "compare two experiments side-by-side across dataset items and metrics."
+        ),
+        "answer_prod": "An experiment groups the traces produced by one evaluation run against a dataset, so you can compare results across versions of your app.",
+        "assertions": [
+            "Mentions traces and dataset",
+            "Mentions comparison between runs",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000014",
+        "question": "How do I tag an experiment?",
+        "answer_staging": (
+            "Pass the `tags` argument when you create it: "
+            "`client.create_experiment(name='...', dataset_name='...', tags=['prod', 'v2.1'])`. "
+            "Tags are free-form strings and can be used later to filter the Experiments list or "
+            "group experiments in comparison views."
+        ),
+        "answer_prod": "Pass `tags=['prod']` (or any list of strings) when calling `client.create_experiment(...)`.",
+        "assertions": [
+            "Mentions the tags parameter",
+        ],
+        "pass_mask_prod": [True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000015",
+        "question": "What is an agent configuration blueprint?",
+        "answer_staging": (
+            "A blueprint is an immutable, versioned snapshot of your agent's configuration — "
+            "model name, temperature, system prompt, tool settings, feature flags, anything you "
+            "want to pin. Each blueprint has a version name (v1, v2, …) and can be tagged with "
+            "an environment like `prod` or `staging`, which lets you point 'the prod agent' at a "
+            "specific blueprint and flip environments without redeploying code."
+        ),
+        "answer_prod": "A blueprint is a versioned snapshot of your agent's config (model, temperature, prompts, flags). You can tag a blueprint with an environment like prod or staging.",
+        "assertions": [
+            "Describes versioned config values",
+            "Mentions environments",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000016",
+        "question": "How do I roll back an agent config?",
+        "answer_staging": (
+            "Environments are just labels on blueprint versions, so a rollback is one call: "
+            "`client.set_config_env(version='v1', env='prod')`. That re-tags the older "
+            "`v1` blueprint with the `prod` environment; next time your agent reads its config "
+            "it will pick up `v1` instead of whatever was previously tagged. No redeploy, no downtime."
+        ),
+        "answer_prod": "Use `client.set_config_env(version='v1', env='prod')` to retag the previous version with the prod environment name — the env pointer moves back to that version.",
+        "assertions": [
+            "Explains retagging",
+            "Names set_config_env",
+            "Mentions the version argument",
+        ],
+        "pass_mask_prod": [True, True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000017",
+        "question": "Can I compare two experiments side by side?",
+        # staging calls out outputs and scores explicitly.
+        "answer_staging": (
+            "Yes. From the Experiments view select two experiments and click "
+            "'Compare' to open the side-by-side diff — it lines up each dataset "
+            "item's outputs, feedback scores, and assertion results so you can "
+            "see exactly where the runs differ."
+        ),
+        # prod — confirms compare exists but omits what is actually displayed.
+        "answer_prod": "Yes — from the Experiments view you can select two experiments and click 'Compare' to open a side-by-side view.",
+        "assertions": [
+            "Confirms side-by-side comparison",
+            "Mentions outputs or scores",
+        ],
+        "pass_mask_prod": [True, False],
+        "fail_reasons_prod": {
+            1: "The reply confirms the 'Compare' action but does not say what data is shown (outputs, scores, or the per-item diff), which is what the assertion asks for.",
+        },
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000018",
+        "question": "Where are assertion results stored?",
+        "answer_staging": (
+            "Regular feedback scores live in the `feedback_scores` table, but "
+            "test-suite assertions are routed to a dedicated `assertion_results` table in ClickHouse. "
+            "That separation keeps ad-hoc feedback distinct from regression signals, and the backend "
+            "reads from `assertion_results` to compute each experiment's pass rate and per-assertion averages."
+        ),
+        "answer_prod": "Test-suite assertions land in a dedicated `assertion_results` table, separate from regular feedback scores, and drive the experiment's pass rate aggregation.",
+        "assertions": [
+            "Mentions a dedicated table",
+            "Mentions pass rate aggregation",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000019",
+        "question": "How do I run Opik locally for development?",
+        "answer_staging": (
+            "Easiest path: clone the repo and from `deployment/docker-compose` run `./opik.sh`. "
+            "That spins up the full stack — frontend, Java backend, Python backend, ClickHouse, MySQL, Redis, "
+            "MinIO — in containers. For iterating on just the backend or frontend while keeping the "
+            "infra dockerized, use `./scripts/dev-runner.sh --start` instead."
+        ),
+        "answer_prod": "Clone the repo, then from `deployment/docker-compose` run `./opik.sh` — that brings up the whole stack with docker compose.",
+        "assertions": [
+            "Mentions the opik.sh script or docker compose",
+            "Is concrete about the path",
+        ],
+        "pass_mask_prod": [True, True],
+    },
+    {
+        "id": "0199a000-0001-7000-8000-000000000020",
+        "question": "How do I evaluate prompt changes without affecting prod?",
+        # staging answer spells out the staging environment explicitly.
+        "answer_staging": (
+            "Publish the candidate prompt as a new blueprint version and tag "
+            "that version as `staging`. Run your test suite against the staging "
+            "blueprint; once the assertions pass at the bar you want, retag the "
+            "same version as `prod` to ship it."
+        ),
+        # prod answer talks about 'a new version' without naming staging.
+        "answer_prod": "Publish a new blueprint version, run your test suite against it, and when the results look good retag that version as prod.",
+        "assertions": [
+            "Mentions staging env",
+            "Describes the retag-to-prod flow",
+        ],
+        "pass_mask_prod": [False, True],
+        "fail_reasons_prod": {
+            0: "The reply refers to 'new blueprint version' and 'retag it as prod' but never names the staging environment explicitly, which is what the assertion requires.",
+        },
+    },
+]
+
+
+# Shared system prompt used by the demo support agent. The generator creates
+# two commits on the same prompt — v1 is pinned by the prod blueprint, v2 is
+# pinned by staging — to mirror a real "prompt under evaluation" workflow.
+demo_agent_prompt_name = "support-agent-system"
+
+demo_agent_prompt_v1 = (
+    "You are a helpful Opik support agent.\n"
+    "Answer user questions about Opik — the LLM observability and evaluation "
+    "platform — in clear, plain English.\n"
+    "Be concise: three sentences or fewer unless the user asks for more detail.\n"
+    "If you do not know the answer, say so rather than guessing."
+)
+
+demo_agent_prompt_v2 = (
+    "You are an expert Opik support agent.\n"
+    "You have access to a document retrieval tool. Always call it before "
+    "answering and ground your reply in the documentation it returns.\n"
+    "When the retrieved passages support your answer, quote the most relevant "
+    "snippet verbatim and cite its title.\n"
+    "Respond in plain English and keep answers under 120 words.\n"
+    "If the retrieved context does not contain the answer, say so explicitly "
+    "and point the user to the official docs or community Slack instead of "
+    "guessing."
+)
+
+
+# Two blueprints tagged prod/staging. Each sets the same keys but with
+# different values so the UI shows a meaningful diff. The `system_prompt`
+# entry has type "prompt" and stores the prompt commit — the backend resolves
+# it to the full prompt version on read.
+demo_agent_config_blueprints = [
+    {
+        "env": "prod",
+        "description": "Production config — stable, cheap, deterministic.",
+        "prompt_version": "v1",
+        "values": [
+            {"key": "model", "value": "gpt-4o-mini", "type": "string",
+             "description": "LLM used for user-facing answers"},
+            {"key": "temperature", "value": "0.2", "type": "float",
+             "description": "Lower temperature for stable outputs"},
+            {"key": "top_p", "value": "0.9", "type": "float",
+             "description": "Nucleus sampling threshold"},
+            {"key": "max_tokens", "value": "512", "type": "integer",
+             "description": "Response length cap"},
+            {"key": "enable_fallback", "value": "true", "type": "boolean",
+             "description": "Fall back to secondary provider on timeout"},
+            # system_prompt value is appended at seed time with the v1 commit.
+        ],
+    },
+    {
+        "env": "staging",
+        "description": "Staging config — experimenting with a stronger model and context-grounded prompt.",
+        "prompt_version": "v2",
+        "values": [
+            {"key": "model", "value": "gpt-4o", "type": "string",
+             "description": "Stronger model under evaluation"},
+            {"key": "temperature", "value": "0.5", "type": "float",
+             "description": "Higher temperature for variety"},
+            {"key": "top_p", "value": "0.95", "type": "float",
+             "description": "Nucleus sampling threshold"},
+            {"key": "max_tokens", "value": "1024", "type": "integer",
+             "description": "Longer responses allowed"},
+            {"key": "enable_fallback", "value": "true", "type": "boolean",
+             "description": "Fall back to secondary provider on timeout"},
+            # system_prompt value is appended at seed time with the v2 commit.
+        ],
+    },
+]
+
+
+# Experiment definitions. `tag` is the env tag for the experiment (also the
+# env tag on the blueprint the experiment is linked to). `pass_mode` drives
+# how per-item assertions are scored: "prod" uses the item's pass_mask_prod,
+# "all_pass" scores every assertion as passing. Global assertion is always
+# scored using the same mode.
+demo_test_suite_experiments = [
+    {
+        "name": "Support agent — prod candidate",
+        "tag": "prod",
+        "pass_mode": "prod",
+    },
+    {
+        "name": "Support agent — staging candidate",
+        "tag": "staging",
+        "pass_mode": "all_pass",
+    },
+]

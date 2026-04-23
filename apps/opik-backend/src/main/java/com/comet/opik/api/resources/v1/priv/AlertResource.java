@@ -13,6 +13,8 @@ import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -74,6 +76,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response createAlert(
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert,
             @Context UriInfo uriInfo) {
@@ -108,6 +111,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response updateAlert(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 

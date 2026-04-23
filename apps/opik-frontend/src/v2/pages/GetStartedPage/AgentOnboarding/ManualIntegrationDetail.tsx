@@ -2,11 +2,13 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import { IntegrationStep } from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationStep";
-import useAppStore, { useUserApiKey } from "@/store/AppStore";
+import { useActiveWorkspaceName, useUserApiKey } from "@/store/AppStore";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
+import AgentCopyButtons from "./AgentCopyButtons";
+import { Separator } from "@/ui/separator";
 
 type ManualIntegrationDetailProps = {
   integration: Integration;
@@ -16,7 +18,7 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
   integration,
 }) => {
   const { agentName } = useAgentOnboarding();
-  const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const workspaceName = useActiveWorkspaceName();
   const apiKey = useUserApiKey();
 
   const { code: codeWithConfig, lines } = putConfigInCode({
@@ -58,6 +60,9 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
           in our docs.
         </p>
       </div>
+      <Separator />
+
+      <AgentCopyButtons />
 
       <IntegrationStep
         title={`${INSTALL_OPIK_SECTION_TITLE}.`}

@@ -316,7 +316,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && optimizations.length === 0)) {
     return <Loader />;
   }
 

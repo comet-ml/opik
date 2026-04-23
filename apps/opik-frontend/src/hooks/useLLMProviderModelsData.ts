@@ -316,6 +316,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/spotlight",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW,
+      label: "arcee-ai/trinity-large-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE,
       label: "arcee-ai/trinity-large-preview:free",
     },
@@ -675,6 +679,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
       label: "inception/mercury-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
+      label: "inclusionai/ling-2.6-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
@@ -1353,6 +1361,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_IMAGE_2,
+      label: "openai/gpt-5.4-image-2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_MINI,
       label: "openai/gpt-5.4-mini",
     },
@@ -1463,6 +1475,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HUNTER_ALPHA,
       label: "openrouter/hunter-alpha",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
+      label: "openrouter/pareto-code",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
@@ -1913,6 +1929,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "xiaomi/mimo-v2-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
+      label: "xiaomi/mimo-v2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
+      label: "xiaomi/mimo-v2.5-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
       label: "z-ai/glm-4-32b",
     },
@@ -1967,6 +1991,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_LATEST,
+      label: "~anthropic/claude-opus-latest",
     },
   ],
 

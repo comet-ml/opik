@@ -7,6 +7,7 @@ import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
   AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
+  DEFAULT_ONBOARDING_FLOW,
 } from "./AgentOnboarding/AgentOnboardingContext";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import useProjectByName from "@/api/projects/useProjectByName";
@@ -50,10 +51,10 @@ const AgentOnboardingQuickstart: React.FC = () => {
 };
 
 const NewQuickstart: React.FC = () => {
-  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "manual".
+  // Variants: "control" = agent onboarding modal with Opik skills tab; "connect-to-ollie" = agent onboarding modal with Connect to Ollie tab; "manual" = skip the modal and render the full integrations page. Undefined (PostHog unavailable) falls back to "control".
   const variant =
     useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
-    "manual";
+    DEFAULT_ONBOARDING_FLOW;
 
   if (variant === "manual") {
     return (

@@ -413,6 +413,36 @@ class TracesResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
         }
+
+        @Test
+        @DisplayName("Add trace comment returns 403 when COMMENT_WRITE permission is denied")
+        void addTraceCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.COMMENT_WRITE.getValue());
+
+            try (var response = traceResourceClient.callAddTraceComment(
+                    UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Add trace feedback score returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void addTraceFeedbackScoreReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callFeedbackScore(
+                    UUID.randomUUID(), factory.manufacturePojo(FeedbackScore.class), workspaceName, apiKey)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

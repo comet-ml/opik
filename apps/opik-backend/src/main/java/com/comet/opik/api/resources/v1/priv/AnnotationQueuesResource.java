@@ -129,6 +129,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE)
     public Response createAnnotationQueueBatch(
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueueBatch.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueueBatch batch) {
 
@@ -154,6 +155,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE)
     public Response createAnnotationQueue(
             @RequestBody(content = @Content(schema = @Schema(implementation = AnnotationQueue.class))) @JsonView(AnnotationQueue.View.Write.class) @NotNull @Valid AnnotationQueue request,
             @Context UriInfo uriInfo) {
