@@ -407,7 +407,7 @@ class ExperimentItemDAO {
                       ei.last_updated_by AS last_updated_by,
                       tfs.visibility_mode AS trace_visibility_mode,
                       ei.execution_policy,
-                      arp.assertions_array AS assertions_array
+                      nullIf(arp.assertions_array, '') AS assertions_array
                   FROM experiment_items_scope AS ei
                   LEFT JOIN (
                       SELECT
