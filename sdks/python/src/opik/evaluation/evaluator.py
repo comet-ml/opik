@@ -36,7 +36,7 @@ from .models import ModelCapabilities, base_model, models_factory
 from .scorers import scorer_function, scorer_wrapper_metric
 from . import test_result
 from .types import ExperimentScoreFunction, LLMTask, ScoringKeyMappingType
-from .. import url_helpers
+from .. import url_helpers, exceptions
 from ..api_objects.dataset.test_suite import suite_result_constructor
 
 if TYPE_CHECKING:
@@ -658,7 +658,7 @@ def evaluate_experiment(
 ) -> evaluation_result.EvaluationResult:
     """Update the existing experiment with new evaluation metrics. You can use either `scoring_metrics` or `scorer_functions` to calculate
     evaluation metrics. The scorer functions doesn't require `scoring_key_mapping` and use reserved parameters
-    to receive inputs and outputs from the task.
+    to receive inputs and outputs from the task. The experiment requires at least one test case.
 
     Args:
         experiment_name: The name of the experiment to update.
@@ -718,6 +718,11 @@ def evaluate_experiment(
         dataset_=dataset_,
         scoring_key_mapping=scoring_key_mapping,
     )
+    if not test_cases:
+        raise exceptions.EmptyExperiment(
+            f"Experiment {experiment.id} does not have any test traces to run an evaluation"
+        )
+
     first_trace_id = test_cases[0].trace_id
     project_name = rest_operations.get_trace_project_name(
         client=client, trace_id=first_trace_id
