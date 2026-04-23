@@ -14,6 +14,7 @@ import {
   DATASET_TYPE,
   Evaluator,
   Experiment,
+  EXPERIMENT_STATUS,
   ExperimentsCompare,
   ExperimentItem,
 } from "@/types/datasets";
@@ -92,7 +93,9 @@ export default function useTestSuitePromptResults(): Record<
       enabled: isTestSuite && !!experimentId,
       refetchInterval: (query: { state: { data: unknown } }) => {
         const data = query.state.data as Experiment | undefined;
-        if (isExperimentTerminal(data?.status)) {
+        if (
+          isExperimentTerminal(data?.status as EXPERIMENT_STATUS | undefined)
+        ) {
           return data?.pass_rate != null ? false : REFETCH_INTERVAL;
         }
         return REFETCH_INTERVAL;
@@ -104,7 +107,9 @@ export default function useTestSuitePromptResults(): Record<
     if (experimentStatusResults.length === 0) return false;
     return experimentStatusResults.every((r) => {
       const data = r.data as Experiment | undefined;
-      return isExperimentTerminal(data?.status);
+      return isExperimentTerminal(
+        data?.status as EXPERIMENT_STATUS | undefined,
+      );
     });
   }, [experimentStatusResults]);
 

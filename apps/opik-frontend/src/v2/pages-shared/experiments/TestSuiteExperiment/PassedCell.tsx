@@ -19,6 +19,7 @@ import {
   ExperimentsCompare,
 } from "@/types/datasets";
 import { isExperimentTerminal } from "@/lib/experiments";
+import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { RunStatus } from "@/types/test-suites";
 import { isAggregatedItem } from "@/lib/trials";
 
@@ -42,6 +43,19 @@ const SKIPPED_RESULT = (reason: string): StatusInfo => ({
   passThreshold: undefined,
   runsPerItem: undefined,
 });
+
+function resolveSkippedStatus(
+  status: RunStatus | undefined,
+  row: ExperimentsCompare,
+  experimentFinished?: boolean,
+): StatusInfo | null {
+  if (!status) {
+    const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
+    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+  }
+  return null;
+}
 
 export function getStatusFromExperimentItems(
   row: ExperimentsCompare,
@@ -69,12 +83,8 @@ export function getStatusFromExperimentItems(
     status = items[0].status;
   }
 
-  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
-  if (!status) {
-    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    status = undefined;
-  }
+  const skipped = resolveSkippedStatus(status, row, experimentFinished);
+  if (skipped) return skipped;
 
   // Item-level execution_policy overrides the dataset-level one
   const passThreshold =
@@ -109,16 +119,12 @@ export function getStatusInfoForExperiment(
   if (!expItems.length) return SKIPPED_RESULT(NO_EXPERIMENT_ITEM_REASON);
 
   const summary = row.run_summaries_by_experiment?.[experimentId];
-  let status: RunStatus | undefined = summary
+  const status: RunStatus | undefined = summary
     ? summary.status
     : expItems[0].status;
 
-  const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
-  if (!status) {
-    if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    status = undefined;
-  }
+  const skipped = resolveSkippedStatus(status, row, experimentFinished);
+  if (skipped) return skipped;
 
   // Item-level execution_policy overrides the dataset-level one
   const passThreshold =
@@ -221,7 +227,7 @@ const isExperimentFinished = (
   experimentId: string,
 ): boolean => {
   const exp = experiments?.find((e) => e.id === experimentId);
-  return isExperimentTerminal(exp?.status);
+  return isExperimentTerminal(exp?.status as EXPERIMENT_STATUS | undefined);
 };
 
 const PassedCell: React.FC<CellContext<ExperimentsCompare, unknown>> = (
