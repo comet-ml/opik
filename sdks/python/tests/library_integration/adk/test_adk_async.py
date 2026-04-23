@@ -344,9 +344,23 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
 
     opik.flush_tracker()
 
-    # ADK emits a wrapper span for each sub-agent under parallel_agent, and
-    # each sub-agent wrapper contains two LLM calls (function_call request +
-    # function_response handling) plus the tool span.
+    # ADK emits a wrapper span for each sub-agent under parallel_agent. Each
+    # sub-agent wrapper contains TWO LLM spans plus the tool span — that's
+    # the normal function-calling round-trip inside LlmAgent:
+    #   1. first LLM call  — the model is handed the tool's function
+    #      declaration and emits a `function_call` part asking to run it
+    #      (Opik opens an LLM span via before_model_callback);
+    #   2. tool span       — ADK dispatches the Python tool and records its
+    #      input/output;
+    #   3. second LLM call — the function_response is fed back to the model,
+    #      which turns it into the user-facing text reply (another
+    #      before/after_model_callback round → another LLM span).
+    # Two LLM spans + one tool span per sub-agent is therefore correct, not a
+    # duplication bug. Siblings below are listed in start_time order (the
+    # emulator sorts children that way); both LLM spans start before the tool
+    # span because ADK opens the second LLM span at the moment it schedules
+    # the follow-up turn (i.e. as soon as the function_call is received),
+    # which is before the tool's `before_tool_callback` fires.
     _llm_span = SpanModel(
         id=ANY_BUT_NONE,
         name=MODEL_NAME,
