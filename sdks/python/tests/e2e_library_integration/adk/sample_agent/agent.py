@@ -8,7 +8,9 @@ from google.adk.agents.callback_context import CallbackContext
 
 from opik.integrations.adk import OpikTracer
 
-from .... import llm_constants
+# ADK loads this file as a top-level module (importlib.import_module("sample_agent")),
+# so relative imports above this package are unavailable — keep the model id inline.
+MODEL = "gemini-2.5-flash"
 
 
 def get_weather(city: str) -> dict:
@@ -75,7 +77,7 @@ def after_agent_callback(
 
 root_agent = Agent(
     name="weather_time_agent",
-    model=llm_constants.GEMINI_FLASH,
+    model=MODEL,
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
         "You are a helpful agent who can answer user questions about the time and weather in a city."
