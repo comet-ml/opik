@@ -58,8 +58,64 @@ def resolve_project_id(api: "OpikApi", project_name: str) -> str:
         return resolve_project_id_by_name(api, project_name)
     except ApiError as e:
         raise click.ClickException(
-            f"Project '{project_name}' not found. Check the project name and try again."
+            _format_project_retrieval_error(project_name, e)
         ) from e
+
+
+_CONFIGURE_DOCS_URL = (
+    "https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
+)
+
+_PROJECT_RETRIEVAL_NOT_FOUND_HINT = "check the project name and try again"
+_PROJECT_RETRIEVAL_AUTH_HINT = (
+    f"run `opik configure` to set your API key and workspace "
+    f"(see {_CONFIGURE_DOCS_URL})"
+)
+_PROJECT_RETRIEVAL_GENERIC_HINT = (
+    f"verify your Opik configuration and connectivity (see {_CONFIGURE_DOCS_URL})"
+)
+
+# Hints read as lowercase verb phrases because they are joined to the
+# server's message in one sentence.
+_PROJECT_RETRIEVAL_STATUS_HINTS: "dict[int, str]" = {
+    404: _PROJECT_RETRIEVAL_NOT_FOUND_HINT,
+    401: _PROJECT_RETRIEVAL_AUTH_HINT,
+    403: _PROJECT_RETRIEVAL_AUTH_HINT,
+}
+
+
+def _extract_server_error_message(error: ApiError) -> Optional[str]:
+    # Opik backends use two shapes: Dropwizard {"code", "message"} and Opik's
+    # custom {"errors": [...]} (e.g. project-retrieve 404).
+    body = error.body
+    if isinstance(body, dict):
+        for key in ("message", "msg", "error"):
+            value = body.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        errors = body.get("errors")
+        if isinstance(errors, list):
+            joined = "; ".join(
+                item.strip()
+                for item in errors
+                if isinstance(item, str) and item.strip()
+            )
+            if joined:
+                return joined
+    elif isinstance(body, str) and body.strip():
+        return body.strip()
+    return None
+
+
+def _format_project_retrieval_error(project_name: str, error: ApiError) -> str:
+    hint = _PROJECT_RETRIEVAL_STATUS_HINTS.get(
+        error.status_code or -1, _PROJECT_RETRIEVAL_GENERIC_HINT
+    )
+    detail = _extract_server_error_message(error) or (
+        f"server returned HTTP {error.status_code or 'unknown'}"
+    )
+    detail = detail.rstrip(".").strip()
+    return f"Could not retrieve project '{project_name}': {detail} — {hint}."
 
 
 _RUNNER_TYPE_BYTE = {

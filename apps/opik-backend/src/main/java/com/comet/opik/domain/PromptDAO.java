@@ -33,8 +33,21 @@ import java.util.UUID;
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
 public interface PromptDAO {
 
-    @SqlQuery("SELECT EXISTS(SELECT 1 FROM prompts WHERE workspace_id = :workspaceId AND project_id IS NULL)")
-    boolean hasVersion1Prompts(@Bind("workspaceId") String workspaceId);
+    /**
+     * Checks for V1 (workspace-scoped) prompts excluding known demo names.
+     * MySQL utf8mb4_unicode_ci collation makes the NOT IN comparison case-insensitive,
+     * so demo name variants differing only in casing are automatically excluded.
+     */
+    @SqlQuery("""
+            SELECT EXISTS(
+                SELECT 1 FROM prompts
+                WHERE workspace_id = :workspaceId AND project_id IS NULL
+                AND name NOT IN (<demoPromptNames>)
+            )""")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    boolean hasVersion1Prompts(
+            @Bind("workspaceId") String workspaceId, @BindList("demoPromptNames") List<String> demoPromptNames);
 
     @SqlUpdate("INSERT INTO prompts (id, name, description, created_by, last_updated_by, workspace_id, project_id, tags, template_structure) "
             +

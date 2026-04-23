@@ -90,6 +90,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_IMAGE_2 = "gpt-image-2",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -98,11 +99,11 @@ export enum PROVIDER_MODEL_TYPE {
   CLAUDE_OPUS_4 = "claude-opus-4-20250514",
   CLAUDE_OPUS_4_5 = "claude-opus-4-5-20251101",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
+  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
   CLAUDE_SONNET_4 = "claude-sonnet-4-20250514",
   CLAUDE_SONNET_4_5 = "claude-sonnet-4-5",
   CLAUDE_SONNET_4_5_20250929 = "claude-sonnet-4-5-20250929",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
-  CLAUDE_OPUS_4_7 = "claude-opus-4-7",
 
   //  <---- OpenRouter
   AI21_JAMBA_LARGE_1_7 = "ai21/jamba-large-1.7",
@@ -237,6 +238,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
+  INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
   KWAIPILOT_KAT_CODER_PRO = "kwaipilot/kat-coder-pro",
@@ -335,6 +337,7 @@ export enum PROVIDER_MODEL_TYPE {
   MOONSHOTAI_KIMI_K2_0905_EXACTO = "moonshotai/kimi-k2-0905:exacto",
   MOONSHOTAI_KIMI_K2_THINKING = "moonshotai/kimi-k2-thinking",
   MOONSHOTAI_KIMI_K2_5 = "moonshotai/kimi-k2.5",
+  MOONSHOTAI_KIMI_K2_6 = "moonshotai/kimi-k2.6",
   MOONSHOTAI_KIMI_K2_FREE = "moonshotai/kimi-k2:free",
   MOONSHOTAI_KIMI_LINEAR_48B_A3B_INSTRUCT = "moonshotai/kimi-linear-48b-a3b-instruct",
   MORPH_MORPH_V3_FAST = "morph/morph-v3-fast",
@@ -405,6 +408,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_3_CHAT = "openai/gpt-5.3-chat",
   OPENAI_GPT_5_3_CODEX = "openai/gpt-5.3-codex",
   OPENAI_GPT_5_4 = "openai/gpt-5.4",
+  OPENAI_GPT_5_4_IMAGE_2 = "openai/gpt-5.4-image-2",
   OPENAI_GPT_5_4_MINI = "openai/gpt-5.4-mini",
   OPENAI_GPT_5_4_NANO = "openai/gpt-5.4-nano",
   OPENAI_GPT_5_4_PRO = "openai/gpt-5.4-pro",
@@ -433,6 +437,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_FREE = "openrouter/free",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
+  OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
   PERPLEXITY_SONAR = "perplexity/sonar",
   PERPLEXITY_SONAR_DEEP_RESEARCH = "perplexity/sonar-deep-research",
   PERPLEXITY_SONAR_PRO = "perplexity/sonar-pro",
@@ -559,6 +564,7 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
+  ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
 
   //   <----- gemini
   AQA = "aqa",

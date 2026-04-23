@@ -216,7 +216,7 @@ def resolve_project_name(
             message='No project name configured. Traces are being logged to "Default Project".\n'
             "Set OPIK_PROJECT_NAME environment variable or pass project_name to the Opik client\n"
             "to log to a specific project.\n"
-            "See https://www.comet.com/docs/opik/tracing/sdk_configuration",
+            "See https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration",
             logger=LOGGER,
         )
 

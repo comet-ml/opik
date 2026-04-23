@@ -289,6 +289,37 @@ class AnnotationQueuesResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Create annotation queue returns 403 when permission is denied")
+        void createAnnotationQueueReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE.getValue());
+
+            try (var response = annotationQueuesResourceClient.callCreateAnnotationQueue(
+                    factory.manufacturePojo(AnnotationQueue.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Create annotation queue batch returns 403 when permission is denied")
+        void createAnnotationQueueBatchReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ANNOTATION_QUEUE_CREATE.getValue());
+
+            try (var response = annotationQueuesResourceClient.callCreateAnnotationQueueBatch(
+                    new LinkedHashSet<>(List.of(factory.manufacturePojo(AnnotationQueue.class))),
+                    apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

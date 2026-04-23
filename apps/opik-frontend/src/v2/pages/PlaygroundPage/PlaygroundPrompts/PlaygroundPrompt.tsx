@@ -53,6 +53,7 @@ import useSavePromptToBlueprint from "@/v2/pages-shared/llm/BlueprintPromptsSele
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import useLoadBlueprintPrompt from "@/hooks/useLoadBlueprintPrompt";
 import { BlueprintPromptRef } from "@/types/playground";
+import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -62,6 +63,8 @@ interface PlaygroundPromptProps {
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
+  onRun?: () => void;
+  onStop?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -72,6 +75,8 @@ const PlaygroundPrompt = ({
   isPendingProviderKeys,
   providerResolver,
   modelResolver,
+  onRun,
+  onStop,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
@@ -443,6 +448,15 @@ const PlaygroundPrompt = ({
           improvePromptConfig={improvePromptConfig}
         />
       </div>
+
+      {onRun && onStop && (
+        <PlaygroundRunButton
+          promptId={promptId}
+          onRun={onRun}
+          onStop={onStop}
+          className="flex items-center justify-end border-t px-4 py-2"
+        />
+      )}
 
       {selectedBlueprintRef && blueprintPromptData && (
         <SaveExistingPromptDialog

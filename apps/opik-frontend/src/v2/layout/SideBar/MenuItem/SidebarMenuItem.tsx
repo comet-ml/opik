@@ -1,6 +1,5 @@
 import React, { MouseEventHandler } from "react";
 import { Link } from "@tanstack/react-router";
-import { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -18,10 +17,11 @@ export type MenuItem = {
   id: string;
   path?: string;
   type: MENU_ITEM_TYPE;
-  icon: LucideIcon;
+  icon: React.ComponentType<{ className?: string }>;
   label: string;
   disabled?: boolean;
   muted?: boolean;
+  exact?: boolean;
   featureFlag?: FeatureToggleKeys;
   onClick?: MouseEventHandler<HTMLButtonElement>;
 };
@@ -84,7 +84,12 @@ const SidebarMenuItem: React.FunctionComponent<SidebarMenuItemProps> = ({
     }
     itemElement = (
       <li className="flex">
-        <Link to={item.path} params={params} className={linkClasses}>
+        <Link
+          to={item.path}
+          params={params}
+          activeOptions={{ exact: item.exact ?? false }}
+          className={linkClasses}
+        >
           {content}
         </Link>
       </li>

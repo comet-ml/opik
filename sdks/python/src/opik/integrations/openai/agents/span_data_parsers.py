@@ -1,9 +1,10 @@
 import dataclasses
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 import logging
 
 from agents import tracing
 
+from opik.llm_usage import litellm_provider_mapping
 from opik.types import SpanType, LLMProvider
 import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
@@ -52,7 +53,7 @@ class ParsedSpanData:
     metadata: Optional[Dict[str, Any]] = None
     usage: Optional[llm_usage.OpikUsage] = None
     model: Optional[str] = None
-    provider: Optional[LLMProvider] = None
+    provider: Optional[Union[LLMProvider, str]] = None
 
 
 def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
@@ -76,9 +77,7 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
         del content["input"], content["output"]
 
     elif openai_span_data.type == "generation":
-        input_data = openai_span_data.input
-        output_data = openai_span_data.output
-        del content["input"], content["output"]
+        return _parse_generation_span_content(openai_span_data)
 
     elif openai_span_data.type == "response":
         return _parse_response_span_content(openai_span_data)
@@ -121,41 +120,79 @@ def parse_spandata(openai_span_data: tracing.SpanData) -> ParsedSpanData:
     )
 
 
-def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
-    response = span_data.response
-
-    if response is None:
-        return ParsedSpanData(
-            name="Response",
-            type="llm",
-        )
-
-    response_dict = span_data.response.model_dump()
-    input = {"input": span_data.input}
-    output = {"output": response.output}
-
-    _, metadata = dict_utils.split_dict_by_keys(
-        input_dict=response_dict,
-        keys=["input", "output"],
+def _infer_provider(model: Optional[str]) -> Union[LLMProvider, str]:
+    """Map a model string to a provider, defaulting to OpenAI for un-prefixed models."""
+    return (
+        litellm_provider_mapping.infer_provider_from_litellm_model_prefix(model)
+        or LLMProvider.OPENAI
     )
 
-    if response.usage is not None:
-        opik_usage = llm_usage.try_build_opik_usage_or_log_error(
-            provider=LLMProvider.OPENAI,
-            usage=response.usage.model_dump(),
-            logger=LOGGER,
-            error_message="Failed to log usage in openai agent run",
-        )
-    else:
-        opik_usage = None
+
+def _wrap_as_dict(value: Any, key: str) -> Optional[Dict[str, Any]]:
+    if value is None or isinstance(value, dict):
+        return value
+    return {key: value}
+
+
+def _build_opik_usage(
+    usage: Optional[Dict[str, Any]], error_message: str
+) -> Optional[llm_usage.OpikUsage]:
+    # openai-agents always emits usage in the OpenAI Responses shape, even for
+    # LiteLLM-routed calls, so the OpenAI parser handles every provider here.
+    if usage is None:
+        return None
+    return llm_usage.try_build_opik_usage_or_log_error(
+        provider=LLMProvider.OPENAI,
+        usage=usage,
+        logger=LOGGER,
+        error_message=error_message,
+    )
+
+
+_GENERATION_SPAN_HANDLED_KEYS = {"input", "output", "usage", "model"}
+
+
+def _parse_generation_span_content(
+    span_data: tracing.GenerationSpanData,
+) -> ParsedSpanData:
+    metadata = {
+        key: value
+        for key, value in span_data.export().items()
+        if key not in _GENERATION_SPAN_HANDLED_KEYS
+    }
+    return ParsedSpanData(
+        name="Generation",
+        type="llm",
+        input=_wrap_as_dict(span_data.input, "input"),
+        output=_wrap_as_dict(span_data.output, "output"),
+        usage=_build_opik_usage(
+            span_data.usage,
+            "Failed to log usage in openai agent generation span",
+        ),
+        metadata=metadata,
+        model=span_data.model,
+        provider=_infer_provider(span_data.model),
+    )
+
+
+def _parse_response_span_content(span_data: tracing.ResponseSpanData) -> ParsedSpanData:
+    response = span_data.response
+    if response is None:
+        return ParsedSpanData(name="Response", type="llm")
+
+    _, metadata = dict_utils.split_dict_by_keys(
+        input_dict=response.model_dump(),
+        keys=["input", "output"],
+    )
+    usage = response.usage.model_dump() if response.usage is not None else None
 
     return ParsedSpanData(
         name="Response",
-        input=input,
-        output=output,
-        usage=opik_usage,
         type="llm",
+        input={"input": span_data.input},
+        output={"output": response.output},
+        usage=_build_opik_usage(usage, "Failed to log usage in openai agent run"),
         metadata=metadata,
         model=response.model,
-        provider=LLMProvider.OPENAI,
+        provider=_infer_provider(response.model),
     )

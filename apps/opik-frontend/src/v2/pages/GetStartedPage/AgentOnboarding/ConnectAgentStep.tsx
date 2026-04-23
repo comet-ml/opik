@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import useLocalStorageState from "use-local-storage-state";
-import { ArrowRight, ChevronsRight, MonitorPlay, Undo2 } from "lucide-react";
+import { ArrowRight, MonitorPlay, Undo2 } from "lucide-react";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
+import { Separator } from "@/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
 import usePluginsStore from "@/store/PluginsStore";
@@ -15,14 +16,17 @@ import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import {
   useAgentOnboarding,
   AGENT_ONBOARDING_STEPS,
+  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
   TRACES_OLDEST_FIRST_SORTING,
+  DEFAULT_ONBOARDING_FLOW,
 } from "./AgentOnboardingContext";
 import AgentOnboardingCard from "./AgentOnboardingCard";
 import ConnectToOllieTab from "./ConnectToOllieTab";
-import InstallWithAITab from "./InstallWithAITab";
+import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
-import ViewDemoProjectButton from "./ViewDemoProjectButton";
+import ShowDemoProjectButton from "./ShowDemoProjectButton";
+import AgentCopyButtons from "./AgentCopyButtons";
 import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,
@@ -31,19 +35,18 @@ import {
 
 const TRACE_POLL_INTERVAL = 5000;
 const FIRST_TRACE_TRACKED_KEY = "agent-onboarding-first-trace-tracked";
-const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
-  "onboarding-skills-for-ai-assisted-setup";
 
 const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
-  const aiAssistedOpikSkillsVariant = useFeatureFlagVariantKey(
-    AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
-  );
-  // it's 95% "test" and 5% "control" in production, but we want to be sure to handle the case where it's undefined
-  const aiAssistedUsesOpikSkills =
-    (aiAssistedOpikSkillsVariant ?? "test") === "test";
+
+  // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "connect-to-ollie".
+  const variant =
+    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
+    DEFAULT_ONBOARDING_FLOW;
+
+  const aiAssistedUsesOpikSkills = variant === "control";
   const showOllieTab = !!apiKey && !aiAssistedUsesOpikSkills;
 
   const [activeTab, setActiveTab] = useState(
@@ -129,10 +132,40 @@ const ConnectAgentStep: React.FC = () => {
     setSelectedIntegrationId(null);
   };
 
-  const handleSkip = () => {
-    trackEvent(OpikEvent.ONBOARDING_SKIPPED, { agent_name: agentName });
-    goToStep(AGENT_ONBOARDING_STEPS.DONE, { agentName });
-  };
+  const tabs = useMemo(
+    () => [
+      showOllieTab
+        ? {
+            value: "connect-to-ollie",
+            label: "AI-assisted setup",
+            content: <ConnectToOllieTab connected={connected} />,
+          }
+        : {
+            value: "install-with-ai",
+            label: "AI-assisted setup",
+            content: (
+              <InstallWithAITab
+                traceReceived={traceReceived}
+                agentName={agentName}
+              />
+            ),
+          },
+      {
+        value: "manual-integration",
+        label: "Manual setup",
+        content: (
+          <ManualIntegrationList
+            onSelectIntegration={setSelectedIntegrationId}
+            showInstallWithAI={showOllieTab}
+            traceReceived={traceReceived}
+            activeCategory={manualCategory}
+            onCategoryChange={setManualCategory}
+          />
+        ),
+      },
+    ],
+    [showOllieTab, connected, traceReceived, manualCategory, agentName],
+  );
 
   if (selectedIntegration) {
     return (
@@ -206,6 +239,12 @@ const ConnectAgentStep: React.FC = () => {
     <AgentOnboardingCard
       title={`Set up Opik for ${agentName}`}
       description="Connect your repo so Opik can help set up tracing, or instrument your code manually."
+      headerContent={
+        <div className="flex flex-col gap-3">
+          <Separator />
+          <AgentCopyButtons />
+        </div>
+      }
       showFooterSeparator
       footer={
         primaryReady ? (
@@ -218,60 +257,24 @@ const ConnectAgentStep: React.FC = () => {
             <ArrowRight className="size-3.5" />
           </Button>
         ) : (
-          <div className="flex w-full items-center justify-between">
-            <ViewDemoProjectButton />
-            <Button
-              variant="link"
-              onClick={handleSkip}
-              className="comet-body-s ml-auto px-0 text-muted-slate"
-              id="onboarding-step2-skip"
-              data-fs-element="onboarding-step2-skip"
-            >
-              Skip for now
-              <ChevronsRight className="size-3.5" />
-            </Button>
-          </div>
+          <ShowDemoProjectButton />
         )
       }
     >
       <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList variant="underline">
-          {showOllieTab && (
-            <TabsTrigger value="connect-to-ollie" variant="underline">
-              AI-assisted setup
+          {tabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} variant="underline">
+              {tab.label}
             </TabsTrigger>
-          )}
-          {!showOllieTab && (
-            <TabsTrigger value="install-with-ai" variant="underline">
-              AI-assisted setup
-            </TabsTrigger>
-          )}
-          <TabsTrigger value="manual-integration" variant="underline">
-            Manual setup
-          </TabsTrigger>
+          ))}
         </TabsList>
 
-        {showOllieTab && (
-          <TabsContent value="connect-to-ollie">
-            <ConnectToOllieTab connected={connected} />
+        {tabs.map((tab) => (
+          <TabsContent key={tab.value} value={tab.value}>
+            {tab.content}
           </TabsContent>
-        )}
-
-        {!showOllieTab && (
-          <TabsContent value="install-with-ai">
-            <InstallWithAITab traceReceived={traceReceived} />
-          </TabsContent>
-        )}
-
-        <TabsContent value="manual-integration">
-          <ManualIntegrationList
-            onSelectIntegration={setSelectedIntegrationId}
-            showInstallWithAI={showOllieTab}
-            traceReceived={traceReceived}
-            activeCategory={manualCategory}
-            onCategoryChange={setManualCategory}
-          />
-        </TabsContent>
+        ))}
       </Tabs>
     </AgentOnboardingCard>
   );

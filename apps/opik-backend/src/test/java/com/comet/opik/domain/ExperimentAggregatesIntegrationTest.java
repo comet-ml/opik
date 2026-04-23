@@ -52,6 +52,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -77,8 +78,10 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.random.RandomGenerator;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -2328,6 +2331,138 @@ class ExperimentAggregatesIntegrationTest {
 
         assertPageNotEmpty(afterAggregation);
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
+    @Test
+    @DisplayName("ExperimentService.delete triggers ExperimentsDeleted event that cleans up aggregates")
+    void deleteExperimentCleansUpAggregatesViaEvent() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        // Query BEFORE aggregation (has_raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Query AFTER aggregation (has_aggregated branch): must match raw
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+
+        experimentService.delete(Set.of(experiment.id()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        Awaitility.await()
+                .atMost(10, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var aggregatedAfter = experimentAggregatesService
+                            .getExperimentFromAggregates(experiment.id())
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.USER_NAME, USER)
+                                    .put(RequestContext.WORKSPACE_ID, workspaceId))
+                            .block();
+                    assertThat(aggregatedAfter)
+                            .as("Aggregated experiment must be removed by the ExperimentsDeleted event handler")
+                            .isNull();
+
+                    var afterDelete = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                            dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+                    assertThat(afterDelete).isNotNull();
+                    assertThat(afterDelete.content()).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("Deleting some experiment items removes their rows from experiment_item_aggregates via ExperimentItemsDeleted event")
+    void deleteExperimentItemsCleansUpItemAggregatesViaEvent() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(),
+                feedbackScoreNames, apiKey, workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        // BEFORE aggregation (has_raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // AFTER aggregation (has_aggregated branch): must match raw
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+
+        // Delete HALF of the experiment items (partial delete), using ids captured from the raw query
+        var allExperimentItems = beforeAggregation.content().stream()
+                .flatMap(datasetItem -> datasetItem.experimentItems().stream())
+                .toList();
+        var deletedItemIds = allExperimentItems.subList(0, allExperimentItems.size() / 2).stream()
+                .map(ExperimentItem::id)
+                .collect(Collectors.toSet());
+
+        experimentResourceClient.deleteExperimentItems(deletedItemIds, apiKey, workspaceName);
+
+        TestUtils.waitForMillis(1000); // Wait for the delete to be processed and the ExperimentItemsDeleted event to be published
+
+        // Expected: beforeAggregation content with the deleted experiment items stripped out
+        var expectedAfterDelete = beforeAggregation.content().stream()
+                .map(datasetItem -> datasetItem.toBuilder()
+                        .experimentItems(datasetItem.experimentItems().stream()
+                                .filter(ei -> !deletedItemIds.contains(ei.id()))
+                                .toList())
+                        .build())
+                .filter(datasetItem -> !datasetItem.experimentItems().isEmpty())
+                .toList();
+
+        // Manually trigger populateAggregations to bypass the publisher's debounce window
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterDelete = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterDelete);
+        assertDatasetItemsWithExperimentItems(expectedAfterDelete, afterDelete.content());
     }
 
 }

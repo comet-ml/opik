@@ -890,3 +890,53 @@ def test_opik_tracing_processor__agent_called_in_another_tracked_function__agent
     trace_tree = fake_backend.trace_trees[0]
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
+
+
+def test_opik_tracing_processor__litellm_vertex_ai_model__provider_is_google_vertexai(
+    fake_backend,
+):
+    from agents.extensions.models.litellm_model import LitellmModel
+
+    input_message = "Write a haiku about recursion in programming."
+    project_name = "opik-test-openai-agents"
+    litellm_model_id = "vertex_ai/gemini-2.0-flash"
+
+    set_trace_processors(processors=[OpikTracingProcessor(project_name)])
+
+    agent = Agent(
+        name="Assistant",
+        instructions="You are a helpful assistant",
+        model=LitellmModel(model=litellm_model_id),
+    )
+
+    Runner.run_sync(agent, input_message)
+
+    opik.flush_tracker()
+
+    assert len(fake_backend.trace_trees) == 1
+    trace_tree = fake_backend.trace_trees[0]
+
+    # openai-agents emits a `Generation` span for `LitellmModel` calls (vs the `Response`
+    # span used by native OpenAI models). The LLM call is the innermost of the
+    # Task → Assistant → Turn → Generation hierarchy.
+    llm_spans = [span for span in _iter_spans(trace_tree.spans) if span.type == "llm"]
+    assert len(llm_spans) == 1, f"Expected exactly one LLM span, found {len(llm_spans)}"
+    llm_span = llm_spans[0]
+
+    assert llm_span.provider == LLMProvider.GOOGLE_VERTEXAI
+    assert llm_span.model.startswith(litellm_model_id)
+    # LiteLLM-routed calls report usage via OpenAI Responses-API shape
+    # (input_tokens/output_tokens), which Opik normalizes to prompt_tokens/completion_tokens.
+    assert llm_span.usage is not None
+    for required_key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        assert required_key in llm_span.usage, (
+            f"Usage missing key '{required_key}': {llm_span.usage}"
+        )
+        assert llm_span.usage[required_key] > 0
+
+
+def _iter_spans(spans):
+    for span in spans:
+        yield span
+        if span.spans:
+            yield from _iter_spans(span.spans)

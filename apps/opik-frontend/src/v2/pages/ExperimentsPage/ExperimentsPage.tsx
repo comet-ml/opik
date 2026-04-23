@@ -23,17 +23,18 @@ const ExperimentsPage: React.FC = () => {
     Boolean(query?.experiment),
   );
 
-  const { data: existenceData } = useExperimentsList(
-    {
-      projectId: activeProjectId ?? undefined,
-      page: 1,
-      size: 1,
-    },
-    {
-      enabled: !!activeProjectId,
-    },
-  );
-  const isEmpty = (existenceData?.total ?? 0) === 0;
+  const { data: existenceData, isPending: isExistencePending } =
+    useExperimentsList(
+      {
+        projectId: activeProjectId ?? undefined,
+        page: 1,
+        size: 1,
+      },
+      {
+        enabled: !!activeProjectId,
+      },
+    );
+  const isEmpty = !isExistencePending && (existenceData?.total ?? 0) === 0;
 
   const handleNewExperimentClick = useCallback(() => {
     setOpenDialog(true);

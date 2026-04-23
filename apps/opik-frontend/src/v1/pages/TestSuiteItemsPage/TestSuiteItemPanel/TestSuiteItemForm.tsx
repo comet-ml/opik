@@ -18,7 +18,6 @@ import { Description } from "@/ui/description";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/test-suites";
 import {
-  ASSERTIONS_DESCRIPTION,
   PASS_CRITERIA_TITLE,
   PASS_CRITERIA_DESCRIPTION,
 } from "@/constants/test-suites";
@@ -208,12 +207,9 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
         </div>
       </div>
 
-      <div className="flex flex-col gap-1">
-        <span className="comet-body-s-accented">Assertions</span>
-        <div className="flex items-center justify-between">
-          <span className="comet-body-xs text-light-slate">
-            {ASSERTIONS_DESCRIPTION}
-          </span>
+      <AssertionsField
+        variant="item"
+        headerContent={
           <button
             type="button"
             className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
@@ -222,16 +218,13 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
             <Settings2 className="size-3.5 shrink-0" />
             Manage global assertions
           </button>
-        </div>
-
-        <AssertionsField
-          readOnlyAssertions={suiteAssertions}
-          editableAssertions={fields.map((f) => f.value)}
-          onChangeEditable={(index, value) => update(index, { value })}
-          onRemoveEditable={(index) => remove(index)}
-          onAdd={() => append({ value: "" })}
-        />
-      </div>
+        }
+        readOnlyAssertions={suiteAssertions}
+        editableAssertions={fields.map((f) => f.value)}
+        onChangeEditable={(index, value) => update(index, { value })}
+        onRemoveEditable={(index) => remove(index)}
+        onAdd={() => append({ value: "" })}
+      />
     </div>
   );
 };

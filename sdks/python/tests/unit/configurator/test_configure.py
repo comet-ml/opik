@@ -894,11 +894,11 @@ class TestGetApiKey:
             "smart-api-key"
         )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key", url=configurator.base_url
+            "smart-api-key", url="https://some-url-from-smart-api-key.com"
         )
 
         assert configurator.api_key == "smart-api-key"
-        assert configurator.base_url == "https://some-url-from-smart-api-key.com"
+        assert configurator.base_url == "https://some-url-from-smart-api-key.com/"
         assert needs_update is True
 
     @patch(
@@ -923,7 +923,7 @@ class TestGetApiKey:
             "smart-api-key"
         )  # called 2 times, one in OpikConfig, another in OpikConfigurator
         mock_is_api_key_correct.assert_called_once_with(
-            "smart-api-key", url=configurator.base_url
+            "smart-api-key", url="https://url-from-smart-api-key.com"
         )
         mock_logger_warning.assert_called_once_with(
             "The url provided in the configure (%s) method doesn't match the domain linked to the API key provided and will be ignored",
@@ -931,8 +931,44 @@ class TestGetApiKey:
         )
 
         assert configurator.api_key == "smart-api-key"
-        assert configurator.base_url == "https://url-from-smart-api-key.com"
+        assert configurator.base_url == "https://url-from-smart-api-key.com/"
         assert needs_update is True
+
+    @pytest.mark.parametrize(
+        "configured_url, api_key_url",
+        [
+            # trailing slash only on one side
+            ("https://same-url.com/", "https://same-url.com"),
+            ("https://same-url.com", "https://same-url.com/"),
+            # both normalised the same way
+            ("https://same-url.com/", "https://same-url.com/"),
+        ],
+    )
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_api_key_correct",
+        return_value=True,
+    )
+    @patch("opik.configurator.configure.LOGGER.warning")
+    def test_try_set_url_from_api_key__same_url_with_different_slash_variants__no_warning(
+        self,
+        mock_logger_warning,
+        mock_is_api_key_correct,
+        configured_url,
+        api_key_url,
+    ):
+        with patch(
+            "opik.api_key.opik_api_key.parse_api_key",
+            return_value=SimpleNamespace(base_url=api_key_url),
+        ):
+            configurator = OpikConfigurator(
+                api_key="smart-api-key",
+                url=configured_url,
+                force=True,
+            )
+            configurator._set_api_key()
+
+        mock_logger_warning.assert_not_called()
+        assert configurator.base_url == "https://same-url.com/"
 
 
 class TestGetWorkspace:
