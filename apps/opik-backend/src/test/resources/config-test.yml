@@ -670,6 +670,34 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: 3600
 
+# Experiment Project Migration configuration
+# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+experimentProjectMigration:
+  # Master switch — disabled in tests by default
+  enabled: false
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: 20
+  # Number of experiments to update per ClickHouse INSERT batch
+  experimentBatchSize: 1000
+  # Interval between recurring job runs
+  interval: 5s
+  # Delay before first run after app startup
+  startupDelay: 0s
+  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
+  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
+  lockTimeout: 5s
+  # Max time to wait for the distributed lock when another replica holds it
+  lockWaitTime: 100ms
+  # Per-cycle timeout — short for tests so hangs fail fast
+  jobTimeout: 30s
+
+# Shared configuration for V1 → V2 entity project migration jobs
+# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
+migration:
+  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
+  excludedWorkspaceIds:
+
 # Job timeout configuration
 jobTimeout:
   # Default: 30s

@@ -1310,6 +1310,37 @@ datasetVersioningMigration:
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
 
+# Experiment Project Migration configuration
+# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+experimentProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${EXPERIMENT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${EXPERIMENT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of experiments to update per ClickHouse INSERT batch
+  experimentBatchSize: ${EXPERIMENT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${EXPERIMENT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${EXPERIMENT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  # Intentionally shorter than jobTimeout: the lock covers typical cycle duration (minutes) and
+  # prevents redundant scheduling across replicas. Cycles that exceed lockTimeout tolerate replica
+  # overlap because the migration is idempotent (WHERE project_id = '' skips already-migrated rows).
+  lockTimeout: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+
+# Shared configuration for V1 → V2 entity project migration jobs
+# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
+migration:
+  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
+  excludedWorkspaceIds: ${MIGRATION_EXCLUDED_WORKSPACE_IDS:-}
+
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
