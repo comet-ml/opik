@@ -336,54 +336,128 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
         ),
     )
 
-    _ = await helpers.async_extract_final_response_text(events)
+    final_response = await helpers.async_extract_final_response_text(events)
 
     opik.flush_tracker()
 
-    # ADK's ParallelAgent runs sub-agents in asyncio tasks. Python 3.12+
-    # preserves the parent task's contextvar stack (Opik's ADK OTel patcher
-    # collapses the sub-agent wrapper spans and attaches each sub-agent's
-    # tool/llm spans directly under parallel_agent), while Python 3.11
-    # isolates the context copy differently and preserves the wrappers with
-    # two LLM calls each. Rather than pin one shape we assert invariants
-    # that hold across both Python versions.
+    # ADK's ParallelAgent runs sub-agents in asyncio tasks whose contextvar
+    # span stack inherits from (instead of isolating from) the parent task,
+    # so Opik's ADK OTel patcher collapses the sub-agent wrapper spans and
+    # attaches each sub-agent's tool/llm spans directly under parallel_agent.
+    # The tree below matches that observed shape deterministically.
+    _llm_span = SpanModel(
+        id=ANY_BUT_NONE,
+        name=MODEL_NAME,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata=ANY_DICT,
+        type="llm",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        provider=opik_adk_helpers.get_adk_provider(),
+        model=MODEL_NAME,
+        usage=EXPECTED_USAGE_GOOGLE,
+        project_name=project_name,
+        source="sdk",
+    )
+
+    EXPECTED_TRACE_TREE = TraceModel(
+        id=ANY_BUT_NONE,
+        name="main_agent",
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata={
+            "created_from": "google-adk",
+            "adk_invocation_id": ANY_STRING,
+            "app_name": APP_NAME,
+            "user_id": USER_ID,
+            "_opik_graph_definition": ANY_DICT,
+        },
+        output=ANY_DICT.containing(
+            {"content": {"parts": [{"text": final_response}], "role": "model"}}
+        ),
+        input={
+            "role": "user",
+            "parts": [{"text": "What's the weather and time in New York?"}],
+        },
+        thread_id=ANY_BUT_NONE,
+        project_name=project_name,
+        spans=[
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="parallel_agent",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="general",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                project_name=project_name,
+                spans=[
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="get_weather",
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        last_updated_at=ANY_BUT_NONE,
+                        metadata=ANY_DICT,
+                        type="tool",
+                        input={"city": "New York"},
+                        output=ANY_DICT.containing({"status": "success"}),
+                        project_name=project_name,
+                        source="sdk",
+                    ),
+                    _llm_span,
+                    SpanModel(
+                        id=ANY_BUT_NONE,
+                        name="get_current_time",
+                        start_time=ANY_BUT_NONE,
+                        end_time=ANY_BUT_NONE,
+                        last_updated_at=ANY_BUT_NONE,
+                        metadata=ANY_DICT,
+                        type="tool",
+                        input={"city": "New York"},
+                        output=ANY_DICT.containing({"status": "success"}),
+                        project_name=project_name,
+                        source="sdk",
+                    ),
+                    _llm_span,
+                ],
+                source="sdk",
+            ),
+            SpanModel(
+                id=ANY_BUT_NONE,
+                name="summary_agent",
+                start_time=ANY_BUT_NONE,
+                end_time=ANY_BUT_NONE,
+                last_updated_at=ANY_BUT_NONE,
+                metadata=ANY_DICT,
+                type="general",
+                input=ANY_DICT,
+                output=ANY_DICT,
+                project_name=project_name,
+                spans=[_llm_span],
+                source="sdk",
+            ),
+        ],
+        source="sdk",
+    )
+
     assert len(fake_backend.trace_trees) > 0
     trace_tree = fake_backend.trace_trees[0]
 
-    def _collect(node, predicate):
-        found = []
-        for span in node.spans or []:
-            if predicate(span):
-                found.append(span)
-            found.extend(_collect(span, predicate))
-        return found
+    # parallel sub-agents produce their tool/llm spans in a non-deterministic
+    # interleaving order; sort both trees by span name so the comparison
+    # stays structural.
+    def _sort(node):
+        node.spans = sorted(node.spans or [], key=lambda s: s.name)
+        for s in node.spans:
+            _sort(s)
 
-    assert trace_tree.name == "main_agent"
-    # Top-level children: parallel_agent then summary_agent
-    assert len(trace_tree.spans) == 2
-    parallel_agent_span = trace_tree.spans[0]
-    summary_agent_span = trace_tree.spans[1]
-    assert parallel_agent_span.name == "parallel_agent"
-    assert parallel_agent_span.type == "general"
-    assert summary_agent_span.name == "summary_agent"
-    assert summary_agent_span.type == "general"
+    _sort(EXPECTED_TRACE_TREE)
+    _sort(trace_tree)
 
-    # Invariants for the parallel subtree: both tools invoked, at least one
-    # LLM span per tool call. Shape varies between Py 3.11 (wrappers) and
-    # Py 3.12+ (flat).
-    parallel_tools = _collect(parallel_agent_span, lambda s: s.type == "tool")
-    parallel_llms = _collect(parallel_agent_span, lambda s: s.type == "llm")
-    parallel_tool_names = {s.name for s in parallel_tools}
-    assert "get_weather" in parallel_tool_names
-    assert "get_current_time" in parallel_tool_names
-    assert len(parallel_llms) >= 2
-    for llm_span in parallel_llms:
-        assert llm_span.model == MODEL_NAME
-        assert llm_span.provider == opik_adk_helpers.get_adk_provider()
-        assert llm_span.project_name == project_name
-
-    # summary_agent emits a single LLM finalizing the response.
-    summary_llms = _collect(summary_agent_span, lambda s: s.type == "llm")
-    assert len(summary_llms) >= 1
-    assert summary_llms[0].model == MODEL_NAME
-
+    assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)
