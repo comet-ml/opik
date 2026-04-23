@@ -87,6 +87,9 @@ public class OpikConfiguration extends JobConfiguration {
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 
     @Valid @NotNull @JsonProperty
+    private UIConfig uiConfig = new UIConfig();
+
+    @Valid @NotNull @JsonProperty
     private TraceThreadConfig traceThreadConfig = new TraceThreadConfig();
 
     @Valid @NotNull @JsonProperty

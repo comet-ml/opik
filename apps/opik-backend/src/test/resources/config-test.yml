@@ -574,6 +574,11 @@ serviceToggles:
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: "disabled"
 
+uiConfig:
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables
+  defaultPageSize: 100
+
 # Local Runner configuration
 localRunner:
   enabled: true
