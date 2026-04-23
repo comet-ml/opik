@@ -50,6 +50,9 @@ const PairRouteVersionGuard: React.FC<{ children: React.ReactNode }> = ({
       if (reloadCount < MAX_RELOADS) {
         sessionStorage.setItem(reloadKey, String(reloadCount + 1));
         window.location.reload();
+      } else {
+        useAppStore.getState().setWorkspaceVersion(apiVersion);
+        sessionStorage.removeItem(reloadKey);
       }
     } else {
       sessionStorage.removeItem(reloadKey);
