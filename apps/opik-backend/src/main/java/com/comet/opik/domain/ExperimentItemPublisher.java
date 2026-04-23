@@ -65,9 +65,10 @@ public class ExperimentItemPublisher {
     }
 
     private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
+        var workspaceId = messages.getFirst().workspaceId();
         var itemsByExperiment = messages.stream()
                 .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
 
-        return testSuiteAssertionCounterService.setCounters(itemsByExperiment);
+        return testSuiteAssertionCounterService.setCounters(workspaceId, itemsByExperiment);
     }
 }

@@ -65,7 +65,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         UUID experimentId = message.experimentId();
         if (experimentId != null) {
             return super.processEvent(message)
-                    .then(testSuiteAssertionCounterService.decrementAndFinishIfComplete(experimentId)
+                    .then(testSuiteAssertionCounterService.decrementAndFinishIfComplete(
+                            message.workspaceId(), experimentId)
                             .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                                     .put(RequestContext.USER_NAME, message.userName())));
         }

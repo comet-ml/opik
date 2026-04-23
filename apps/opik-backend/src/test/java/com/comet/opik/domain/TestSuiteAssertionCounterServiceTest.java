@@ -38,6 +38,8 @@ class TestSuiteAssertionCounterServiceTest {
     @Mock
     private RAtomicLongReactive atomicLong;
 
+    private static final String WORKSPACE_ID = "test-workspace";
+
     private TestSuiteAssertionCounterService service;
 
     @BeforeEach
@@ -57,15 +59,15 @@ class TestSuiteAssertionCounterServiceTest {
         when(atomicLong.set(any(Long.class))).thenReturn(Mono.empty());
         when(atomicLong.expire(any(java.time.Duration.class))).thenReturn(Mono.just(true));
 
-        service.setCounters(Map.of(experimentA, 3L, experimentB, 2L)).block();
+        service.setCounters(WORKSPACE_ID, Map.of(experimentA, 3L, experimentB, 2L)).block();
 
         var keyCaptor = ArgumentCaptor.forClass(String.class);
         verify(redisClient, org.mockito.Mockito.atLeast(2)).getAtomicLong(keyCaptor.capture());
 
         var keys = keyCaptor.getAllValues();
         assertThat(keys).contains(
-                ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + experimentA,
-                ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + experimentB);
+                ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + WORKSPACE_ID + ":" + experimentA,
+                ExperimentExecutionConfig.TEST_SUITE_ASSERTION_COUNTER_KEY_PREFIX + WORKSPACE_ID + ":" + experimentB);
     }
 
     @Test
@@ -74,7 +76,7 @@ class TestSuiteAssertionCounterServiceTest {
 
         when(atomicLong.decrementAndGet()).thenReturn(Mono.just(2L));
 
-        service.decrementAndFinishIfComplete(experimentId).block();
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
         verify(atomicLong).decrementAndGet();
         verify(experimentService, never()).update(any(), any());
@@ -89,7 +91,7 @@ class TestSuiteAssertionCounterServiceTest {
         when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
-        service.decrementAndFinishIfComplete(experimentId).block();
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
         var updateCaptor = ArgumentCaptor.forClass(ExperimentUpdate.class);
         verify(experimentService).update(eq(experimentId), updateCaptor.capture());
@@ -105,7 +107,7 @@ class TestSuiteAssertionCounterServiceTest {
         when(experimentService.update(any(UUID.class), any(ExperimentUpdate.class))).thenReturn(Mono.empty());
         when(experimentService.finishExperiments(any())).thenReturn(Mono.empty());
 
-        service.decrementAndFinishIfComplete(experimentId).block();
+        service.decrementAndFinishIfComplete(WORKSPACE_ID, experimentId).block();
 
         verify(experimentService).update(eq(experimentId), any(ExperimentUpdate.class));
         verify(experimentService).finishExperiments(Set.of(experimentId));
@@ -117,7 +119,7 @@ class TestSuiteAssertionCounterServiceTest {
 
         when(atomicLong.isExists()).thenReturn(Mono.just(true));
 
-        var result = service.exists(experimentId).block();
+        var result = service.exists(WORKSPACE_ID, experimentId).block();
 
         assertThat(result).isTrue();
     }
@@ -128,7 +130,7 @@ class TestSuiteAssertionCounterServiceTest {
 
         when(atomicLong.isExists()).thenReturn(Mono.just(false));
 
-        var result = service.exists(experimentId).block();
+        var result = service.exists(WORKSPACE_ID, experimentId).block();
 
         assertThat(result).isFalse();
     }
@@ -139,7 +141,7 @@ class TestSuiteAssertionCounterServiceTest {
 
         when(atomicLong.addAndGet(5L)).thenReturn(Mono.just(8L));
 
-        var result = service.adjust(experimentId, 5L).block();
+        var result = service.adjust(WORKSPACE_ID, experimentId, 5L).block();
 
         assertThat(result).isEqualTo(8L);
     }
@@ -151,7 +153,7 @@ class TestSuiteAssertionCounterServiceTest {
 
         when(atomicLong.delete()).thenReturn(Mono.just(true));
 
-        service.deleteCounters(Set.of(experimentA, experimentB)).block();
+        service.deleteCounters(WORKSPACE_ID, Set.of(experimentA, experimentB)).block();
 
         verify(atomicLong, org.mockito.Mockito.atLeast(2)).delete();
     }
