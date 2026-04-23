@@ -32,7 +32,7 @@ import {
 } from "@/types/feedback-definitions";
 import FeedbackDefinitionDetails from "./FeedbackDefinitionDetails";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 const TYPE_OPTIONS = [
   {

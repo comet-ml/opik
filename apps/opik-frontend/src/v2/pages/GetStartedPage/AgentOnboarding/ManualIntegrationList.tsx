@@ -8,7 +8,7 @@ import {
   INTEGRATION_CATEGORIES,
   getIntegrationsByCategory,
 } from "@/constants/integrations";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
 

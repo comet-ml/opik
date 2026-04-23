@@ -8,7 +8,7 @@ import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/shared/DateTag/DateTag";
 import PromptTab from "@/v1/pages/PromptPage/PromptTab/PromptTab";
 import CommitsTab from "@/v1/pages/PromptPage/CommitsTab/CommitsTab";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import PromptTagsList from "@/v1/pages/PromptPage/PromptTagsList";
 import { Separator } from "@/ui/separator";

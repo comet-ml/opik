@@ -6,7 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAlertsLightUrl from "/images/empty-alerts-light.svg";
 import emptyAlertsDarkUrl from "/images/empty-alerts-dark.svg";
 import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
@@ -46,7 +46,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { Separator } from "@/ui/separator";
 import AlertsActionsPanel from "@/v2/pages/AlertsPage/AlertsActionsPanel";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -356,7 +356,7 @@ const AlertsPage: React.FunctionComponent = () => {
           }
           primaryActionLabel="Create your first alert"
           onPrimaryAction={handleNewAlertClick}
-          docsUrl={buildDocsUrl("/production/alerts")}
+          docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
       ) : (
         <>

@@ -15,7 +15,7 @@ import {
 import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Textarea } from "@/ui/textarea";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import CsvUploadDialog from "@/v2/pages-shared/datasets/CsvUploadDialog/CsvUploadDialog";
@@ -124,7 +124,9 @@ const AddEditDatasetDialogWrapper: React.FunctionComponent<
                   )}
                   <Button variant="link" size="sm" className="h-5 px-1" asChild>
                     <a
-                      href={buildDocsUrl("/evaluation/manage_datasets")}
+                      href={buildDocsUrl(
+                        "/evaluation/advanced/manage_datasets",
+                      )}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

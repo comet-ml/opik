@@ -38,7 +38,7 @@ import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { COLUMN_DATA_ID, COLUMN_TYPE } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { usePermissions } from "@/contexts/PermissionsContext";
 

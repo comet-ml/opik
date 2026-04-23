@@ -6,7 +6,7 @@ import { Textarea } from "@/ui/textarea";
 import { Description } from "@/ui/description";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface TextPromptEditorProps {
   value: string;

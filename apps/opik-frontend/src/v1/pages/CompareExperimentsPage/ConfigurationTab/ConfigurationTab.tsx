@@ -27,7 +27,7 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-experiments-config-columns-width";
 
