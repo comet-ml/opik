@@ -182,14 +182,14 @@ def test_haystack__context_aware_tracing(fake_backend):
         pipe.add_component("tracer", opik_connector)
         pipe.add_component("prompt_builder", ChatPromptBuilder())
         pipe.add_component(
-        "llm",
-        OpenAIChatGenerator(
-            model=MODEL_NAME,
-            generation_kwargs={
-                "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
-            },
-        ),
-    )
+            "llm",
+            OpenAIChatGenerator(
+                model=MODEL_NAME,
+                generation_kwargs={
+                    "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+                },
+            ),
+        )
 
         pipe.connect("prompt_builder.prompt", "llm.messages")
 
