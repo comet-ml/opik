@@ -84,7 +84,10 @@ def _run(shutdown_event: threading.Event) -> None:
         return Agent(
             description=entry.get("docstring", ""),
             language="python",
-            params=[Param(name=p.name, type=p.type) for p in entry.get("params", [])],
+            params=[
+                Param(name=p.name, type=p.type, presence=p.presence)
+                for p in entry.get("params", [])
+            ],
             timeout=0,
         ).dict()
 

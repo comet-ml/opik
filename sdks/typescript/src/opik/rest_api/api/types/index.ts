@@ -380,6 +380,7 @@ export * from "./OptimizationWrite.js";
 export * from "./OptimizationWriteStatus.js";
 export * from "./PageColumns.js";
 export * from "./Param.js";
+export * from "./ParamPresence.js";
 export * from "./PercentageValueStatPublic.js";
 export * from "./PercentageValues.js";
 export * from "./PercentageValuesDetailed.js";
