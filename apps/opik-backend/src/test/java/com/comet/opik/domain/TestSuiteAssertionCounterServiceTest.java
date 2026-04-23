@@ -183,15 +183,4 @@ class TestSuiteAssertionCounterServiceTest {
         assertThat(result).isEqualTo(8L);
     }
 
-    @Test
-    void deleteCounters() {
-        var experimentA = UUID.randomUUID();
-        var experimentB = UUID.randomUUID();
-
-        when(atomicLong.delete()).thenReturn(Mono.just(true));
-
-        service.deleteCounters(WORKSPACE_ID, Set.of(experimentA, experimentB)).block();
-
-        verify(atomicLong, org.mockito.Mockito.atLeast(2)).delete();
-    }
 }

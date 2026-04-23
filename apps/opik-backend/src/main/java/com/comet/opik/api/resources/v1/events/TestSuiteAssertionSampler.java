@@ -218,7 +218,7 @@ public class TestSuiteAssertionSampler {
                                                     .experimentId(experimentId)
                                                     .build());
                                 });
-                    } catch (Exception e) {
+                    } catch (RuntimeException e) {
                         log.error("Failed to fetch evaluators for trace '{}', "
                                 + "decrementing counter and skipping scoring", trace.id(), e);
                         decrementAssertionCounter(experimentId, tracesBatch.workspaceId(),
@@ -307,7 +307,7 @@ public class TestSuiteAssertionSampler {
                             .put(RequestContext.USER_NAME, userName)
                             .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
                     .block();
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to decrement assertion counter for experiment '{}'", experimentId, e);
         }
     }
@@ -318,7 +318,7 @@ public class TestSuiteAssertionSampler {
         }
         try {
             testSuiteAssertionCounterService.adjust(workspaceId, experimentId, additionalMessages).block();
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to adjust assertion counter for experiment '{}'", experimentId, e);
         }
     }
@@ -329,7 +329,7 @@ public class TestSuiteAssertionSampler {
                     .content().stream()
                     .map(ProviderApiKey::provider)
                     .collect(Collectors.toSet());
-        } catch (Exception e) {
+        } catch (RuntimeException e) {
             log.error("Failed to fetch connected providers for workspace '{}'", workspaceId, e);
             return Set.of();
         }

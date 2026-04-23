@@ -13,7 +13,6 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.util.Collection;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -94,12 +93,6 @@ public class TestSuiteAssertionCounterService {
                 .then(experimentService.finishExperiments(Set.of(experimentId)))
                 .doOnSuccess(unused -> log.info("Finished experiment '{}' after all assertions completed",
                         experimentId));
-    }
-
-    public Mono<Void> deleteCounters(@NonNull String workspaceId, @NonNull Collection<UUID> experimentIds) {
-        return Flux.fromIterable(experimentIds)
-                .flatMap(id -> redisClient.getAtomicLong(counterKey(workspaceId, id)).delete())
-                .then();
     }
 
     private static String counterKey(String workspaceId, UUID experimentId) {
