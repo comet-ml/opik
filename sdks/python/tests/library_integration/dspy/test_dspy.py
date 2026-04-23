@@ -1,5 +1,3 @@
-from typing import Union
-
 import uuid
 
 import dspy
@@ -13,13 +11,9 @@ from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.dspy.callback import OpikCallback
 from ... import llm_constants
 from ...testlib import (
-    ANY,
     ANY_BUT_NONE,
     ANY_DICT,
     ANY_STRING,
-    SpanModel,
-    TraceModel,
-    assert_equal,
 )
 
 
@@ -32,13 +26,6 @@ ANY_USAGE_DICT = ANY_DICT.containing(
     }
 )
 ANY_METADATA_WITH_CREATED_FROM = ANY_DICT.containing({"created_from": "dspy"})
-
-
-def sort_spans_by_name(tree: Union[SpanModel, TraceModel]) -> None:
-    """
-    Sorts the spans within a trace/span tree by their names in ascending order.
-    """
-    tree.spans = sorted(tree.spans, key=lambda span: span.name)
 
 
 @pytest.mark.parametrize(
@@ -69,71 +56,40 @@ def test_dspy__happyflow(
 
     opik_callback.flush()
 
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_STRING,
-        name="ChainOfThought",
-        input={"args": [], "kwargs": {"question": "What is the meaning of life?"}},
-        output=None,
-        metadata={"created_from": "dspy"},
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=expected_project_name,
-        spans=[
-            SpanModel(
-                id=ANY_STRING,
-                type="llm",
-                name="Predict",
-                provider=None,
-                model=None,
-                input=ANY_DICT,
-                output=ANY_DICT,
-                metadata={"created_from": "dspy"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=expected_project_name,
-                spans=[
-                    SpanModel(
-                        id=ANY_STRING,
-                        type="llm",
-                        name=ANY_STRING.starting_with("LM"),
-                        provider="openai",
-                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        usage=ANY_USAGE_DICT,
-                        total_cost=ANY,  # Cost is extracted from DSPy history when available
-                        metadata=ANY_METADATA_WITH_CREATED_FROM,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=expected_project_name,
-                        spans=[],
-                        source="sdk",
-                    ),
-                ],
-                source="sdk",
-            ),
-        ],
-        source="sdk",
-    )
-
+    # DSPy's ChatAdapter silently retries failed parses via JSONAdapter, which
+    # produces a variable number of LM spans under Predict (1 on the happy
+    # path, 2 when the ChatAdapter parse fails and falls back). Assert on the
+    # invariants that actually matter rather than the exact tree shape.
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    sort_spans_by_name(EXPECTED_TRACE_TREE)
-    sort_spans_by_name(fake_backend.trace_trees[0])
-
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
-
-    # Explicitly verify that metadata contains created_from for all spans
     trace_tree = fake_backend.trace_trees[0]
-    assert trace_tree.metadata["created_from"] == "dspy"
+    assert trace_tree.name == "ChainOfThought"
+    assert trace_tree.input == {
+        "args": [],
+        "kwargs": {"question": "What is the meaning of life?"},
+    }
+    assert trace_tree.project_name == expected_project_name
+    assert trace_tree.metadata == {"created_from": "dspy"}
+
     predict_span = trace_tree.spans[0]
-    assert predict_span.metadata["created_from"] == "dspy"
-    lm_span = predict_span.spans[0]
-    assert lm_span.metadata["created_from"] == "dspy"
-    # LM span should also have usage in metadata (added when usage is set on span)
-    assert "usage" in lm_span.metadata
+    assert predict_span.name == "Predict"
+    assert predict_span.type == "llm"
+    assert predict_span.project_name == expected_project_name
+    assert predict_span.metadata == {"created_from": "dspy"}
+    assert predict_span.spans, "Expected at least one LM child span under Predict"
+
+    for lm_span in predict_span.spans:
+        assert lm_span.name == ANY_STRING.starting_with("LM")
+        assert lm_span.type == "llm"
+        assert lm_span.provider == "openai"
+        assert lm_span.model == ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO)
+        assert lm_span.usage == ANY_USAGE_DICT
+        assert lm_span.total_cost is not None
+        assert lm_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+        assert lm_span.project_name == expected_project_name
+        # LM span should also have usage in metadata (added when usage is set on span)
+        assert "usage" in lm_span.metadata
 
 
 def test_dspy__openai_llm_is_used__error_occurred_during_openai_call__error_info_is_logged(
@@ -219,91 +175,49 @@ def test_dspy_callback__used_inside_another_track_function__data_attached_to_exi
     f("the-input")
     opik.flush_tracker()
 
-    EXPECTED_TRACE_TREE = TraceModel(
-        id=ANY_BUT_NONE,
-        name="f",
-        input={"x": "the-input"},
-        output={"output": "the-output"},
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        last_updated_at=ANY_BUT_NONE,
-        project_name=project_name,
-        spans=[
-            SpanModel(
-                id=ANY_BUT_NONE,
-                name="f",
-                type="general",
-                input={"x": "the-input"},
-                output={"output": "the-output"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=project_name,
-                spans=[
-                    SpanModel(
-                        id=ANY_STRING,
-                        name="ChainOfThought",
-                        input={
-                            "args": [],
-                            "kwargs": {"question": "What is the meaning of life?"},
-                        },
-                        output=ANY_DICT,
-                        metadata={"created_from": "dspy"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        project_name=project_name,
-                        spans=[
-                            SpanModel(
-                                id=ANY_STRING,
-                                type="llm",
-                                name="Predict",
-                                provider=None,
-                                model=None,
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                metadata={"created_from": "dspy"},
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                project_name=project_name,
-                                spans=[
-                                    SpanModel(
-                                        id=ANY_STRING,
-                                        type="llm",
-                                        name=ANY_STRING.starting_with("LM: openai"),
-                                        provider="openai",
-                                        model=ANY_STRING.starting_with(
-                                            llm_constants.OPENAI_GPT_NANO
-                                        ),
-                                        input=ANY_DICT,
-                                        output=ANY_DICT,
-                                        usage=ANY_USAGE_DICT,
-                                        total_cost=ANY,  # Cost is extracted from DSPy history when available
-                                        metadata=ANY_METADATA_WITH_CREATED_FROM,
-                                        start_time=ANY_BUT_NONE,
-                                        end_time=ANY_BUT_NONE,
-                                        project_name=project_name,
-                                        spans=[],
-                                        source="sdk",
-                                    ),
-                                ],
-                                source="sdk",
-                            ),
-                        ],
-                        source="sdk",
-                    )
-                ],
-                source="sdk",
-            )
-        ],
-        source="sdk",
-    )
-
     assert len(fake_backend.trace_trees) == 1
     assert len(fake_backend.span_trees) == 1
 
-    sort_spans_by_name(EXPECTED_TRACE_TREE.spans[0].spans[0])
-    sort_spans_by_name(fake_backend.trace_trees[0].spans[0].spans[0])
+    # check spans directly to avoid flakiness when the LLM span is duplicated —
+    # DSPy's ChatAdapter silently retries failed parses via JSONAdapter, which
+    # produces a variable number of LM spans under Predict depending on the
+    # first-attempt output.
+    trace_tree = fake_backend.trace_trees[0]
+    assert trace_tree.name == "f"
+    assert trace_tree.input == {"x": "the-input"}
+    assert trace_tree.output == {"output": "the-output"}
+    assert trace_tree.project_name == project_name
 
-    assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])
+    track_span = trace_tree.spans[0]
+    assert track_span.name == "f"
+    assert track_span.type == "general"
+    assert track_span.input == {"x": "the-input"}
+    assert track_span.output == {"output": "the-output"}
+    assert track_span.project_name == project_name
+
+    chain_of_thought_span = track_span.spans[0]
+    assert chain_of_thought_span.name == "ChainOfThought"
+    assert chain_of_thought_span.input == {
+        "args": [],
+        "kwargs": {"question": "What is the meaning of life?"},
+    }
+    assert chain_of_thought_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+    assert chain_of_thought_span.project_name == project_name
+
+    predict_span = chain_of_thought_span.spans[0]
+    assert predict_span.name == "Predict"
+    assert predict_span.type == "llm"
+    assert predict_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+    assert predict_span.project_name == project_name
+
+    lm_span = predict_span.spans[-1]
+    assert lm_span.name == ANY_STRING.starting_with("LM: openai")
+    assert lm_span.type == "llm"
+    assert lm_span.provider == "openai"
+    assert lm_span.model == ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO)
+    assert lm_span.usage == ANY_USAGE_DICT
+    assert lm_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+    assert lm_span.project_name == project_name
 
 
 def test_dspy_callback__used_when_there_was_already_existing_trace_without_span__data_attached_to_existing_trace(
@@ -425,74 +339,40 @@ def test_dspy_callback__used_when_there_was_already_existing_span_without_trace_
     client.__internal_api__span__(**span_data.__dict__)
     opik.flush_tracker()
 
-    EXPECTED_SPANS_TREE = SpanModel(
-        id=ANY_STRING,
-        name="manually-created-span",
-        input={"input": "input-of-manually-created-span"},
-        output={"output": "output-of-manually-created-span"},
-        metadata=None,
-        start_time=ANY_BUT_NONE,
-        end_time=ANY_BUT_NONE,
-        spans=[
-            SpanModel(
-                id=ANY_STRING,
-                name="ChainOfThought",
-                input={
-                    "args": [],
-                    "kwargs": {"question": "What is the meaning of life?"},
-                },
-                output=ANY_DICT,
-                metadata={"created_from": "dspy"},
-                start_time=ANY_BUT_NONE,
-                end_time=ANY_BUT_NONE,
-                project_name=OPIK_PROJECT_DEFAULT_NAME,
-                spans=[
-                    SpanModel(
-                        id=ANY_STRING,
-                        type="llm",
-                        name="Predict",
-                        provider=None,
-                        model=None,
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        metadata={"created_from": "dspy"},
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        spans=[
-                            SpanModel(
-                                id=ANY_STRING,
-                                type="llm",
-                                name=ANY_STRING.starting_with("LM"),
-                                provider="openai",
-                                model=ANY_STRING.starting_with(
-                                    llm_constants.OPENAI_GPT_NANO
-                                ),
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                usage=ANY_USAGE_DICT,
-                                total_cost=ANY,  # Cost is extracted from DSPy history when available
-                                metadata=ANY_METADATA_WITH_CREATED_FROM,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                spans=[],
-                                source="sdk",
-                            ),
-                        ],
-                        source="sdk",
-                    ),
-                ],
-                source="sdk",
-            )
-        ],
-        source="sdk",
-    )
-
     assert len(fake_backend.span_trees) == 1
 
-    sort_spans_by_name(EXPECTED_SPANS_TREE.spans[0])
-    sort_spans_by_name(fake_backend.span_trees[0].spans[0])
+    # check spans directly to avoid flakiness when the LLM span is duplicated —
+    # DSPy's ChatAdapter silently retries failed parses via JSONAdapter, which
+    # produces a variable number of LM spans under Predict depending on the
+    # first-attempt output.
+    root_span = fake_backend.span_trees[0]
+    assert root_span.name == "manually-created-span"
+    assert root_span.input == {"input": "input-of-manually-created-span"}
+    assert root_span.output == {"output": "output-of-manually-created-span"}
 
-    assert_equal(EXPECTED_SPANS_TREE, fake_backend.span_trees[0])
+    chain_of_thought_span = root_span.spans[0]
+    assert chain_of_thought_span.name == "ChainOfThought"
+    assert chain_of_thought_span.input == {
+        "args": [],
+        "kwargs": {"question": "What is the meaning of life?"},
+    }
+    assert chain_of_thought_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+    assert chain_of_thought_span.project_name == OPIK_PROJECT_DEFAULT_NAME
+
+    predict_span = chain_of_thought_span.spans[0]
+    assert predict_span.name == "Predict"
+    assert predict_span.type == "llm"
+    assert predict_span.metadata == ANY_METADATA_WITH_CREATED_FROM
+
+    # the last span is the LM call (may be 1 or 2 siblings depending on the
+    # ChatAdapter→JSONAdapter fallback); pick the most recent one.
+    lm_span = predict_span.spans[-1]
+    assert lm_span.name == ANY_STRING.starting_with("LM: openai")
+    assert lm_span.type == "llm"
+    assert lm_span.provider == "openai"
+    assert lm_span.model == ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO)
+    assert lm_span.usage == ANY_USAGE_DICT
+    assert lm_span.metadata == ANY_METADATA_WITH_CREATED_FROM
 
 
 @pytest.mark.parametrize(
