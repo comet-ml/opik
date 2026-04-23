@@ -929,7 +929,11 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
         model=MODEL_NAME,
         tools=[adk_agent_tool.AgentTool(agent=translator_to_english)],
         description="Agent responsible for translating text to english by invoking a special tool for that.",
-        instruction="Use the Translator tool, then reply with its result.",
+        instruction=(
+            "You MUST call the Translator tool with the user's text. "
+            "Then return the tool's result verbatim. "
+            "Never answer directly without calling the tool."
+        ),
     )
 
     track_adk_agent_recursive(root_agent, opik_tracer)
