@@ -45,6 +45,7 @@ import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/ui/button";
+import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
@@ -447,7 +448,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         value={currentActiveTab}
         onValueChange={setActiveTab}
       >
-        <div className="mx-6" data-panel-tabs="true">
+        <div className="mx-4" data-panel-tabs="true">
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="messages">
               Messages
@@ -460,7 +461,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <TabsContent value="messages">
           <MediaProvider media={media}>
             {media.length > 0 && (
-              <div className="mb-4 px-6">
+              <div className="mb-4 px-4">
                 <Accordion type="multiple" defaultValue={["attachments"]}>
                   <AttachmentsList media={media} />
                 </Accordion>
@@ -475,7 +476,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </MediaProvider>
         </TabsContent>
-        <TabsContent value="feedback_scores" className="px-6">
+        <TabsContent value="feedback_scores" className="px-4">
           <ConfigurableFeedbackScoreTable
             onDeleteFeedbackScore={
               canAnnotateTraceSpanThread ? handleDeleteFeedbackScore : undefined
@@ -512,11 +513,35 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       <div className="relative size-full">
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
-            <div ref={ref} className="relative size-full">
-              <div className="px-6 pb-6 pt-4" data-panel-header="true">
-                {renderHeader()}
+            <div className="flex size-full flex-col">
+              <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
+                <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+                  Inspect
+                </span>
+                <div className="flex-auto" />
+                <AddToDropdown
+                  getDataForExport={async () => rows}
+                  selectedRows={rows}
+                  dataType="threads"
+                  buttonVariant="ghost"
+                  buttonSize="2xs"
+                />
+                <DetailsActionSectionToggle
+                  activeSection={null}
+                  setActiveSection={setActiveSection}
+                  layoutSize={ButtonLayoutSize.Large}
+                  type={DetailsActionSection.Annotate}
+                  variant="ghost"
+                  buttonSize="2xs"
+                  hotkey="A"
+                />
               </div>
-              <div data-panel-body="true">{renderBody()}</div>
+              <div ref={ref} className="relative flex-auto">
+                <div className="px-4 pb-6 pt-4" data-panel-header="true">
+                  {renderHeader()}
+                </div>
+                <div data-panel-body="true">{renderBody()}</div>
+              </div>
             </div>
           </ResizablePanel>
           {Boolean(currentActiveSection) && (
@@ -551,7 +576,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       <div className="flex flex-auto items-center justify-between">
         <div className="flex items-center gap-1 overflow-hidden">
           <TooltipWrapper content="Close panel">
-            <Button variant="ghost" size="icon-xs" onClick={onClose}>
+            <Button variant="ghost" size="icon-2xs" onClick={onClose}>
               <ChevronsRight />
             </Button>
           </TooltipWrapper>
@@ -562,26 +587,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         </div>
 
         <div className="flex shrink-0 items-center gap-2 pl-4">
-          <AddToDropdown
-            getDataForExport={async () => rows}
-            selectedRows={rows}
-            dataType="threads"
-            buttonVariant="ghost"
-            buttonSize="xs"
-          />
-          <DetailsActionSectionToggle
-            activeSection={null}
-            setActiveSection={setActiveSection}
-            layoutSize={ButtonLayoutSize.Large}
-            type={DetailsActionSection.Annotate}
-            variant="ghost"
-            buttonSize="xs"
-            hotkey="A"
-          />
-
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-xs">
+              <Button variant="outline" size="icon-2xs">
                 <span className="sr-only">Actions menu</span>
                 <MoreHorizontal />
               </Button>
@@ -663,27 +671,23 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               <Separator orientation="vertical" className="mx-1 h-4" />
               <Button
                 variant="outline"
-                size="xs"
+                size="2xs"
                 disabled={!horizontalNavigation.hasPrevious}
                 onClick={() => horizontalNavigation.onChange(-1)}
-                className="gap-2"
+                className="gap-1"
               >
                 Previous
-                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                  J
-                </kbd>
+                <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
               </Button>
               <Button
                 variant="outline"
-                size="xs"
+                size="2xs"
                 disabled={!horizontalNavigation.hasNext}
                 onClick={() => horizontalNavigation.onChange(1)}
-                className="gap-2"
+                className="gap-1"
               >
                 Next
-                <kbd className="flex h-5 min-w-5 items-center justify-center rounded-sm border px-1 text-xs text-muted-foreground">
-                  K
-                </kbd>
+                <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
               </Button>
             </>
           )}
@@ -691,7 +695,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <TooltipWrapper content="View all traces for this thread">
             <Button
               variant="outline"
-              size="xs"
+              size="2xs"
               onClick={() => {
                 navigate({
                   to: "/$workspaceName/projects/$projectId/logs",
