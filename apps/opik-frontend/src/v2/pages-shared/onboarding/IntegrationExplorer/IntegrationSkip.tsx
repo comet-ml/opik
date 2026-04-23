@@ -17,7 +17,7 @@ const IntegrationSkip: React.FunctionComponent<IntegrationSkipProps> = ({
   onSkip,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
-  const { data: demoProject } = useDemoProject({ workspaceName });
+  const { data: demoProject, isLoading } = useDemoProject({ workspaceName });
 
   const content = (
     <>
@@ -34,7 +34,7 @@ const IntegrationSkip: React.FunctionComponent<IntegrationSkipProps> = ({
     "data-fs-element": "QuickstartSkipExplorePlatform",
   };
 
-  if (onSkip && !demoProject) {
+  if (onSkip && !demoProject && !isLoading) {
     return (
       <Button {...buttonProps} onClick={onSkip}>
         {content}

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_KEY, PROJECTS_REST_ENDPOINT } from "@/api/api";
 import { Project } from "@/types/projects";
@@ -31,8 +31,14 @@ const getProjects = async (
 
 const getFirstTracedProject = (data: ProjectsResponse | undefined) =>
   (data?.content ?? [])
-    .filter((p) => p.name !== DEMO_PROJECT_NAME)
-    .find((p) => !!p.last_updated_trace_at) ?? null;
+    .filter((p) => p.name !== DEMO_PROJECT_NAME && !!p.last_updated_trace_at)
+    .reduce<Project | null>(
+      (latest, p) =>
+        !latest || p.last_updated_trace_at! > latest.last_updated_trace_at!
+          ? p
+          : latest,
+      null,
+    );
 
 export default function useFirstTraceReceived({
   workspaceName,
@@ -41,6 +47,13 @@ export default function useFirstTraceReceived({
 }: UseFirstTraceReceivedParams) {
   const pollStartRef = useRef<number | null>(null);
   const [pollExpired, setPollExpired] = useState(false);
+
+  useEffect(() => {
+    if (poll) {
+      setPollExpired(false);
+      pollStartRef.current = null;
+    }
+  }, [poll]);
 
   const query = useQuery({
     queryKey: [PROJECTS_KEY, { workspaceName, purpose: "first-trace-check" }],
