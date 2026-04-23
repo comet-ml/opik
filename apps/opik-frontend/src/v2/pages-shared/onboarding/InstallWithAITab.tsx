@@ -24,7 +24,9 @@ const InstallWithAITab: React.FC<InstallWithAITabProps> = ({
   const workspaceName = useActiveWorkspaceName();
 
   const projectPart = agentName ? `, project name "${agentName}"` : "";
-  const prompt = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart} and API key "${apiKey ?? "<YOUR_API_KEY>"}".`;
+  const prompt = `Instrument my agent with Opik using the /instrument command. Make sure you use workspace "${workspaceName}"${projectPart} and API key "${
+    apiKey ?? "<YOUR_API_KEY>"
+  }".`;
 
   return (
     <div className="flex flex-col gap-4 px-1">
