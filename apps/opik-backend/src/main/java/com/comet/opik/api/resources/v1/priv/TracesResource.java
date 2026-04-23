@@ -444,6 +444,7 @@ public class TracesResource {
     @Operation(operationId = "addTraceFeedbackScore", summary = "Add trace feedback score", description = "Add trace feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response addTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScore.class))) @NotNull @Valid FeedbackScore score) {
 
@@ -464,6 +465,7 @@ public class TracesResource {
     @Path("/{id}/feedback-scores/delete")
     @Operation(operationId = "deleteTraceFeedbackScore", summary = "Delete trace feedback score", description = "Delete trace feedback score", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response deleteTraceFeedbackScore(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteFeedbackScore.class))) @NotNull @Valid DeleteFeedbackScore score) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -482,6 +484,7 @@ public class TracesResource {
     @Operation(operationId = "scoreBatchOfTraces", summary = "Batch feedback scoring for traces", description = "Batch feedback scoring for traces", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response scoreBatchOfTraces(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatch.class))) @NotNull @Valid FeedbackScoreBatchContainer.FeedbackScoreBatch feedbackScoreBatch) {
 
@@ -530,6 +533,7 @@ public class TracesResource {
     @Operation(operationId = "addTraceComment", summary = "Add trace comment", description = "Add trace comment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/{traceId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response addTraceComment(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
             @Context UriInfo uriInfo) {
@@ -575,6 +579,7 @@ public class TracesResource {
     @Operation(operationId = "updateTraceComment", summary = "Update trace comment by id", description = "Update trace comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response updateTraceComment(@PathParam("commentId") UUID commentId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
@@ -596,6 +601,7 @@ public class TracesResource {
     @Operation(operationId = "deleteTraceComments", summary = "Delete trace comments", description = "Delete trace comments", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response deleteTraceComments(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 
@@ -920,6 +926,7 @@ public class TracesResource {
     @Operation(operationId = "scoreBatchOfThreads", summary = "Batch feedback scoring for threads", description = "Batch feedback scoring for threads", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response scoreBatchOfThreads(
             @RequestBody(content = @Content(schema = @Schema(implementation = FeedbackScoreBatchThread.class))) @NotNull @Valid FeedbackScoreBatchThread batch) {
 
@@ -943,6 +950,7 @@ public class TracesResource {
     @Path("/threads/feedback-scores/delete")
     @Operation(operationId = "deleteThreadFeedbackScores", summary = "Delete thread feedback scores", description = "Delete thread feedback scores", responses = {
             @ApiResponse(responseCode = "204", description = "No Content")})
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response deleteThreadFeedbackScores(
             @RequestBody(content = @Content(schema = @Schema(implementation = DeleteThreadFeedbackScores.class))) @NotNull @Valid DeleteThreadFeedbackScores scores) {
         var workspaceId = requestContext.get().getWorkspaceId();
@@ -993,6 +1001,7 @@ public class TracesResource {
     @Operation(operationId = "addThreadComment", summary = "Add thread comment", description = "Add thread comment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/traces/threads/{threadId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response addThreadComment(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
             @Context UriInfo uriInfo) {
@@ -1038,6 +1047,7 @@ public class TracesResource {
     @Operation(operationId = "updateThreadComment", summary = "Update thread comment by id", description = "Update thread comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response updateThreadComment(@PathParam("commentId") UUID commentId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
@@ -1059,6 +1069,7 @@ public class TracesResource {
     @Operation(operationId = "deleteThreadComments", summary = "Delete thread comments", description = "Delete thread comments", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
     public Response deleteThreadComments(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 

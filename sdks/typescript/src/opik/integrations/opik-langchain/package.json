@@ -1,7 +1,7 @@
 {
   "name": "opik-langchain",
   "description": "Opik TypeScript and JavaScript SDK integration with LangChain",
-  "version": "2.0.11",
+  "version": "2.0.12",
   "engines": {
     "node": ">=18"
   },

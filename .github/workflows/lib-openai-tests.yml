@@ -9,6 +9,10 @@ permissions:
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID:  ${{ secrets.OPENAI_ORG_ID }}
+  GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+  GOOGLE_CLOUD_LOCATION: us-east1
+  GOOGLE_CLOUD_PROJECT: opik-sdk-tests
+  GOOGLE_GENAI_USE_VERTEXAI: TRUE
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPIK_TEST_EXPENSIVE: ${{ inputs.run_expensive_tests }}
@@ -57,6 +61,11 @@ jobs:
           cd ./tests
           pip install --no-cache-dir --disable-pip-version-check -r library_integration/openai/requirements.txt
           pip list
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS_JSON }}
 
       - name: Run tests
         run: |

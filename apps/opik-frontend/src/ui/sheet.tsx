@@ -56,7 +56,7 @@ interface SheetContentProps
 }
 
 const DefaultSheetHeader = () => (
-  <div className="flex h-[60px] items-center border-b border-b-border px-6">
+  <div className="flex h-[var(--header-height)] items-center border-b border-b-border px-6">
     <Button asChild size="icon-sm" variant="outline">
       <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
         <X />
