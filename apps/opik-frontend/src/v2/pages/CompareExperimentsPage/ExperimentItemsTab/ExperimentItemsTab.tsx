@@ -514,6 +514,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           minSize: 140,
           customMeta: {
             experimentsIds,
+            experiments,
           },
         }),
       );

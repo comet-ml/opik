@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.redisson.api.RAtomicLongReactive;
 import org.redisson.api.RedissonReactiveClient;
 import reactor.core.publisher.Flux;
@@ -15,6 +16,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Singleton
 @Slf4j
@@ -22,13 +24,16 @@ public class ExperimentItemPublisher {
 
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
 
     @Inject
     public ExperimentItemPublisher(
             @NonNull RedissonReactiveClient redisClient,
-            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config) {
+            @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         this.redisClient = redisClient;
         this.config = config;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
     /**
@@ -36,8 +41,8 @@ public class ExperimentItemPublisher {
      * The counter is set BEFORE publishing to prevent the race where a fast consumer
      * decrements to zero before all messages are published.
      */
-    public Mono<Void> publish(@NonNull UUID batchId, @NonNull List<ExperimentItemToProcess> messages) {
-        if (messages.isEmpty()) {
+    public Mono<Void> publish(@NonNull UUID batchId, List<ExperimentItemToProcess> messages) {
+        if (CollectionUtils.isEmpty(messages)) {
             return Mono.empty();
         }
 
@@ -48,6 +53,7 @@ public class ExperimentItemPublisher {
 
         return counter.set(messages.size())
                 .then(counter.expire(config.getBatchCounterTtl().toJavaDuration()))
+                .then(setAssertionCounters(messages))
                 .thenMany(Flux.fromIterable(messages)
                         .flatMap(message -> stream.add(RedisStreamUtils.buildAddArgs(
                                 ExperimentExecutionConfig.PAYLOAD_FIELD, message, config))
@@ -57,5 +63,14 @@ public class ExperimentItemPublisher {
                 .then()
                 .doOnSuccess(v -> log.info("Published '{}' experiment item messages for batch '{}'",
                         messages.size(), batchId));
+    }
+
+    private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
+        var workspaceId = messages.getFirst().workspaceId();
+        var itemsByExperiment = messages.stream()
+                .filter(m -> m.experimentId() != null)
+                .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
+
+        return testSuiteAssertionCounterService.setCounters(workspaceId, itemsByExperiment);
     }
 }

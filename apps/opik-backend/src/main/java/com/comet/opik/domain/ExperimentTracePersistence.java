@@ -5,6 +5,7 @@ import com.comet.opik.api.ExperimentExecutionRequest;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
+import com.comet.opik.api.TestSuiteMetadataKeys;
 import com.comet.opik.api.Trace;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.utils.JsonUtils;
@@ -66,12 +67,13 @@ class ExperimentTracePersistence {
 
         ObjectNode metadata = JsonUtils.createObjectNode();
         metadata.put("created_from", "playground");
-        metadata.put("test_suite_dataset_id", ctx.datasetId().toString());
+        metadata.put(TestSuiteMetadataKeys.DATASET_ID, ctx.datasetId().toString());
         if (ctx.versionHash() != null) {
-            metadata.put("test_suite_dataset_version_hash", ctx.versionHash());
+            metadata.put(TestSuiteMetadataKeys.DATASET_VERSION_HASH, ctx.versionHash());
         }
-        metadata.put("test_suite_dataset_item_id", ctx.datasetItemId().toString());
-        metadata.put("test_suite_model", ctx.prompt().model());
+        metadata.put(TestSuiteMetadataKeys.DATASET_ITEM_ID, ctx.datasetItemId().toString());
+        metadata.put(TestSuiteMetadataKeys.MODEL, ctx.prompt().model());
+        metadata.put(TestSuiteMetadataKeys.EXPERIMENT_ID, ctx.experimentId().toString());
 
         var traceBuilder = Trace.builder()
                 .id(ctx.traceId())

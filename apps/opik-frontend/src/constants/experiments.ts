@@ -14,7 +14,7 @@ export const OPTIMIZATION_EXAMPLES_KEY = `${OPTIMIZATION_METADATA_EXCLUDED_KEY}.
 // TODO: OPIK-5724 — replace with a dedicated BE count endpoint / dataset_item_id filter
 export const COMPARE_EXPERIMENTS_MAX_PAGE_SIZE = 20000;
 
-export const ASSERTION_POLL_INTERVAL_MS = 3000;
+export const ASSERTION_POLL_INTERVAL_MS = 1000;
 export const EXPERIMENT_POLL_INTERVAL_MS = 2000;
 
 export const STATUS_TO_VARIANT_MAP: Record<
