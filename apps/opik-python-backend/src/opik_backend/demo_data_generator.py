@@ -12,7 +12,7 @@ import opik.rest_api
 from opik.rest_api.types.trace_write import TraceWrite
 from opik.rest_api.types.span_write import SpanWrite
 from opik.rest_api.types.feedback_score_batch_item import FeedbackScoreBatchItem
-from opik.api_objects.experiment.experiment_item import ExperimentItemReferences
+from opik.rest_api.types.experiment_item import ExperimentItem as RestExperimentItem
 from opik_backend.demo_data import (
     demo_traces,
     demo_spans,
@@ -849,9 +849,16 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
                         env=env,
                     ))
 
-                    experiment_refs.append(ExperimentItemReferences(
+                    experiment_refs.append(RestExperimentItem(
+                        experiment_id=experiment.id,
                         dataset_item_id=dataset_item_id,
                         trace_id=trace_id,
+                        # Pin project_name so the backend resolves project_id
+                        # deterministically via projectService.retrieveByNamesOrCreate
+                        # instead of falling back to a trace lookup — that lookup
+                        # races with ClickHouse ingestion of the traces we just
+                        # POSTed and can return null in prod.
+                        project_name=project_name,
                     ))
 
                     # Assertion scores. Pass mode drives fail patterns. Name = full
@@ -895,14 +902,23 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
                             source="online_scoring",
                         ))
 
+                # Use synchronous REST for every write. The SDK's async streamer
+                # (experiment.insert / client.flush) silently drops messages on
+                # timeout in production — client.flush() returns True even when
+                # it couldn't drain the queue before the signup handler exits,
+                # which leaves the experiment with zero items in the UI even
+                # though the "Seeded experiment" log fires. Posting directly to
+                # the REST endpoint guarantees a 2xx-or-raise before we log.
                 client.rest_client.traces.create_traces(traces=traces_to_create)
                 client.rest_client.spans.create_spans(spans=spans_to_create)
-                experiment.insert(experiment_refs)
-                client.flush()
+                client.rest_client.experiments.create_experiment_items(
+                    experiment_items=experiment_refs,
+                )
                 client.rest_client.traces.score_batch_of_traces(scores=score_items)
 
-                logger.info("Seeded experiment '%s' with %d traces / %d spans / %d assertion scores",
-                            exp_cfg["name"], len(traces_to_create), len(spans_to_create), len(score_items))
+                logger.info("Seeded experiment '%s' with %d traces / %d spans / %d items / %d assertion scores",
+                            exp_cfg["name"], len(traces_to_create), len(spans_to_create),
+                            len(experiment_refs), len(score_items))
 
         except Exception as e:
             logger.error("Error creating demo test suite for workspace %s: %s",
