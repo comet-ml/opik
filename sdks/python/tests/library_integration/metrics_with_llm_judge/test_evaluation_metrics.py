@@ -82,7 +82,9 @@ def test__answer_relevance__no_context_provided__error_raised(model):
         )
 
 
-def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(model):
+def test__answer_relevance__no_context_provided__no_context_mode_is_enabled__happyflow(
+    model,
+):
     answer_relevance_metric = metrics.AnswerRelevance(
         model=model, require_context=False, track=False
     )
