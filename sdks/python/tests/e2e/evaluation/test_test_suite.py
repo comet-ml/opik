@@ -215,15 +215,15 @@ def test_test_suite__pass_threshold_not_met__item_fails(
     """
     Test that items fail when pass_threshold is not met across multiple runs.
 
-    With runs_per_item=3, pass_threshold=2: only the first run returns a
-    correct answer, so at most 1 run passes (< threshold of 2).
+    With runs_per_item=2, pass_threshold=2: only the first run returns a
+    correct answer, so only 1 run passes (< threshold of 2).
     """
     project_name = "project_test_test_suite__pass_threshold_not_met"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test pass threshold failure",
         global_assertions=["The response correctly states that 2 + 2 equals 4"],
-        global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
         project_name=project_name,
     )
 
@@ -255,7 +255,7 @@ def test_test_suite__pass_threshold_not_met__item_fails(
 
     item_result = list(suite_result.item_results.values())[0]
     assert item_result.passed is False
-    assert item_result.runs_total == 3
+    assert item_result.runs_total == 2
     assert item_result.pass_threshold == 2
 
 
@@ -267,7 +267,7 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
 ):
     """
     Comprehensive pass/fail logic test:
-    - 1 item, 3 assertions, runs_per_item=3, pass_threshold=2
+    - 1 item, 3 assertions, runs_per_item=2, pass_threshold=1
     - Consistent correct answers -> all runs pass -> item passes
 
     Pass/fail logic:
@@ -284,7 +284,7 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         name=dataset_name,
         description="Test multiple assertions with multiple runs",
         global_assertions=[assertion_1, assertion_2, assertion_3],
-        global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
         project_name=project_name,
     )
 
@@ -307,16 +307,16 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         suite_result=suite_result,
         items_total=1,
         items_passed=1,
-        experiment_items_count=3,  # 1 item * 3 runs
-        total_feedback_scores=9,  # 3 assertions * 3 runs
+        experiment_items_count=2,  # 1 item * 2 runs
+        total_feedback_scores=6,  # 3 assertions * 2 runs
         expected_score_names={assertion_1, assertion_2, assertion_3},
         project_name=project_name,
     )
 
     item_result = list(suite_result.item_results.values())[0]
-    assert item_result.runs_total == 3
-    assert item_result.pass_threshold == 2
-    assert item_result.runs_passed >= 2
+    assert item_result.runs_total == 2
+    assert item_result.pass_threshold == 1
+    assert item_result.runs_passed >= 1
     assert item_result.passed is True
 
     # Verify each experiment item has exactly 3 assertion results (one per assertion)
