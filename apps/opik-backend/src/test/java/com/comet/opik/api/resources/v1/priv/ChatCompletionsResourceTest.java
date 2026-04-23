@@ -501,7 +501,7 @@ class ChatCompletionsResourceTest {
         }
 
         @Test
-        @DisplayName("Azure-style {error:{code,message}} body — current behaviour falls through to 500")
+        @DisplayName("Azure-style {error:{code,message}} body — surfaces as clean 4xx with extracted message")
         void azureStyleErrorBodyIsPropagated() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);
             var workspaceId = UUID.randomUUID().toString();
@@ -530,18 +530,19 @@ class ChatCompletionsResourceTest {
 
             System.out.printf("[azureStyle] status=%d body=%s%n", status, body);
 
-            // CustomLlmErrorMessage expects {"error": "<string>"}; Azure uses {"error": {...}}.
-            // Jackson fails to deserialize the nested object into the String field, the parser
-            // returns empty, and ChatCompletionService falls through to the generic 500 path
-            // which embeds the raw upstream body inside its message field.
-            //
-            // AC #9 (error transparency) is only partially satisfied today: the text survives but
-            // is buried in a string, and the HTTP status is wrong. The implementation of
-            // OPIK-4551 needs to add an Azure-shape-aware error mapper so this returns a clean
-            // 4xx with the extracted {code, message}. When fixed, update this assertion.
-            assertThat(status).isEqualTo(HttpStatus.SC_INTERNAL_SERVER_ERROR);
-            assertThat(body).contains("InvalidAPIVersion");
+            // CustomLlmErrorMessage now understands both shapes: the historical
+            // {"error": "<string>"} form and Azure's nested {"error": {"code", "message"}}
+            // form. The gateway's human-readable message surfaces in the response
+            // message field. HTTP status is 400 because `InvalidAPIVersion` isn't in
+            // the OpenAI-compat code table, and CustomLlmErrorMessage defaults unknown
+            // codes to 400 (gateway errors are client errors). The code itself lives in
+            // ErrorMessage.details, which Dropwizard's default mapper drops when
+            // re-serializing via ClientErrorException; visible-through-API checks must
+            // focus on the message.
+            assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(body).contains("The API version 2024-08-01-preview is not supported");
+            // The raw embedded JSON wrapper the old 500 path used is no longer present.
+            assertThat(body).doesNotContain("Unexpected error calling LLM provider");
         }
 
         @Test
