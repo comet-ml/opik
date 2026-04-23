@@ -16169,6 +16169,11 @@ components:
         type:
           minLength: 1
           type: string
+        presence:
+          type: string
+          enum:
+          - required
+          - optional
     LocalRunnerHeartbeatResponse:
       type: object
       properties:

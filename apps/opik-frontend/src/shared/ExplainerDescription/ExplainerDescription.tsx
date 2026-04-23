@@ -2,7 +2,7 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Explainer } from "@/types/shared";
 
 type ExplainerDescriptionProps = {
@@ -16,7 +16,6 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
   title,
   description,
   docLink,
-  docHash,
   isMinimalLink = false,
   iconSize = "size-4",
   className,
@@ -42,11 +41,7 @@ const ExplainerDescription: React.FC<ExplainerDescriptionProps> = ({
           className="h-5 px-1"
           asChild
         >
-          <a
-            href={buildDocsUrl(docLink, docHash)}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <a href={docLink} target="_blank" rel="noreferrer">
             Read more
             <ExternalLink className={cn("ml-1 shrink-0", iconSize)} />
           </a>

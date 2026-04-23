@@ -11,7 +11,7 @@ import { Button } from "@/ui/button";
 import useWorkspaceMetrics from "@/api/workspaces/useWorkspaceMetrics";
 import useWorkspaceMetricsSummary from "@/api/workspaces/useWorkspaceMetricsSummary";
 import { calculatePercentageChange, cn, formatNumericData } from "@/lib/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import ViewDetailsButton from "@/v1/pages/HomePage/ViewDetailsButton";
 import PercentageTrend, {

@@ -4,7 +4,7 @@ import { EditorView } from "@codemirror/view";
 import GEvalField from "./GEvalField";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 import { GEvalMetricParameters } from "@/types/optimizations";
 

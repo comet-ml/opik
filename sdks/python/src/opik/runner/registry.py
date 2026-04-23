@@ -8,6 +8,7 @@ import typing
 from typing import Any, Callable, Dict, List
 
 from opik.api_objects import type_helpers
+from opik.rest_api.types.param_presence import ParamPresence
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ _listeners: List[Callable[[str], None]] = []
 class Param:
     name: str
     type: str = "string"
+    presence: ParamPresence = "required"
 
 
 def register(
@@ -77,7 +79,10 @@ def extract_params(fn: Callable) -> List[Param]:
             except TypeError:
                 type_name = "string"
                 unresolved.append(param_name)
-        params.append(Param(name=param_name, type=type_name))
+        presence: ParamPresence = (
+            "required" if param.default is inspect.Parameter.empty else "optional"
+        )
+        params.append(Param(name=param_name, type=type_name, presence=presence))
     if unresolved:
         logger.warning(
             "Could not resolve type for parameter(s) %s in %r. "

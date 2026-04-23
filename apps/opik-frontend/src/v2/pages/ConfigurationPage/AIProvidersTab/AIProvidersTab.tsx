@@ -19,7 +19,7 @@ import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
 import { COLUMN_NAME_ID, COLUMN_TYPE, ColumnData } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 export const DEFAULT_COLUMNS: ColumnData<ProviderObject>[] = [

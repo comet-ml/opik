@@ -5,7 +5,7 @@ import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { GepaOptimizerParameters } from "@/types/optimizations";
 import { DEFAULT_GEPA_OPTIMIZER_CONFIGS } from "@/constants/optimizations";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface GepaOptimizerConfigsProps {
   configs: Partial<GepaOptimizerParameters>;

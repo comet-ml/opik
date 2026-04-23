@@ -10,7 +10,7 @@ import { TEXT_AREA_CLASSES } from "@/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { Description } from "@/ui/description";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { ExecutionPolicy } from "@/types/test-suites";
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
 import { TestSuiteItemFormValues } from "./testSuiteItemFormSchema";
@@ -115,7 +115,7 @@ const FormEvaluationCriteriaSection: React.FC<
   FormEvaluationCriteriaSectionProps
 > = ({ suiteAssertions, suitePolicy, onOpenSettings }) => {
   const form = useFormContext<TestSuiteItemFormValues>();
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, prepend, remove, update } = useFieldArray({
     control: form.control,
     name: "assertions",
   });
@@ -163,7 +163,7 @@ const FormEvaluationCriteriaSection: React.FC<
       editableAssertions={fields.map((f) => f.value)}
       onChangeAssertion={(index, value) => update(index, { value })}
       onRemoveAssertion={(index) => remove(index)}
-      onAddAssertion={() => append({ value: "" })}
+      onAddAssertion={() => prepend({ value: "" })}
       runsPerItem={runsPerItem}
       passThreshold={passThreshold}
       onRunsPerItemChange={handleRunsChange}
@@ -171,6 +171,8 @@ const FormEvaluationCriteriaSection: React.FC<
       useGlobalPolicy={useGlobalPolicy}
       onRevertToDefaults={handleRevertPolicy}
       onOpenSettings={onOpenSettings}
+      defaultRunsPerItem={suitePolicy.runs_per_item}
+      defaultPassThreshold={suitePolicy.pass_threshold}
     />
   );
 };

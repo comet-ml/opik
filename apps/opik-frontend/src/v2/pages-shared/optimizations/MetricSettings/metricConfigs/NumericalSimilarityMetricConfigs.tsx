@@ -3,7 +3,7 @@ import { Label } from "@/ui/label";
 import { Input } from "@/ui/input";
 import { NumericalSimilarityMetricParameters } from "@/types/optimizations";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DatasetVariablesHint from "../DatasetVariablesHint";
 
 interface NumericalSimilarityMetricConfigsProps {

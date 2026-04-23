@@ -2,7 +2,7 @@ import React from "react";
 import { ExternalLink } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
@@ -61,9 +61,7 @@ const AgentConfigurationEmptyState: React.FC = () => {
 
         <Button variant="outline" size="sm" asChild>
           <a
-            href={buildDocsUrl(
-              "/latest/development/agent-configuration/overview",
-            )}
+            href={buildDocsUrl("/development/agent-configuration/overview")}
             target="_blank"
             rel="noreferrer"
           >

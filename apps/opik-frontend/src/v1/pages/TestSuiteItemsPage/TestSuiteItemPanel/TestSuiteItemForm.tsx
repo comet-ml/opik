@@ -15,7 +15,7 @@ import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useClampedIntegerInput } from "@/hooks/useClampedIntegerInput";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import { Description } from "@/ui/description";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { ExecutionPolicy, MAX_RUNS_PER_ITEM } from "@/types/test-suites";
 import {
   PASS_CRITERIA_TITLE,
@@ -209,10 +209,10 @@ const EvaluationCriteriaSection: React.FC<EvaluationCriteriaSectionProps> = ({
 
       <AssertionsField
         variant="item"
-        headerContent={
+        footerContent={
           <button
             type="button"
-            className="comet-body-xs inline-flex shrink-0 items-center gap-1 border-b border-foreground text-foreground"
+            className="comet-body-xs inline-flex shrink-0 items-center gap-1 text-foreground underline"
             onClick={onOpenSettings}
           >
             <Settings2 className="size-3.5 shrink-0" />

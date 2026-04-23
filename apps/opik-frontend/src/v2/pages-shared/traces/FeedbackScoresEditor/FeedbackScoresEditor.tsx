@@ -9,7 +9,7 @@ import { Link } from "@tanstack/react-router";
 import { ExternalLink, InfoIcon } from "lucide-react";
 import AnnotateRow from "../TraceDetailsPanel/TraceAnnotateViewer/AnnotateRow";
 import { cn } from "@/lib/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import { UpdateFeedbackScoreData } from "../TraceDetailsPanel/TraceAnnotateViewer/types";
 

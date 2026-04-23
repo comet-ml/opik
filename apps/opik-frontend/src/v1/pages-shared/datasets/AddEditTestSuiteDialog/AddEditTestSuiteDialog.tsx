@@ -28,7 +28,7 @@ import { useToast } from "@/ui/use-toast";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
 import Loader from "@/shared/Loader/Loader";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { validateCsvFile, getCsvFilenameWithoutExtension } from "@/lib/file";
 import { Dataset, DATASET_TYPE, DATASET_ITEM_SOURCE } from "@/types/datasets";
 import { FeatureToggleKeys } from "@/types/feature-toggles";

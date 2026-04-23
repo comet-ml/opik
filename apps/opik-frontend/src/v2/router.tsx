@@ -229,10 +229,16 @@ const logsRoute = createRoute({
 const projectDashboardsRoute = createRoute({
   path: "/dashboards",
   getParentRoute: () => projectScopedRoute,
-  component: ProjectDashboardsPage,
+  component: DashboardsPageGuard,
   staticData: {
     title: "Dashboards",
   },
+});
+
+const projectDashboardsIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => projectDashboardsRoute,
+  component: ProjectDashboardsPage,
 });
 
 // ----------- traces redirect (old path → /logs, handles ?tab= params)
@@ -592,7 +598,7 @@ const routeTree = rootRoute.addChildren([
         projectScopedRoute.addChildren([
           projectHomeRoute,
           logsRoute,
-          projectDashboardsRoute,
+          projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
           experimentsRoute.addChildren([
             experimentsListRoute,

@@ -16,7 +16,7 @@ const ThreadFeedbackScoresInfo: React.FC<ThreadFeedbackScoresInfoProps> = ({
     return null;
   }
 
-  //   const scoreDocsLink = buildDocsUrl("/tracing/annotate_traces");
+  //   const scoreDocsLink = buildDocsUrl("/tracing/advanced/annotate_traces");
 
   return (
     <div className="comet-body-xs mt-2 flex gap-1.5 py-2 text-light-slate">

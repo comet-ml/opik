@@ -73,7 +73,6 @@ export type Explainer = {
   type?: explainerType;
   description: string;
   docLink?: string;
-  docHash?: string;
 };
 
 export type HeaderIconType =

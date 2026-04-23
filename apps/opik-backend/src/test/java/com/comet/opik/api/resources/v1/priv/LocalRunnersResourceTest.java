@@ -34,6 +34,7 @@ import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerJobStatus;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
 import com.comet.opik.api.runner.LocalRunnerStatus;
+import com.comet.opik.api.runner.ParamPresence;
 import com.comet.opik.api.runner.RunnerType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -750,6 +751,36 @@ class LocalRunnersResourceTest {
 
             LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
             assertThat(runner.agents().get(0).timeout()).isEqualTo(0);
+        }
+
+        @org.junit.jupiter.params.ParameterizedTest
+        @org.junit.jupiter.params.provider.MethodSource("paramsWithPresenceCases")
+        void storesAndReturnsParamsWithPresence(List<LocalRunner.Agent.Param> params) {
+            var ctx = createIsolatedWorkspace();
+            UUID projectId = createProject(ctx.apiKey, ctx.workspace);
+            UUID runnerId = connectRunnerWithPairing("reg-agents-params-" + randomUUID(), projectId, ctx.apiKey,
+                    ctx.workspace);
+
+            LocalRunner.Agent agent = LocalRunner.Agent.builder().params(params).build();
+            runnersClient.registerAgents(runnerId, Map.of("agent1", agent), ctx.apiKey, ctx.workspace);
+
+            LocalRunner runner = runnersClient.getRunner(runnerId, ctx.apiKey, ctx.workspace);
+            assertThat(runner.agents()).hasSize(1);
+            assertThat(runner.agents().get(0).params()).containsExactlyElementsOf(params);
+        }
+
+        static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> paramsWithPresenceCases() {
+            return java.util.stream.Stream.of(
+                    org.junit.jupiter.params.provider.Arguments.of(List.of(
+                            LocalRunner.Agent.Param.builder()
+                                    .name(randomUUID().toString()).type(randomUUID().toString())
+                                    .presence(ParamPresence.REQUIRED).build(),
+                            LocalRunner.Agent.Param.builder()
+                                    .name(randomUUID().toString()).type(randomUUID().toString())
+                                    .presence(ParamPresence.OPTIONAL).build())),
+                    org.junit.jupiter.params.provider.Arguments.of(List.of(
+                            LocalRunner.Agent.Param.builder()
+                                    .name(randomUUID().toString()).type(randomUUID().toString()).build())));
         }
 
         @Test

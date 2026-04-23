@@ -7,7 +7,7 @@ import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
-import AgentCopyButtons from "./AgentCopyButtons";
+import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import { Separator } from "@/ui/separator";
 
 type ManualIntegrationDetailProps = {
@@ -62,7 +62,7 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
       </div>
       <Separator />
 
-      <AgentCopyButtons />
+      <AgentCopyButtons agentName={agentName} />
 
       <IntegrationStep
         title={`${INSTALL_OPIK_SECTION_TITLE}.`}
@@ -76,6 +76,7 @@ const ManualIntegrationDetail: React.FC<ManualIntegrationDetailProps> = ({
           <div className="overflow-hidden rounded-md border">
             <CodeHighlighter
               data={`import opik\n\nopik.configure(use_local=False, project_name="${agentName}")`}
+              highlightedLines={[1, 3]}
             />
           </div>
         </div>

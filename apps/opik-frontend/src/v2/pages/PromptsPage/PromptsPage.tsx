@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-table";
 import { PlusIcon } from "lucide-react";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyPromptLibraryLightUrl from "/images/empty-prompt-library-light.svg";
 import emptyPromptLibraryDarkUrl from "/images/empty-prompt-library-dark.svg";
 import useLocalStorageState from "use-local-storage-state";
@@ -365,7 +365,7 @@ const PromptsPage: React.FunctionComponent = () => {
           }
           primaryActionLabel="Create your first prompt"
           onPrimaryAction={handleNewPromptClick}
-          docsUrl={buildDocsUrl("/prompt_engineering/prompt_management")}
+          docsUrl={buildDocsUrl("/development/agent-configuration/overview")}
         />
       ) : (
         <>

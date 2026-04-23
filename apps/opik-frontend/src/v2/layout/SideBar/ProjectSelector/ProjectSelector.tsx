@@ -373,7 +373,8 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
         to="/$workspaceName/projects/$projectId/home"
         params={{ workspaceName, projectId: project.id }}
         className={cn(
-          "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground hover:pr-9",
+          "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground",
+          hasActions && "hover:pr-9",
           isSelected && "bg-primary-100 text-primary",
         )}
         onClick={(e) => {
