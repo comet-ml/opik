@@ -258,7 +258,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   }, []);
 
   const handleAssertionAdd = useCallback(() => {
-    setAssertions((prev) => [...prev, ""]);
+    setAssertions((prev) => ["", ...prev]);
   }, []);
 
   const handleRunsPerItemChange = useCallback(
@@ -503,7 +503,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
   return (
     <>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg sm:max-w-[560px]">
+        <DialogContent className="max-w-lg sm:max-w-screen-sm">
           <DialogHeader>
             <DialogTitle>Add to {entityName}</DialogTitle>
           </DialogHeader>
@@ -522,7 +522,26 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                 value={selectedDataset?.id ?? ""}
                 onChange={handleDatasetSelect}
                 options={datasetOptions}
-                placeholder={`Select a ${entityName}`}
+                placeholder={
+                  <div className="flex items-center gap-2">
+                    {isTestSuiteMode ? (
+                      <ListChecks className="size-4 shrink-0 text-muted-slate" />
+                    ) : (
+                      <Database className="size-4 shrink-0 text-muted-slate" />
+                    )}
+                    <span>Select a {entityName}</span>
+                  </div>
+                }
+                renderTitle={(option: DropdownOption<string>) => (
+                  <div className="flex items-center gap-2 truncate">
+                    {isTestSuiteMode ? (
+                      <ListChecks className="size-4 shrink-0 text-muted-slate" />
+                    ) : (
+                      <Database className="size-4 shrink-0 text-muted-slate" />
+                    )}
+                    <span className="truncate">{option.label}</span>
+                  </div>
+                )}
                 searchPlaceholder={`Search ${entityName}s`}
                 isLoading={isPending}
                 disabled={noValidRows}
@@ -553,7 +572,7 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
               </div>
             )}
             {isTestSuiteMode && selectedDataset && (
-              <div ref={configSectionRef} className="mt-4">
+              <div ref={configSectionRef} className="mt-6">
                 <EvaluationCriteriaSection
                   suiteAssertions={suiteAssertions}
                   editableAssertions={assertions}
@@ -566,6 +585,8 @@ const AddToDatasetDialog: React.FunctionComponent<AddToDatasetDialogProps> = ({
                   onPassThresholdChange={handlePassThresholdChange}
                   useGlobalPolicy={useGlobalPolicy}
                   onRevertToDefaults={handleRevertToDefaults}
+                  defaultRunsPerItem={suiteExecutionPolicy.runs_per_item}
+                  defaultPassThreshold={suiteExecutionPolicy.pass_threshold}
                 />
               </div>
             )}
