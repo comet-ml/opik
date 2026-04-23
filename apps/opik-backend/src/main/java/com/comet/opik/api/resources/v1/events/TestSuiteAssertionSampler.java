@@ -88,6 +88,8 @@ public class TestSuiteAssertionSampler {
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
     }
 
+    // TracesCreated fires only on insert; updates (e.g. endTime null→set) fire TracesUpdated,
+    // so a given trace ID appears here exactly once — safe to partition and decrement without double-counting.
     @Subscribe
     public void onTracesCreated(TracesCreated tracesBatch) {
         var completeTraces = tracesBatch.traces().stream()
