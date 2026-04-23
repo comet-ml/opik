@@ -1318,3 +1318,11 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}
+
+# UI Config configuration
+uiConfig:
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables.
+  #              Lower this value to reduce initial render cost for
+  #              high-volume workspaces.
+  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
