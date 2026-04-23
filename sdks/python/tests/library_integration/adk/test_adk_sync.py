@@ -68,7 +68,10 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -188,9 +191,11 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
-            "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
-            "Always call the matching tool first and reply using its response."
+            "You MUST invoke one of the provided function tools before replying — never fabricate a response, "
+            "never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
+            "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[
             agent_tools.get_weather,
@@ -524,7 +529,10 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -657,7 +665,10 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -729,7 +740,10 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1147,7 +1161,10 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1349,7 +1366,10 @@ def test_adk__llm_call_failed__error_info_is_logged_in_llm_span(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1413,7 +1433,10 @@ def test_adk__tool_call_failed__error_info_is_logged_in_tool_span(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1666,7 +1689,10 @@ def test_adk__tracing_disabled__no_spans_created(fake_backend, disable_tracing):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1711,7 +1737,10 @@ def test_adk__llm_call__time_to_first_token_tracked_in_metadata(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1776,7 +1805,10 @@ def test_adk__llm_call__time_to_first_token_tracked_for_streaming_responses(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1842,9 +1874,11 @@ def test_adk__llm_call__time_to_first_token_tracked_for_multiple_llm_calls(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
-            "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
-            "Always call the matching tool first and reply using its response."
+            "You MUST invoke one of the provided function tools before replying — never fabricate a response, "
+            "never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
+            "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather, agent_tools.get_current_time],
         before_agent_callback=opik_tracer.before_agent_callback,
@@ -1916,7 +1950,10 @@ def test_adk__llm_call__time_to_first_token_not_present_when_no_content(fake_bac
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,

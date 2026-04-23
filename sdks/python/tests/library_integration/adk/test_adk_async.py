@@ -39,7 +39,10 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
         instruction=(
-            "When the user asks about the weather in a city, always call the `get_weather` tool with that city name and reply using the tool's response."
+            "You MUST invoke the `get_weather` function tool whenever the user asks about weather — "
+            "never fabricate a response, never describe a fake tool call in plain text, never paste invented JSON. "
+            "If the user asks about weather, your next action MUST be a function call to `get_weather(city=...)`. "
+            "After the tool returns, reply using only the information from the tool's response."
         ),
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,

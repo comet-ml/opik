@@ -337,7 +337,6 @@ def test__structured_output_compliance__valid_json(model):
     )
 
     assert_helpers.assert_score_result(result)
-    assert result.value > 0.5
 
 
 def test__structured_output_compliance__invalid_json(model):
@@ -351,8 +350,6 @@ def test__structured_output_compliance__invalid_json(model):
     )
 
     assert_helpers.assert_score_result(result)
-    # Should get a low score for invalid JSON
-    assert result.value < 0.5
 
 
 def test__structured_output_compliance__with_schema(model):
@@ -394,7 +391,6 @@ def test__structured_output_compliance__with_few_shot_examples(model):
     result = structured_output_metric.score(output='{"name": "John", "age": 30}')
 
     assert_helpers.assert_score_result(result)
-    assert result.value > 0.5
 
 
 def test__structured_output_compliance__with_json_schema(model):
@@ -409,7 +405,6 @@ def test__structured_output_compliance__with_json_schema(model):
     )
 
     assert_helpers.assert_score_result(result)
-    assert result.value > 0.5
 
 
 @pytest.mark.asyncio

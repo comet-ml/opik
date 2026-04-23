@@ -81,9 +81,11 @@ root_agent = LlmAgent(
     model=LiteLlm(model=MODEL, reasoning_effort="minimal"),
     description="Agent to answer questions about the time and weather in a city.",
     instruction=(
-        "When the user asks about the weather in a city, call the `get_weather` tool with that city name. "
-        "When the user asks about the current time in a city, call the `get_current_time` tool with that city name. "
-        "Always call the matching tool first and reply using its response."
+        "You MUST invoke one of the provided function tools before replying — never fabricate a response, "
+        "never describe a fake tool call in plain text, never paste invented JSON. "
+        "If the user asks about the weather in a city, your next action MUST be a function call to `get_weather(city=...)`. "
+        "If the user asks about the current time in a city, your next action MUST be a function call to `get_current_time(city=...)`. "
+        "After the tool returns, reply using only the information from the tool's response."
     ),
     tools=[get_weather, get_current_time],
     before_agent_callback=opik_tracer.before_agent_callback,
