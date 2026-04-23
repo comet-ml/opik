@@ -45,7 +45,7 @@ public record LocalRunner(
         public record Param(
                 @NotBlank String name,
                 @NotBlank String type,
-                Boolean required) {
+                ParamPresence presence) {
         }
     }
 

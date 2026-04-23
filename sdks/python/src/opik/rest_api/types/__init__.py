@@ -472,6 +472,7 @@ from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
 from .param import Param
+from .param_presence import ParamPresence
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
 from .percentage_values_detailed import PercentageValuesDetailed
@@ -1095,6 +1096,7 @@ __all__ = [
     "OptimizationWriteStatus",
     "PageColumns",
     "Param",
+    "ParamPresence",
     "PercentageValueStatPublic",
     "PercentageValues",
     "PercentageValuesDetailed",

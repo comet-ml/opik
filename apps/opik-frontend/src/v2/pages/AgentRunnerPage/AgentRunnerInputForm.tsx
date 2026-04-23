@@ -6,10 +6,12 @@ import { Textarea } from "@/ui/textarea";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 
+type ParamPresence = "required" | "optional";
+
 type AgentParam = {
   name: string;
   type: string;
-  required?: boolean;
+  presence?: ParamPresence;
 };
 
 const NUMERIC_TYPES = new Set(["int", "integer", "float", "double", "number"]);
@@ -46,7 +48,7 @@ type AgentRunnerInputFormProps = {
 };
 
 const isFieldRequired = (field: AgentParam): boolean => {
-  return field.required !== false;
+  return field.presence !== "optional";
 };
 
 const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({

@@ -85,7 +85,7 @@ def _run(shutdown_event: threading.Event) -> None:
             description=entry.get("docstring", ""),
             language="python",
             params=[
-                Param(name=p.name, type=p.type, required=p.required)
+                Param(name=p.name, type=p.type, presence=p.presence)
                 for p in entry.get("params", [])
             ],
             timeout=0,

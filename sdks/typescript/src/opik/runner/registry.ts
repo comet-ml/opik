@@ -1,10 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-export interface Param {
-  name: string;
-  type: string;
-  required?: boolean;
-}
+import type { Param } from "@/rest_api/api/types/Param";
+import { ParamPresence } from "@/rest_api/api/types/ParamPresence";
+
+export type { Param };
+export { ParamPresence };
 
 export interface RegistryEntry {
   func: (...args: any[]) => any;
@@ -57,7 +57,8 @@ export function extractParams(fn: Function): Param[] {
         .replace(/:\s*.*$/, "")
         .replace(/^\.\.\.|[?]$/g, "")
         .trim();
-      return { name, type: "string", required: !hasDefault };
+      const presence = hasDefault ? ParamPresence.Optional : ParamPresence.Required;
+      return { name, type: "string", presence };
     })
     .filter((p) => p.name.length > 0);
 }

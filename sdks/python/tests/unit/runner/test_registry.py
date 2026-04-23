@@ -110,22 +110,22 @@ class TestExtractParams:
             pass
 
         params = extract_params(fn)
-        assert params[0].required is True
+        assert params[0].presence == "required"
 
-    def test_extract_params__with_default__not_required(self):
+    def test_extract_params__with_default__optional(self):
         def fn(x: str = "hi") -> None:
             pass
 
         params = extract_params(fn)
-        assert params[0].required is False
+        assert params[0].presence == "optional"
 
-    def test_extract_params__optional_with_none_default__not_required(self):
+    def test_extract_params__optional_with_none_default__optional(self):
         def fn(x: Optional[str] = None) -> None:
             pass
 
         params = extract_params(fn)
         assert params[0].type == "string"
-        assert params[0].required is False
+        assert params[0].presence == "optional"
 
     def test_extract_params__optional_no_default__required(self):
         def fn(x: Optional[str]) -> None:
@@ -133,4 +133,4 @@ class TestExtractParams:
 
         params = extract_params(fn)
         assert params[0].type == "string"
-        assert params[0].required is True
+        assert params[0].presence == "required"
