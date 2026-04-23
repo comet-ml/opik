@@ -27,7 +27,7 @@ export enum EXPLAINER_ID {
   whats_the_experiment_configuration = "whats_the_experiment_configuration",
   what_does_it_mean_to_compare_my_experiments = "what_does_it_mean_to_compare_my_experiments",
   whats_the_test_suite_item = "whats_the_test_suite_item",
-  whats_an_test_suite = "whats_an_test_suite",
+  whats_a_test_suite = "whats_a_test_suite",
   why_do_i_need_multiple_test_suites = "why_do_i_need_multiple_test_suites",
   what_format_is_this_to_add_my_test_suite_item = "what_format_is_this_to_add_my_test_suite_item",
   what_format_is_this_to_add_my_dataset_item = "what_format_is_this_to_add_my_dataset_item",
@@ -260,8 +260,8 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
       "Test suite items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
     type: "help",
   },
-  [EXPLAINER_ID.whats_an_test_suite]: {
-    id: EXPLAINER_ID.whats_an_test_suite,
+  [EXPLAINER_ID.whats_a_test_suite]: {
+    id: EXPLAINER_ID.whats_a_test_suite,
     description:
       "A test suite is a collection of input-output examples used to evaluate your LLM application's performance.",
   },
