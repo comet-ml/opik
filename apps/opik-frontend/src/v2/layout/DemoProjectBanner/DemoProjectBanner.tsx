@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { Link } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
+import { useFeatureFlagVariantKey } from "posthog-js/react";
 
 import { useActiveProjectId, useActiveWorkspaceName } from "@/store/AppStore";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
@@ -10,6 +11,8 @@ import {
   AGENT_ONBOARDING_KEY,
   AGENT_ONBOARDING_STEPS,
   AgentOnboardingState,
+  AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY,
+  DEFAULT_ONBOARDING_FLOW,
 } from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentOnboardingContext";
 import useAutoCompleteAgentOnboarding from "./useAutoCompleteAgentOnboarding";
 
@@ -39,6 +42,11 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     onChangeHeight(node.clientHeight);
   });
 
+  const variant =
+    useFeatureFlagVariantKey(AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY) ??
+    DEFAULT_ONBOARDING_FLOW;
+  const isManualFlow = variant === "manual";
+
   const isDemoProject = project?.name === DEMO_PROJECT_NAME;
   const isOnboardingActive =
     !!onboardingState?.step &&
@@ -49,7 +57,7 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
     enabled: isDemoProject && isOnboardingActive,
   });
 
-  const hideBanner = !isDemoProject || !isOnboardingActive;
+  const hideBanner = !isDemoProject || (!isOnboardingActive && !isManualFlow);
 
   useEffect(() => {
     onChangeHeight(!hideBanner ? heightRef.current : 0);
@@ -64,9 +72,11 @@ const DemoProjectBanner: React.FC<DemoProjectBannerProps> = ({
   // AgentNameStep initializes its input from it and the create-project mutation
   // auto-advances on 409 when the name still belongs to their existing project.
   const handleCreateYourOwn = () => {
-    setOnboardingState((prev) =>
-      prev ? { ...prev, step: AGENT_ONBOARDING_STEPS.AGENT_NAME } : prev,
-    );
+    if (!isManualFlow) {
+      setOnboardingState((prev) =>
+        prev ? { ...prev, step: AGENT_ONBOARDING_STEPS.AGENT_NAME } : prev,
+      );
+    }
   };
 
   return (

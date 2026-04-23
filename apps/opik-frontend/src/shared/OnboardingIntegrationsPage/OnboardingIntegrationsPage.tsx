@@ -9,7 +9,7 @@ type IntegrationExplorerComponent = React.FC<{
   TypeScriptSDK: React.ComponentType;
   GetHelp: React.ComponentType;
   CopyApiKey: React.ComponentType;
-  Skip: React.ComponentType;
+  Skip: React.ComponentType<{ onSkip?: () => void }>;
   Tabs: React.FC<{ children: React.ReactNode }>;
   Grid: React.ComponentType;
 };
@@ -17,17 +17,24 @@ type IntegrationExplorerComponent = React.FC<{
 type OnboardingIntegrationsPageProps = {
   IntegrationExplorer: IntegrationExplorerComponent;
   source: string;
+  banner?: React.ReactNode;
+  onSkip?: () => void;
 };
 
 const OnboardingIntegrationsPage: React.FC<OnboardingIntegrationsPageProps> = ({
   IntegrationExplorer,
   source,
+  banner,
+  onSkip,
 }) => {
   return (
     <div className="mx-auto w-full max-w-[1040px] pb-10">
-      <h1 className="md:comet-title-xl comet-title-l mb-3 mt-6 md:mt-10">
-        Get started with Opik
-      </h1>
+      <div className="mb-3 mt-6 flex items-center justify-between md:mt-10">
+        <h1 className="md:comet-title-xl comet-title-l">
+          Get started with Opik
+        </h1>
+        {banner}
+      </div>
       <p className="comet-body-s mb-10 text-muted-slate">
         Opik helps you improve your LLM features by tracking what happens behind
         the scenes. Integrate Opik to unlock evaluations, experiments, and
@@ -40,7 +47,7 @@ const OnboardingIntegrationsPage: React.FC<OnboardingIntegrationsPageProps> = ({
           <div className="flex flex-wrap items-center gap-6 md:gap-3">
             <IntegrationExplorer.CopyApiKey />
             <IntegrationExplorer.GetHelp />
-            <IntegrationExplorer.Skip />
+            <IntegrationExplorer.Skip onSkip={onSkip} />
           </div>
         </div>
 

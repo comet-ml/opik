@@ -242,7 +242,7 @@ const ConnectAgentStep: React.FC = () => {
       headerContent={
         <div className="flex flex-col gap-3">
           <Separator />
-          <AgentCopyButtons />
+          <AgentCopyButtons agentName={agentName} />
         </div>
       }
       showFooterSeparator

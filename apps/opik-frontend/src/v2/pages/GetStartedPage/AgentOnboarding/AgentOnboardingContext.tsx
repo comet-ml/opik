@@ -11,11 +11,12 @@ import useSubmitOnboardingAnswerMutation from "@/api/feedback/useSubmitOnboardin
 import { useActiveWorkspaceName } from "@/store/AppStore";
 
 export const AGENT_ONBOARDING_KEY = "agent-onboarding";
+export const MANUAL_ONBOARDING_KEY = "manual-onboarding";
 
 export const AI_ASSISTED_OPIK_SKILLS_FEATURE_FLAG_KEY =
   "onboarding-integrations-3-options";
 
-export const DEFAULT_ONBOARDING_FLOW = "control";
+export const DEFAULT_ONBOARDING_FLOW = "manual";
 
 export const TRACES_OLDEST_FIRST_SORTING = [{ id: "id", desc: false }];
 
