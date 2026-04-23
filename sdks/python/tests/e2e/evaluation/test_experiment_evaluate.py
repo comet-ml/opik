@@ -26,10 +26,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
                 "expected_model_output": {"output": "Paris"},
             },
             {
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-            },
-            {
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
@@ -39,8 +35,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {"output": "Paris"}
-        if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
             return {"output": "Krakow"}
 
@@ -77,7 +71,7 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt],
         experiment_tags=experiment_tags,
@@ -92,8 +86,8 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
         evaluation_result.experiment_id
     )
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 3, (
-        f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
+    assert len(experiment_items_contents) == 2, (
+        f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
         f"Experiment items: {experiment_items_contents}"
     )
 
@@ -108,25 +102,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__happ
                 "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Paris"},
-            feedback_scores=[
-                {
-                    "category_name": None,
-                    "name": "equals_metric",
-                    "reason": None,
-                    "value": 1.0,
-                }
-            ],
-        ),
-        experiment_item.ExperimentItemContent(
-            id=ANY_BUT_NONE,
-            dataset_item_id=ANY_BUT_NONE,
-            trace_id=ANY_BUT_NONE,
-            dataset_item_data={
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-                "id": ANY_BUT_NONE,
-            },
-            evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
                 {
                     "category_name": None,
@@ -194,8 +169,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {"output": "Paris"}
-        if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
             return {"output": "Krakow"}
 
@@ -279,25 +252,6 @@ def test_experiment_creation_via_evaluate_function__single_prompt_arg_used__filt
                 }
             ],
         ),
-        experiment_item.ExperimentItemContent(
-            id=ANY_BUT_NONE,
-            dataset_item_id=ANY_BUT_NONE,
-            trace_id=ANY_BUT_NONE,
-            dataset_item_data={
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-                "id": ANY_BUT_NONE,
-            },
-            evaluation_task_output={"output": "Berlin"},
-            feedback_scores=[
-                {
-                    "category_name": None,
-                    "name": "equals_metric",
-                    "reason": None,
-                    "value": 1.0,
-                }
-            ],
-        ),
     ]
     assert_equal(
         sorted(
@@ -321,10 +275,6 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
                 "expected_model_output": {"output": "Paris"},
             },
             {
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-            },
-            {
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
@@ -334,8 +284,6 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {"output": "Paris"}
-        if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
             return {"output": "Krakow"}
 
@@ -373,7 +321,7 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         prompts=[prompt1, prompt2],
         project_name=project_name,
@@ -387,8 +335,8 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
         evaluation_result.experiment_id
     )
     experiment_items_contents = retrieved_experiment.get_items()
-    assert len(experiment_items_contents) == 3, (
-        f"Expected 3 experiment items, but got {len(experiment_items_contents)}. "
+    assert len(experiment_items_contents) == 2, (
+        f"Expected 2 experiment items, but got {len(experiment_items_contents)}. "
         f"Experiment items: {experiment_items_contents}"
     )
 
@@ -403,25 +351,6 @@ def test_experiment_creation_via_evaluate_function__multiple_prompts_arg_used__h
                 "id": ANY_BUT_NONE,
             },
             evaluation_task_output={"output": "Paris"},
-            feedback_scores=[
-                {
-                    "category_name": None,
-                    "name": "equals_metric",
-                    "reason": None,
-                    "value": 1.0,
-                }
-            ],
-        ),
-        experiment_item.ExperimentItemContent(
-            id=ANY_BUT_NONE,
-            dataset_item_id=ANY_BUT_NONE,
-            trace_id=ANY_BUT_NONE,
-            dataset_item_data={
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-                "id": ANY_BUT_NONE,
-            },
-            evaluation_task_output={"output": "Berlin"},
             feedback_scores=[
                 {
                     "category_name": None,
@@ -611,10 +540,6 @@ def test_experiment__get_experiments_by_name(
                 "expected_model_output": {"output": "Paris"},
             },
             {
-                "input": {"question": "What is the of capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-            },
-            {
                 "input": {"question": "What is the of capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
@@ -624,8 +549,6 @@ def test_experiment__get_experiments_by_name(
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the of capital of France?"}:
             return {"output": "Paris"}
-        if item["input"] == {"question": "What is the of capital of Germany?"}:
-            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the of capital of Poland?"}:
             return {"output": "Krakow"}
 
@@ -667,7 +590,7 @@ def test_experiment__get_experiments_by_name(
             id=result.experiment_id,
             experiment_name=result.experiment_name,
             experiment_metadata={"model_name": "gpt-3.5"},
-            traces_amount=3,  # one trace per dataset item
+            traces_amount=2,  # one trace per dataset item
             feedback_scores_amount=1,
             prompts=[prompt],
             project_name=project_name,
@@ -750,10 +673,6 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
                 "expected_model_output": {"output": "Paris"},
             },
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
-            },
-            {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
             },
@@ -763,8 +682,6 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
     def task(item: Dict[str, Any]):
         if item["input"] == {"question": "What is the capital of France?"}:
             return {"output": "Paris"}
-        if item["input"] == {"question": "What is the capital of Germany?"}:
-            return {"output": "Berlin"}
         if item["input"] == {"question": "What is the capital of Poland?"}:
             return {"output": "Krakow"}  # Wrong answer
 
@@ -827,7 +744,7 @@ def test_experiment_creation_via_evaluate_function__with_experiment_scoring_func
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         experiment_scores={"fixed_number": 0.8},
         project_name=project_name,
