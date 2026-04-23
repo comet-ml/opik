@@ -1,0 +1,58 @@
+---
+description: Score whether an agent followed the expected action path
+headline: Trajectory accuracy | Opik Documentation
+og:description: Evaluate and audit agent performance with Trajectory Accuracy to ensure
+  effective decision-making in complex workflows.
+og:site_name: Opik Documentation
+og:title: Trajectory Accuracy Metrics - Opik
+title: Trajectory accuracy
+---
+
+# Trajectory Accuracy
+
+`TrajectoryAccuracy` checks how closely a ReAct-style agent followed a sensible sequence of thoughts, actions, and observations to achieve the stated goal. It is useful for auditing complex workflow agents and reinforcement-learning traces.
+
+```python title="Auditing an agent run"
+from opik.evaluation.metrics import TrajectoryAccuracy
+
+metric = TrajectoryAccuracy()
+
+score = metric.score(
+    goal="Book travel to Paris",
+    trajectory=[
+        {
+            "thought": "Check available flights",
+            "action": "search_flights(destination='Paris')",
+            "observation": "Found flights for next week",
+        },
+        {
+            "thought": "Summarise the best option",
+            "action": "summarise(options)",
+            "observation": "Shared top three flights",
+        },
+    ],
+    final_result="Here are the best flights to Paris next week.",
+)
+
+print(score.value)  # Already normalised between 0.0 and 1.0
+print(score.reason)  # Explanation of the verdict
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `goal` | `str` | **Yes** | The agent’s objective or task description. |
+| `trajectory` | `list[dict]` | **Yes** | Sequence of steps with `thought`, `action`, and `observation` keys. |
+| `final_result` | `str` | **Yes** | Outcome that the agent reported after completing the trajectory. |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Judge used to score the trajectory. |
+| `temperature` | `None` | Forwarded to the underlying model when provided. |
+| `track` | `True` | Disable to skip logging to Opik. When `False`, disables tracing for both the metric and underlying LLM judge calls. |
+| `project_name` | `None` | Override the tracking project name. |
+
+The metric returns a value in the 0.0–1.0 range together with a detailed explanation highlighting missing steps, misaligned actions, or other issues.

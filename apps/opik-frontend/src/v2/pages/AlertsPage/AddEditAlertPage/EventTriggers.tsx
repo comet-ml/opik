@@ -19,7 +19,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Separator } from "@/ui/separator";
 import { Input } from "@/ui/input";
 import SelectBox from "@/shared/SelectBox/SelectBox";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import { DropdownOption } from "@/types/shared";
 import { AlertFormType } from "./schema";
 import { TRIGGER_CONFIG } from "./helpers";
@@ -33,7 +32,7 @@ import FeedbackScoreConditions, {
 
 type EventTriggersProps = {
   form: UseFormReturn<AlertFormType>;
-  projectsIds: string[];
+  projectId: string;
 };
 
 const WINDOW_OPTIONS: DropdownOption<string>[] = [
@@ -77,7 +76,7 @@ function getThresholdPlaceholder(eventType: ALERT_EVENT_TYPE): string {
 
 const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
   form,
-  projectsIds,
+  projectId,
 }) => {
   const triggersError = form.formState.errors.triggers;
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -103,7 +102,6 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
 
       append({
         eventType,
-        projectIds: projectsIds,
         ...(isFeedbackScoreTrigger
           ? {
               conditions: [DEFAULT_FEEDBACK_SCORE_CONDITION],
@@ -202,6 +200,7 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
         form={form}
         triggerIndex={index}
         eventType={eventType}
+        projectId={projectId}
       />
     );
   };
@@ -333,27 +332,6 @@ const EventTriggers: React.FunctionComponent<EventTriggersProps> = ({
                             </Label>
                             <Description>{config.description}</Description>
                           </div>
-
-                          {config.hasScope && (
-                            <FormField
-                              control={form.control}
-                              name={
-                                `triggers.${index}.projectIds` as Path<AlertFormType>
-                              }
-                              render={({ field }) => (
-                                <FormItem className="justify-center">
-                                  <ProjectsSelectBox
-                                    value={field.value as string[]}
-                                    onValueChange={field.onChange}
-                                    multiselect={true}
-                                    className="h-8 w-40"
-                                    showSelectAll={true}
-                                    minWidth={204}
-                                  />
-                                </FormItem>
-                              )}
-                            />
-                          )}
                         </div>
                         {isThresholdTrigger &&
                           renderThresholdConfig(index, field.eventType)}

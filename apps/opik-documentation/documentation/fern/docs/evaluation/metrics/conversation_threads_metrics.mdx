@@ -60,13 +60,13 @@ score = metric.score(conversation=my_thread)
 | ConversationPromptPerplexityMetric | Estimates prompt difficulty at the conversation level. |
 | ConversationPromptUncertaintyMetric | Flags ambiguous prompts in threaded evaluations. |
 
-These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and assistant. Opik ships a prompt template that wraps the transcript, criteria, and evaluation steps for you. By default, the `gpt-5-nano` model is used to evaluate responses, but you can switch to any LiteLLM-supported backend by setting the `model` parameter. You can learn more in the [Customize models for LLM as a Judge metrics](/evaluation/metrics/custom_model) guide.
+These metrics are based on the idea of using an LLM to evaluate the turns of the conversation between user and assistant. Opik ships a prompt template that wraps the transcript, criteria, and evaluation steps for you. By default, the `gpt-5-nano` model is used to evaluate responses, but you can switch to any LiteLLM-supported backend by setting the `model` parameter. You can learn more in the [Customize models for LLM as a Judge metrics](/v1/evaluation/metrics/custom_model) guide.
 
 <Tip>
   The GEval-based conversation adapters listed above live in the
   `opik.evaluation.metrics.conversation.llm_judges.g_eval_wrappers` module. They accept the same
   keyword arguments as their underlying judges (e.g. `model`, `temperature`). See
-  [Conversation-level GEval metrics](/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
+  [Conversation-level GEval metrics](/v1/evaluation/metrics/g_eval_conversation_metrics) for a deeper walkthrough.
 </Tip>
 
 <Tip>
@@ -213,5 +213,5 @@ print(result.reason)
 
 ## Next steps
 
-- Read more about [conversational threads evaluation](/evaluation/evaluate_threads)
-- Learn how to create [custom conversation metrics](/evaluation/metrics/custom_conversation_metric)
+- Read more about [conversational threads evaluation](/v1/evaluation/evaluate_threads)
+- Learn how to create [custom conversation metrics](/v1/evaluation/metrics/custom_conversation_metric)

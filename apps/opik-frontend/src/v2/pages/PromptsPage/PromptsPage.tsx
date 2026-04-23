@@ -1,6 +1,18 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import {
+  ColumnPinningState,
+  ColumnSort,
+  RowSelectionState,
+} from "@tanstack/react-table";
+import { PlusIcon } from "lucide-react";
+import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
+import { buildDocsUrl } from "@/lib/utils";
+import emptyPromptLibraryLightUrl from "/images/empty-prompt-library-light.svg";
+import emptyPromptLibraryDarkUrl from "/images/empty-prompt-library-dark.svg";
+import useLocalStorageState from "use-local-storage-state";
+import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -22,11 +34,10 @@ import {
   COLUMN_TYPE,
   ColumnData,
 } from "@/types/shared";
-import useLocalStorageState from "use-local-storage-state";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import usePromptsList from "@/api/prompts/usePromptsList";
+import useProjectPromptsList from "@/api/prompts/useProjectPromptsList";
 import { Prompt, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { PromptRowActionsCell } from "@/v2/pages/PromptsPage/PromptRowActionsCell";
 import AddEditPromptDialog from "@/v2/pages/PromptsPage/AddEditPromptDialog";
@@ -35,14 +46,6 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
-import {
-  ColumnPinningState,
-  ColumnSort,
-  RowSelectionState,
-} from "@tanstack/react-table";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -210,7 +213,7 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const {
-    permissions: { canDeletePrompts },
+    permissions: { canCreatePrompts, canDeletePrompts },
   } = usePermissions();
 
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
@@ -229,20 +232,21 @@ const PromptsPage: React.FunctionComponent = () => {
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
-  const { data, isPending, isPlaceholderData, isFetching } = usePromptsList(
-    {
-      workspaceName,
-      filters,
-      sorting: sortedColumns,
-      search: search!,
-      page,
-      size,
-    },
-    {
-      placeholderData: keepPreviousData,
-      refetchInterval: 30000,
-    },
-  );
+  const { data, isPending, isPlaceholderData, isFetching } =
+    useProjectPromptsList(
+      {
+        projectId: activeProjectId!,
+        filters,
+        sorting: sortedColumns,
+        search: search!,
+        page,
+        size,
+      },
+      {
+        placeholderData: keepPreviousData,
+        refetchInterval: 30000,
+      },
+    );
 
   const prompts = useMemo(() => data?.content ?? [], [data?.content]);
   const sortableBy: string[] = useMemo(
@@ -332,86 +336,105 @@ const PromptsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && prompts.length === 0)) {
     return <Loader />;
   }
 
+  const isEmpty = noData && prompts.length === 0;
+
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Prompt library</h1>
-      </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_prompt_library]}
-      />
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
-        <div className="flex items-center gap-2">
-          <SearchInput
-            searchText={search!}
-            setSearchText={setSearch}
-            placeholder="Search by name"
-            className="w-[320px]"
-            dimension="sm"
-          ></SearchInput>
-          <FiltersButton
-            columns={FILTER_COLUMNS}
-            filters={filters}
-            onChange={setFilters}
-            layout="icon"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          {canDeletePrompts && (
-            <>
-              <PromptsActionsPanel prompts={selectedRows} />
-              <Separator orientation="vertical" className="mx-2 h-4" />
-            </>
-          )}
-          <ColumnsButton
-            columns={DEFAULT_COLUMNS}
-            selectedColumns={selectedColumns}
-            onSelectionChange={setSelectedColumns}
-            order={columnsOrder}
-            onOrderChange={setColumnsOrder}
-          />
-          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-            Create new prompt
+    <div className="flex min-h-full flex-col pt-4">
+      <div className="mb-4 flex min-h-7 items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">
+          Prompt library
+        </h1>
+        {canCreatePrompts && (
+          <Button variant="default" size="xs" onClick={handleNewPromptClick}>
+            <PlusIcon className="mr-1 size-4" />
+            Create prompt
           </Button>
-        </div>
+        )}
       </div>
-      <DataTable
-        columns={columns}
-        data={prompts}
-        onRowClick={handleRowClick}
-        sortConfig={sortConfig}
-        resizeConfig={resizeConfig}
-        selectionConfig={{
-          rowSelection,
-          setRowSelection,
-        }}
-        getRowId={getRowId}
-        columnPinning={DEFAULT_COLUMN_PINNING}
-        noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewPromptClick}>
-                Create new prompt
-              </Button>
-            )}
-          </DataTableNoData>
-        }
-        showLoadingOverlay={isPlaceholderData && isFetching}
-      />
-      <div className="py-4">
-        <DataTablePagination
-          page={page}
-          pageChange={setPage}
-          size={size}
-          sizeChange={setSize}
-          total={total}
+      {isEmpty ? (
+        <PageEmptyState
+          lightImageUrl={emptyPromptLibraryLightUrl}
+          darkImageUrl={emptyPromptLibraryDarkUrl}
+          title="No prompts yet"
+          description={
+            "Create and manage prompts in one place.\nVersion them, improve and reuse, and keep your workflows consistent."
+          }
+          primaryActionLabel="Create your first prompt"
+          onPrimaryAction={handleNewPromptClick}
+          docsUrl={buildDocsUrl("/prompt_engineering/prompt_management")}
         />
-      </div>
+      ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-x-8 gap-y-2">
+            <div className="flex items-center gap-2">
+              <SearchInput
+                searchText={search!}
+                setSearchText={setSearch}
+                placeholder="Search by name"
+                className="w-[320px]"
+                dimension="sm"
+              ></SearchInput>
+              <FiltersButton
+                columns={FILTER_COLUMNS}
+                filters={filters}
+                onChange={setFilters}
+                layout="icon"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              {canDeletePrompts && (
+                <>
+                  <PromptsActionsPanel prompts={selectedRows} />
+                  <Separator orientation="vertical" className="mx-2 h-4" />
+                </>
+              )}
+              <ColumnsButton
+                columns={DEFAULT_COLUMNS}
+                selectedColumns={selectedColumns}
+                onSelectionChange={setSelectedColumns}
+                order={columnsOrder}
+                onOrderChange={setColumnsOrder}
+              />
+            </div>
+          </div>
+          <DataTable
+            columns={columns}
+            data={prompts}
+            onRowClick={handleRowClick}
+            sortConfig={sortConfig}
+            resizeConfig={resizeConfig}
+            selectionConfig={{
+              rowSelection,
+              setRowSelection,
+            }}
+            getRowId={getRowId}
+            columnPinning={DEFAULT_COLUMN_PINNING}
+            noData={
+              <DataTableNoData title={noDataText}>
+                {noData && canCreatePrompts && (
+                  <Button variant="link" onClick={handleNewPromptClick}>
+                    Create prompt
+                  </Button>
+                )}
+              </DataTableNoData>
+            }
+            showLoadingOverlay={isPlaceholderData && isFetching}
+          />
+          <div className="py-4">
+            <DataTablePagination
+              page={page}
+              pageChange={setPage}
+              size={size}
+              sizeChange={setSize}
+              total={total}
+            />
+          </div>
+        </>
+      )}
       <AddEditPromptDialog
         key={resetDialogKeyRef.current}
         open={openDialog}

@@ -17,23 +17,21 @@ const TextCell = <TData,>(context: CellContext<TData, string>) => {
     context.table.options.meta?.rowHeight ??
     ROW_HEIGHT.small;
 
-  const isSmall = rowHeight === ROW_HEIGHT.small;
+  const isLarge = rowHeight === ROW_HEIGHT.large;
 
   return (
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
     >
-      {isSmall ? (
-        <CellTooltipWrapper content={value}>
-          <span className="truncate">
-            <LinkifyText>{value}</LinkifyText>
-          </span>
-        </CellTooltipWrapper>
-      ) : (
-        <div className="size-full overflow-y-auto whitespace-pre-wrap break-words">
+      {isLarge ? (
+        <div className="h-full overflow-y-auto whitespace-pre-wrap break-words">
           <LinkifyText>{value}</LinkifyText>
         </div>
+      ) : (
+        <span className="truncate">
+          <LinkifyText>{value}</LinkifyText>
+        </span>
       )}
     </CellWrapper>
   );

@@ -28,7 +28,7 @@ const useDatasetCreateMutation = () => {
 
       if (!extractedId) {
         throw new Error(
-          "Failed to create evaluation suite: No ID returned from server",
+          "Failed to create test suite: No ID returned from server",
         );
       }
 
@@ -56,6 +56,7 @@ const useDatasetCreateMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

@@ -224,11 +224,13 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     (row: PromptVersion) => {
       const promptResource = RESOURCE_MAP[RESOURCE_TYPE.prompt];
       const workspaceName = useAppStore.getState().activeWorkspaceName;
+      const projectId = useAppStore.getState().activeProjectId;
       navigate({
-        to: promptResource.url,
+        to: promptResource.projectUrl,
         params: {
           [promptResource.param]: row.prompt_id,
           workspaceName,
+          projectId: projectId!,
         },
         search: {
           activeVersionId: row.id,

@@ -13,11 +13,16 @@ import com.comet.opik.api.ProjectRetrieve;
 import com.comet.opik.api.ProjectStatsSummary;
 import com.comet.opik.api.ProjectUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
+import com.comet.opik.api.Source;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.error.ErrorMessage;
+import com.comet.opik.api.filter.Operator;
+import com.comet.opik.api.filter.TraceField;
+import com.comet.opik.api.filter.TraceFilter;
+import com.comet.opik.api.metrics.KpiCardRequest;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.BigDecimalCollectors;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -86,6 +91,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -292,6 +298,64 @@ class ProjectsResourceTest {
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.PROJECT_DELETE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create project returns 403 when permission is denied")
+        void createProjectReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_CREATE.getValue());
+
+            try (var response = projectResourceClient.callCreateProject(
+                    factory.manufacturePojo(Project.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Find projects falls back to public visibility when PROJECT_DATA_VIEW permission is denied")
+        void findProjectsFallsBackToPublicVisibilityWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+            mockGetWorkspaceIdByName(workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            try (var response = projectResourceClient.callFindProjects(apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            }
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get project KPI cards returns 403 when permission is denied")
+        void getProjectKpiCardsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
+
+            var request = KpiCardRequest.builder()
+                    .entityType(KpiCardRequest.EntityType.TRACES)
+                    .intervalStart(Instant.now().minus(Duration.ofDays(1)))
+                    .intervalEnd(Instant.now())
+                    .build();
+
+            try (var response = projectResourceClient.getKpiCardsRaw(UUID.randomUUID(), request, apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -751,6 +815,39 @@ class ProjectsResourceTest {
                     arguments(ProjectRetrieve.builder().name(null).build(), "name must not be blank", 422),
                     arguments(ProjectRetrieve.builder().name(UUID.randomUUID().toString()).build(), "Project not found",
                             404));
+        }
+
+        @Test
+        @DisplayName("when retrieving project from another workspace, then return 404")
+        void retrieveProject__whenProjectBelongsToAnotherWorkspace__thenReturn404() {
+            // Set up workspace A with a project
+            String workspaceNameA = UUID.randomUUID().toString();
+            String apiKeyA = UUID.randomUUID().toString();
+            String workspaceIdA = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyA, workspaceNameA, workspaceIdA);
+
+            var project = factory.manufacturePojo(Project.class);
+            createProject(project, apiKeyA, workspaceNameA);
+
+            // Set up workspace B with a different API key
+            String workspaceNameB = UUID.randomUUID().toString();
+            String apiKeyB = UUID.randomUUID().toString();
+            String workspaceIdB = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKeyB, workspaceNameB, workspaceIdB);
+
+            // Try to retrieve workspace A's project using workspace B's credentials
+            try (var actualResponse = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKeyB)
+                    .header(WORKSPACE_HEADER, workspaceNameB)
+                    .post(Entity.json(ProjectRetrieve.builder().name(project.name()).build()))) {
+
+                assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(404);
+                assertThat(actualResponse.hasEntity()).isTrue();
+                assertThat(actualResponse.readEntity(ErrorMessage.class).errors())
+                        .contains("Project not found");
+            }
         }
 
     }
@@ -1526,6 +1623,7 @@ class ProjectsResourceTest {
                         .isEqualTo(expectedLastTraceByProjectId);
             });
         }
+
     }
 
     private ProjectStatsSummaryItem mapFromProjectToSummary(Project project) {
@@ -1950,6 +2048,71 @@ class ProjectsResourceTest {
 
             // Error count might be null or have count = 0, also verify thread count
             assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary.reversed());
+        }
+
+        @Test
+        @DisplayName("when source filter is applied, then exclude non-SDK traces from stats")
+        void getProjectStats__whenSourceFilterApplied__thenExcludeNonSdkTraces() {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Project project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+
+            Instant startTime = Instant.now();
+            Trace sdkTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.SDK)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            Trace experimentTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.EXPERIMENT)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            Trace playgroundTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name())
+                    .source(Source.PLAYGROUND)
+                    .startTime(startTime)
+                    .endTime(startTime.plusSeconds(1))
+                    .errorInfo(null)
+                    .usage(null)
+                    .guardrailsValidations(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            traceResourceClient.batchCreateTraces(List.of(sdkTrace, experimentTrace, playgroundTrace), apiKey,
+                    workspaceName);
+
+            var sourceFilter = new TraceFilter(TraceField.SOURCE, Operator.EQUAL, null, Source.SDK.getValue());
+
+            List<ProjectStatsSummaryItem> expectedProjectsSummary = List.of(
+                    mapFromProjectToSummary(
+                            createProjectSummary(project.toBuilder().id(projectId).build(), List.of(sdkTrace)),
+                            List.of(sdkTrace)));
+
+            var actualProjectsSummary = projectResourceClient.getProjectStatsSummary(project.name(), apiKey,
+                    workspaceName, List.of(sourceFilter));
+
+            assertSummaryResponse(actualProjectsSummary, expectedProjectsSummary);
         }
 
         private void assertSummaryResponse(ProjectStatsSummary actualProjectsSummary,

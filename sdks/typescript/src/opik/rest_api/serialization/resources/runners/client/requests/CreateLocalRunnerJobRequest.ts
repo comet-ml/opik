@@ -14,6 +14,7 @@ export const CreateLocalRunnerJobRequest: core.serialization.Schema<
     inputs: JsonNode.optional(),
     projectId: core.serialization.property("project_id", core.serialization.string()),
     maskId: core.serialization.property("mask_id", core.serialization.string().optional()),
+    blueprintName: core.serialization.property("blueprint_name", core.serialization.string().optional()),
     metadata: LocalRunnerJobMetadata.optional(),
 });
 
@@ -23,6 +24,7 @@ export declare namespace CreateLocalRunnerJobRequest {
         inputs?: JsonNode.Raw | null;
         project_id: string;
         mask_id?: string | null;
+        blueprint_name?: string | null;
         metadata?: LocalRunnerJobMetadata.Raw | null;
     }
 }

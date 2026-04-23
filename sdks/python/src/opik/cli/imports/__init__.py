@@ -10,11 +10,12 @@ from rich.console import Console
 import opik
 
 from ..migration_manifest import MigrationManifest
+from .all import import_all_command
 from .dataset import import_datasets_from_directory
 from .experiment import import_experiments_from_directory
 from .project import import_projects_from_directory
 from .prompt import import_prompts_from_directory
-from .utils import print_import_summary, debug_print
+from .utils import debug_print, no_attachments_option, print_import_summary
 
 console = Console()
 
@@ -31,6 +32,7 @@ def _import_by_type(
     recreate_experiments: bool = False,
     api_key: Optional[str] = None,
     force: bool = False,
+    include_attachments: bool = True,
 ) -> None:
     """
     Import data by type (dataset, project, experiment) with pattern matching.
@@ -49,13 +51,10 @@ def _import_by_type(
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
 
         # Initialize Opik client
-        # _use_batching=True speeds up bulk ingestion. It is safe here because
-        # the import flow only creates traces/spans (no update calls) and
-        # explicitly calls client.flush() before exiting.
         if api_key:
-            client = opik.Opik(api_key=api_key, workspace=workspace, _use_batching=True)
+            client = opik.Opik(api_key=api_key, workspace=workspace)
         else:
-            client = opik.Opik(workspace=workspace, _use_batching=True)
+            client = opik.Opik(workspace=workspace)
 
         base_path = Path(path)
 
@@ -123,6 +122,7 @@ def _import_by_type(
                 debug,
                 recreate_experiments,
                 manifest=manifest,
+                include_attachments=include_attachments,
             )
         elif import_type == "experiment":
             stats = import_experiments_from_directory(
@@ -222,6 +222,7 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Data Types:
+        all         Import everything: datasets, prompts, projects, and experiments
         project     Import projects from path/projects/ (default: opik_exports)
         dataset     Import datasets from path/datasets/ (default: opik_exports)
         experiment  Import experiments from path/experiments/ (default: opik_exports)
@@ -236,6 +237,12 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 
     \b
     Examples:
+        # Import everything in the workspace
+        opik import my-workspace all
+
+        # Preview what would be imported
+        opik import my-workspace all --dry-run
+
         # Preview an experiment that would be imported
         opik import my-workspace experiment "my-experiment" --dry-run
 
@@ -295,6 +302,9 @@ setattr(
     "format_commands",
     format_commands.__get__(import_group, type(import_group)),
 )
+
+# Add the "all" subcommand (defined in all.py, registered here to avoid circular imports)
+import_group.add_command(import_all_command)
 
 
 @import_group.command(name="dataset")
@@ -381,6 +391,7 @@ def import_dataset(
     is_flag=True,
     help="Enable debug output to show detailed information about the import process.",
 )
+@no_attachments_option()
 @click.pass_context
 def import_project(
     ctx: click.Context,
@@ -389,6 +400,7 @@ def import_project(
     dry_run: bool,
     force: bool,
     debug: bool,
+    no_attachments: bool,
 ) -> None:
     """Import projects from workspace/projects directory.
 
@@ -431,6 +443,7 @@ def import_project(
         True,  # Always recreate experiments when importing projects
         api_key=api_key,
         force=force,
+        include_attachments=not no_attachments,
     )
 
 

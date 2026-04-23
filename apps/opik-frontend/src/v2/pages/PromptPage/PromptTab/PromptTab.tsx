@@ -26,12 +26,17 @@ import ChatPromptView from "./ChatPromptView";
 import TextPromptView from "./TextPromptView";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import usePromptVersionsUpdateMutation from "@/api/prompts/usePromptVersionsUpdateMutation";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 interface PromptTabInterface {
   prompt?: PromptWithLatestVersion;
 }
 
 const PromptTab = ({ prompt }: PromptTabInterface) => {
+  const {
+    permissions: { canUsePlayground },
+  } = usePermissions();
+
   const [openUseThisPrompt, setOpenUseThisPrompt] = useState(false);
   const [openEditPrompt, setOpenEditPrompt] = useState(false);
   const [versionToRestore, setVersionToRestore] =
@@ -120,8 +125,13 @@ const PromptTab = ({ prompt }: PromptTabInterface) => {
           <Info className="mr-1.5 size-3.5" />
           Use this prompt
         </Button>
-        <TryInPlaygroundButton prompt={prompt} activeVersion={activeVersion} />
-        {!isChatPrompt && (
+        {canUsePlayground && (
+          <TryInPlaygroundButton
+            prompt={prompt}
+            activeVersion={activeVersion}
+          />
+        )}
+        {canUsePlayground && !isChatPrompt && (
           <ImproveInPlaygroundButton
             prompt={prompt}
             activeVersion={activeVersion}

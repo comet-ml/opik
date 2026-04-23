@@ -3,6 +3,12 @@
 import type * as OpikApi from "../index.js";
 
 export interface DatasetItemWrite {
+    /**
+     * Stable item identifier.
+     * On write, used as the upsert key.
+     * If omitted, a new ID is generated.
+     * Remains the same across dataset versions
+     */
     id?: string;
     traceId?: string;
     spanId?: string;

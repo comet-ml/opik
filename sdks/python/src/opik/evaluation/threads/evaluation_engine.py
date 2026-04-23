@@ -84,7 +84,10 @@ class ThreadsEvaluationEngine:
         ]
 
         results = evaluation_tasks_executor.execute(
-            evaluation_tasks, workers=self._number_of_workers, verbose=self._verbose
+            evaluation_tasks,
+            workers=self._number_of_workers,
+            verbose=self._verbose,
+            client=self._threads_client.client,
         )
 
         helpers.log_feedback_scores(
@@ -129,6 +132,7 @@ class ThreadsEvaluationEngine:
             name="evaluation_task",
             created_by="evaluation",
             project_name=eval_project_name,
+            source="experiment",
         )
 
         with opik_context.trace_context(

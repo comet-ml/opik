@@ -9,15 +9,16 @@ import {
 } from "use-query-params";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
+import { Plus } from "lucide-react";
 
 import { formatNumericData } from "@/lib/utils";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import TextCell from "@/shared/DataTableCells/TextCell";
 import useProjectWithStatisticsList from "@/hooks/useProjectWithStatisticsList";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { ProjectWithStatistic } from "@/types/projects";
@@ -52,10 +53,11 @@ import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
-import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import ErrorsCountCell from "@/shared/DataTableCells/ErrorsCountCell";
 import { LOGS_TYPE } from "@/constants/traces";
+import { LOGS_SOURCE } from "@/types/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import ProjectNameCell from "@/v2/pages/ProjectsPage/ProjectNameCell";
 
 export const getRowId = (p: ProjectWithStatistic) => p.id;
 
@@ -128,7 +130,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         id: COLUMN_NAME_ID,
         label: "Name",
         type: COLUMN_TYPE.string,
-        cell: TextCell as never,
+        cell: ProjectNameCell as never,
         sortable: true,
       },
       {
@@ -336,6 +338,7 @@ const ProjectsPage: React.FunctionComponent = () => {
         }),
         page: page!,
         size: size!,
+        logsSource: LOGS_SOURCE.sdk,
       },
       {
         placeholderData: keepPreviousData,
@@ -435,14 +438,16 @@ const ProjectsPage: React.FunctionComponent = () => {
   }
 
   return (
-    <div className="pt-6">
-      <div className="mb-1 flex items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">Manage projects</h1>
+    <div className="pt-4">
+      <div className="mb-4 flex items-center justify-between">
+        <h1 className="comet-body-accented truncate break-words">Projects</h1>
+        {canCreateProjects && (
+          <Button variant="default" size="xs" onClick={handleNewProjectClick}>
+            <Plus className="mr-1 size-4" />
+            Create project
+          </Button>
+        )}
       </div>
-      <ExplainerDescription
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_do_you_use_projects_for]}
-      />
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search!}
@@ -465,11 +470,6 @@ const ProjectsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          {canCreateProjects && (
-            <Button variant="default" size="sm" onClick={handleNewProjectClick}>
-              Create new project
-            </Button>
-          )}
         </div>
       </div>
       <DataTable
@@ -493,13 +493,17 @@ const ProjectsPage: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={canDeleteProjects ? DEFAULT_COLUMN_PINNING : undefined}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && canCreateProjects && (
-              <Button variant="link" onClick={handleNewProjectClick}>
-                Create new project
-              </Button>
-            )}
-          </DataTableNoData>
+          noData ? (
+            <DataTableNoData title={noDataText}>
+              {canCreateProjects && (
+                <Button variant="link" onClick={handleNewProjectClick}>
+                  Create project
+                </Button>
+              )}
+            </DataTableNoData>
+          ) : (
+            <DataTableNoMatchingData />
+          )
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
       />

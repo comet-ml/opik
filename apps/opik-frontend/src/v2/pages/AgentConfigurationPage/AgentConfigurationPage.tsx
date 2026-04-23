@@ -1,12 +1,12 @@
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import AgentConfigurationTab from "@/v2/pages/AgentConfigurationPage/AgentConfigurationTab/AgentConfigurationTab";
 
 const AgentConfigurationPage = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
 
   return (
-    <PageBodyScrollContainer>
+    <PageBodyScrollContainer className="[scrollbar-gutter:stable]">
       <AgentConfigurationTab projectId={projectId} />
     </PageBodyScrollContainer>
   );

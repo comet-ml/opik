@@ -2,6 +2,7 @@ import React from "react";
 import { ColumnMeta, TableMeta } from "@tanstack/react-table";
 import {
   CELL_HORIZONTAL_ALIGNMENT_MAP,
+  CELL_TEXT_CLASS_MAP,
   CELL_VERTICAL_ALIGNMENT_MAP,
 } from "@/constants/shared";
 import { CELL_VERTICAL_ALIGNMENT, ROW_HEIGHT } from "@/types/shared";
@@ -41,6 +42,7 @@ const CellWrapper = <TData,>({
     <div
       className={cn(
         "flex size-full overflow-hidden py-2 px-3",
+        CELL_TEXT_CLASS_MAP[rowHeight ?? ROW_HEIGHT.small],
         stopClickPropagation && "cursor-auto",
         verticalAlignClass,
         horizontalAlignClass,

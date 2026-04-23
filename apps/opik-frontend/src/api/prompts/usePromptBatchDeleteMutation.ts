@@ -32,6 +32,7 @@ const usePromptBatchDeleteMutation = () => {
       });
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["project-prompts"] });
       return queryClient.invalidateQueries({
         queryKey: ["prompts"],
       });

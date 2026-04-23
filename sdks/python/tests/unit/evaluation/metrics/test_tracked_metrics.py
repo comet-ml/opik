@@ -44,8 +44,10 @@ def test_metric_equals__track_enabled__happyflow(fake_backend):
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -93,8 +95,10 @@ def test_metric_equals__track_enabled__project_name_set__data_logged_to_the_spec
                 end_time=ANY_BUT_NONE,
                 project_name="metric-project-name",
                 spans=[],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

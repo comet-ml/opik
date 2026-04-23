@@ -21,6 +21,8 @@ export const RetentionRulePublic: core.serialization.ObjectSchema<
     createdAt: core.serialization.property("created_at", core.serialization.date().optional()),
     lastUpdatedBy: core.serialization.property("last_updated_by", core.serialization.string().optional()),
     lastUpdatedAt: core.serialization.property("last_updated_at", core.serialization.date().optional()),
+    catchUpCursor: core.serialization.property("catch_up_cursor", core.serialization.string().optional()),
+    catchUpDone: core.serialization.property("catch_up_done", core.serialization.boolean().optional()),
 });
 
 export declare namespace RetentionRulePublic {
@@ -36,5 +38,7 @@ export declare namespace RetentionRulePublic {
         created_at?: string | null;
         last_updated_by?: string | null;
         last_updated_at?: string | null;
+        catch_up_cursor?: string | null;
+        catch_up_done?: boolean | null;
     }
 }

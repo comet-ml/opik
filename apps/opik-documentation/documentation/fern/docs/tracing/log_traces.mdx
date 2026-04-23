@@ -8,7 +8,7 @@ title: Log traces
 ---
 
 <Tip>
-  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/quickstart) guide that
+  If you are just getting started with Opik, we recommend first checking out the [Quickstart](/v1/quickstart) guide that
   will walk you through the process of logging your first LLM call.
 </Tip>
 
@@ -22,16 +22,16 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
 </Frame>
 
 Opik supports agent observability using our [Typescript SDK](/reference/typescript-sdk/overview),
-[Python SDK](/reference/python-sdk/overview), [first class OpenTelemetry support](/integrations/opentelemetry)
+[Python SDK](/reference/python-sdk/overview), [first class OpenTelemetry support](/v1/integrations/opentelemetry)
 and our [REST API](/reference/rest-api/overview).
 
 <Tip>
   We recommend starting with one of our integrations to get started quickly, you can find a full list of our
-  integrations in the [integrations overview](/integrations/overview) page.
+  integrations in the [integrations overview](/v1/integrations/overview) page.
 </Tip>
 
 We won't be covering how to track chat conversations in this guide, you can learn more about this in the
-[Logging conversations](/tracing/log_chat_conversations) guide.
+[Logging conversations](/v1/tracing/log_chat_conversations) guide.
 
 ## Enable agent observability
 
@@ -89,7 +89,7 @@ Opik SDK.
 
 <Tip>
   Opik is open-source and can be hosted locally using Docker, please refer to the [self-hosting
-  guide](/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
+  guide](/v1/self-host/overview) to get started. Alternatively, you can use our hosted platform by creating an account on
   [Comet](https://www.comet.com/signup?from=llm).
 </Tip>
 
@@ -377,22 +377,22 @@ Once you have installed and configured the Opik SDK, you can start using it to t
   </Tab>
   <Tab title="Other" value="other" language="other">
     Opik has more than 30 integrations with the most popular frameworks and libraries, you can find
-    a full list of integrations [here](/integrations/overview). For example:
+    a full list of integrations [here](/v1/integrations/overview). For example:
 
-    - [Dify](/integrations/dify)
-    - [Agno](/integrations/agno)
-    - [Ollama](/integrations/ollama)
+    - [Dify](/v1/integrations/dify)
+    - [Agno](/v1/integrations/agno)
+    - [Ollama](/v1/integrations/ollama)
 
     If you are using a framework or library that is not listed, you can still log your traces
     using either the function decorator or the Opik client, check out the
-    [Log Traces](/tracing/log_traces) guide for more information.
+    [Log Traces](/v1/tracing/log_traces) guide for more information.
 
   </Tab>
 </Tabs>
 
 <Tip>
   Opik has more than 40 integrations with the majority of the popular frameworks and libraries. You can find a full list
-  of integrations in the integrations [overview page](/integrations/overview).
+  of integrations in the integrations [overview page](/v1/integrations/overview).
 </Tip>
 
 If you would like more control over the logging process, you can use the low-level SDKs to log
@@ -402,13 +402,13 @@ your traces and spans.
 
 Now that you have observability enabled for your agents, you can start to review and analyze the
 agent calls in Opik. In the Opik UI, you can review each agent call, see the
-[agent graph](/tracing/log_agent_graphs) and review all the tool calls made by the agent.
+[agent graph](/v1/tracing/log_agent_graphs) and review all the tool calls made by the agent.
 
 <Frame>
   <img src="/img/tracing/tracing_agent_overview.png" />
 </Frame>
 
-As a next step, you can create an [offline evaluation](/evaluation/evaluate_prompt) to evaluate your
+As a next step, you can create an [offline evaluation](/v1/evaluation/evaluate_prompt) to evaluate your
 agent's performance on a fixed set of samples.
 
 ## Advanced usage
@@ -619,7 +619,7 @@ If you need full control over the logging process, you can use the low-level SDK
 
         <Tip>
             Make sure you define the environment variables for the Opik client in your `.env` file,
-            you can find more information about the configuration [here](/tracing/sdk_configuration).
+            you can find more information about the configuration [here](/v1/tracing/sdk_configuration).
         </Tip>
     </Tab>
     <Tab title="Python" value="python" language="python">
@@ -719,7 +719,7 @@ If you are using the low-level SDKs, you can use the context managers to log tra
         - `output` (Dict[str, Any], optional): Output data for the trace
         - `tags` (List[str], optional): Tags to categorize the trace
         - `metadata` (Dict[str, Any], optional): Additional metadata
-        - `project_name` (str, optional): Project name (defaults to environment variable)
+        - `project_name` (str, optional): Project name (falls back to active project context, then client configuration)
         - `thread_id` (str, optional): Thread identifier for multi-threaded applications
         - `flush` (bool, optional): Whether to flush data immediately (default: False)
 
@@ -903,6 +903,100 @@ the trace to be logged to in a couple of ways:
 
 </Tabs>
 
+### Project name resolution (Python SDK)
+
+The project name is determined differently depending on whether an active project context already exists.
+
+#### When no project context is active
+
+This applies to the **top-level** `@track`-decorated function call, the `Opik()` client, or a native integration (e.g., `track_openai`, `OpikTracer`) used outside any traced context. The project name is resolved in this order:
+
+1. **Explicit `project_name` argument** — passed directly to `@track(project_name="...")`, `Opik(project_name="...")`, `OpikTracer(project_name="...")`, or a client method like `client.trace(project_name="...")`
+2. **Client configuration** — from the `OPIK_PROJECT_NAME` environment variable or `~/.opik.config` file
+3. **Default** — falls back to `"Default Project"` (a warning is logged once to remind you to configure a project name)
+
+The first `@track(project_name="...")` or `opik.project_context("...")` call that runs establishes the **active project context** for all nested operations.
+
+#### When a project context is active
+
+Once a project context is established (by a parent `@track(project_name="...")` or `opik.project_context("...")`), **all nested operations use the context project name**. This includes:
+
+- Nested `@track`-decorated functions — even if they pass a different `project_name`, the outer context wins (a warning is logged)
+- Native integrations (e.g., `OpikTracer`, `track_openai`) — if initialized inside an active context, the context project overrides the integration's `project_name` argument (a warning is logged)
+- `Opik()` client methods — if a method like `client.trace(project_name="...")` is called with an explicit `project_name`, the explicit argument wins; if `project_name` is omitted, the context project is used
+
+This ensures that all traces and spans within a single execution flow are logged to the same project.
+
+#### `@track` context propagation
+
+When `@track(project_name="...")` is used on the top-level function, it sets the project context for the entire call tree:
+
+```python
+from opik import track
+
+@track(project_name="my-agent")
+def agent(query):
+    context = retrieve(query)
+    return generate(context)
+
+@track
+def retrieve(query):
+    # Inherits "my-agent" from the parent context
+    ...
+
+@track
+def generate(context):
+    # Also inherits "my-agent" from the parent context
+    ...
+```
+
+If a nested function specifies a different `project_name`, it is ignored and the outer project is preserved:
+
+```python
+@track(project_name="my-agent")
+def agent(query):
+    helper(query)  # Still logs to "my-agent", NOT "other-project"
+
+@track(project_name="other-project")
+def helper(query):
+    # Warning is logged: outer project "my-agent" will be used
+    ...
+```
+
+#### `opik.project_context()`
+
+The `opik.project_context()` context manager sets the project name for all Opik operations within a block — `@track`-decorated functions, native integrations, and `Opik()` client calls (when `project_name` is not passed explicitly):
+
+```python
+import opik
+
+with opik.project_context("customer-support"):
+    # @track-decorated functions and native integrations
+    # all use "customer-support" as the project name
+    my_agent(query)
+```
+
+Nesting rules are the same: the first `project_context` or `@track(project_name=...)` to run owns the context. Inner calls with a different project name are ignored (a warning is logged).
+
+<Warning>
+When a script combines `@track` tracing with other Opik API calls — such as `evaluate()`, `get_or_create_dataset()`, or `Prompt()` — traces and API objects can land in different projects if the project name is not set consistently. Make sure the value passed to `opik.configure(project_name=...)` (which controls where `@track` traces go) matches the `project_name` argument passed explicitly to each API call:
+
+```python
+import opik
+
+opik.configure(project_name="my-project")
+
+dataset = client.get_or_create_dataset(name="my-dataset", project_name="my-project")
+
+evaluation = evaluate(
+    dataset=dataset,
+    task=evaluation_task,
+    project_name="my-project",  # must match opik.configure value above
+    ...
+)
+```
+</Warning>
+
 ### Flushing traces and spans
 
 This process is optional and is only needed if you are running a short-lived script or if you are
@@ -985,6 +1079,6 @@ debugging why traces and spans are not being logged to Opik.
 
 Once you have the observability set up for your agent, you can go one step further and:
 
-- [Logging chat conversations](/tracing/log_chat_conversations)
-- [Logging user feedback](/tracing/annotate_traces)
-- [Setup online evaluation metrics](/production/rules)
+- [Logging chat conversations](/v1/tracing/log_chat_conversations)
+- [Logging user feedback](/v1/tracing/annotate_traces)
+- [Setup online evaluation metrics](/v1/production/rules)

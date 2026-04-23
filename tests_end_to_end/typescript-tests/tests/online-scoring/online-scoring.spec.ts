@@ -7,7 +7,7 @@ import { modelConfigLoader } from '../../helpers/model-config-loader';
 
 // Timeout constants
 const RULE_ACTIVATION_TIMEOUT = 10000; // 10 seconds for rule to fully activate in backend
-const PAGE_REFRESH_TIMEOUT = 2000; // 2 seconds wait after page refresh
+const PAGE_REFRESH_TIMEOUT = 3000; // 3 seconds wait after page refresh
 const POST_RELOAD_TIMEOUT = 1000; // 1 second wait after page reload
 
 const enabledModels = modelConfigLoader.getEnabledModelsForOnlineScoring();
@@ -62,6 +62,7 @@ test.describe('Online Scoring Tests', () => {
       helperClient,
       createProjectApi,
     }) => {
+      test.setTimeout(120_000);
       const providerSetupHelper = new AIProviderSetupHelper(page);
       const rulesPage = new RulesPage(page);
       const tracesPage = new TracesPage(page);
@@ -106,7 +107,7 @@ test.describe('Online Scoring Tests', () => {
 
         // Retry loop: wait for Moderation column header in the table, then check score value.
         // Scoring is async and Anthropic models can take longer, so we allow generous retries.
-        const maxAttempts = 15;
+        const maxAttempts = 25;
         let moderationColumnIndex = -1;
         let moderationValue = '';
 

@@ -20,16 +20,22 @@ export { DatasetVersion } from "@/dataset/DatasetVersion";
 export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
 export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
 
-export { Prompt, PromptType } from "@/prompt";
+export { Prompt, ChatPrompt, PromptType } from "@/prompt";
+export { getGlobalClient, setGlobalClient, resetGlobalClient } from "@/client/globalClient";
 export { OpikQueryLanguage } from "@/query";
 export type { FilterExpression } from "@/query";
 
 export { TracesAnnotationQueue, ThreadsAnnotationQueue } from "@/annotation-queue";
 export type { AnnotationQueuePublicScope as AnnotationQueueScope } from "@/rest_api/api/types/AnnotationQueuePublicScope";
 
-// AgentConfig exports
-export { AgentConfig, Blueprint } from "@/agent-config";
-export type { CreateBlueprintOptions, GetBlueprintOptions } from "@/agent-config";
+// Config exports
+export { agentConfigContext } from "@/agent-config";
+export type { Config } from "@/agent-config";
+export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
+
+// Runner exports
+export { activateRunner } from "@/runner/activate";
+export type { RegistryEntry, Param } from "@/runner/registry";
 
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";

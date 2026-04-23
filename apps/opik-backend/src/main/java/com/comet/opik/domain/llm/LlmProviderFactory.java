@@ -2,6 +2,7 @@ package com.comet.opik.domain.llm;
 
 import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import dev.langchain4j.model.chat.ChatModel;
 
@@ -16,6 +17,8 @@ public interface LlmProviderFactory {
     ChatModel getLanguageModel(String workspaceId, LlmAsJudgeModelParameters modelParameters);
 
     LlmProvider getLlmProvider(String model);
+
+    StructuredOutputStrategy getStructuredOutputStrategy(String model);
 
     /**
      * Returns the resolved model info for the given model name.

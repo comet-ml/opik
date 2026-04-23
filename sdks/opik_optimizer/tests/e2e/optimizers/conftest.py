@@ -5,12 +5,13 @@ import pytest
 
 import opik_optimizer
 from opik import Dataset
-from .utils import MultiPromptTestAgent
+from .utils import dataset_helpers, MultiPromptTestAgent
 
 
 @pytest.fixture(scope="session")
-def tiny_dataset() -> Dataset:
+def tiny_dataset(setup_environment) -> Dataset | None:  # type: ignore
     """Shared tiny dataset for e2e optimizer tests."""
+    dataset_helpers.remove_old_datasets(["tiny_test_train"])
     try:
         return opik_optimizer.datasets.tiny_test()
     except Exception as exc:  # pragma: no cover

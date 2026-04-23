@@ -13,6 +13,7 @@ import com.comet.opik.domain.attachment.PreSignerService;
 import com.comet.opik.domain.optimization.OptimizationLogSyncService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.queues.Queue;
 import com.comet.opik.infrastructure.queues.QueueProducer;
 import com.google.common.base.Preconditions;
@@ -39,6 +40,7 @@ import java.time.Instant;
 import java.util.AbstractMap;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -86,6 +88,7 @@ class OptimizationServiceImpl implements OptimizationService {
     private final @NonNull OpikConfiguration config;
     private final @NonNull OptimizationLogSyncService logSyncService;
     private final @NonNull RedissonReactiveClient redisClient;
+    private final @NonNull AnalyticsService analyticsService;
 
     // Redis key pattern for cancellation signals (Python worker checks this)
     private static final String CANCEL_KEY_PATTERN = "opik:cancel:%s";
@@ -226,6 +229,25 @@ class OptimizationServiceImpl implements OptimizationService {
                                         .doOnSuccess(__ -> {
                                             postOptimizationCreatedEvent(newOptimization, workspaceId,
                                                     userName);
+                                            if (existingOpt.isEmpty()) {
+                                                Schedulers.boundedElastic().schedule(
+                                                        () -> analyticsService.trackEvent(
+                                                                "opik_optimization_created",
+                                                                Map.of(
+                                                                        "optimization_id",
+                                                                        newOptimization.id().toString(),
+                                                                        "dataset_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.datasetName()),
+                                                                        "objective_name",
+                                                                        String.valueOf(
+                                                                                newOptimization.objectiveName()),
+                                                                        "project_id",
+                                                                        String.valueOf(
+                                                                                newOptimization.projectId()),
+                                                                        "workspace_id", workspaceId),
+                                                                userName));
+                                            }
 
                                             // Only enqueue job for NEW Studio optimizations
                                             if (shouldEnqueueJob) {
@@ -296,6 +318,9 @@ class OptimizationServiceImpl implements OptimizationService {
                 .switchIfEmpty(Mono.error(failWithNotFound("Optimization", id)))
                 .flatMap(optimization -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+                    // USER_NAME is absent on the internal cancelOptimization() path, where only
+                    // WORKSPACE_ID is seeded — fall back and let AnalyticsService resolve identity.
+                    String userName = ctx.getOrDefault(RequestContext.USER_NAME, null);
 
                     // Validate cancellation request for Studio optimizations
                     boolean isStudioCancellation = update.status() == OptimizationStatus.CANCELLED
@@ -311,11 +336,26 @@ class OptimizationServiceImpl implements OptimizationService {
 
                     return signalCancellationIfNeeded(id, optimization, update)
                             .then(optimizationDAO.update(id, update))
-                            .doOnSuccess(result -> {
+                            .doOnSuccess(__ -> {
                                 // Sync logs when optimization reaches terminal status
                                 // Safe to call multiple times - just syncs and reduces TTL
                                 if (update.status() != null && update.status().isTerminal()) {
                                     finalizeLogsAsync(workspaceId, id);
+                                    // Only emit completion event on the transition into a terminal state
+                                    if (!optimization.status().isTerminal()) {
+                                        Schedulers.boundedElastic().schedule(() -> analyticsService.trackEvent(
+                                                "opik_optimization_completed",
+                                                Map.of(
+                                                        "optimization_id", optimization.id().toString(),
+                                                        "status", update.status().getValue(),
+                                                        "workspace_id", workspaceId,
+                                                        "num_trials", String.valueOf(optimization.numTrials()),
+                                                        "baseline_objective_score",
+                                                        String.valueOf(optimization.baselineObjectiveScore()),
+                                                        "best_objective_score",
+                                                        String.valueOf(optimization.bestObjectiveScore())),
+                                                userName));
+                                    }
                                 }
                             });
                 }));

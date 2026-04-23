@@ -92,6 +92,7 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -107,8 +108,10 @@ def test_langchain__google_vertexai_llm_is_used__token_usage_is_logged__happyflo
                 usage=ANY_DICT,
                 provider="google_vertexai",
                 model=ANY_STRING.starting_with("gemini-2.0-flash"),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -196,6 +199,7 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
                 },
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -211,8 +215,10 @@ def test_langchain__google_vertexai_llm_is_used__streaming__token_usage_is_logge
                 usage=ANY_DICT,
                 provider="google_vertexai",
                 model=ANY_STRING.starting_with("gemini-2.0-flash"),
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

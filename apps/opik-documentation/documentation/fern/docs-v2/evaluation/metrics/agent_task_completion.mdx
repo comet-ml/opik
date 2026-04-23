@@ -1,0 +1,45 @@
+---
+description: Verify whether an agent fulfilled its assigned objective
+headline: Agent task completion | Opik Documentation
+og:description: Evaluate agent performance effectively by using the AgentTaskCompletionJudge
+  to ensure objectives are met in multi-step tasks.
+og:site_name: Opik Documentation
+og:title: Agent Task Completion with Opik
+title: Agent task completion
+---
+
+# Agent Task Completion Judge
+
+`AgentTaskCompletionJudge` reviews an agent run (often a natural-language summary of what happened) and decides whether the high-level objective was met. It is particularly helpful for multi-step agents where success cannot be inferred from the final response alone.
+
+```python title="Did the agent finish the job?"
+from opik.evaluation.metrics import AgentTaskCompletionJudge
+
+metric = AgentTaskCompletionJudge()
+
+payload = """TASK: Extract company name, address, and tax ID from the invoice.
+OUTCOME: Agent retrieved company name and address but failed to extract the tax ID.
+"""
+
+score = metric.score(output=payload)
+
+print(score.value)  # 0.0–1.0 after normalisation
+print(score.reason)
+```
+
+## Inputs
+
+| Argument | Type | Required | Description |
+| --- | --- | --- | --- |
+| `output` | `str` | **Yes** | Payload describing the task, evidence, and outcome for the judge. |
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Switch to heavier evaluators for complex workflows. |
+| `temperature` | `0.0` | Increase slightly if you want more creative feedback. |
+| `track` | `True` | Toggle evaluation logging. |
+| `project_name` | `None` | Override project for logging. |
+
+The evaluator returns an integer between 0 and 10; Opik divides it by 10 so `score.value` falls in the 0.0–1.0 range, while `score.reason` summarises which sub-tasks were completed or missed.

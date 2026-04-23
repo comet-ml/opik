@@ -4,9 +4,16 @@ import GitHubIcon from "@/icons/github.svg?react";
 
 import useGitHubStarts from "@/api/external/useGitHubStarts";
 import { Button } from "@/ui/button";
-import { formatNumberInK } from "@/lib/utils";
+import { cn, formatNumberInK } from "@/lib/utils";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
-const GitHubStarListItem: React.FC = () => {
+export interface GitHubStarListItemProps {
+  expanded: boolean;
+}
+
+const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
+  expanded,
+}) => {
   const { data } = useGitHubStarts({});
 
   const starCount = useMemo(() => {
@@ -14,12 +21,15 @@ const GitHubStarListItem: React.FC = () => {
     return isNumber(count) ? formatNumberInK(count) : "9.6k";
   }, [data?.stargazers_count]);
 
-  return (
-    <li>
+  const itemElement = (
+    <li className="mb-2">
       <Button
         variant="outline"
         size="sm"
-        className="ml-0.5 h-8 gap-1.5 px-2 dark:bg-primary-foreground"
+        className={cn(
+          expanded ? "ml-0.5 h-8 gap-1.5 px-2" : "size-8 p-0 max-w-full",
+          "dark:bg-primary-foreground",
+        )}
         asChild
       >
         <a
@@ -28,13 +38,31 @@ const GitHubStarListItem: React.FC = () => {
           rel="noreferrer"
         >
           <GitHubIcon className="size-3.5" />
-          <span className="comet-body-s">Star</span>
-          <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs dark:bg-secondary">
-            {starCount}
-          </span>
+          {expanded && (
+            <>
+              <span className="comet-body-s">Star</span>
+              <span className="rounded-full bg-muted px-1.5 py-0.5 text-xs dark:bg-secondary">
+                {starCount}
+              </span>
+            </>
+          )}
         </a>
       </Button>
     </li>
+  );
+
+  if (expanded) {
+    return itemElement;
+  }
+
+  return (
+    <TooltipWrapper
+      content={`GitHub star ${starCount}`}
+      side="right"
+      delayDuration={0}
+    >
+      {itemElement}
+    </TooltipWrapper>
   );
 };
 

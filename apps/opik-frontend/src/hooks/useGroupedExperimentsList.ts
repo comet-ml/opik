@@ -63,6 +63,8 @@ const PROJECTS_SORTING: Sorting = [
 
 const MAX_ENTITIES_FOR_SORTING = 1000;
 
+const EXPERIMENTS_LIST_POLLING_INTERVAL_MS = 10_000;
+
 const buildOrderMap = <T extends { id: string }>(
   data: T[] | undefined,
 ): Record<string, number> | undefined => {
@@ -76,6 +78,7 @@ const buildOrderMap = <T extends { id: string }>(
 
 type UseGroupedExperimentsListParams = {
   workspaceName: string;
+  projectId?: string;
   filters?: Filters;
   sorting?: Sorting;
   groups?: Groups;
@@ -330,7 +333,9 @@ const useExperimentsCache = () => {
 export default function useGroupedExperimentsList(
   params: UseGroupedExperimentsListParams,
 ): UseGroupedExperimentsListResponse {
-  const refetchInterval = params.polling ? 30000 : undefined;
+  const refetchInterval = params.polling
+    ? EXPERIMENTS_LIST_POLLING_INTERVAL_MS
+    : undefined;
   const experimentsCache = useExperimentsCache();
   const groups = useMemo(() => params.groups ?? [], [params.groups]);
   const hasGroups = Boolean(groups?.length);
@@ -360,11 +365,13 @@ export default function useGroupedExperimentsList(
     const isOrphanProjectFilter = projectFilter && projectIdValue === "";
 
     return {
-      projectId: isOrphanProjectFilter ? undefined : projectIdValue,
+      projectId:
+        params.projectId ??
+        (isOrphanProjectFilter ? undefined : projectIdValue),
       projectDeleted: isOrphanProjectFilter ? true : undefined,
       filtersWithoutProjectId: otherFilters,
     };
-  }, [params.filters]);
+  }, [params.filters, params.projectId]);
 
   const {
     data: groupsData,
@@ -414,6 +421,7 @@ export default function useGroupedExperimentsList(
   } = useDatasetsList(
     {
       workspaceName: params.workspaceName,
+      ...(projectId && { projectId }),
       page: 1,
       size: MAX_ENTITIES_FOR_SORTING,
       withExperimentsOnly: true,
@@ -543,7 +551,10 @@ export default function useGroupedExperimentsList(
         promptId: params.promptId,
         types: params.types,
         // Don't send projectId if it's an orphan project, use projectDeleted flag instead
-        projectId: isOrphanProject ? undefined : projectIdValue,
+        // Fall back to params.projectId (page context) when no project filter or group metadata
+        projectId: isOrphanProject
+          ? undefined
+          : projectIdValue ?? params.projectId,
         projectDeleted: isOrphanProject || undefined,
         page: 1,
         size: extractPageSize(id, params.groupLimit),

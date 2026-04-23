@@ -91,23 +91,21 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
     <div ref={containerRef} className="min-w-72 max-w-full flex-1 pr-6 pt-4">
       <div className="flex items-center justify-between gap-2 pb-4">
         <div className="flex min-w-0 shrink items-center gap-1">
-          <h4 className="comet-body-accented truncate">
-            Evaluation suite item
-          </h4>
+          <h4 className="comet-body-accented truncate">Test suite item</h4>
           <ExplainerIcon
-            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_evaluation_suite_item]}
+            {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_item]}
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {datasetItemId && (
             <NavigationTag
               id={datasetId}
-              name="View in evaluation suite"
+              name="View in test suite"
               resource={RESOURCE_TYPE.datasetItem}
               search={{
                 row: datasetItemId,
               }}
-              tooltipContent="View this item in the evaluation suite"
+              tooltipContent="View this item in the test suite"
               className="h-8"
             />
           )}

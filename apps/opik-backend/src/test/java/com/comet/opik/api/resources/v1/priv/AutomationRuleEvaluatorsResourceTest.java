@@ -46,6 +46,7 @@ import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.llm.LlmModule;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -631,6 +632,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -652,6 +654,42 @@ class AutomationRuleEvaluatorsResourceTest {
                     }
                 }
             });
+        }
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Create evaluator returns 403 when permission is denied")
+        void createEvaluatorReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            try (var response = evaluatorsResourceClient.callCreateEvaluator(
+                    factory.manufacturePojo(AutomationRuleEvaluatorLlmAsJudge.class), workspaceName, apiKey)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update evaluator returns 403 when permission is denied")
+        void updateEvaluatorReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE.getValue());
+
+            try (var response = evaluatorsResourceClient.callUpdateEvaluator(
+                    UUID.randomUUID(), workspaceName,
+                    factory.manufacturePojo(AutomationRuleEvaluatorUpdateLlmAsJudge.class), apiKey)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
         }
     }
 
@@ -1014,6 +1052,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1048,6 +1087,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
                     .input(OBJECT_MAPPER.readTree(INPUT))
                     .output(OBJECT_MAPPER.readTree(OUTPUT))
@@ -1105,6 +1145,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null) // Must be null for trace-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
@@ -1160,6 +1201,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .output(OBJECT_MAPPER.readTree("""
                             {
@@ -1218,6 +1260,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1267,6 +1310,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
@@ -1358,6 +1402,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1407,6 +1452,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36)) // Must have threadId for thread-level evaluation
                     .build();
 
@@ -1465,6 +1511,7 @@ class AutomationRuleEvaluatorsResourceTest {
             var trace = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectId(projectId)
                     .projectName(projectName) // Backend uses projectName, not projectId!
+                    .source(null)
                     .threadId(null)
                     .build();
             traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
@@ -1500,6 +1547,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 var trace = factory.manufacturePojo(Trace.class).toBuilder()
                         .projectId(projectId)
                         .projectName(projectName) // Backend uses projectName, not projectId!
+                        .source(null)
                         .threadId(null)
                         .build();
                 traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);

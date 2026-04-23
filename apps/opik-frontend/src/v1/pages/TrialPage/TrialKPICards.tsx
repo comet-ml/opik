@@ -16,7 +16,7 @@ type TrialKPICardsProps = {
   experiments: Experiment[];
   allOptimizationExperiments: Experiment[];
   objectiveName?: string;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
 };
 
 const getMetricValue = (
@@ -31,7 +31,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
   experiments,
   allOptimizationExperiments,
   objectiveName,
-  isEvaluationSuite,
+  isTestSuite,
 }) => {
   const currentMetrics = useMemo(
     () => aggregateExperimentMetrics(experiments, objectiveName),
@@ -73,7 +73,7 @@ const TrialKPICards: React.FunctionComponent<TrialKPICardsProps> = ({
     return aggregateExperimentMetrics(baselineExps, objectiveName);
   }, [allOptimizationExperiments, experiments, objectiveName]);
 
-  const configs = getMetricKPICardConfigs({ isEvaluationSuite, objectiveName });
+  const configs = getMetricKPICardConfigs({ isTestSuite, objectiveName });
 
   return (
     <div className="grid grid-cols-3 gap-4">

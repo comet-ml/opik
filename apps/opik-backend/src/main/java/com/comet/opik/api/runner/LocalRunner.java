@@ -2,6 +2,7 @@ package com.comet.opik.api.runner;
 
 import com.comet.opik.api.Page;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import jakarta.validation.Valid;
@@ -21,7 +22,10 @@ public record LocalRunner(
         UUID projectId,
         LocalRunnerStatus status,
         Instant connectedAt,
-        List<Agent> agents) {
+        List<Agent> agents,
+        List<String> capabilities,
+        JsonNode checklist,
+        RunnerType type) {
 
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)

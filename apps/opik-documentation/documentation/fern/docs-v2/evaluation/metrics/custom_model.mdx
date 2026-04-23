@@ -1,0 +1,296 @@
+---
+description: Describes how to use a custom model for Opik's built-in LLM as a Judge
+  metrics
+headline: Custom model | Opik Documentation
+og:description: Learn to utilize Opik's model-agnostic metrics for LLM evaluation,
+  leveraging the LiteLLM library for enhanced flexibility.
+og:site_name: Opik Documentation
+og:title: Custom Model Metrics - Opik
+title: Custom model
+toc_max_heading_level: 4
+---
+
+Opik provides a set of LLM as a Judge metrics that are designed to be model-agnostic and can be used with any LLM. In order to achieve this, we use the [LiteLLM library](https://github.com/BerriAI/litellm) to abstract the LLM calls.
+
+By default, Opik will use the `gpt-5-nano` model. However, you can change this by setting the `model` parameter when initializing your metric to any model supported by [LiteLLM](https://docs.litellm.ai/docs/providers):
+
+```python
+from opik.evaluation.metrics import Hallucination
+
+hallucination_metric = Hallucination(
+    model="gpt-4o-mini"
+)
+```
+
+## Using a model supported by LiteLLM
+
+In order to use many models supported by LiteLLM, you also need to pass additional parameters. For this, you can use the [LiteLLMChatModel](https://www.comet.com/docs/opik/python-sdk-reference/Objects/LiteLLMChatModel.html) class and passing it to the metric:
+
+```python
+from opik.evaluation.metrics import Hallucination
+from opik.evaluation import models
+
+model = models.LiteLLMChatModel(
+    model_name="<model_name>"
+)
+
+hallucination_metric = Hallucination(
+    model=model
+)
+```
+
+## Using OpenAI-compatible providers
+
+Many LLM providers (such as SiliconFlow, Together AI, Groq, and others) expose APIs that are compatible with the OpenAI API format. You can use these providers with Opik's LLM-as-a-Judge metrics by using LiteLLM's [`openai/` provider prefix](https://docs.litellm.ai/docs/providers/openai_compatible) and setting the appropriate environment variables.
+
+This is a simpler alternative to [creating a custom model class](#creating-your-own-custom-model-class) when your provider already supports the OpenAI API format.
+
+Set `OPENAI_API_KEY` to your provider's API key and `OPENAI_BASE_URL` to the provider's API endpoint, then use the `openai/` prefix when specifying the model name:
+
+{/* Example based on LiteLLM's OpenAI-compatible provider pattern.
+    See: https://docs.litellm.ai/docs/providers/openai_compatible */}
+
+```python
+import os
+from opik.evaluation.metrics import Hallucination
+
+# Configure the OpenAI-compatible provider
+os.environ["OPENAI_API_KEY"] = "your-provider-api-key"
+os.environ["OPENAI_BASE_URL"] = "https://api.your-provider.com/v1"
+
+# Use the openai/ prefix with the provider's model name
+hallucination_metric = Hallucination(
+    model="openai/your-model-name"
+)
+
+score = hallucination_metric.score(
+    input="What is the capital of France?",
+    output="The capital of France is Paris, a city known for its iconic Eiffel Tower.",
+    context=["Paris is the capital and most populous city of France."]
+)
+print(f"Hallucination score: {score.value}")
+```
+
+The `openai/` prefix tells LiteLLM to use the OpenAI-compatible API format with the configured base URL. This approach works with any metric that accepts a `model` parameter, including `Hallucination`, `Moderation`, `AnswerRelevance`, and others.
+
+For the full list of supported providers and configuration options, see the [LiteLLM OpenAI-compatible providers documentation](https://docs.litellm.ai/docs/providers/openai_compatible).
+
+## Creating Your Own Custom Model Class
+
+Opik's LLM-as-a-Judge metrics, such as [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html), are designed to work with various language models. While Opik supports many models out-of-the-box via LiteLLM, you can integrate any LLM by creating a custom model class. This involves subclassing [`opik.evaluation.models.OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) and implementing its required methods.
+
+### The [`OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) Interface
+
+[`OpikBaseModel`](https://www.comet.com/docs/opik/python-sdk-reference/Objects/OpikBaseModel.html#opik.evaluation.models.OpikBaseModel) is an abstract base class that defines the interface Opik metrics use to interact with LLMs. To create a compatible custom model, you must implement the following methods:
+
+1.  `__init__(self, model_name: str)`:
+    Initializes the base model with a given model name.
+2.  `generate_string(self, input: str, **kwargs: Any) -> str`:
+    Simplified interface to generate a string output from the model.
+3.  `generate_provider_response(self, **kwargs: Any) -> Any`:
+    Generate a provider-specific response. Can be used to interface with the underlying model provider (e.g., OpenAI, Anthropic) and get raw output.
+
+### Implementing a Custom Model for an OpenAI-like API
+
+Here's an example of a custom model class that interacts with an LLM service exposing an OpenAI-compatible API endpoint.
+
+```python
+import requests
+from typing import Any
+
+from opik.evaluation.models import OpikBaseModel
+
+class CustomOpenAICompatibleModel(OpikBaseModel):
+    def __init__(self, model_name: str, api_key: str, base_url: str):
+        super().__init__(model_name)
+        self.api_key = api_key
+        self.base_url = base_url # e.g., "https://api.openai.com/v1/chat/completions"
+        self.headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
+        }
+
+    def generate_string(self, input: str, **kwargs: Any) -> str:
+        """
+        This method is used as part of LLM as a Judge metrics to take a string prompt, pass it to
+        the model as a user message and return the model's response as a string.
+        """
+        conversation = [
+            {
+                "content": input,
+                "role": "user",
+            },
+        ]
+
+        provider_response = self.generate_provider_response(messages=conversation, **kwargs)
+        return provider_response["choices"][0]["message"]["content"]
+
+    def generate_provider_response(self, messages: list[dict[str, Any]], **kwargs: Any) -> Any:
+        """
+        This method is used as part of LLM as a Judge metrics to take a list of AI messages, pass it to
+        the model and return the full model response.
+        """
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+        }
+
+        response = requests.post(self.base_url, headers=self.headers, json=payload)
+
+        response.raise_for_status()
+        return response.json()
+```
+
+**Key considerations for the implementation:**
+
+- **API Endpoint and Payload**: Adjust `base_url` and the JSON payload to match your specific LLM provider's
+  requirements if they deviate from the common OpenAI structure.
+- **Model Name**: The `model_name` passed to `__init__` is used as the `model` parameter in the API call. Ensure this matches an available model on your LLM service.
+
+### Using the Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) Metric
+
+In order to run an evaluation using your Custom Model with the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) metric,
+you will first need to instantiate our `CustomOpenAICompatibleModel` class and pass it to the [`Hallucination`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) class.
+The evaluation can then be kicked off by calling the [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html)` method.
+
+```python
+from opik.evaluation.metrics import Hallucination
+
+# Ensure these are set securely, e.g., via environment variables
+API_KEY = os.getenv("MY_CUSTOM_LLM_API_KEY")
+BASE_URL = "YOUR_LLM_CHAT_COMPLETIONS_ENDPOINT" # e.g., "https://api.openai.com/v1/chat/completions"
+MODEL_NAME = "your-model-name" # e.g., "gpt-3.5-turbo"
+
+# Initialize your custom model
+my_custom_model = CustomOpenAICompatibleModel(
+    model_name=MODEL_NAME,
+    api_key=API_KEY,
+    base_url=BASE_URL
+)
+
+# Initialize the Hallucination metric with the custom model
+hallucination_metric = Hallucination(
+    model=my_custom_model
+)
+
+# Example usage:
+evaluation = hallucination_metric.score(
+    input="What is the capital of Mars?",
+    output="The capital of Mars is Ares City, a bustling metropolis.",
+    context=["Mars is a planet in our solar system. It does not currently have any established cities or a designated capital."]
+)
+print(f"Hallucination Score: {evaluation.value}") # Expected: 1.0 (hallucination detected)
+print(f"Reason: {evaluation.reason}")
+```
+
+**Key considerations for the implementation:**
+
+- **ScoreResult Output**: [`Hallucination.score()`](https://www.comet.com/docs/opik/python-sdk-reference/evaluation/metrics/Hallucination.html) returns a ScoreResult object containing the metric name (`name`), score value (`value`), optional explanation (`reason`), metadata (`metadata`), and a failure flag (`scoring_failed`).
+
+## TypeScript: Using Vercel AI SDK Models
+
+The TypeScript SDK integrates seamlessly with the Vercel AI SDK, allowing you to use language models directly with Opik's evaluation metrics. For comprehensive model configuration including supported providers, generation parameters, and advanced settings, see the [Models Reference](/reference/typescript-sdk/evaluation/models).
+
+### Creating Custom Models with OpikBaseModel
+
+For unsupported LLM providers, implement the `OpikBaseModel` interface:
+
+```typescript
+import { OpikBaseModel, OpikMessage } from "opik/evaluation/models";
+
+class CustomProviderModel extends OpikBaseModel {
+  private apiKey: string;
+  private baseUrl: string;
+
+  constructor(modelName: string, apiKey: string, baseUrl: string) {
+    super(modelName);
+    this.apiKey = apiKey;
+    this.baseUrl = baseUrl;
+  }
+
+  async generateString(input: string): Promise<string> {
+    // Convert string input to message format
+    const messages: OpikMessage[] = [
+      {
+        role: "user",
+        content: input,
+      },
+    ];
+
+    // Call provider API
+    const response = await this.generateProviderResponse(messages);
+
+    // Extract text from response
+    return response.choices[0].message.content;
+  }
+
+  async generateProviderResponse(messages: OpikMessage[]): Promise<unknown> {
+    // Make API call to your custom provider
+    const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.modelName,
+        messages: messages,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+}
+```
+
+### Using Custom Models
+
+Once implemented, use your custom model like any other:
+
+```typescript
+import { Hallucination } from "opik";
+import { evaluatePrompt } from "opik";
+
+// Initialize custom model
+const customModel = new CustomProviderModel(
+  "custom-model-v1",
+  process.env.CUSTOM_API_KEY!,
+  "https://api.custom-provider.com"
+);
+
+// Use with metrics
+const metric = new Hallucination({ model: customModel });
+
+const score = await metric.score({
+  input: "What is the capital of Mars?",
+  output: "The capital of Mars is Ares City, a bustling metropolis.",
+  context: [
+    "Mars is a planet in our solar system. It does not currently have any established cities or a designated capital.",
+  ],
+});
+
+console.log(`Hallucination Score: ${score.value}`); // Expected: 1.0 (hallucination detected)
+console.log(`Reason: ${score.reason}`);
+
+// Use with evaluatePrompt
+await evaluatePrompt({
+  dataset,
+  messages: [{ role: "user", content: "{{input}}" }],
+  model: customModel,
+  scoringMetrics: [metric],
+});
+```
+
+### Best Practices
+
+When implementing custom models:
+
+1. **Implement both required methods**: Ensure your custom model implements both `generateString()` and `generateProviderResponse()` methods
+2. **Handle errors gracefully**: Wrap API calls in try-catch blocks and provide meaningful error messages
+3. **Configure API keys securely**: Store API keys in environment variables, never hardcode them
+
+For standard model usage and configuration, refer to the [Models Reference](/reference/typescript-sdk/evaluation/models).

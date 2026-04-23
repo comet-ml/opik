@@ -6,12 +6,15 @@ export interface Permissions {
   canEditDashboards: boolean;
   canDeleteDashboards: boolean;
   canViewDatasets: boolean;
+  canCreateDatasets: boolean;
   canEditDatasets: boolean;
   canDeleteDatasets: boolean;
   canDeleteProjects: boolean;
   canCreateAnnotationQueues: boolean;
+  canEditAnnotationQueues: boolean;
   canDeleteAnnotationQueues: boolean;
   canDeleteTraces: boolean;
+  canCreatePrompts: boolean;
   canDeletePrompts: boolean;
   canDeleteOptimizationRuns: boolean;
   canConfigureWorkspaceSettings: boolean;
@@ -22,6 +25,7 @@ export interface Permissions {
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
   canTagTrace: boolean;
+  canUsePlayground: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -38,12 +42,15 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canEditDashboards: true,
     canDeleteDashboards: true,
     canViewDatasets: true,
+    canCreateDatasets: true,
     canEditDatasets: true,
     canDeleteDatasets: true,
     canDeleteProjects: true,
     canCreateAnnotationQueues: true,
+    canEditAnnotationQueues: true,
     canDeleteAnnotationQueues: true,
     canDeleteTraces: true,
+    canCreatePrompts: true,
     canDeletePrompts: true,
     canDeleteOptimizationRuns: true,
     canConfigureWorkspaceSettings: true,
@@ -54,6 +61,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
     canTagTrace: true,
+    canUsePlayground: true,
   },
   isPending: false,
 };

@@ -23,6 +23,7 @@ import { TEMPLATE_LIST } from "@/lib/dashboard/templates";
 interface UseDashboardLifecycleParams {
   dashboardId: string | null;
   enabled?: boolean;
+  scope?: DASHBOARD_SCOPE;
   readOnly?: boolean;
 }
 
@@ -35,6 +36,7 @@ interface UseDashboardLifecycleReturn {
 export const useDashboardLifecycle = ({
   dashboardId,
   enabled = true,
+  scope,
   readOnly = false,
 }: UseDashboardLifecycleParams): UseDashboardLifecycleReturn => {
   const isTemplate = isTemplateId(dashboardId);
@@ -76,6 +78,7 @@ export const useDashboardLifecycle = ({
   } = useDashboardPersistence({
     dashboardId: dashboardId || "",
     enabled: Boolean(dashboardId) && enabled && !isTemplate,
+    scope,
   });
 
   useEffect(() => {

@@ -19,6 +19,7 @@ export interface ExperimentData {
   datasetName?: string;
   prompts?: Prompt[];
   tags?: string[];
+  projectName?: string;
 }
 
 /**
@@ -30,13 +31,14 @@ export class Experiment {
   public readonly datasetName?: string;
   public readonly prompts?: Prompt[];
   public readonly tags?: string[];
+  public readonly projectName?: string;
 
   /**
    * Creates a new Experiment instance.
    * This should not be created directly, use static factory methods instead.
    */
   constructor(
-    { id, name, datasetName, prompts, tags }: ExperimentData,
+    { id, name, datasetName, prompts, tags, projectName }: ExperimentData,
     private opik: OpikClient
   ) {
     this.id = id || generateId();
@@ -44,6 +46,7 @@ export class Experiment {
     this.datasetName = datasetName;
     this.prompts = prompts;
     this.tags = tags;
+    this.projectName = projectName;
   }
 
   /**
@@ -209,7 +212,7 @@ export class Experiment {
       );
     }
 
-    const dataset = await this.opik.getDataset(this.datasetName);
+    const dataset = await this.opik.getDataset(this.datasetName, this.projectName);
     const baseUrl = this.opik.config.apiUrl || DEFAULT_CONFIG.apiUrl;
 
     return getExperimentUrlById({

@@ -110,8 +110,10 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -137,16 +139,21 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
@@ -256,8 +263,10 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -283,16 +292,21 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
                                         usage=ANY_DICT,
+                                        source="sdk",
                                     )
                                 ],
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)

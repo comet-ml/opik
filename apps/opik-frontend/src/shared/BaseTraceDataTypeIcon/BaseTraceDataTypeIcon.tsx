@@ -8,38 +8,32 @@ import {
   Link,
   MessageCircle,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 
 const ICONS_MAP = {
   [TRACE_TYPE_FOR_TREE]: {
     icon: InspectionPanel,
-    bg: "var(--tag-purple-bg)",
-    color: "var(--tag-purple-text)",
+    color: "var(--type-trace)",
     tooltip: "Trace",
   },
   [SPAN_TYPE.llm]: {
     icon: MessageCircle,
-    bg: "var(--tag-blue-bg)",
-    color: "var(--tag-blue-text)",
+    color: "var(--type-span-llm)",
     tooltip: "LLM span",
   },
   [SPAN_TYPE.general]: {
     icon: Link,
-    bg: "var(--tag-green-bg)",
-    color: "var(--tag-green-text)",
+    color: "var(--type-span-general)",
     tooltip: "General span",
   },
   [SPAN_TYPE.tool]: {
     icon: Hammer,
-    bg: "var(--tag-burgundy-bg)",
-    color: "var(--tag-burgundy-text)",
+    color: "var(--type-span-tool)",
     tooltip: "Tool span",
   },
   [SPAN_TYPE.guardrail]: {
     icon: Construction,
-    bg: "var(--tag-orange-bg)",
-    color: "var(--tag-orange-text)",
+    color: "var(--type-span-guardrail)",
     tooltip: "Guardrail span",
   },
 };
@@ -53,15 +47,15 @@ const BaseTraceDataTypeIcon: React.FunctionComponent<
 > = ({ type = TRACE_TYPE_FOR_TREE }) => {
   const data = ICONS_MAP[type];
 
+  if (!data) return null;
+
   return (
     <div
-      style={{ background: data.bg, color: data.color }}
-      className={cn(
-        "relative flex size-5 items-center justify-center rounded-md flex-shrink-0",
-      )}
+      style={{ background: data.color }}
+      className="relative flex size-4 shrink-0 items-center justify-center rounded"
     >
       <TooltipWrapper content={data.tooltip}>
-        <data.icon className="size-3" />
+        <data.icon className="size-2 text-white" />
       </TooltipWrapper>
     </div>
   );

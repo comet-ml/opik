@@ -121,7 +121,7 @@ describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
         prompt: "Answer this question: {{question}}",
         metadata: { type: "qa" },
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Create dataset
       const dataset = await createQADataset(client);
@@ -153,13 +153,13 @@ describe.skipIf(!shouldRunApiTests)("evaluatePrompt Integration", () => {
         name: `test-prompt-1-${Date.now()}`,
         prompt: "System: {{system}}\nUser: {{question}}",
       });
-      createdPromptIds.push(prompt1.id);
+      createdPromptIds.push(prompt1.id!);
 
       const prompt2 = await client.createPrompt({
         name: `test-prompt-2-${Date.now()}`,
         prompt: "Question: {{question}}\nContext: {{context}}",
       });
-      createdPromptIds.push(prompt2.id);
+      createdPromptIds.push(prompt2.id!);
 
       const dataset = await createQADataset(client);
       createdDatasetNames.push(dataset.name);

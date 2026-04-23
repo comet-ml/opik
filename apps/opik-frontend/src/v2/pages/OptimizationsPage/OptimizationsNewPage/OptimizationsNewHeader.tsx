@@ -19,7 +19,7 @@ const OptimizationsNewHeader: React.FC<OptimizationsNewHeaderProps> = ({
   return (
     <>
       <div className="mb-2 flex items-center justify-between">
-        <h1 className="comet-title-l">Optimize a prompt</h1>
+        <h1 className="comet-title-xs">Optimize a prompt</h1>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={onCancel}>
             Cancel

@@ -24,6 +24,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.FilterTestUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -4068,32 +4069,15 @@ class GetTracesByProjectResourceTest {
     }
 
     private String getValidValue(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, ENUM, STRING_STATE_DB ->
-                RandomStringUtils.secure().nextAlphanumeric(10);
-            case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
-            case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
-            case ERROR_CONTAINER -> "";
-        };
+        return FilterTestUtils.getValidValue(field);
     }
 
     private String getKey(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, NUMBER, DURATION, MAP, DATE_TIME, LIST, ENUM, ERROR_CONTAINER,
-                    STRING_STATE_DB, DATE_TIME_STATE_DB,
-                    DICTIONARY, DICTIONARY_STATE_DB ->
-                null;
-            case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-        };
+        return FilterTestUtils.getKey(field);
     }
 
     private String getInvalidValue(Field field) {
-        return switch (field.getType()) {
-            case STRING, STRING_EXACT, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER,
-                    STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                " ";
-            case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER -> RandomStringUtils.secure().nextAlphanumeric(10);
-        };
+        return FilterTestUtils.getInvalidValue(field);
     }
 
     @Nested
@@ -4184,6 +4168,42 @@ class GetTracesByProjectResourceTest {
                                     trace.endTime()))
                             .build())
                     .toList();
+
+            TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
+        }
+
+        @Test
+        void searchTracesStream__whenExcludeFeedbackScores__thenReturnTracesWithoutScores() {
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            var expectedTraces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .usage(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    trace.startTime(), trace.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Trace::id).reversed())
+                    .toList();
+            traceResourceClient.batchCreateTraces(expectedTraces, API_KEY, TEST_WORKSPACE);
+
+            List<FeedbackScoreBatchItem> feedbackScores = expectedTraces.stream()
+                    .flatMap(trace -> PodamFactoryUtils
+                            .manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(trace.projectName())
+                                    .id(trace.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            traceResourceClient.feedbackScores(feedbackScores, API_KEY, TEST_WORKSPACE);
+
+            var streamRequest = TraceSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .exclude(Set.of(Trace.TraceField.FEEDBACK_SCORES))
+                    .build();
+            var actualTraces = traceResourceClient.getStreamAndAssertContent(API_KEY, TEST_WORKSPACE, streamRequest);
 
             TraceAssertions.assertTraces(actualTraces, expectedTraces, USER);
         }
@@ -4863,6 +4883,56 @@ class GetTracesByProjectResourceTest {
             getAndAssertPage(workspaceName, projectName, null, List.of(), traces, traces.reversed(), List.of(), apiKey,
                     List.of(), exclude);
 
+        }
+
+        @Test
+        void getTracesByProject__whenExcludeFeedbackScoresWithFilter__thenReturnTracesExcludingAndFilteringScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var traces = PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
+                    .stream()
+                    .map(trace -> trace.toBuilder()
+                            .projectName(projectName)
+                            // We're creating feedback scores for these traces (by sending them in batch below)
+                            // but they should be excluded from the expected response by the "exclude" param,
+                            .feedbackScores(null)
+                            // Not logging any spans, so no expected usage
+                            .usage(null)
+                            .build())
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            // Creating multiple feedback scores for each trace
+            List<FeedbackScoreBatchItem> feedbackScores = traces.stream()
+                    .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(feedbackScoreBatchItem -> feedbackScoreBatchItem.toBuilder()
+                                    .projectName(trace.projectName())
+                                    .id(trace.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            traceResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            // Filter by the first trace's first feedback score
+            var filters = List.of(
+                    TraceFilter.builder()
+                            .field(TraceField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(feedbackScores.getFirst().name())
+                            .value(feedbackScores.getFirst().value().toString())
+                            .build());
+
+            // The query still uses runs CTEs, joins etc. by enabling exclude_feedback_scores template
+            // because feedback_scores_filters is active.
+            // However, returned feedback scores are excluded (nulled) from the response
+            var expectedTraces = List.of(traces.getFirst());
+            var unexpectedTraces = traces.subList(1, traces.size());
+            getAndAssertPage(workspaceName, projectName, null, filters, traces, expectedTraces,
+                    unexpectedTraces, apiKey, List.of(), Set.of(Trace.TraceField.FEEDBACK_SCORES));
         }
 
         @Test

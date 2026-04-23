@@ -24,12 +24,13 @@ import { Separator } from "@/ui/separator";
 import { Spinner } from "@/ui/spinner";
 import { cn } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import AddEditEvaluationSuiteDialog from "@/v1/pages-shared/datasets/AddEditEvaluationSuiteDialog/AddEditEvaluationSuiteDialog";
+import AddEditTestSuiteDialog from "@/v1/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import useDatasetVersionSelect, {
   DEFAULT_LOADED_DATASETS,
 } from "./useDatasetVersionSelect";
 import VersionOption from "./VersionOption";
 import { Dataset } from "@/types/datasets";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   parseDatasetVersionKey,
   formatDatasetVersionKey,
@@ -54,10 +55,10 @@ function DatasetEmptyState() {
   return (
     <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
       <div className="comet-body-s-accented pb-1 text-foreground">
-        No evaluation suites available
+        No test suites available
       </div>
       <div className="comet-body-s text-muted-slate">
-        Create an evaluation suite with examples to evaluate your prompt on.
+        Create a test suite with examples to evaluate your prompt on.
       </div>
     </div>
   );
@@ -79,6 +80,10 @@ function DatasetVersionSelectBox({
   const [openDatasetId, setOpenDatasetId] = useState<string | null>(null);
   const [isSelectOpen, setIsSelectOpen] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const {
+    permissions: { canCreateDatasets },
+  } = usePermissions();
 
   const parsed = parseDatasetVersionKey(value);
   const datasetId = parsed?.datasetId ?? null;
@@ -171,7 +176,7 @@ function DatasetVersionSelectBox({
 
           {isEmpty ? (
             <div className="relative flex w-8 shrink-0 justify-center self-stretch rounded pt-3">
-              <TooltipWrapper content="This evaluation suite is empty">
+              <TooltipWrapper content="This test suite is empty">
                 <Info className="size-3.5 text-light-slate" />
               </TooltipWrapper>
             </div>
@@ -292,9 +297,7 @@ function DatasetVersionSelectBox({
           open={isSelectOpen}
           disabled={disabled}
         >
-          <TooltipWrapper
-            content={displayValue ?? "Select an evaluation suite"}
-          >
+          <TooltipWrapper content={displayValue ?? "Select a test suite"}>
             <SelectTrigger
               className={cn(
                 "size-full w-[220px] data-[placeholder]:text-light-slate h-[32px] py-0",
@@ -309,7 +312,7 @@ function DatasetVersionSelectBox({
                   <div className="flex w-full items-center text-light-slate">
                     <Database className="mr-2 size-4" />
                     <span className="truncate font-normal">
-                      Select an evaluation suite
+                      Select a test suite
                     </span>
                   </div>
                 }
@@ -339,7 +342,7 @@ function DatasetVersionSelectBox({
                 <Input
                   ref={inputRef}
                   className="outline-0"
-                  placeholder="Search evaluation suites"
+                  placeholder="Search test suites"
                   value={search}
                   variant="ghost"
                   onChange={(e) => setSearch(e.target.value)}
@@ -347,17 +350,20 @@ function DatasetVersionSelectBox({
               </div>
               <SelectSeparator />
               {renderOptions()}
-
-              <Separator className="my-1" />
-              <ListAction
-                onClick={() => {
-                  setIsSelectOpen(false);
-                  setIsDialogOpen(true);
-                }}
-              >
-                <Plus className="size-3.5 shrink-0" />
-                Add new
-              </ListAction>
+              {canCreateDatasets && (
+                <>
+                  <Separator className="my-1" />
+                  <ListAction
+                    onClick={() => {
+                      setIsSelectOpen(false);
+                      setIsDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="size-3.5 shrink-0" />
+                    Add new
+                  </ListAction>
+                </>
+              )}
             </div>
           </SelectContent>
         </Select>
@@ -374,7 +380,7 @@ function DatasetVersionSelectBox({
           </Button>
         )}
       </div>
-      <AddEditEvaluationSuiteDialog
+      <AddEditTestSuiteDialog
         key={resetDialogKeyRef.current}
         open={isDialogOpen}
         setOpen={setIsDialogOpen}

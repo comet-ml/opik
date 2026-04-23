@@ -8,6 +8,10 @@ on:
   pull_request:
     types: [opened, edited, synchronize]
 
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   lint-pr:
     runs-on: ubuntu-latest

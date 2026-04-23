@@ -44,9 +44,11 @@ def test_records_spans_and_traces__happy_path():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
@@ -60,7 +62,7 @@ def test_prevents_nested_usage():
 
 
 def test_cleanup_and_reuse_after_exit__should_save_new_data():
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # First run: record and ensure the local processor becomes active
     with opik.record_traces_locally() as storage:
@@ -94,9 +96,11 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
@@ -135,9 +139,11 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])

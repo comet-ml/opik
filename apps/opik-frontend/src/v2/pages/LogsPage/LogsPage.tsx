@@ -1,4 +1,4 @@
-import { useProjectIdFromURL } from "@/hooks/useProjectIdFromURL";
+import { useActiveProjectId } from "@/store/AppStore";
 import useProjectById from "@/api/projects/useProjectById";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -13,7 +13,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import useLogsType from "@/v2/pages/LogsPage/useLogsType";
 
 const LogsPage = () => {
-  const projectId = useProjectIdFromURL();
+  const projectId = useActiveProjectId()!;
   const [isGuardrailsDialogOpened, setIsGuardrailsDialogOpened] =
     useState<boolean>(false);
   const isGuardrailsEnabled = useIsFeatureEnabled(
@@ -43,12 +43,7 @@ const LogsPage = () => {
           className="mb-4 mt-6 flex items-center justify-between"
           direction="horizontal"
         >
-          <h1
-            data-testid="traces-page-title"
-            className="comet-title-l truncate break-words"
-          >
-            {projectName}
-          </h1>
+          <h1 className="comet-body-accented truncate break-words">Logs</h1>
           {isGuardrailsEnabled && (
             <div className="flex shrink-0 items-center gap-2">
               <Button
@@ -62,14 +57,6 @@ const LogsPage = () => {
             </div>
           )}
         </PageBodyStickyContainer>
-        {project?.description && (
-          <PageBodyStickyContainer
-            className="-mt-3 mb-4 flex min-h-8 items-center justify-between"
-            direction="horizontal"
-          >
-            <div className="text-muted-slate">{project.description}</div>
-          </PageBodyStickyContainer>
-        )}
         {needsDefaultResolution ? (
           <Loader />
         ) : (

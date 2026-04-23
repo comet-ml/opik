@@ -206,3 +206,15 @@ export type ConfigurationType = Record<string, unknown>;
 export type GoogleColabCardCoreProps = {
   link: string;
 };
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}

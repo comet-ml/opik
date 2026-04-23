@@ -71,8 +71,8 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v1/pages-shared/experiments/useExperimentItemsState";
 import useExperimentItemsData from "@/v1/pages-shared/experiments/useExperimentItemsData";
 import useExperimentItemsSidebar from "@/v1/pages-shared/experiments/useExperimentItemsSidebar";
-import PassedCell from "@/v1/pages-shared/experiments/EvaluationSuiteExperiment/PassedCell";
-import EvaluationSuiteExperimentPanel from "@/v1/pages-shared/experiments/EvaluationSuiteExperiment/ExperimentItemSidebar/EvaluationSuiteExperimentPanel";
+import PassedCell from "@/v1/pages-shared/experiments/TestSuiteExperiment/PassedCell";
+import TestSuiteExperimentPanel from "@/v1/pages-shared/experiments/TestSuiteExperiment/ExperimentItemSidebar/TestSuiteExperimentPanel";
 
 const getRowId = (d: ExperimentsCompare) => d.id;
 
@@ -87,12 +87,12 @@ const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 
 function getFilterColumns(
-  isEvalSuite: boolean,
+  isTestSuite: boolean,
 ): ColumnData<ExperimentsCompare>[] {
   return [
     {
       id: COLUMN_ID_ID,
-      label: isEvalSuite ? "ID (Evaluation suite item)" : "Dataset item ID",
+      label: isTestSuite ? "ID (Test suite item)" : "Dataset item ID",
       type: COLUMN_TYPE.string,
     },
     {
@@ -132,14 +132,14 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
 export type ExperimentItemsTabProps = {
   experimentsIds: string[];
   experiments?: Experiment[];
-  isEvalSuite?: boolean;
+  isTestSuite?: boolean;
   datasetId?: string;
 };
 
 const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   experimentsIds = [],
   experiments,
-  isEvalSuite,
+  isTestSuite,
   datasetId: datasetIdProp,
 }) => {
   const datasetIdFromURL = useDatasetIdFromCompareExperimentsURL();
@@ -224,9 +224,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
   const columnPinning = useMemo<ColumnPinningState>(
     () => ({
       left: [COLUMN_SELECT_ID],
-      right: isEvalSuite ? [COLUMN_PASSED_ID] : [],
+      right: isTestSuite ? [COLUMN_PASSED_ID] : [],
     }),
-    [isEvalSuite],
+    [isTestSuite],
   );
 
   const filtersConfig = useMemo(
@@ -254,7 +254,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
         size: 180,
         sortable: isColumnSortable(COLUMN_ID_ID, sortableColumns),
-        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_evaluation_suite_item],
+        explainer: EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_item],
       } as ColumnData<ExperimentsCompare>,
       ...dynamicDatasetColumns.map(
         ({ label, id, columnType }) =>
@@ -405,7 +405,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         columnHelper.group({
           id: "dataset",
           meta: {
-            header: isEvalSuite ? "Evaluation suite" : "Dataset",
+            header: isTestSuite ? "Test suite" : "Dataset",
           },
           header: SectionHeader,
           columns: convertColumnDataToColumn<
@@ -490,7 +490,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       );
     }
 
-    if (isEvalSuite) {
+    if (isTestSuite) {
       retVal.push(
         mapColumnDataFields<ExperimentsCompare, ExperimentsCompare>({
           id: COLUMN_PASSED_ID,
@@ -509,7 +509,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return retVal;
   }, [
     experimentsCount,
-    isEvalSuite,
+    isTestSuite,
     datasetColumnsData,
     selectedColumns,
     outputColumnsData,
@@ -542,7 +542,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
       ...sortBy(dynamicDatasetColumns, "label").map(
         ({ id, label, columnType }) => ({
           id,
-          label: `${label} (${isEvalSuite ? "Evaluation suite" : "Dataset"})`,
+          label: `${label} (${isTestSuite ? "Test suite" : "Dataset"})`,
           type: columnType,
         }),
       ),
@@ -551,9 +551,9 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: `${label} (Output)`,
         type: COLUMN_TYPE.string,
       })),
-      ...getFilterColumns(!!isEvalSuite),
+      ...getFilterColumns(!!isTestSuite),
     ];
-  }, [dynamicDatasetColumns, dynamicOutputColumns, isEvalSuite]);
+  }, [dynamicDatasetColumns, dynamicOutputColumns, isTestSuite]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -660,9 +660,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
             searchText={search!}
             setSearchText={setSearch}
             placeholder={
-              isEvalSuite
-                ? "Search evaluation suite items"
-                : "Search dataset items"
+              isTestSuite ? "Search test suite items" : "Search dataset items"
             }
             className="w-[320px]"
             dimension="sm"
@@ -738,17 +736,17 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           truncationEnabled={truncationEnabled}
         />
       </PageBodyStickyContainer>
-      <EvaluationSuiteExperimentPanel
+      <TestSuiteExperimentPanel
         {...sharedPanelProps}
         experimentsCompareId={
-          isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+          isTestSuite ? sharedPanelProps.experimentsCompareId : undefined
         }
         datasetId={datasetId ?? ""}
       />
       <CompareExperimentsPanel
         {...sharedPanelProps}
         experimentsCompareId={
-          !isEvalSuite ? sharedPanelProps.experimentsCompareId : undefined
+          !isTestSuite ? sharedPanelProps.experimentsCompareId : undefined
         }
       />
       <TraceDetailsPanel

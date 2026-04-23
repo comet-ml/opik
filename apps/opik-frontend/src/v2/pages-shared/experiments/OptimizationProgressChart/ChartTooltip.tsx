@@ -18,25 +18,25 @@ type ChartTooltipProps = {
   };
   candidate: AggregatedCandidate;
   chartData: CandidateDataPoint[];
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
 };
 
 const ChartTooltip: React.FC<ChartTooltipProps> = ({
   hoveredTrial,
   candidate,
   chartData,
-  isEvaluationSuite,
+  isTestSuite,
 }) => {
   const chartPoint = chartData.find(
     (d) => d.candidateId === hoveredTrial.candidateId,
   );
   const status = chartPoint?.status ?? "passed";
-  const scoreLabel = isEvaluationSuite ? "Pass rate" : "Score";
+  const scoreLabel = isTestSuite ? "Pass rate" : "Score";
   const percentageDisplay = isNumber(candidate.score)
     ? formatAsPercentage(candidate.score)
     : "-";
   const fractionDisplay =
-    isEvaluationSuite && isNumber(candidate.score) && candidate.totalCount > 0
+    isTestSuite && isNumber(candidate.score) && candidate.totalCount > 0
       ? ` (${candidate.passedCount}/${candidate.totalCount})`
       : "";
 

@@ -10,4 +10,6 @@ export interface AlertWrite {
     metadata?: Record<string, string>;
     webhook: OpikApi.WebhookWrite;
     triggers?: OpikApi.AlertTriggerWrite[];
+    /** Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error. */
+    projectId?: string;
 }

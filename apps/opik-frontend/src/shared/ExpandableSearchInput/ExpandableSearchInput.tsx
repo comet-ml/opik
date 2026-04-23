@@ -5,6 +5,7 @@ import isUndefined from "lodash/isUndefined";
 import { cn } from "@/lib/utils";
 import { Button, buttonVariants } from "@/ui/button";
 import DebounceInput from "@/shared/DebounceInput/DebounceInput";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cva, VariantProps } from "class-variance-authority";
 
 const searchInputVariants = cva("px-8", {
@@ -27,8 +28,10 @@ type ExpandableSearchInputProps = {
   disabled?: boolean;
   buttonVariant?: VariantProps<typeof buttonVariants>["variant"];
   size?: VariantProps<typeof searchInputVariants>["size"];
+  tooltip?: string;
   onPrev?: () => void;
   onNext?: () => void;
+  onExpandedChange?: (expanded: boolean) => void;
 };
 
 const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
@@ -39,8 +42,10 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   buttonVariant = "outline",
   size = "default",
   disabled = false,
+  tooltip,
   onPrev,
   onNext,
+  onExpandedChange,
 }) => {
   const [isExpanded, setIsExpanded] = useState(Boolean(value) && !disabled);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,16 +58,21 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
   }, [isExpanded]);
 
   useEffect(() => {
-    setIsExpanded((state) => (isUndefined(value) ? false : state));
-  }, [value]);
+    if (isUndefined(value)) {
+      setIsExpanded(false);
+      onExpandedChange?.(false);
+    }
+  }, [value, onExpandedChange]);
 
   const handleExpand = () => {
     if (disabled) return;
     setIsExpanded(true);
+    onExpandedChange?.(true);
   };
 
   const handleCollapse = () => {
     setIsExpanded(false);
+    onExpandedChange?.(false);
     onChange?.("");
   };
 
@@ -96,14 +106,16 @@ const ExpandableSearchInput: React.FC<ExpandableSearchInputProps> = ({
       )}
     >
       {!isExpanded && (
-        <Button
-          variant={buttonVariant}
-          size="icon-sm"
-          onClick={handleExpand}
-          disabled={disabled}
-        >
-          <Search />
-        </Button>
+        <TooltipWrapper content={tooltip}>
+          <Button
+            variant={buttonVariant}
+            size="icon-sm"
+            onClick={handleExpand}
+            disabled={disabled}
+          >
+            <Search />
+          </Button>
+        </TooltipWrapper>
       )}
       {isExpanded && (
         <div className="relative flex w-full items-center">

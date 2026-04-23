@@ -1,23 +1,13 @@
 import React, { useCallback, useMemo, useRef } from "react";
 import get from "lodash/get";
-import isNumber from "lodash/isNumber";
 import { StringParam, useQueryParam } from "use-query-params";
-import {
-  Brain,
-  Calendar,
-  Clock,
-  Coins,
-  Hash,
-  MessageSquareMore,
-  PenLine,
-} from "lucide-react";
+import { Brain, Calendar, MessageSquareMore, PenLine } from "lucide-react";
 
 import { AgentGraphData, Span, Trace } from "@/types/traces";
 import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
-import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import FeedbackScoreHoverCard from "@/shared/FeedbackScoreTag/FeedbackScoreHoverCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
@@ -25,29 +15,23 @@ import TagList from "../TagList/TagList";
 import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
-import PromptsTab from "./PromptsTab";
 import AgentConfigurationTab, {
   isAgentConfigurationMetadata,
 } from "./AgentConfigurationTab";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
-import { formatDuration, formatDate } from "@/lib/date";
-import isUndefined from "lodash/isUndefined";
-import { formatCost } from "@/lib/money";
+import { formatDate } from "@/lib/date";
+import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import TraceDataViewerActionsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/TraceDataViewerActionsPanel";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
   DetailsActionSection,
   DetailsActionSectionValue,
 } from "@/v2/pages-shared/traces/DetailsActionSection";
-import TraceDataViewerHeader from "./TraceDataViewerHeader";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";
 import { detectLLMMessages } from "@/shared/PrettyLLMMessage/llmMessages";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { useUnifiedMedia } from "@/hooks/useUnifiedMedia";
 
 type TraceDataViewerProps = {
@@ -56,7 +40,6 @@ type TraceDataViewerProps = {
   projectId: string;
   traceId: string;
   spanId?: string;
-  activeSection: DetailsActionSectionValue | null;
   setActiveSection: (v: DetailsActionSectionValue) => void;
   isSpansLazyLoading: boolean;
   search?: string;
@@ -68,7 +51,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   projectId,
   traceId,
   spanId,
-  activeSection,
   setActiveSection,
   isSpansLazyLoading,
   search,
@@ -88,15 +70,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
   );
   const hasSpanAgentGraph =
     Boolean(agentGraphData) && type !== TRACE_TYPE_FOR_TREE;
-  const showOptimizerPrompts = useIsFeatureEnabled(
-    FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED,
-  );
-  const hasPrompts = useMemo(() => {
-    if (!showOptimizerPrompts) return false;
-    const prompts = (data.metadata as Record<string, unknown>)?.opik_prompts;
-    return Array.isArray(prompts) && prompts.length > 0;
-  }, [data.metadata, showOptimizerPrompts]);
-
   const hasAgentConfiguration = useMemo(() => {
     const config = (data.metadata as Record<string, unknown>)?.[
       AGENT_CONFIGURATION_METADATA_KEY
@@ -134,13 +107,13 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     const legacyTabMap: Record<string, string> = {
       input: canShowMessagesTab ? "messages" : "details",
       metadata: "details",
+      prompts: "details",
     };
     const normalizedTab = legacyTabMap[tab] ?? tab;
 
     // Fall back when a tab is not available
     if (normalizedTab === "messages" && !canShowMessagesTab) return "details";
     if (normalizedTab === "graph" && !hasSpanAgentGraph) return defaultTab;
-    if (normalizedTab === "prompts" && !hasPrompts) return defaultTab;
     if (normalizedTab === "configuration" && !hasAgentConfiguration)
       return defaultTab;
 
@@ -150,7 +123,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     defaultTab,
     canShowMessagesTab,
     hasSpanAgentGraph,
-    hasPrompts,
     hasAgentConfiguration,
   ]);
 
@@ -181,27 +153,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
     [traceId, spanId, feedbackScoreDeleteMutation],
   );
 
-  const duration = formatDuration(data.duration);
-  const start_time = data.start_time
-    ? formatDate(data.start_time, { includeSeconds: true })
-    : "";
-  const end_time = data.end_time
-    ? formatDate(data.end_time, { includeSeconds: true })
-    : "";
   const created_at = data.created_at ? formatDate(data.created_at) : "";
-  const estimatedCost = data.total_estimated_cost;
   const model = get(data, "model", null);
   const provider = get(data, "provider", null);
-
-  const durationTooltip = (
-    <div>
-      Duration in seconds: {duration}
-      <p>
-        {start_time}
-        {end_time ? ` - ${end_time}` : ""}
-      </p>
-    </div>
-  );
 
   return (
     <div ref={rootScrollRef} className="size-full max-w-full overflow-auto">
@@ -212,75 +166,28 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
       )}
       <div className="min-w-[400px] max-w-full overflow-x-hidden p-4">
         <div className="mb-6 flex flex-col gap-1">
-          <TraceDataViewerHeader
-            title={
-              <>
-                <BaseTraceDataTypeIcon type={type} />
-                <div
-                  data-testid="data-viewer-title"
-                  className="comet-title-xs truncate"
-                >
-                  {data?.name}
-                </div>
-              </>
-            }
-            actionsPanel={(layoutSize) => (
-              <TraceDataViewerActionsPanel
-                data={data}
-                activeSection={activeSection}
-                setActiveSection={setActiveSection}
-                layoutSize={layoutSize}
-              />
-            )}
-          />
-          <div className="comet-body-s-accented flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
+          <div className="comet-body-s flex w-full flex-wrap items-center gap-3 pl-1 text-muted-slate">
             {created_at && (
               <TooltipWrapper content={`Created at: ${created_at}`}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-created-at"
                 >
                   <Calendar className="size-3 shrink-0" /> {created_at}
                 </div>
               </TooltipWrapper>
             )}
-            <TooltipWrapper content={durationTooltip}>
-              <div
-                className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                data-testid="data-viewer-duration"
-              >
-                <Clock className="size-3 shrink-0" /> {duration}
-              </div>
-            </TooltipWrapper>
-            {isNumber(tokens) && (
-              <TooltipWrapper content={`Total amount of tokens: ${tokens}`}>
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-tokens"
-                >
-                  <Hash className="size-3 shrink-0" /> {tokens}
-                </div>
-              </TooltipWrapper>
-            )}
-            {!isUndefined(estimatedCost) && (
-              <TooltipWrapper
-                content={`Estimated cost ${formatCost(estimatedCost, {
-                  modifier: "full",
-                })}`}
-              >
-                <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
-                  data-testid="data-viewer-cost"
-                >
-                  <Coins className="size-3 shrink-0" />{" "}
-                  {formatCost(estimatedCost)}
-                </div>
-              </TooltipWrapper>
-            )}
+            <TraceStatsDisplay
+              duration={data.duration}
+              startTime={data.start_time}
+              endTime={data.end_time}
+              totalTokens={tokens}
+              estimatedCost={data.total_estimated_cost}
+            />
             {Boolean(data.feedback_scores?.length) && (
               <FeedbackScoreHoverCard scores={data.feedback_scores!}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-scores"
                 >
                   <PenLine className="size-3 shrink-0" />{" "}
@@ -295,7 +202,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   scores={traceData.span_feedback_scores!}
                 >
                   <div
-                    className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                    className="comet-body-xs flex items-center gap-1 text-muted-slate"
                     data-testid="data-viewer-span-scores"
                   >
                     <PenLine className="size-3 shrink-0" />{" "}
@@ -306,7 +213,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             {Boolean(data.comments?.length) && (
               <UserCommentHoverList commentsList={data.comments}>
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-comments"
                 >
                   <MessageSquareMore className="size-3 shrink-0" />{" "}
@@ -321,7 +228,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 }`}
               >
                 <div
-                  className="comet-body-xs-accented flex items-center gap-1 text-muted-slate"
+                  className="comet-body-xs flex items-center gap-1 text-muted-slate"
                   data-testid="data-viewer-provider-model"
                 >
                   <Brain className="size-3 shrink-0" />{" "}
@@ -339,6 +246,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             traceId={traceId}
             spanId={spanId}
             className="pl-1"
+            tagVariant="gray"
           />
         </div>
 
@@ -363,11 +271,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                 {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_scores]}
               />
             </TabsTrigger>
-            {hasPrompts && (
-              <TabsTrigger variant="underline" value="prompts">
-                Prompts
-              </TabsTrigger>
-            )}
             {hasSpanAgentGraph && (
               <TabsTrigger variant="underline" value="graph">
                 Agent graph
@@ -435,11 +338,6 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               )}
             </div>
           </TabsContent>
-          {hasPrompts && (
-            <TabsContent value="prompts">
-              <PromptsTab data={data} search={search} />
-            </TabsContent>
-          )}
           {hasSpanAgentGraph && (
             <TabsContent value="graph">
               <AgentGraphTab data={agentGraphData} />

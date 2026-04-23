@@ -13,7 +13,7 @@ import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAppStore, { useSetAppUser } from "@/store/AppStore";
 import { usePostHog } from "posthog-js/react";
-import Logo from "./Logo";
+import Logo from "@/shared/Logo/Logo";
 import { identifyReoUser } from "./analytics/reo";
 import useSegment from "./analytics/useSegment";
 import { ORGANIZATION_ROLE_TYPE, Organization, Workspace } from "./types";

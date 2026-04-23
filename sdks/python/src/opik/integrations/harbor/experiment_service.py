@@ -32,7 +32,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional, Set, TYPE_CHECKING
 
-from opik.api_objects import opik_client
+import opik
 from opik.api_objects.experiment import experiment_item
 
 if TYPE_CHECKING:
@@ -86,14 +86,16 @@ class HarborExperimentService:
         self._experiment_name = experiment_name
         self._experiment_config = experiment_config or {}
         self._experiment_config["created_from"] = "harbor"
-        self._client = opik_client.get_client_cached()
-
         # Lazy-initialized per source (benchmark dataset)
         self._datasets: Dict[str, "Dataset"] = {}
         self._experiments: Dict[str, "Experiment"] = {}
 
         # Track which trials have been linked to avoid duplicates
         self._linked_trials: Set[str] = set()
+
+    @property
+    def _client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def _ensure_dataset_and_experiment(self, source: str) -> None:
         """

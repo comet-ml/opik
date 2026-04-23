@@ -9,7 +9,7 @@ type AgentGraphTabProps = {
 
 const AgentGraphTab: React.FC<AgentGraphTabProps> = ({ data }) => {
   return (
-    <ZoomPanContainer dialogTitle="Agent graph">
+    <ZoomPanContainer dialogTitle="Agent graph" expandButton={false}>
       <MermaidDiagram chart={data.data} />
     </ZoomPanContainer>
   );

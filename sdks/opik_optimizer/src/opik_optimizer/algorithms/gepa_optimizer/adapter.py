@@ -346,11 +346,19 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
             )
             return _local_evaluation()
 
+        _failed_items: set[str] = set()
+
         def llm_task(dataset_item: dict[str, Any]) -> dict[str, str]:
             # Choose the best candidate output before passing into Opik evaluation.
             candidates = self._collect_candidates(prompt_variants, dataset_item)
             if not candidates:
-                raise RuntimeError("No candidates produced by agent")
+                logger.warning(
+                    "No candidates produced by agent for dataset item; "
+                    "forcing score to 0"
+                )
+                nonlocal _failed_items
+                _failed_items.add(dataset_item.get("id", ""))
+                return {"llm_output": ""}
 
             best_output = candidates[0]
             best_score = float("-inf")
@@ -415,7 +423,10 @@ class OpikGEPAAdapter(GEPAAdapter[OpikDataInst, dict[str, Any], dict[str, Any]])
 
             output_text = ""
             score_value = 0.0
-            if test_result is not None:
+            if dataset_item_id in _failed_items:
+                # Agent produced no candidates — force score to 0
+                pass
+            elif test_result is not None:
                 output_text = str(
                     test_result.test_case.task_output.get("llm_output", "")
                 ).strip()

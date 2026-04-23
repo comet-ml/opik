@@ -62,7 +62,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.api.Trace.TracePage;
-import static com.comet.opik.infrastructure.DatabaseUtils.ANALYTICS_DELETE_BATCH_SIZE;
+import static com.comet.opik.infrastructure.FilterUtils.ANALYTICS_DELETE_BATCH_SIZE;
 import static com.comet.opik.utils.ErrorUtils.failWithNotFound;
 
 @ImplementedBy(TraceServiceImpl.class)
@@ -324,7 +324,8 @@ class TraceServiceImpl implements TraceService {
                                         Set.of(project.id()),
                                         Set.of(id),
                                         ctx.get(RequestContext.WORKSPACE_ID),
-                                        ctx.get(RequestContext.USER_NAME)))))))
+                                        ctx.get(RequestContext.USER_NAME),
+                                        traceUpdate))))))
                 .then());
     }
 
@@ -345,7 +346,7 @@ class TraceServiceImpl implements TraceService {
                                 .doOnSuccess(__ -> {
                                     log.info("Completed batch update for '{}' traces", batchUpdate.ids().size());
                                     eventBus.post(new TracesUpdated(projectIds, batchUpdate.ids(), workspaceId,
-                                            userName));
+                                            userName, batchUpdate.update()));
                                 });
                     });
         });

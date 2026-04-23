@@ -179,6 +179,127 @@ class TestRefreshCallback:
         assert cache.blueprint_id is None
 
 
+class TestRefreshPolicy:
+    """Verify which cache lookups get a background refresh callback and which do not.
+
+    Tests use a local SharedCacheRegistry to avoid interference with the global
+    singleton used by init_cache_entry.
+    """
+
+    def _make_bp(self, bp_id: str, values: dict) -> mock.Mock:
+        bp = mock.Mock()
+        bp.id = bp_id
+        bp._values = values
+        return bp
+
+    def test_latest_lookup__refresh_callback_registered(self, registry):
+        manager = mock.Mock()
+        bp = self._make_bp("bp-latest", {"K.v": "v1"})
+        cache = registry.get("proj", None, None, None)
+        cache.update(bp)
+        cache.set_refresh_callback(
+            lambda: manager.get_blueprint(env=None, mask_id=None, field_types={})
+        )
+        registry.ensure_refresh_thread_started()
+        assert cache._refresh_callback is not None
+
+    def test_env_lookup__refresh_callback_registered(self, registry):
+        manager = mock.Mock()
+        bp = self._make_bp("bp-env", {"K.v": "v1"})
+        cache = registry.get("proj", "prod", None, None)
+        cache.update(bp)
+        cache.set_refresh_callback(
+            lambda: manager.get_blueprint(env="prod", mask_id=None, field_types={})
+        )
+        registry.ensure_refresh_thread_started()
+        assert cache._refresh_callback is not None
+
+    def test_version_lookup__no_refresh_callback(self, registry):
+        bp = self._make_bp("bp-v1", {"K.v": "v1"})
+        cache = registry.get("proj", None, None, "v1")
+        cache.update(bp)
+        # version-pinned: no refresh callback registered
+        assert cache._refresh_callback is None
+
+    def test_masked_lookup__no_refresh_callback(self, registry):
+        bp = self._make_bp("bp-masked", {"K.v": "v1"})
+        cache = registry.get("proj", None, "mask-abc", None)
+        cache.update(bp)
+        # masked: no refresh callback registered
+        assert cache._refresh_callback is None
+
+    def test_latest_and_version__separate_cache_entries(self, registry):
+        bp_latest = self._make_bp("bp-latest", {"K.v": "latest"})
+        bp_v1 = self._make_bp("bp-v1", {"K.v": "v1"})
+
+        latest_cache = registry.get("proj", None, None, None)
+        latest_cache.update(bp_latest)
+
+        version_cache = registry.get("proj", None, None, "v1")
+        version_cache.update(bp_v1)
+
+        assert latest_cache is not version_cache
+        assert latest_cache.blueprint_id == "bp-latest"
+        assert version_cache.blueprint_id == "bp-v1"
+
+    def test_latest__background_refresh_updates_cache(self, registry):
+        bp_new = self._make_bp("bp-refreshed", {"K.v": "refreshed"})
+        cache = registry.get("proj", None, None, None)
+        cache._ttl_seconds = 0
+        cache.set_refresh_callback(lambda: bp_new)
+        cache.try_background_refresh()
+        assert cache.blueprint_id == "bp-refreshed"
+        assert cache.values == {"K.v": "refreshed"}
+
+    def test_version__no_background_refresh_even_when_stale(self):
+        bp = self._make_bp("bp-v1", {"K.v": "v1"})
+        cache = SharedConfigCache(ttl_seconds=0)
+        cache.update(bp)
+        # No refresh callback registered for version-pinned cache
+        assert cache._refresh_callback is None
+        cache.try_background_refresh()
+        assert cache.blueprint_id == "bp-v1"
+
+    def test_init_cache_entry__latest__registers_refresh(self, registry):
+        """init_cache_entry with version=None, mask_id=None must register a refresh callback."""
+        import opik.api_objects.agent_config.cache as cache_mod
+
+        manager = mock.Mock()
+        bp = self._make_bp("bp-latest", {"K.v": "v1"})
+        with mock.patch.object(cache_mod, "_registry", registry):
+            cache_mod.init_cache_entry(
+                "proj", None, None, {}, manager, blueprint=bp, version=None
+            )
+        cache = registry.get("proj", None, None, None)
+        assert cache._refresh_callback is not None
+
+    def test_init_cache_entry__version__no_refresh(self, registry):
+        """init_cache_entry with version set must NOT register a refresh callback."""
+        import opik.api_objects.agent_config.cache as cache_mod
+
+        manager = mock.Mock()
+        bp = self._make_bp("bp-v1", {"K.v": "v1"})
+        with mock.patch.object(cache_mod, "_registry", registry):
+            cache_mod.init_cache_entry(
+                "proj", None, None, {}, manager, blueprint=bp, version="v1"
+            )
+        cache = registry.get("proj", None, None, "v1")
+        assert cache._refresh_callback is None
+
+    def test_init_cache_entry__masked__no_refresh(self, registry):
+        """init_cache_entry with mask_id set must NOT register a refresh callback."""
+        import opik.api_objects.agent_config.cache as cache_mod
+
+        manager = mock.Mock()
+        bp = self._make_bp("bp-masked", {"K.v": "v1"})
+        with mock.patch.object(cache_mod, "_registry", registry):
+            cache_mod.init_cache_entry(
+                "proj", None, "mask-abc", {}, manager, blueprint=bp, version=None
+            )
+        cache = registry.get("proj", None, "mask-abc", None)
+        assert cache._refresh_callback is None
+
+
 class TestCacheRefreshThread:
     def test_stops_on_close(self):
         thread = CacheRefreshThread(get_caches=list, interval_seconds=0.01)

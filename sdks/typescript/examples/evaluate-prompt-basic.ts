@@ -4,15 +4,13 @@
  * A simple example showing the core steps to evaluate a prompt
  * using the Prompt management system with Usefulness and Moderation metrics.
  */
-import { Opik } from "../src/opik";
+import { Opik, Prompt } from "../src/opik";
 import { evaluatePrompt } from "../src/opik/evaluation/evaluatePrompt";
 import { Usefulness, Moderation } from "../src/opik/evaluation/metrics";
 
 async function basicExample() {
-  // Initialize client
-  const client = new Opik();
-
   // Step 1: Get or create a dataset
+  const client = new Opik({ projectName: "my-project" });
   const dataset = await client.getOrCreateDataset("qa-dataset");
 
   // Add some sample data
@@ -28,10 +26,11 @@ async function basicExample() {
   ]);
 
   // Step 2: Create a prompt
-  const prompt = await client.createPrompt({
+  const prompt = new Prompt({
     name: "qa-assistant",
     prompt: "Answer this question: {{question}}\nContext: {{context}}",
     type: "mustache",
+    projectName: "my-project",
   });
 
   // Step 3: Create metrics

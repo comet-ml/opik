@@ -3,12 +3,8 @@
 import type * as OpikApi from "../index.js";
 
 export interface AgentConfigValueHistory {
-    id?: string;
-    projectId?: string;
     key: string;
     value?: string;
     type: OpikApi.AgentConfigValueHistoryType;
     description?: string;
-    validFromBlueprintId?: string;
-    validToBlueprintId?: string;
 }

@@ -23,7 +23,7 @@ It is specially relevant to define your own metrics when:
 - You want to align with business KPIs
 - You're experimenting with new evaluation approaches
 
-If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/evaluation/metrics/g_eval) or create your own from scratch.
+If you want to write an LLM as a Judge metric, you can use either the [G-Eval metric](/v1/evaluation/metrics/g_eval) or create your own from scratch.
 
 ## Writing your own custom metrics
 
@@ -76,7 +76,7 @@ metric = MyCustomMetric()
 metric.score(input="What is the capital of France?", output="Paris")
 ```
 
-Also, this metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/evaluation/evaluate_your_llm).
+Also, this metric can now be used in the `evaluate` function as explained here: [Evaluating LLMs](/v1/evaluation/evaluate_your_llm).
 
 #### Example: Accessing trajectory data in a custom metric
 
@@ -103,7 +103,7 @@ class MyCustomMetric(base_metric.BaseMetric):
 <Tip>
   In order to access the full trajectory data, make sure you have integrated your evaluation task
   with Opik's tracing features. You learn more about how to evaluate agent trajectories in the
-  [Evaluate Agent Trajectory](/evaluation/evaluate_agent_trajectory) guide.
+  [Evaluate Agent Trajectory](/v1/evaluation/evaluate_agent_trajectory) guide.
 </Tip>
 
 
@@ -347,8 +347,8 @@ metric.score(output="Paris is the capital of France")
 
 ## Creating a custom metric using G-Eval
 
-[G-eval](/evaluation/metrics/g_eval) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
-You can read more about this advanced metric [here](/evaluation/metrics/g_eval). 
+[G-eval](/v1/evaluation/metrics/g_eval) allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.
+You can read more about this advanced metric [here](/v1/evaluation/metrics/g_eval). 
 
 To use G-Eval, you will need to specify a task introduction and evaluation criteria:
 
@@ -370,7 +370,7 @@ metric = GEval(
 
 For evaluating multi-turn conversations and dialogue systems, you'll need specialized conversation metrics. These metrics evaluate entire conversation threads rather than single input-output pairs.
 
-Learn how to create custom conversation metrics in the [Custom Conversation Metrics guide](/evaluation/metrics/custom_conversation_metric).
+Learn how to create custom conversation metrics in the [Custom Conversation Metrics guide](/v1/evaluation/metrics/custom_conversation_metric).
 
 ## What's next
 
@@ -378,6 +378,6 @@ Creating custom metrics is just the beginning of building a comprehensive evalua
 
 From here, you might want to:
 
-- **Evaluate your LLM application** following the [Evaluate your LLM application](/evaluation/evaluate_your_llm) guide
-- **Evaluate conversation threads** using the [Evaluate Threads guide](/evaluation/evaluate_threads)
-- **Explore built-in metrics** in the [Metrics overview](/evaluation/metrics/overview)
+- **Evaluate your LLM application** following the [Evaluate your LLM application](/v1/evaluation/evaluate_your_llm) guide
+- **Evaluate conversation threads** using the [Evaluate Threads guide](/v1/evaluation/evaluate_threads)
+- **Explore built-in metrics** in the [Metrics overview](/v1/evaluation/metrics/overview)

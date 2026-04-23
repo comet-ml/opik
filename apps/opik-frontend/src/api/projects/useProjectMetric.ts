@@ -2,7 +2,8 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { PROJECTS_REST_ENDPOINT, QueryConfig } from "@/api/api";
 import { ProjectMetricTrace } from "@/types/projects";
 import { Filter } from "@/types/filters";
-import { processFiltersArray } from "@/lib/filters";
+import { generateLogsSourceFilter, processFiltersArray } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { BreakdownConfig, BREAKDOWN_FIELD } from "@/types/dashboard";
 
 export enum METRIC_NAME_TYPE {
@@ -19,6 +20,11 @@ export enum METRIC_NAME_TYPE {
   SPAN_DURATION = "SPAN_DURATION",
   SPAN_FEEDBACK_SCORES = "SPAN_FEEDBACK_SCORES",
   SPAN_TOKEN_USAGE = "SPAN_TOKEN_USAGE",
+  TRACE_AVERAGE_DURATION = "TRACE_AVERAGE_DURATION",
+  SPAN_AVERAGE_DURATION = "SPAN_AVERAGE_DURATION",
+  THREAD_AVERAGE_DURATION = "THREAD_AVERAGE_DURATION",
+  TRACE_ERROR_RATE = "TRACE_ERROR_RATE",
+  SPAN_ERROR_RATE = "SPAN_ERROR_RATE",
 }
 
 export enum INTERVAL_TYPE {
@@ -38,6 +44,7 @@ type UseProjectMetricsParams = {
   threadFilters?: Filter[];
   spanFilters?: Filter[];
   breakdown?: BreakdownConfig;
+  logsSource?: LOGS_SOURCE;
 };
 
 export interface ProjectMetricResult {
@@ -79,8 +86,11 @@ const getProjectMetric = async (
     threadFilters,
     spanFilters,
     breakdown,
+    logsSource,
   }: UseProjectMetricsParams,
 ) => {
+  const sourceFilter = logsSource ? generateLogsSourceFilter(logsSource) : [];
+
   const { data } = await api.post<ProjectMetricsResponse>(
     `${PROJECTS_REST_ENDPOINT}${projectId}/metrics`,
     {
@@ -88,13 +98,18 @@ const getProjectMetric = async (
       interval,
       ...(intervalStart && { interval_start: intervalStart }),
       ...(intervalEnd && { interval_end: intervalEnd }),
-      trace_filters: traceFilters
-        ? processFiltersArray(traceFilters)
-        : undefined,
-      thread_filters: threadFilters
-        ? processFiltersArray(threadFilters)
-        : undefined,
-      span_filters: spanFilters ? processFiltersArray(spanFilters) : undefined,
+      trace_filters: processFiltersArray([
+        ...(traceFilters ?? []),
+        ...sourceFilter,
+      ]),
+      thread_filters: processFiltersArray([
+        ...(threadFilters ?? []),
+        ...sourceFilter,
+      ]),
+      span_filters: processFiltersArray([
+        ...(spanFilters ?? []),
+        ...sourceFilter,
+      ]),
       breakdown: processBreakdownConfig(breakdown),
     },
     {

@@ -457,6 +457,7 @@ describe("ChatPrompt", () => {
         messages: [{ role: "user", content: "Hello" }],
         description: "Old description",
         tags: ["old-tag"],
+        synced: true,
       };
 
       const chatPrompt = new ChatPrompt(data, mockClient);
@@ -493,6 +494,7 @@ describe("ChatPrompt", () => {
         versionId: "version-456",
         name: "test-prompt",
         messages: [{ role: "user", content: "Hello" }],
+        synced: true,
       };
 
       const chatPrompt = new ChatPrompt(data, mockClient);

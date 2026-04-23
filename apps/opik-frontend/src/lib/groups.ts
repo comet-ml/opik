@@ -124,7 +124,7 @@ export const calculateGroupLabel = (group?: Group) => {
     case COLUMN_PROJECT_ID:
       return "Project";
     case COLUMN_DATASET_ID:
-      return "Evaluation suite";
+      return "Test suite";
     case COLUMN_METADATA_ID:
       return `config.${group.key}`;
     default:

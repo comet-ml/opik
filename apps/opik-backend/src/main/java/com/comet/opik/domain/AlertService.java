@@ -4,6 +4,7 @@ import com.comet.opik.api.Alert;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertTrigger;
 import com.comet.opik.api.AlertTriggerConfig;
+import com.comet.opik.api.AlertTriggerConfigType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.Webhook;
 import com.comet.opik.api.WebhookExamples;
@@ -26,6 +27,7 @@ import io.dropwizard.jersey.errors.ErrorMessage;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
@@ -65,6 +67,9 @@ public interface AlertService {
     void update(UUID id, Alert alert);
 
     Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters);
+
+    Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters,
+            UUID projectId);
 
     Alert getById(UUID id);
 
@@ -259,6 +264,7 @@ class AlertServiceImpl implements AlertService {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
+        validateNoProjectScopeConflict(alert);
         var newAlert = prepareAlert(alert, userName, workspaceId);
 
         return EntityConstraintHandler
@@ -275,6 +281,9 @@ class AlertServiceImpl implements AlertService {
 
         // Ensure the alert exists, will throw NotFoundException if not
         var existingAlert = getById(id);
+
+        validateNoProjectScopeConflict(alert);
+
         alert = alert.toBuilder()
                 .createdBy(existingAlert.createdBy())
                 .createdAt(existingAlert.createdAt())
@@ -296,6 +305,12 @@ class AlertServiceImpl implements AlertService {
 
     @Override
     public Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters) {
+        return find(page, size, sortingFields, filters, null);
+    }
+
+    @Override
+    public Alert.AlertPage find(int page, int size, List<SortingField> sortingFields, List<? extends Filter> filters,
+            UUID projectId) {
         String workspaceId = requestContext.get().getWorkspaceId();
         String sortingFieldsSql = sortingQueryBuilder.toOrderBySql(sortingFields);
 
@@ -310,12 +325,12 @@ class AlertServiceImpl implements AlertService {
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             AlertDAO alertDAO = handle.attach(AlertDAO.class);
 
-            long total = alertDAO.count(workspaceId, filtersSQL, filterMapping);
+            long total = alertDAO.count(workspaceId, filtersSQL, filterMapping, projectId);
 
             var offset = (page - 1) * size;
 
             List<Alert> content = alertDAO.find(workspaceId, offset, size, sortingFieldsSql, filtersSQL,
-                    filterMapping);
+                    filterMapping, projectId);
 
             return Alert.AlertPage.builder()
                     .page(page)
@@ -495,7 +510,22 @@ class AlertServiceImpl implements AlertService {
         return new EntityAlreadyExistsException(new ErrorMessage(HttpStatus.SC_CONFLICT, ALERT_ALREADY_EXISTS));
     }
 
+    private static void validateNoProjectScopeConflict(Alert alert) {
+        if (alert.projectId() == null || alert.triggers() == null) {
+            return;
+        }
+        boolean hasScopeProjectConfig = alert.triggers().stream()
+                .filter(trigger -> trigger.triggerConfigs() != null)
+                .flatMap(trigger -> trigger.triggerConfigs().stream())
+                .anyMatch(config -> AlertTriggerConfigType.SCOPE_PROJECT.equals(config.type()));
+        if (hasScopeProjectConfig) {
+            throw new BadRequestException(
+                    "Cannot provide both 'project_id' and a 'scope:project' trigger config. Set 'project_id' only — the system creates the scope config automatically.");
+        }
+    }
+
     private Alert prepareAlert(Alert alert, String userName, String workspaceId) {
+
         UUID id = alert.id() == null ? idGenerator.generateId() : alert.id();
         IdGenerator.validateVersion(id, "Alert");
 

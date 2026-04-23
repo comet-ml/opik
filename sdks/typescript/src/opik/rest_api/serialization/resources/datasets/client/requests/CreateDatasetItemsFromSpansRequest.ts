@@ -3,6 +3,8 @@
 import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
+import { EvaluatorItem } from "../../../../types/EvaluatorItem.js";
+import { ExecutionPolicy } from "../../../../types/ExecutionPolicy.js";
 import { SpanEnrichmentOptions } from "../../../../types/SpanEnrichmentOptions.js";
 
 export const CreateDatasetItemsFromSpansRequest: core.serialization.Schema<
@@ -11,11 +13,15 @@ export const CreateDatasetItemsFromSpansRequest: core.serialization.Schema<
 > = core.serialization.object({
     spanIds: core.serialization.property("span_ids", core.serialization.list(core.serialization.string())),
     enrichmentOptions: core.serialization.property("enrichment_options", SpanEnrichmentOptions),
+    evaluators: core.serialization.list(EvaluatorItem).optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicy.optional()),
 });
 
 export declare namespace CreateDatasetItemsFromSpansRequest {
     export interface Raw {
         span_ids: string[];
         enrichment_options: SpanEnrichmentOptions.Raw;
+        evaluators?: EvaluatorItem.Raw[] | null;
+        execution_policy?: ExecutionPolicy.Raw | null;
     }
 }

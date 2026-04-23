@@ -1,5 +1,6 @@
-export { AgentConfig } from "./AgentConfig";
-export type { CreateBlueprintOptions, GetBlueprintOptions } from "./AgentConfig";
+export { ConfigManager } from "./ConfigManager";
+export type { CreateBlueprintOptions, GetBlueprintOptions } from "./ConfigManager";
 export { Blueprint } from "./Blueprint";
 export type { BlueprintData } from "./Blueprint";
-export type { SupportedValue } from "./typeHelpers";
+export type { Config } from "./Config";
+export { agentConfigContext, getActiveConfigMask } from "./configContext";

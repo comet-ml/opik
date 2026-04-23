@@ -8,6 +8,10 @@ subtitle: Guides you through the process of creating and managing datasets
 title: Manage datasets
 ---
 
+<Note>
+  In Opik 2.0, datasets are project-scoped. Make sure to specify a `project_name` when creating datasets so they are associated with the correct project.
+</Note>
+
 Datasets can be used to track test cases you would like to evaluate your LLM on. Each dataset is made up of a dictionary
 with any key value pairs. When getting started, we recommend having an `input` and optional `expected_output` fields for
 example. These datasets can be created from:
@@ -38,7 +42,7 @@ Steps:
   <img src="/img/evaluation/create_dataset.png" />
 </Frame>
 
-If you need to create a dataset with more than 1,000 rows, you [can use the SDK](/evaluation/manage_datasets#creating-a-dataset-using-the-sdk).
+If you need to create a dataset with more than 1,000 rows, you [can use the SDK](/v1/evaluation/manage_datasets#creating-a-dataset-using-the-sdk).
 
 <Tip>
   The UI dataset creation has some limitations:
@@ -170,6 +174,10 @@ This rich structure allows you to:
 
 ## Creating a dataset using the SDK
 
+<Tip>
+  In Opik 2.0, datasets are project-scoped. Specify a `project_name` to associate your dataset with the correct project.
+</Tip>
+
 You can create a dataset and log items to it using the `get_or_create_dataset` method:
 
 <CodeBlocks>
@@ -178,7 +186,7 @@ import { Opik } from "opik";
 
 // Create a dataset
 const client = new Opik();
-const dataset = await client.getOrCreateDataset("My dataset");
+const dataset = await client.getOrCreateDataset("My dataset", "Evaluation dataset", "my-project");
 ```
 
 ```python title="Python SDK" language="python"
@@ -186,7 +194,7 @@ from opik import Opik
 
 # Create a dataset
 client = Opik()
-dataset = client.get_or_create_dataset(name="My dataset")
+dataset = client.get_or_create_dataset(name="My dataset", project_name="my-project")
 ```
 
 </CodeBlocks>
@@ -203,7 +211,7 @@ You can insert items to a dataset using the `insert` method:
 ```typescript title="TypeScript" language="typescript"
 import { Opik } from "opik";
 const client = new Opik();
-const dataset = await client.getOrCreateDataset("My dataset");
+const dataset = await client.getOrCreateDataset("My dataset", "Evaluation dataset", "my-project");
 
 dataset.insert([
   { user_question: "Hello, world!", expected_output: { assistant_answer: "Hello, world!" } },
@@ -216,7 +224,7 @@ import opik
 
 # Get or create a dataset
 client = opik.Opik()
-dataset = client.get_or_create_dataset(name="My dataset")
+dataset = client.get_or_create_dataset(name="My dataset", project_name="my-project")
 
 # Add dataset items to it
 dataset.insert([
@@ -253,7 +261,7 @@ You can also insert items from a JSONL file:
   import opik
 
   client = opik.Opik()
-  dataset = client.get_or_create_dataset(name="My dataset")
+  dataset = client.get_or_create_dataset(name="My dataset", project_name="my-project")
 
 dataset.read_jsonl_from_file("path/to/file.jsonl")
 
@@ -269,7 +277,7 @@ You can also insert items from a Pandas DataFrame:
 import opik
 
 client = opik.Opik()
-dataset = client.get_or_create_dataset(name="My dataset")
+dataset = client.get_or_create_dataset(name="My dataset", project_name="my-project")
 
 dataset.insert_from_pandas(dataframe=df)
 
@@ -463,6 +471,7 @@ result = evaluate(
     dataset=dataset,
     task=my_task_function,
     scoring_metrics=[my_metric],
+    project_name="my-project",
 )
 
 # Run experiment on a specific version
@@ -472,6 +481,7 @@ result = evaluate(
     dataset=v1_view,  # Pass the DatasetVersion object
     task=my_task_function,
     scoring_metrics=[my_metric],
+    project_name="my-project",
 )
 ```
 
@@ -487,6 +497,7 @@ const result = await evaluate({
   dataset: dataset,
   task: myTaskFunction,
   scoringMetrics: [myMetric],
+  projectName: "my-project",
 });
 
 // Run experiment on a specific version
@@ -496,6 +507,7 @@ const pinnedResult = await evaluate({
   dataset: v2,
   task: myTaskFunction,
   scoringMetrics: [myMetric],
+  projectName: "my-project",
 });
 ```
 </CodeBlocks>

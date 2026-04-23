@@ -1,0 +1,136 @@
+---
+description: Describes all the built-in evaluation metrics provided by Opik
+headline: Overview | Opik Documentation
+og:description: Explore Opik's evaluation metrics to assess LLM behavior with heuristic
+  and LLM as a Judge methods for precise analysis.
+og:site_name: Opik Documentation
+og:title: Evaluation Metrics Overview - Opik
+title: Overview
+---
+
+# Overview
+
+Opik provides a set of built-in evaluation metrics that you can mix and match to evaluate LLM behaviour. These metrics are broken down into two main categories:
+
+1. **Heuristic metrics** – deterministic checks that rely on rules, statistics, or classical NLP algorithms.
+2. **LLM as a Judge metrics** – delegate scoring to an LLM so you can capture semantic, task-specific, or conversation-level quality signals.
+
+Heuristic metrics are ideal when you need reproducible checks such as exact matching, regex validation, or similarity scores against a reference. LLM as a Judge metrics are useful when you want richer qualitative feedback (hallucination detection, helpfulness, summarisation quality, regulatory risk, etc.).
+
+## Built-in metrics
+
+### Heuristic metrics
+
+| Metric | Description | Documentation |
+| --- | --- | --- |
+| BERTScore | Contextual embedding similarity score | [BERTScore](/evaluation/metrics/heuristic_metrics#bertscore) |
+| ChrF | Character n-gram F-score (chrF / chrF++) | [ChrF](/evaluation/metrics/heuristic_metrics#chrf) |
+| Contains | Checks whether the output contains a specific substring | [Contains](/evaluation/metrics/heuristic_metrics#contains) |
+| Corpus BLEU | Computes corpus-level BLEU across multiple outputs | [CorpusBLEU](/evaluation/metrics/heuristic_metrics#bleu) |
+| Equals | Checks if the output exactly matches an expected string | [Equals](/evaluation/metrics/heuristic_metrics#equals) |
+| GLEU | Estimates grammatical fluency for candidate sentences | [GLEU](/evaluation/metrics/heuristic_metrics#gleu) |
+| IsJson | Validates that the output can be parsed as JSON | [IsJson](/evaluation/metrics/heuristic_metrics#isjson) |
+| JSDivergence | Jensen–Shannon similarity between token distributions | [JSDivergence](/evaluation/metrics/heuristic_metrics#jsdivergence) |
+| JSDistance | Raw Jensen–Shannon divergence | [JSDistance](/evaluation/metrics/heuristic_metrics#jsdistance) |
+| KLDivergence | Kullback–Leibler divergence with smoothing | [KLDivergence](/evaluation/metrics/heuristic_metrics#kldivergence) |
+| Language Adherence | Verifies output language code | [Language Adherence](/evaluation/metrics/heuristic_metrics#language-adherence) |
+| Levenshtein | Calculates the normalized Levenshtein distance between output and reference | [Levenshtein](/evaluation/metrics/heuristic_metrics#levenshteinratio) |
+| Readability | Reports Flesch Reading Ease and FK grade | [Readability](/evaluation/metrics/heuristic_metrics#readability) |
+| RegexMatch | Checks if the output matches a specified regular expression pattern | [RegexMatch](/evaluation/metrics/heuristic_metrics#regexmatch) |
+| ROUGE | Calculates ROUGE variants (rouge1/2/L/Lsum/W) | [ROUGE](/evaluation/metrics/heuristic_metrics#rouge) |
+| Sentence BLEU | Computes a BLEU score for a single output against one or more references | [SentenceBLEU](/evaluation/metrics/heuristic_metrics#bleu) |
+| Sentiment | Scores sentiment using VADER | [Sentiment](/evaluation/metrics/heuristic_metrics#sentiment) |
+| Spearman Ranking | Spearman's rank correlation | [Spearman Ranking](/evaluation/metrics/heuristic_metrics#spearman-ranking) |
+| Tone | Flags tone issues such as shouting or negativity | [Tone](/evaluation/metrics/heuristic_metrics#tone) |
+
+### Conversation heuristic metrics
+
+| Metric | Description | Documentation |
+| --- | --- | --- |
+| DegenerationC | Detects repetition and degeneration patterns over a conversation | [DegenerationC](/evaluation/metrics/conversation_threads_metrics#conversation-degeneration-metric) |
+| Knowledge Retention | Checks whether the last assistant reply preserves user facts from earlier turns | [Knowledge Retention](/evaluation/metrics/conversation_threads_metrics#knowledge-retention-metric) |
+
+### LLM as a Judge metrics
+
+| Metric | Description | Documentation |
+| --- | --- | --- |
+| Agent Task Completion Judge | Checks whether an agent fulfilled its assigned task | [Agent Task Completion](/evaluation/metrics/agent_task_completion) |
+| Agent Tool Correctness Judge | Evaluates whether an agent used tools correctly | [Agent Tool Correctness](/evaluation/metrics/agent_tool_correctness) |
+| Answer Relevance | Checks whether the answer stays on-topic with the question | [Answer Relevance](/evaluation/metrics/answer_relevance) |
+| Compliance Risk Judge | Identifies non-compliant or high-risk statements | [Compliance Risk](/evaluation/metrics/compliance_risk) |
+| Context Precision | Ensures the answer only uses relevant context | [Context Precision](/evaluation/metrics/context_precision) |
+| Context Recall | Measures how well the answer recalls supporting context | [Context Recall](/evaluation/metrics/context_recall) |
+| Dialogue Helpfulness Judge | Evaluates how helpful an assistant reply is in a dialogue | [Dialogue Helpfulness](/evaluation/metrics/dialogue_helpfulness) |
+| G-Eval | Task-agnostic judge configurable with custom instructions | [G-Eval](/evaluation/metrics/g_eval) |
+| Hallucination | Detects unsupported or hallucinated claims using an LLM judge | [Hallucination](/evaluation/metrics/hallucination) |
+| LLM Juries Judge | Averages scores from multiple judge metrics for ensemble scoring | [LLM Juries](/evaluation/metrics/llm_juries) |
+| Meaning Match | Evaluates semantic equivalence between output and ground truth | [Meaning Match](/evaluation/metrics/meaning_match) |
+| Moderation | Flags safety or policy violations in assistant responses | [Moderation](/evaluation/metrics/moderation) |
+| Prompt Uncertainty Judge | Detects ambiguity in prompts that may confuse LLMs | [Prompt Diagnostics](/evaluation/metrics/prompt_diagnostics) |
+| QA Relevance Judge | Determines whether an answer directly addresses the user question | [QA Relevance](/evaluation/metrics/g_eval#qa-relevance-judge) |
+| Structured Output Compliance | Checks JSON or schema adherence for structured responses | [Structured Output](/evaluation/metrics/structure_output_compliance) |
+| Summarization Coherence Judge | Rates the structure and coherence of a summary | [Summarization Coherence](/evaluation/metrics/summarization_coherence) |
+| Summarization Consistency Judge | Checks if a summary stays faithful to the source | [Summarization Consistency](/evaluation/metrics/summarization_consistency) |
+| Trajectory Accuracy | Scores how closely agent trajectories follow expected steps | [Trajectory Accuracy](/evaluation/metrics/trajectory_accuracy) |
+| Usefulness | Rates how useful the answer is to the user | [Usefulness](/evaluation/metrics/usefulness) |
+
+### Conversation LLM as a Judge metrics
+
+| Metric | Description | Documentation |
+| --- | --- | --- |
+| Conversational Coherence | Evaluates coherence across sliding windows of a dialogue | [Conversational Coherence](/evaluation/metrics/conversation_threads_metrics#conversationalcoherencemetric) |
+| Session Completeness Quality | Checks whether user goals were satisfied during the session | [Session Completeness](/evaluation/metrics/conversation_threads_metrics#sessioncompletenessquality) |
+| User Frustration | Estimates the likelihood a user was frustrated | [User Frustration](/evaluation/metrics/conversation_threads_metrics#userfrustrationmetric) |
+
+
+## Customizing LLM as a Judge metrics
+
+By default, Opik uses GPT-5-nano from OpenAI as the LLM to evaluate the output of other LLMs. However, you can easily switch to another LLM provider by specifying a different `model` parameter.
+
+<CodeBlocks>
+```python title="Python" language="python"
+from opik.evaluation.metrics import Hallucination
+
+metric = Hallucination(model="bedrock/anthropic.claude-3-sonnet-20240229-v1:0")
+
+metric.score(
+input="What is the capital of France?",
+output="The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+)
+
+````
+
+```typescript title="TypeScript" language="typescript"
+import { Hallucination } from 'opik';
+import { openai } from '@ai-sdk/openai';
+
+// Using model ID string (simplest approach)
+const metric1 = new Hallucination({ model: 'gpt-4o' });
+const metric2 = new Hallucination({ model: 'claude-3-5-sonnet-latest' });
+const metric3 = new Hallucination({ model: 'gemini-2.0-flash' });
+
+// With generation parameters (temperature, seed, maxTokens)
+const metric4 = new Hallucination({
+  model: 'gpt-4o',
+  temperature: 0.3,
+  seed: 42
+});
+
+// Using custom LanguageModel instance for provider-specific configuration
+const customModel = openai('gpt-4o', {
+  structuredOutputs: true
+});
+const metric5 = new Hallucination({ model: customModel });
+
+// Score using the metric
+await metric4.score({
+    input: "What is the capital of France?",
+    output: "The capital of France is Paris. It is famous for its iconic Eiffel Tower and rich cultural heritage.",
+});
+````
+
+</CodeBlocks>
+
+For **Python**, this functionality is based on LiteLLM framework. You can find a full list of supported LLM providers and how to configure them in the [LiteLLM Providers](https://docs.litellm.ai/docs/providers) guide.
+
+For **TypeScript**, the SDK integrates with the Vercel AI SDK. You can use model ID strings for simplicity or LanguageModel instances for advanced configuration. See the [Models documentation](/reference/typescript-sdk/evaluation/models) for more details.

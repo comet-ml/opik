@@ -27,4 +27,5 @@ export interface SpanUpdate {
     totalEstimatedCost?: number;
     errorInfo?: OpikApi.ErrorInfo;
     ttft?: number;
+    source?: OpikApi.SpanUpdateSource;
 }

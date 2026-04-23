@@ -70,6 +70,11 @@ def get_dataset_url_by_id(dataset_id: str, url_override: str) -> str:
     return urllib.parse.urljoin(ensure_ending_slash(url_override), project_path)
 
 
+def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/"
+
+
 def get_base_url(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}/"

@@ -5,7 +5,7 @@ import {
   useIsDraftMode,
   useAddedDatasetItemById,
   useEditedDatasetItemById,
-} from "@/store/EvaluationSuiteDraftStore";
+} from "@/store/TestSuiteDraftStore";
 import { getFieldType } from "./useDatasetItemFormHelpers";
 
 export enum FIELD_TYPE {

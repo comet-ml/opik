@@ -109,12 +109,16 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         "expected_model_output": {"output": "Paris"},
     }
 
+    project_name = "dataset-test-project"
+
     # Write the dataset
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=project_name
+    )
     dataset.insert([item])
 
     # Read the dataset and insert the same item
-    new_dataset = opik_client.get_dataset(dataset_name)
+    new_dataset = opik_client.get_dataset(dataset_name, project_name=project_name)
     new_dataset.insert([item])
 
     # Verify the dataset
@@ -125,14 +129,17 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         dataset_items=[
             dataset_item.DatasetItem(**item),
         ],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=project_name,
     )
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    project_name = "dataset-test-project"
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=project_name
+    )
 
     dataset.insert(
         [
@@ -153,7 +160,7 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=[],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=project_name,
     )
 
 
@@ -350,3 +357,24 @@ def test_get_version_view__version_not_found__raises_exception(
     # Try to get a non-existent version
     with pytest.raises(opik.exceptions.DatasetVersionNotFound):
         dataset.get_version_view("v999")
+
+
+def test_dataset_items_count__returns_correct_count_after_insert(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that dataset_items_count returns the correct count after insert."""
+    dataset = opik_client.create_dataset(dataset_name, description="items_count test")
+
+    dataset.insert(
+        [
+            {"input": {"question": "What is 2+2?"}},
+            {"input": {"question": "What is 3+3?"}},
+            {"input": {"question": "What is 4+4?"}},
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: dataset.dataset_items_count == 3,
+        max_try_seconds=30,
+    )
+    assert success, f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"

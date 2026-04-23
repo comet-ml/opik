@@ -7,6 +7,7 @@ import com.comet.opik.api.DatasetLastOptimizationCreated;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.Visibility;
+import com.comet.opik.infrastructure.db.DatasetTypeMapper;
 import com.comet.opik.infrastructure.db.SetFlatArgumentFactory;
 import com.comet.opik.infrastructure.db.UUIDArgumentFactory;
 import org.jdbi.v3.sqlobject.config.RegisterArgumentFactory;
@@ -35,7 +36,25 @@ import java.util.UUID;
 @RegisterConstructorMapper(BiInformationResponse.BiInformation.class)
 @RegisterArgumentFactory(SetFlatArgumentFactory.class)
 @RegisterColumnMapper(SetFlatArgumentFactory.class)
+@RegisterArgumentFactory(DatasetTypeMapper.class)
+@RegisterColumnMapper(DatasetTypeMapper.class)
 public interface DatasetDAO {
+
+    /**
+     * Checks for V1 (workspace-scoped) datasets excluding known demo names.
+     * MySQL utf8mb4_unicode_ci collation makes the NOT IN comparison case-insensitive,
+     * so demo name variants differing only in casing are automatically excluded.
+     */
+    @SqlQuery("""
+            SELECT EXISTS(
+                SELECT 1 FROM datasets
+                WHERE workspace_id = :workspaceId AND project_id IS NULL
+                AND name NOT IN (<demoDatasetNames>)
+            )""")
+    @UseStringTemplateEngine
+    @AllowUnusedBindings
+    boolean hasVersion1Datasets(@Bind("workspaceId") String workspaceId,
+            @BindList("demoDatasetNames") List<String> demoDatasetNames);
 
     @SqlUpdate("INSERT INTO datasets(id, name, description, visibility, type, workspace_id, project_id, created_by, last_updated_by, tags) "
             +

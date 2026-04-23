@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useFormContext } from "react-hook-form";
 
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import useOptimizationCreateMutation from "@/api/optimizations/useOptimizationCreateMutation";
 import { OptimizationConfigFormType } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
 import { convertFormDataToStudioConfig } from "@/v2/pages-shared/optimizations/OptimizationConfigForm/schema";
@@ -25,6 +25,14 @@ import {
 } from "@/lib/optimizations";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import useDatasetSamplePreview from "./useDatasetSamplePreview";
+import { BlueprintPromptRef } from "@/types/playground";
+import usePromptByCommit from "@/api/prompts/usePromptByCommit";
+import useSavePromptToBlueprint from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/useSavePromptToBlueprint";
+import {
+  serializeChatTemplate,
+  chatTemplatesEqual,
+  parseChatTemplateToMessages,
+} from "@/lib/chatTemplate";
 
 const getBreadcrumbTitle = (name: string) =>
   name?.trim() ? `${name} (new)` : "... (new)";
@@ -40,11 +48,16 @@ export const useOptimizationsNewFormHandlers = () => {
 
   const form = useFormContext<OptimizationConfigFormType>();
 
-  const { data: datasetsData } = useDatasetsList({
-    workspaceName,
-    page: 1,
-    size: 1000,
-  });
+  const { data: datasetsData } = useProjectDatasetsList(
+    {
+      projectId: activeProjectId!,
+      page: 1,
+      size: 1000,
+    },
+    {
+      enabled: !!activeProjectId,
+    },
+  );
 
   const datasets = useMemo(
     () => datasetsData?.content || [],
@@ -62,6 +75,54 @@ export const useOptimizationsNewFormHandlers = () => {
   });
 
   const { calculateModelProvider } = useLLMProviderModelsData();
+
+  // Blueprint prompt integration
+  const [blueprintRef, setBlueprintRef] = useState<
+    BlueprintPromptRef | undefined
+  >();
+  const loadedCommitRef = useRef<string | null>(null);
+
+  const { data: commitPromptData } = usePromptByCommit(
+    { commitId: blueprintRef?.commitId ?? "" },
+    { enabled: !!blueprintRef?.commitId },
+  );
+
+  // Populate form messages when a blueprint prompt is loaded
+  useEffect(() => {
+    if (!commitPromptData || !blueprintRef) return;
+    const commitId = blueprintRef.commitId;
+    if (loadedCommitRef.current === commitId) return;
+
+    const template = commitPromptData.requested_version?.template;
+    if (!template) return;
+
+    try {
+      const messages = parseChatTemplateToMessages(template);
+      form.setValue("messages", messages, { shouldValidate: true });
+      loadedCommitRef.current = commitId;
+    } catch {
+      // ignore parse failures
+    }
+  }, [commitPromptData, blueprintRef, form]);
+
+  const handleBlueprintRefClear = useCallback(() => {
+    setBlueprintRef(undefined);
+    loadedCommitRef.current = null;
+  }, []);
+
+  const messages = form.watch("messages");
+  const hasUnsavedBlueprintChanges = useMemo(() => {
+    const loadedTemplate = commitPromptData?.requested_version?.template;
+    if (!blueprintRef || !loadedTemplate || messages.length === 0) return false;
+    return !chatTemplatesEqual(serializeChatTemplate(messages), loadedTemplate);
+  }, [blueprintRef, commitPromptData, messages]);
+
+  const {
+    existingFieldNames: blueprintFieldNames,
+    saveExistingVersion: saveBlueprintExisting,
+    saveAsNewField: saveBlueprintNewField,
+    isSaving: isSavingBlueprint,
+  } = useSavePromptToBlueprint(activeProjectId!);
 
   const handleDatasetChange = useCallback(
     (id: string | null) => {
@@ -219,6 +280,7 @@ export const useOptimizationsNewFormHandlers = () => {
           dataset_name: datasetNameValue,
           objective_name: objectiveName,
           status: OPTIMIZATION_STATUS.INITIALIZED,
+          project_id: activeProjectId ?? undefined,
         },
       });
 
@@ -273,9 +335,55 @@ export const useOptimizationsNewFormHandlers = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Build the chat template string from current form messages
+  const getBlueprintTemplate = useCallback(
+    () => serializeChatTemplate(form.getValues("messages")),
+    [form],
+  );
+
+  const handleSaveBlueprintExisting = useCallback(
+    async (changeDescription: string) => {
+      if (!blueprintRef || !commitPromptData) return null;
+      const result = await saveBlueprintExisting({
+        ref: blueprintRef,
+        promptName: commitPromptData.name,
+        template: getBlueprintTemplate(),
+        changeDescription: changeDescription || undefined,
+      });
+      if (result) {
+        setBlueprintRef(result.newRef);
+        loadedCommitRef.current = result.newRef.commitId;
+      }
+      return result;
+    },
+    [
+      blueprintRef,
+      commitPromptData,
+      saveBlueprintExisting,
+      getBlueprintTemplate,
+    ],
+  );
+
+  const handleSaveBlueprintNewField = useCallback(
+    async (fieldName: string, changeDescription: string) => {
+      const newRef = await saveBlueprintNewField({
+        fieldName,
+        template: getBlueprintTemplate(),
+        changeDescription: changeDescription || undefined,
+      });
+      if (newRef) {
+        setBlueprintRef(newRef);
+        loadedCommitRef.current = newRef.commitId;
+      }
+      return newRef;
+    },
+    [saveBlueprintNewField, getBlueprintTemplate],
+  );
+
   return {
     form,
     isSubmitting,
+    activeProjectId,
     datasetId,
     optimizerType,
     metricType,
@@ -294,5 +402,14 @@ export const useOptimizationsNewFormHandlers = () => {
     handleCancel,
     handleNameChange,
     getFirstMetricParamsError,
+    blueprintRef,
+    blueprintPromptName: commitPromptData?.name,
+    blueprintFieldNames,
+    isSavingBlueprint,
+    hasUnsavedBlueprintChanges,
+    handleBlueprintRefChange: setBlueprintRef,
+    handleBlueprintRefClear,
+    handleSaveBlueprintExisting,
+    handleSaveBlueprintNewField,
   };
 };

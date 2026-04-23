@@ -1,5 +1,5 @@
 import React from "react";
-import { JsonValue, JsonObject } from "./types";
+import { JsonValue, JsonObject } from "@/types/shared";
 
 export interface ParsedSearchQuery {
   pathToExpand: string | null;
