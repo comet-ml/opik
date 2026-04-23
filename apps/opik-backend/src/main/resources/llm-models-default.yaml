@@ -73,6 +73,7 @@ openai:
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
+  - id: "gpt-image-2"
   - id: "o1"
     reasoning: true
   - id: "o1-2024-12-17"
@@ -105,7 +106,6 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
-  - id: "gpt-image-2"
 anthropic:
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-haiku-4-5-20251001"
@@ -244,6 +244,7 @@ openrouter:
   - id: "arcee-ai/coder-large"
   - id: "arcee-ai/maestro-reasoning"
   - id: "arcee-ai/spotlight"
+  - id: "arcee-ai/trinity-large-preview"
   - id: "arcee-ai/trinity-large-preview:free"
   - id: "arcee-ai/trinity-large-thinking"
   - id: "arcee-ai/trinity-mini"
@@ -745,6 +746,8 @@ openrouter:
   - id: "xiaomi/mimo-v2-flash"
   - id: "xiaomi/mimo-v2-omni"
   - id: "xiaomi/mimo-v2-pro"
+  - id: "xiaomi/mimo-v2.5"
+  - id: "xiaomi/mimo-v2.5-pro"
   - id: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
   - id: "z-ai/glm-4.5-air"

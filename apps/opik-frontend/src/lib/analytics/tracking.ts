@@ -1,6 +1,7 @@
 const EVENT_PREFIX = "opik_";
 
 export const OpikEvent = {
+  ONBOARDING_INTENT_SELECTED: "opik_onboarding_intent_selected",
   ONBOARDING_AGENT_NAME_SUBMITTED: "opik_onboarding_agent_name_submitted",
   ONBOARDING_FIRST_TRACE_RECEIVED: "opik_onboarding_first_trace_received",
   ONBOARDING_SKIPPED: "opik_onboarding_skipped",

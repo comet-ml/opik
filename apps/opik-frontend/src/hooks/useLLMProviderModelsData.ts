@@ -316,6 +316,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/spotlight",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW,
+      label: "arcee-ai/trinity-large-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE,
       label: "arcee-ai/trinity-large-preview:free",
     },
@@ -1923,6 +1927,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_PRO,
       label: "xiaomi/mimo-v2-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
+      label: "xiaomi/mimo-v2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
+      label: "xiaomi/mimo-v2.5-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
