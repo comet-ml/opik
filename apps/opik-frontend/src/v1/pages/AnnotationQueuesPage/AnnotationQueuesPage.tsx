@@ -38,7 +38,7 @@ import AnnotationQueueRowActionsCell from "@/v1/pages-shared/annotation-queues/A
 import AnnotationQueuesActionsPanel from "@/v1/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/v1/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import NoDataPage from "@/shared/NoDataPage/NoDataPage";
 import NoAnnotationQueuesPage from "@/v1/pages-shared/annotation-queues/NoAnnotationQueuesPage";
 import ProjectsSelectBox from "@/v1/pages-shared/automations/ProjectsSelectBox";

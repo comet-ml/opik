@@ -44,7 +44,7 @@ import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialo
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import EvaluationCriteriaSection from "@/shared/EvaluationCriteriaSection/EvaluationCriteriaSection";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import { Separator } from "@/ui/separator";

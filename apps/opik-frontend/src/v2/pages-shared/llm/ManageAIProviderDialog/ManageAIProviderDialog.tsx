@@ -29,7 +29,7 @@ import {
   createAIProviderFormSchema,
   AIProviderFormType,
 } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import {
   convertCustomProviderModels,

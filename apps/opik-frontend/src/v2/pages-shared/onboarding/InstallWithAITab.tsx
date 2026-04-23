@@ -1,6 +1,6 @@
 import React from "react";
 import { useUserApiKey, useActiveWorkspaceName } from "@/store/AppStore";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import claudeCodeLogo from "/images/integrations/claude_code.svg";

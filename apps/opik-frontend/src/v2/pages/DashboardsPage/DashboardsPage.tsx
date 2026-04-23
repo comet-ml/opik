@@ -12,7 +12,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -379,7 +379,7 @@ const DashboardsPage: React.FunctionComponent = () => {
           onPrimaryAction={
             canCreateDashboards ? handleNewDashboardClick : undefined
           }
-          docsUrl={buildDocsUrl("/production/dashboards")}
+          docsUrl={buildDocsUrl("/tracing/dashboards/dashboards")}
         />
       ) : (
         <>

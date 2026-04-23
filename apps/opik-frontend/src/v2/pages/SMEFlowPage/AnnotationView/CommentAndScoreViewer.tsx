@@ -5,7 +5,7 @@ import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { useSMEFlow } from "@/v2/pages/SMEFlowPage/SMEFlowContext";
 import { SME_ACTION, SME_HOTKEYS } from "@/v2/pages/SMEFlowPage/hotkeys";
 import { usePermissions } from "@/contexts/PermissionsContext";

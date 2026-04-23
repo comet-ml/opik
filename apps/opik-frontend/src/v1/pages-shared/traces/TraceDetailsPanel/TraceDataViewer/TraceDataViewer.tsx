@@ -37,7 +37,7 @@ import {
   DetailsActionSectionValue,
 } from "@/v1/pages-shared/traces/DetailsActionSection";
 import TraceDataViewerHeader from "./TraceDataViewerHeader";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import useTraceFeedbackScoreDeleteMutation from "@/api/traces/useTraceFeedbackScoreDeleteMutation";
 import ConfigurableFeedbackScoreTable from "./FeedbackScoreTable/ConfigurableFeedbackScoreTable";

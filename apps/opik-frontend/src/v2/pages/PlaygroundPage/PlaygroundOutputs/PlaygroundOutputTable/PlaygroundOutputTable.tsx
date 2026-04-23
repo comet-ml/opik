@@ -17,7 +17,7 @@ import PlaygroundOutputCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/Pl
 import PlaygroundOutputColumnHeader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputColumnHeader";
 import PlaygroundVariableCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { useDatasetType } from "@/store/PlaygroundStore";
 import { DATASET_TYPE } from "@/types/datasets";
 import { useIncrementalDatasetHydration } from "@/v2/pages/PlaygroundPage/useIncrementalDatasetHydration";

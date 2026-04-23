@@ -47,7 +47,7 @@ import ListCell from "@/shared/DataTableCells/ListCell";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { Filter } from "@/types/filters";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
@@ -59,7 +59,7 @@ type DatasetListPageProps = {
 const TYPE_CONFIG = {
   dataset: {
     title: "Datasets",
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "datasets",
     createButtonText: "Create dataset",
     noDataText: "There are no datasets yet",
@@ -86,7 +86,7 @@ const TYPE_CONFIG = {
   test_suite: {
     title: "Test suites",
     // TODO: replace with test suites documentation URL once it exists
-    docsUrl: "/evaluation/manage_datasets",
+    docsUrl: "/evaluation/advanced/manage_datasets",
     entityName: "test suites",
     createButtonText: "Create test suite",
     noDataText: "There are no test suites yet",

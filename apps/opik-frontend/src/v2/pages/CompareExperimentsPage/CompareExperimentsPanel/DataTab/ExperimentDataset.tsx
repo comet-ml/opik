@@ -14,7 +14,7 @@ import ExperimentDatasetItems from "@/v2/pages/CompareExperimentsPage/CompareExp
 import useLocalStorageState from "use-local-storage-state";
 import difference from "lodash/difference";
 import union from "lodash/union";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";

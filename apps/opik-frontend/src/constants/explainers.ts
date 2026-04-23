@@ -130,13 +130,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     title: "Project created",
     description:
       "Log traces to your project to capture LLM interactions, analyze performance, run experiments, and improve your application over time.",
-    docLink: "/tracing/log_traces",
   },
   [EXPLAINER_ID.what_are_traces]: {
     id: EXPLAINER_ID.what_are_traces,
     description:
       "A trace is a step-by-step record of how your LLM application processes a single input, including LLM calls and other operations.",
-    docLink: "/tracing/log_traces",
   },
   [EXPLAINER_ID.what_are_spans]: {
     id: EXPLAINER_ID.what_are_spans,
@@ -147,56 +145,46 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_are_threads,
     description:
       "A thread represents a full conversation session, grouping together multiple related traces. Use threads to review and evaluate entire interactions in chat-based applications.",
-    docLink: "/tracing/log_chat_conversations",
     type: "help",
   },
   [EXPLAINER_ID.whats_online_evaluation]: {
     id: EXPLAINER_ID.whats_online_evaluation,
     description:
       "Automatically score your production traces by defining LLM-as-a-Judge or code metrics.",
-    docLink: "/production/rules",
   },
   [EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what]: {
     id: EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what,
     title: "Traces added to test suite",
     description:
       "Your traces have been added to the test suite and can now be used in experiments to evaluate your agent.",
-    docLink: "/evaluation/overview",
-    docHash: "#running-an-evaluation",
   },
   [EXPLAINER_ID.i_added_items_to_a_dataset_now_what]: {
     id: EXPLAINER_ID.i_added_items_to_a_dataset_now_what,
     title: "Items added to dataset",
     description:
       "Your items have been added to the dataset and can now be used in experiments to evaluate your agent.",
-    docLink: "/evaluation/overview",
-    docHash: "#running-an-evaluation",
   },
   [EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite]: {
     id: EXPLAINER_ID.why_would_i_want_to_add_traces_to_an_test_suite,
     description:
-      "Add traces to a test suite to evaluate your agent's performance using real production data.",
+      "Add traces to a test suite to evaluate and benchmark LLM outputs using real production data. You can then use these test suites in experiments to track how your LLM app's performance evolves over time.",
   },
   [EXPLAINER_ID.hows_the_cost_estimated]: {
     id: EXPLAINER_ID.hows_the_cost_estimated,
     description:
       "Opik estimates the cost of each trace by calculating token usage across all LLM calls, using model-specific pricing.",
-    docLink: "/tracing/cost_tracking",
     type: "help",
   },
   [EXPLAINER_ID.hows_the_thread_cost_estimated]: {
     id: EXPLAINER_ID.hows_the_thread_cost_estimated,
     description:
       "Opik estimates the cost of each thread by calculating token usage across all Traces and associated LLM calls, applying model-specific pricing.",
-    docLink: "/tracing/cost_tracking",
     type: "help",
   },
   [EXPLAINER_ID.whats_that_prompt_select]: {
     id: EXPLAINER_ID.whats_that_prompt_select,
     description:
       "Select the LLM-as-a-Judge prompt to use. You can use one of the prompts provided by Opik, or you can [create your own metrics].",
-    docLink: "/production/rules",
-    docHash: "#writing-your-own-llm-as-a-judge-metric",
     type: "help",
   },
   [EXPLAINER_ID.i_added_edited_a_new_online_evaluation_rule_now_what]: {
@@ -233,7 +221,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_are_annotation_queues,
     description:
       "Add traces or thread to an annotation queue to collect human feedback on your LLM outputs. Only queues created in this project appear here, and traces can be added to them only",
-    docLink: "/evaluation/annotation_queues",
   },
   [EXPLAINER_ID.how_to_choose_annotation_queue_type]: {
     id: EXPLAINER_ID.how_to_choose_annotation_queue_type,
@@ -244,51 +231,39 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_an_experiment,
     description:
       "Experiments help you test prompts and models, compare versions, and track improvements or issues.",
-    docLink: "/evaluation/overview",
   },
   [EXPLAINER_ID.whats_a_prompt_commit]: {
     id: EXPLAINER_ID.whats_a_prompt_commit,
     description:
       "Prompt commits capture the exact prompt version used in an experiment, ensuring reproducibility and traceability of results. Manage your prompts in the Prompt library.",
-    docLink: "/prompt_engineering/prompt_management",
     type: "help",
   },
   [EXPLAINER_ID.what_are_experiment_items]: {
     id: EXPLAINER_ID.what_are_experiment_items,
     description:
       "Experiment items are individual evaluations that connect a dataset sample with its LLM output, feedback scores, and trace.",
-    docLink: "/evaluation/overview",
-    docHash: "#analyzing-evaluation-results",
   },
   [EXPLAINER_ID.whats_the_experiment_configuration]: {
     id: EXPLAINER_ID.whats_the_experiment_configuration,
     description:
       "The experiment configuration captures key settings, like the prompt, model, and temperature, to keep experiments reproducible and easy to analyze.",
-    docLink: "/evaluation/concepts",
-    docHash: "#experiment-configuration",
   },
   [EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments]: {
     id: EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments,
     description:
       "Compare experiments to understand how changes to prompts, models, or rules impact performance. Select at least two experiments from the same test suite to get started.",
-    docLink: "/evaluation/overview",
-    docHash: "#analyzing-evaluation-results",
     type: "help",
   },
   [EXPLAINER_ID.whats_the_test_suite_item]: {
     id: EXPLAINER_ID.whats_the_test_suite_item,
     description:
       "Test suite items are individual input samples in an experiment, each representing a test case your LLM app processes and evaluates.",
-    docLink: "/evaluation/concepts",
-    docHash: "#experiments",
     type: "help",
   },
   [EXPLAINER_ID.whats_an_test_suite]: {
     id: EXPLAINER_ID.whats_an_test_suite,
     description:
       "A test suite is a collection of input-output examples used to evaluate your LLM application's performance.",
-    docLink: "/evaluation/concepts",
-    docHash: "#test-suites",
   },
   [EXPLAINER_ID.why_do_i_need_multiple_test_suites]: {
     id: EXPLAINER_ID.why_do_i_need_multiple_test_suites,
@@ -309,14 +284,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_the_prompt_library,
     description:
       "Store and version prompts to maintain consistency and simplify experimentation across projects",
-    docLink: "/prompt_engineering/prompt_management",
   },
   [EXPLAINER_ID.how_do_i_use_this_prompt]: {
     id: EXPLAINER_ID.how_do_i_use_this_prompt,
     description:
       "To use a saved prompt from your library, select it when configuring an experiment or in the playground. You can also reference its latest version or a specific commit.",
-    docLink: "/prompt_engineering/prompt_management",
-    docHash: "#linking-prompts-to-experiments",
   },
   [EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library]: {
     id: EXPLAINER_ID.why_do_i_have_experiments_in_the_prompt_library,
@@ -327,27 +299,22 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.what_are_commits,
     description:
       "Each edit in a prompt creates a new commit, ensuring version control and reproducibility.",
-    docLink: "/prompt_engineering/prompt_management",
-    docHash: "#managing-prompts-stored-in-code",
     type: "help",
   },
   [EXPLAINER_ID.how_do_i_write_my_prompt]: {
     id: EXPLAINER_ID.how_do_i_write_my_prompt,
     description:
       "Write prompts as your LLM would receive them, including any dynamic placeholders or formatting.",
-    docLink: "/agent_optimization/best-practices/prompt_engineering",
   },
   [EXPLAINER_ID.what_happens_if_i_edit_my_prompt]: {
     id: EXPLAINER_ID.what_happens_if_i_edit_my_prompt,
     description:
       "Write prompts as your LLM would receive them, including any dynamic placeholders or formatting. Editing creates a new version automatically. View history in the Commits tab.",
-    docLink: "/agent_optimization/best-practices/prompt_engineering",
   },
   [EXPLAINER_ID.whats_the_playground]: {
     id: EXPLAINER_ID.whats_the_playground,
     description:
       "Test before saving a prompt to the library or running a full experiment. Or use it to explore different prompt variations and see how your LLM responds in real time.",
-    docLink: "/prompt_engineering/playground",
   },
   [EXPLAINER_ID.whats_these_configuration_things]: {
     id: EXPLAINER_ID.whats_these_configuration_things,
@@ -359,10 +326,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_do_i_need_an_ai_provider,
     description:
       "Connect AI providers to test prompts, preview model responses, and score traces using online evaluation rules in the Playground.",
-  },
-  [EXPLAINER_ID.why_do_i_need_the_collaborators_tab]: {
-    id: EXPLAINER_ID.why_do_i_need_the_collaborators_tab,
-    description: "Manage access to your workspace.",
   },
   [EXPLAINER_ID.what_does_the_test_suite_do_here]: {
     id: EXPLAINER_ID.what_does_the_test_suite_do_here,
@@ -389,6 +352,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Create custom fields to manually rate LLM outputs. Use them to collect structured feedback and track quality over time.",
   },
+  [EXPLAINER_ID.why_do_i_need_the_collaborators_tab]: {
+    id: EXPLAINER_ID.why_do_i_need_the_collaborators_tab,
+    description: "Manage access to your workspace.",
+  },
   [EXPLAINER_ID.what_format_should_the_metadata_be]: {
     id: EXPLAINER_ID.what_format_should_the_metadata_be,
     description:
@@ -403,7 +370,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_an_optimization_run,
     description:
       "Automatically test prompt variations and find the best-performing one.",
-    docLink: "/agent_optimization/overview",
   },
   [EXPLAINER_ID.whats_the_best_score]: {
     id: EXPLAINER_ID.whats_the_best_score,
@@ -448,21 +414,18 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.why_would_i_compare_commits,
     description:
       "Compare prompt commits to understand how changes affect output quality and performance. Select at least two commits to get started.",
-    docLink: "/evaluation/evaluate_prompt",
     type: "help",
   },
   [EXPLAINER_ID.whats_the_optimizer]: {
     id: EXPLAINER_ID.whats_the_optimizer,
     description:
       "An optimizer is a built-in algorithm from the Opik Agent Optimizer SDK that improves prompt effectiveness. Each one uses its own strategy and configurable settings to target specific optimization goals.",
-    docLink: "/agent_optimization/opik_optimizer/concepts",
     type: "help",
   },
   [EXPLAINER_ID.what_are_trial_items]: {
     id: EXPLAINER_ID.what_are_trial_items,
     description:
       "Trial items are test suite samples processed during a trial. Each one generates an output and score that contribute to the trial's results.",
-    docLink: "/agent_optimization/opik_optimizer/concepts",
   },
   [EXPLAINER_ID.whats_the_evaluation_run_configuration]: {
     id: EXPLAINER_ID.whats_the_evaluation_run_configuration,
@@ -473,98 +436,75 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.metric_equals,
     description:
       "Checks if the output exactly matches an expected string. Use this for strict equality checks.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#equals",
   },
   [EXPLAINER_ID.metric_contains]: {
     id: EXPLAINER_ID.metric_contains,
     description:
       "Checks if the output contains a specific substring, can be both case sensitive or case insensitive.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#contains",
   },
   [EXPLAINER_ID.metric_regex_match]: {
     id: EXPLAINER_ID.metric_regex_match,
     description:
       "Checks if the output matches a specified regular expression pattern.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#regexmatch",
   },
   [EXPLAINER_ID.metric_is_json]: {
     id: EXPLAINER_ID.metric_is_json,
     description: "Checks if the output is a valid JSON object.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#isjson",
   },
   [EXPLAINER_ID.metric_levenshtein]: {
     id: EXPLAINER_ID.metric_levenshtein,
     description:
       "Calculates the Levenshtein distance between the output and an expected string.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#levenshteinratio",
   },
   [EXPLAINER_ID.metric_sentence_bleu]: {
     id: EXPLAINER_ID.metric_sentence_bleu,
     description:
       "Calculates a single-sentence BLEU score for a candidate vs. one or more references.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#bleu",
   },
   [EXPLAINER_ID.metric_corpus_bleu]: {
     id: EXPLAINER_ID.metric_corpus_bleu,
     description:
       "Calculates a corpus-level BLEU score for multiple candidates vs. their references.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#bleu",
   },
   [EXPLAINER_ID.metric_rouge]: {
     id: EXPLAINER_ID.metric_rouge,
     description:
       "Calculates the ROUGE score for a candidate vs. one or more references.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#rouge",
   },
   [EXPLAINER_ID.metric_hallucination]: {
     id: EXPLAINER_ID.metric_hallucination,
     description:
       "The hallucination metric allows you to check if the LLM response contains any hallucinated information. In order to check for hallucination, you will need to provide the LLM input, LLM output. If the context is provided, this will also be used to check for hallucinations.",
-    docLink: "/evaluation/metrics/hallucination",
   },
   [EXPLAINER_ID.metric_g_eval]: {
     id: EXPLAINER_ID.metric_g_eval,
     description:
       "G-Eval is a task agnostic LLM as a Judge metric that allows you to specify a set of criteria for your metric and it will use a Chain of Thought prompting technique to create some evaluation steps and return a score.",
-    docLink: "/evaluation/metrics/g_eval",
   },
   [EXPLAINER_ID.metric_moderation]: {
     id: EXPLAINER_ID.metric_moderation,
     description:
       "The Moderation metric allows you to evaluate the appropriateness of the LLM’s response to the given LLM output. It does this by asking the LLM to rate the appropriateness of the response on a scale of 1 to 10, where 1 is the least appropriate and 10 is the most appropriate.",
-    docLink: "/evaluation/metrics/moderation",
   },
   [EXPLAINER_ID.metric_usefulness]: {
     id: EXPLAINER_ID.metric_usefulness,
     description:
       "The usefulness metric allows you to evaluate how useful an LLM response is given an input. It uses a language model to assess the usefulness and provides a score between 0.0 and 1.0, where higher values indicate higher usefulness. Along with the score, it provides a detailed explanation of why that score was assigned.",
-    docLink: "/evaluation/metrics/usefulness",
   },
   [EXPLAINER_ID.metric_answer_relevance]: {
     id: EXPLAINER_ID.metric_answer_relevance,
     description:
       "The Answer Relevance metric allows you to evaluate how relevant and appropriate the LLM’s response is to the given input question or prompt. To assess the relevance of the answer, you will need to provide the LLM input (question or prompt) and the LLM output (generated answer). Unlike the Hallucination metric, the Answer Relevance metric focuses on the appropriateness and pertinence of the response rather than factual accuracy.",
-    docLink: "/evaluation/metrics/answer_relevance",
   },
   [EXPLAINER_ID.metric_context_precision]: {
     id: EXPLAINER_ID.metric_context_precision,
     description:
       "The context precision metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
-    docLink: "/evaluation/metrics/context_precision",
   },
   [EXPLAINER_ID.metric_context_recall]: {
     id: EXPLAINER_ID.metric_context_recall,
     description:
       "The context recall metric evaluates the accuracy and relevance of an LLM’s response based on provided context, helping to identify potential hallucinations or misalignments with the given information.",
-    docLink: "/evaluation/metrics/context_recall",
   },
   [EXPLAINER_ID.trace_opik_ai]: {
     id: EXPLAINER_ID.trace_opik_ai,
@@ -586,39 +526,31 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.prompt_generation_learn_more,
     description:
       "Not sure where to start? Tell us your goal in plain language, and we'll generate a ready-to-use prompt.",
-    docLink: "/prompt_engineering/improve",
-    docHash: "#generate",
   },
   [EXPLAINER_ID.prompt_improvement_learn_more]: {
     id: EXPLAINER_ID.prompt_improvement_learn_more,
     description:
       "Give your prompt a boost! Add optional guidance, or let AI apply best-practice improvements for you.",
-    docLink: "/prompt_engineering/improve",
-    docHash: "#improve",
   },
   [EXPLAINER_ID.prompt_improvement_optimizer]: {
     id: EXPLAINER_ID.prompt_improvement_optimizer,
     description:
       "Looking for advanced optimization algorithms? Check out the Opik optimizer!",
-    docLink: "/agent_optimization/opik_optimizer/overview",
   },
   [EXPLAINER_ID.whats_an_alert]: {
     id: EXPLAINER_ID.whats_an_alert,
     description:
       "Monitor important events in your project and get notified when something needs your attention.",
-    docLink: "/production/alerts",
   },
   [EXPLAINER_ID.what_are_dashboards]: {
     id: EXPLAINER_ID.what_are_dashboards,
     description:
       "Set up dashboards to monitor quality, cost, and performance of your projects and share experiment results",
-    docLink: "/production/dashboards",
   },
   [EXPLAINER_ID.whats_the_optimization_config]: {
     id: EXPLAINER_ID.whats_the_optimization_config,
     description:
       "Configure your setup and let Opik automatically find the best prompt.",
-    docLink: "/agent_optimization/optimization_studio",
   },
   [EXPLAINER_ID.whats_the_algorithm_section]: {
     id: EXPLAINER_ID.whats_the_algorithm_section,
@@ -636,15 +568,12 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.whats_the_metric_settings,
     description:
       "Configure parameters for the selected evaluation metric to customize how your outputs are scored.",
-    docLink: "/evaluation/metrics/overview",
   },
   [EXPLAINER_ID.whats_the_algorithm_settings]: {
     id: EXPLAINER_ID.whats_the_algorithm_settings,
     description:
       "Configure parameters for the selected optimization algorithm to control how prompts are improved.",
-    docLink: "/agent_optimization/opik_optimizer/concepts",
   },
-  // Metric config explainers
   [EXPLAINER_ID.geval_task_introduction]: {
     id: EXPLAINER_ID.geval_task_introduction,
     description: "Provide context about the task being evaluated.",
@@ -662,7 +591,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     id: EXPLAINER_ID.metric_case_sensitive,
     description: "Enable case-sensitive comparison when evaluating outputs.",
   },
-  // Optimizer config explainers
   [EXPLAINER_ID.optimizer_verbose]: {
     id: EXPLAINER_ID.optimizer_verbose,
     description: "Enable detailed logging during optimization process.",
@@ -689,7 +617,6 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     description:
       "Automatically detect and maintain output style from examples.",
   },
-  // Dashboard widget explainers
   [EXPLAINER_ID.feedback_score_groupby_requires_single_metric]: {
     id: EXPLAINER_ID.feedback_score_groupby_requires_single_metric,
     description:

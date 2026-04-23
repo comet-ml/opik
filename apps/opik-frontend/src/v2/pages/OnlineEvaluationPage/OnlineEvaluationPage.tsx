@@ -45,7 +45,7 @@ import TagCell from "@/shared/DataTableCells/TagCell";
 import useRulesList from "@/api/automations/useRulesList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOnlineEvalLightUrl from "/images/empty-online-eval-light.svg";
 import emptyOnlineEvalDarkUrl from "/images/empty-online-eval-dark.svg";
 import AddEditRuleDialog from "@/v2/pages-shared/automations/AddEditRuleDialog/AddEditRuleDialog";
@@ -386,7 +386,7 @@ export const OnlineEvaluationPage: React.FC = () => {
           }
           primaryActionLabel="Create your first rule"
           onPrimaryAction={handleNewRuleClick}
-          docsUrl={buildDocsUrl("/production/rules")}
+          docsUrl={buildDocsUrl("/production/online-evaluation/rules")}
         />
       ) : (
         <>
