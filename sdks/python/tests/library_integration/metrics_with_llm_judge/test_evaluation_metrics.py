@@ -323,6 +323,7 @@ def test__trajectory_accuracy__poor_quality(model):
 
     assert_helpers.assert_score_result(result)
 
+
 def test__structured_output_compliance__valid_json(model):
     """Test structured output compliance with valid JSON."""
     structured_output_metric = metrics.StructuredOutputCompliance(
