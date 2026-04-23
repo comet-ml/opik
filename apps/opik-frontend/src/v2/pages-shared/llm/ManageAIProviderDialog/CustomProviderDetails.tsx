@@ -10,6 +10,7 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import { Input } from "@/ui/input";
 import { Description } from "@/ui/description";
 import { Button } from "@/ui/button";
+import { Switch } from "@/ui/switch";
 import { PROVIDERS } from "@/constants/providers";
 import { PROVIDER_TYPE } from "@/types/providers";
 import CustomHeadersField from "./CustomHeadersField";
@@ -82,6 +83,11 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                 />
               </FormControl>
               <FormMessage />
+              <Description>
+                {
+                  "For multi-deployment gateways (e.g. Azure APIM), use `{model}` as a placeholder — Opik substitutes the selected model at request time."
+                }
+              </Description>
             </FormItem>
           );
         }}
@@ -162,6 +168,74 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
       />
 
       <CustomHeadersField form={form} />
+
+      <CustomHeadersField
+        form={form}
+        name="queryParams"
+        label="Query parameters (optional)"
+        keyPlaceholder="Parameter name"
+        valuePlaceholder="Parameter value"
+        addButtonLabel="Add query parameter"
+        description="Appended to every outgoing request URL. Required by Azure OpenAI gateways (e.g. api-version=2024-08-01-preview)."
+      />
+
+      <FormField
+        control={form.control}
+        name="authHeaderName"
+        render={({ field, formState }) => {
+          const validationErrors = get(formState.errors, ["authHeaderName"]);
+
+          return (
+            <FormItem>
+              <Label htmlFor="authHeaderName">
+                Auth header name (optional)
+              </Label>
+              <FormControl>
+                <Input
+                  id="authHeaderName"
+                  placeholder="api-key"
+                  value={field.value ?? ""}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className={cn({
+                    "border-destructive": Boolean(validationErrors?.message),
+                  })}
+                />
+              </FormControl>
+              <FormMessage />
+              <Description>
+                If set, the API key is sent as <code>{"{name}: <key>"}</code> in
+                addition to the default <code>Authorization: Bearer</code>{" "}
+                header. Used by Azure APIM gateways that expect{" "}
+                <code>api-key</code> or a tenant-specific header name.
+              </Description>
+            </FormItem>
+          );
+        }}
+      />
+
+      <FormField
+        control={form.control}
+        name="suppressDefaultAuth"
+        render={({ field }) => (
+          <FormItem>
+            <div className="flex items-center gap-3">
+              <Switch
+                id="suppressDefaultAuth"
+                checked={Boolean(field.value)}
+                onCheckedChange={field.onChange}
+              />
+              <Label htmlFor="suppressDefaultAuth">
+                Suppress default Authorization header
+              </Label>
+            </div>
+            <Description>
+              Turn on only if your gateway rejects requests that include{" "}
+              <code>Authorization: Bearer</code>. Default off, matching
+              today&apos;s behavior for all existing custom providers.
+            </Description>
+          </FormItem>
+        )}
+      />
     </div>
   );
 };
