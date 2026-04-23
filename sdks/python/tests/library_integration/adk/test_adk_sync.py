@@ -648,9 +648,12 @@ def test_adk__litellm_used_for_openai_model__usage_logged_in_openai_format(
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
+    # No reasoning_effort="minimal" here — the test asserts the agent calls
+    # get_weather, and gpt-5-nano with minimal reasoning answers directly
+    # instead of invoking the tool.
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
+        model=adk_lite_llm.LiteLlm(model_name),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
@@ -720,9 +723,11 @@ def test_adk__litellm_used_for_openai_model__streaming_mode_is_SSE__usage_logged
         tags=["adk-test"], metadata={"adk-metadata-key": "adk-metadata-value"}
     )
 
+    # See the note on the non-streaming twin above — keep default reasoning so
+    # the agent actually calls get_weather.
     root_agent = adk_agents.Agent(
         name="weather_time_agent",
-        model=adk_lite_llm.LiteLlm(model_name, reasoning_effort="minimal"),
+        model=adk_lite_llm.LiteLlm(model_name),
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
