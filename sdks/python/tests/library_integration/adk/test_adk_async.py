@@ -345,22 +345,16 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
     opik.flush_tracker()
 
     # ADK emits a wrapper span for each sub-agent under parallel_agent. Each
-    # sub-agent wrapper contains TWO LLM spans plus the tool span — that's
-    # the normal function-calling round-trip inside LlmAgent:
+    # sub-agent wrapper contains the standard function-calling round-trip
+    # inside LlmAgent — two LLM spans surrounding one tool span:
     #   1. first LLM call  — the model is handed the tool's function
-    #      declaration and emits a `function_call` part asking to run it
-    #      (Opik opens an LLM span via before_model_callback);
-    #   2. tool span       — ADK dispatches the Python tool and records its
-    #      input/output;
+    #      declaration and emits a `function_call` part (Opik opens an LLM
+    #      span via before_model_callback).
+    #   2. tool span       — ADK dispatches the Python tool.
     #   3. second LLM call — the function_response is fed back to the model,
-    #      which turns it into the user-facing text reply (another
-    #      before/after_model_callback round → another LLM span).
-    # Two LLM spans + one tool span per sub-agent is therefore correct, not a
-    # duplication bug. Siblings below are listed in start_time order (the
-    # emulator sorts children that way); both LLM spans start before the tool
-    # span because ADK opens the second LLM span at the moment it schedules
-    # the follow-up turn (i.e. as soon as the function_call is received),
-    # which is before the tool's `before_tool_callback` fires.
+    #      which turns it into the user-facing text reply (another LLM span).
+    # Siblings are listed below in start_time order — the emulator sorts
+    # children that way to match how the real backend would return them.
     _llm_span = SpanModel(
         id=ANY_BUT_NONE,
         name=MODEL_NAME,
@@ -392,7 +386,6 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
             project_name=project_name,
             spans=[
                 _llm_span,
-                _llm_span,
                 SpanModel(
                     id=ANY_BUT_NONE,
                     name=tool_name,
@@ -406,6 +399,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                     project_name=project_name,
                     source="sdk",
                 ),
+                _llm_span,
             ],
             source="sdk",
         )
