@@ -853,6 +853,12 @@ def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_
                         experiment_id=experiment.id,
                         dataset_item_id=dataset_item_id,
                         trace_id=trace_id,
+                        # Pin project_name so the backend resolves project_id
+                        # deterministically via projectService.retrieveByNamesOrCreate
+                        # instead of falling back to a trace lookup — that lookup
+                        # races with ClickHouse ingestion of the traces we just
+                        # POSTed and can return null in prod.
+                        project_name=project_name,
                     ))
 
                     # Assertion scores. Pass mode drives fail patterns. Name = full
