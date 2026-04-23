@@ -26,7 +26,7 @@ import InstallWithAITab from "@/v2/pages-shared/onboarding/InstallWithAITab";
 import ManualIntegrationList from "./ManualIntegrationList";
 import ManualIntegrationDetail from "./ManualIntegrationDetail";
 import ShowDemoProjectButton from "./ShowDemoProjectButton";
-import AgentCopyButtons from "./AgentCopyButtons";
+import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import { INTEGRATIONS } from "@/constants/integrations";
 import {
   SLACK_LINK,

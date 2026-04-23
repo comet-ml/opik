@@ -7,7 +7,7 @@ import { putConfigInCode } from "@/lib/formatCodeSnippets";
 import { Integration } from "@/constants/integrations";
 import { INSTALL_OPIK_SECTION_TITLE } from "@/constants/shared";
 import { useAgentOnboarding } from "./AgentOnboardingContext";
-import AgentCopyButtons from "./AgentCopyButtons";
+import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 import { Separator } from "@/ui/separator";
 
 type ManualIntegrationDetailProps = {

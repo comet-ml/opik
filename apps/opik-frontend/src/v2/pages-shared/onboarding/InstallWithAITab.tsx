@@ -7,7 +7,7 @@ import claudeCodeLogo from "/images/integrations/claude_code.svg";
 import codexLogo from "/images/integrations/codex.svg";
 import cursorLogo from "/images/integrations/cursor.svg";
 import { INSTALL_OPIK_SKILLS_COMMAND } from "@/constants/shared";
-import AgentCopyButtons from "@/v2/pages/GetStartedPage/AgentOnboarding/AgentCopyButtons";
+import AgentCopyButtons from "@/v2/pages-shared/onboarding/AgentCopyButtons";
 
 interface InstallWithAITabProps {
   traceReceived: boolean;
