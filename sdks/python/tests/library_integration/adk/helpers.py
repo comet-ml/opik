@@ -87,16 +87,24 @@ async def async_extract_final_response_text(
 def _pick_final_response_event(
     events: List[adk_events.Event],
 ) -> adk_events.Event:
-    """Return the last event that carries content.parts text — skipping any
-    trailing terminator events emitted with content=None. Raises with
-    context if none of the events carried content, which usually means the
-    model produced nothing for the final turn."""
+    """Return the last event that is a final agent response with text
+    content. Skips trailing terminator events (content=None) that ADK
+    1.31+ sometimes emits, and skips intermediate events such as
+    pre-tool model messages or function_call/function_response parts —
+    otherwise tool-failure tests (which never reach a final text
+    response) would silently pick up a pre-tool chatter event and stop
+    raising. Raises if no qualifying event is found."""
     for event in reversed(events):
+        if not event.is_final_response():
+            continue
         content = event.content
-        if content is not None and content.parts:
-            return event
+        if content is None or not content.parts:
+            continue
+        if content.parts[0].text is None:
+            continue
+        return event
     raise AssertionError(
-        f"No event with content.parts found among {len(events)} events. "
+        f"No final-response event with text content found among {len(events)} events. "
         f"Last event: {events[-1]!r}"
     )
 
