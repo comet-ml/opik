@@ -77,6 +77,7 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
+  GPT_IMAGE_2 = "gpt-image-2",
   GPT_O1 = "o1",
   GPT_O1_2024_12_17 = "o1-2024-12-17",
   GPT_O1_MINI = "o1-mini",
@@ -90,7 +91,6 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
-  GPT_IMAGE_2 = "gpt-image-2",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -148,6 +148,7 @@ export enum PROVIDER_MODEL_TYPE {
   ARCEE_AI_CODER_LARGE = "arcee-ai/coder-large",
   ARCEE_AI_MAESTRO_REASONING = "arcee-ai/maestro-reasoning",
   ARCEE_AI_SPOTLIGHT = "arcee-ai/spotlight",
+  ARCEE_AI_TRINITY_LARGE_PREVIEW = "arcee-ai/trinity-large-preview",
   ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE = "arcee-ai/trinity-large-preview:free",
   ARCEE_AI_TRINITY_LARGE_THINKING = "arcee-ai/trinity-large-thinking",
   ARCEE_AI_TRINITY_MINI = "arcee-ai/trinity-mini",
@@ -550,6 +551,8 @@ export enum PROVIDER_MODEL_TYPE {
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
   XIAOMI_MIMO_V2_OMNI = "xiaomi/mimo-v2-omni",
   XIAOMI_MIMO_V2_PRO = "xiaomi/mimo-v2-pro",
+  XIAOMI_MIMO_V2_5 = "xiaomi/mimo-v2.5",
+  XIAOMI_MIMO_V2_5_PRO = "xiaomi/mimo-v2.5-pro",
   Z_AI_GLM_4_32B = "z-ai/glm-4-32b",
   Z_AI_GLM_4_5 = "z-ai/glm-4.5",
   Z_AI_GLM_4_5_AIR = "z-ai/glm-4.5-air",
