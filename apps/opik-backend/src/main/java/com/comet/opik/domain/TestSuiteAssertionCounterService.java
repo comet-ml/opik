@@ -84,6 +84,8 @@ public class TestSuiteAssertionCounterService {
                 });
     }
 
+    // TODO: deduplicate with ExperimentItemProcessingSubscriber.finishExperiments — extract into
+    //  a shared ExperimentFinishListener triggered by an ExperimentProcessed event
     private Mono<Void> finishExperiment(UUID experimentId) {
         var statusUpdate = ExperimentUpdate.builder()
                 .status(ExperimentStatus.COMPLETED)
