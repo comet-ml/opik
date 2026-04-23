@@ -793,11 +793,13 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
         name="Translator",
         model=MODEL_NAME,
         description="Translates text to English.",
+        instruction="Translate to English.",
     )
     summarizer = adk_agents.Agent(
         name="Summarizer",
         model=MODEL_NAME,
         description="Summarizes text to 1 sentence.",
+        instruction="Summarize to one sentence.",
     )
     root_agent = adk_agents.SequentialAgent(
         name="TextProcessingAssistant",
@@ -919,6 +921,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
         name="Translator",
         model=MODEL_NAME,
         description="Translates text to English.",
+        instruction="Translate to English.",
     )
 
     root_agent = adk_agents.Agent(
@@ -926,6 +929,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
         model=MODEL_NAME,
         tools=[adk_agent_tool.AgentTool(agent=translator_to_english)],
         description="Agent responsible for translating text to english by invoking a special tool for that.",
+        instruction="Use the Translator tool, then reply with its result.",
     )
 
     track_adk_agent_recursive(root_agent, opik_tracer)
@@ -1251,6 +1255,7 @@ def test_adk__agent_with_response_schema__happyflow(
         name="Summarizer",
         model=MODEL_NAME,
         description="Summarizes text to 1 sentence.",
+        instruction="Summarize to one sentence.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,
