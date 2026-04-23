@@ -47,8 +47,8 @@ def test__find_experiment_items_for_dataset__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
@@ -122,11 +122,11 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
             dataset_item_data={
-                "expected_model_output": {"output": "Berlin"},
+                "expected_model_output": {"output": "Kyiv"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the capital of Germany?"},
+                "input": {"question": "What is the capital of Ukraine?"},
             },
-            evaluation_task_output={"output": "Berlin"},
+            evaluation_task_output={"output": "Kyiv"},
             feedback_scores=[
                 FeedbackScoreDict(
                     category_name=None,
@@ -158,8 +158,8 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
@@ -279,8 +279,8 @@ def test__experiment_scores__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
