@@ -15,6 +15,8 @@ import org.apache.commons.lang3.StringUtils;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /// HTTP client decorator for the Custom LLM provider that mutates outgoing
@@ -23,22 +25,33 @@ import java.util.Map;
 /// Current responsibilities:
 ///   - Appends entries from `configuration["url_query_params"]` (JSON-encoded
 ///     `Map<String, String>`) to the outgoing URL as query parameters.
+///   - Adds a custom auth header `{name}: {apiKey}` when
+///     `configuration["auth_header_name"]` is set. Appends alongside the
+///     default `Authorization: Bearer` header unless it is suppressed.
+///   - Removes the default `Authorization: Bearer <apiKey>` header when
+///     `configuration["suppress_default_auth"]` is `"true"`. Used by
+///     gateways whose policy rejects an `Authorization` header.
 ///
-/// Later revisions will extend this decorator with auth-header handling and
-/// `{model}` URL substitution. When none of its config keys are set, it is a
-/// pure no-op — preserving the existing Custom LLM provider contract and
-/// anything byte-exact that LangChain4j's `OpenAiClient` already produced.
+/// Later revisions will extend this decorator with `{model}` URL substitution.
+/// When none of its config keys are set, it is a pure no-op — preserving the
+/// existing Custom LLM provider contract and anything byte-exact that
+/// LangChain4j's `OpenAiClient` already produced.
 @RequiredArgsConstructor
 @Slf4j
 class InterceptingHttpClient implements HttpClient {
 
     static final String URL_QUERY_PARAMS_CONFIG_KEY = "url_query_params";
+    static final String AUTH_HEADER_NAME_CONFIG_KEY = "auth_header_name";
+    static final String SUPPRESS_DEFAULT_AUTH_CONFIG_KEY = "suppress_default_auth";
+
+    private static final String AUTHORIZATION_HEADER = "Authorization";
 
     private static final TypeReference<Map<String, String>> QUERY_PARAMS_TYPE = new TypeReference<>() {
     };
 
     private final @NonNull HttpClient delegate;
     private final Map<String, String> configuration;
+    private final String apiKey;
 
     @Override
     public SuccessfulHttpResponse execute(HttpRequest request) throws HttpException, RuntimeException {
@@ -57,16 +70,44 @@ class InterceptingHttpClient implements HttpClient {
         }
 
         String mutatedUrl = applyQueryParams(request.url());
-        if (mutatedUrl.equals(request.url())) {
+        Map<String, List<String>> mutatedHeaders = applyAuthHeaders(request.headers());
+
+        boolean urlChanged = !mutatedUrl.equals(request.url());
+        boolean headersChanged = mutatedHeaders != request.headers();
+        if (!urlChanged && !headersChanged) {
             return request;
         }
 
         return HttpRequest.builder()
                 .method(request.method())
                 .url(mutatedUrl)
-                .headers(request.headers())
+                .headers(mutatedHeaders)
                 .body(request.body())
                 .build();
+    }
+
+    private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {
+        String customHeaderName = configuration.get(AUTH_HEADER_NAME_CONFIG_KEY);
+        boolean addCustomHeader = StringUtils.isNotBlank(customHeaderName)
+                && StringUtils.isNotBlank(apiKey);
+        boolean suppressDefault = "true".equalsIgnoreCase(
+                StringUtils.trimToNull(configuration.get(SUPPRESS_DEFAULT_AUTH_CONFIG_KEY)));
+
+        if (!addCustomHeader && !suppressDefault) {
+            return headers;
+        }
+
+        var mutated = new LinkedHashMap<String, List<String>>(headers.size() + 1);
+        for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
+            if (suppressDefault && AUTHORIZATION_HEADER.equalsIgnoreCase(entry.getKey())) {
+                continue;
+            }
+            mutated.put(entry.getKey(), entry.getValue());
+        }
+        if (addCustomHeader) {
+            mutated.put(customHeaderName, List.of(apiKey));
+        }
+        return mutated;
     }
 
     private String applyQueryParams(String url) {

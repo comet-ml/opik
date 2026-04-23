@@ -32,7 +32,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
-        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration());
+        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
+                config.apiKey());
 
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotBlank)
@@ -73,7 +74,8 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
-        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration());
+        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
+                config.apiKey());
 
         // Extract provider_name from configuration (null for legacy providers)
         String providerName = Optional.ofNullable(config.configuration())

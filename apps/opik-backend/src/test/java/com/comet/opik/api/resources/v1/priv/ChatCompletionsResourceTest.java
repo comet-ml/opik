@@ -545,6 +545,85 @@ class ChatCompletionsResourceTest {
         }
 
         @Test
+        @DisplayName("auth_header_name adds a custom header alongside the default Authorization: Bearer")
+        void authHeaderNameAddsCustomHeaderAlongsideBearer() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(CUSTOM_PROVIDER_NAME)
+                    .apiKey("azure-key-sentinel")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .configuration(Map.of(
+                            "provider_name", CUSTOM_PROVIDER_NAME,
+                            "models", MODEL,
+                            "auth_header_name", "api-key"))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(".*/chat/completions.*"))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(SUCCESS_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(MODEL)
+                    .addUserMessage("ping")
+                    .build();
+
+            assertThat(postChatCompletion(workspaceName, request).getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            WIRE_MOCK.server().verify(postRequestedFor(urlPathMatching(".*/chat/completions.*"))
+                    .withHeader("Authorization", equalTo("Bearer azure-key-sentinel"))
+                    .withHeader("api-key", equalTo("azure-key-sentinel")));
+        }
+
+        @Test
+        @DisplayName("suppress_default_auth drops Authorization and sends only the custom header")
+        void suppressDefaultAuthDropsBearer() {
+            var workspaceName = RandomStringUtils.randomAlphanumeric(20);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(workspaceName, workspaceId);
+
+            var providerApiKey = ProviderApiKey.builder()
+                    .provider(LlmProvider.CUSTOM_LLM)
+                    .providerName(CUSTOM_PROVIDER_NAME)
+                    .apiKey("strict-apim-key")
+                    .baseUrl(WIRE_MOCK.runtimeInfo().getHttpBaseUrl())
+                    .configuration(Map.of(
+                            "provider_name", CUSTOM_PROVIDER_NAME,
+                            "models", MODEL,
+                            "auth_header_name", "api-key",
+                            "suppress_default_auth", "true"))
+                    .build();
+            llmProviderApiKeyResourceClient.createProviderApiKey(providerApiKey, API_KEY, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            WIRE_MOCK.server().stubFor(post(urlPathMatching(".*/chat/completions.*"))
+                    .willReturn(aResponse()
+                            .withStatus(HttpStatus.SC_OK)
+                            .withHeader("Content-Type", "application/json")
+                            .withBody(SUCCESS_BODY)));
+
+            var request = ChatCompletionRequest.builder()
+                    .stream(false)
+                    .model(MODEL)
+                    .addUserMessage("ping")
+                    .build();
+
+            assertThat(postChatCompletion(workspaceName, request).getStatus()).isEqualTo(HttpStatus.SC_OK);
+
+            WIRE_MOCK.server().verify(postRequestedFor(urlPathMatching(".*/chat/completions.*"))
+                    .withHeader("api-key", equalTo("strict-apim-key"))
+                    .withoutHeader("Authorization"));
+        }
+
+        @Test
         @DisplayName("url_query_params configuration is appended to upstream request URL")
         void urlQueryParamsAreAppendedToUpstreamRequest() {
             var workspaceName = RandomStringUtils.randomAlphanumeric(20);

@@ -19,6 +19,7 @@ class InterceptingHttpClientBuilder implements HttpClientBuilder {
 
     private final @NonNull HttpClientBuilder delegate;
     private final Map<String, String> configuration;
+    private final String apiKey;
 
     @Override
     public Duration connectTimeout() {
@@ -44,6 +45,6 @@ class InterceptingHttpClientBuilder implements HttpClientBuilder {
 
     @Override
     public HttpClient build() {
-        return new InterceptingHttpClient(delegate.build(), configuration);
+        return new InterceptingHttpClient(delegate.build(), configuration, apiKey);
     }
 }
