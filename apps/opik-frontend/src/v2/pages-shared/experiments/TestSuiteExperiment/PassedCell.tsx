@@ -34,6 +34,7 @@ type StatusInfo = {
 
 const NO_EXPERIMENT_ITEM_REASON = "No experiment item defined";
 const NO_ASSERTIONS_REASON = "No assertions defined";
+const SCORING_FAILED_REASON = "Scoring failed";
 
 const SKIPPED_RESULT = (reason: string): StatusInfo => ({
   status: RunStatus.SKIPPED,
@@ -52,7 +53,7 @@ function resolveSkippedStatus(
   if (!status) {
     const hasEvaluators = (row.evaluators?.length ?? 0) > 0;
     if (!hasEvaluators) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
-    if (experimentFinished) return SKIPPED_RESULT(NO_ASSERTIONS_REASON);
+    if (experimentFinished) return SKIPPED_RESULT(SCORING_FAILED_REASON);
   }
   return null;
 }

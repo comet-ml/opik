@@ -68,6 +68,7 @@ public class ExperimentItemPublisher {
     private Mono<Void> setAssertionCounters(List<ExperimentItemToProcess> messages) {
         var workspaceId = messages.getFirst().workspaceId();
         var itemsByExperiment = messages.stream()
+                .filter(m -> m.experimentId() != null)
                 .collect(Collectors.groupingBy(ExperimentItemToProcess::experimentId, Collectors.counting()));
 
         return testSuiteAssertionCounterService.setCounters(workspaceId, itemsByExperiment);
