@@ -24,9 +24,12 @@ from ...e2e import verifiers
 
 def _build_otlp_exporter(config: opik_config.OpikConfig) -> OTLPSpanExporter:
     """Build an OTLP exporter pointing at the Opik backend."""
+    parsed = urllib.parse.urlparse(config.url_override)
+    port = parsed.port
+    # different port for local dev vs test CI environment
     otel_path = (
         "/api/v1/private/otel/v1/traces"
-        if config.url_override.endswith("5173")
+        if port == 5173
         else "/v1/private/otel/v1/traces"
     )
     endpoint = urllib.parse.urljoin(config.url_override, otel_path)
