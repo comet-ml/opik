@@ -35,7 +35,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
-  const [hasAllRequiredParams, setHasAllRequiredParams] = useState(true);
+  const [hasAllRequiredParams, setHasAllRequiredParams] = useState(false);
   const [tracePanelSpanId, setTracePanelSpanId] = useState<
     string | null | undefined
   >("");

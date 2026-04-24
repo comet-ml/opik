@@ -1,5 +1,7 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
 import { Input } from "@/ui/input";
 import { Textarea } from "@/ui/textarea";
@@ -52,19 +54,40 @@ const isFieldRequired = (field: AgentParam): boolean => {
   return field.presence !== "optional";
 };
 
+const buildSchema = (fields: AgentParam[]) => {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const field of fields) {
+    const lower = field.type.toLowerCase();
+    // Boolean fields are always valid (Switch is always "true"/"false")
+    if (BOOL_TYPES.has(lower)) {
+      shape[field.name] = z.string();
+    } else if (isFieldRequired(field)) {
+      shape[field.name] = z
+        .string()
+        .refine((v) => v.trim().length > 0, { message: "This field is required" });
+    } else {
+      shape[field.name] = z.string();
+    }
+  }
+  return z.object(shape);
+};
+
 const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
   fields,
   onSubmit,
   isRunning,
   onValidityChange,
 }) => {
+  const schema = useMemo(() => buildSchema(fields), [fields]);
+
   const {
     register,
     handleSubmit,
     setValue,
     watch,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm({
+    resolver: zodResolver(schema),
     defaultValues: fields.reduce(
       (acc, field) => {
         acc[field.name] = "";
@@ -72,19 +95,12 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
       },
       {} as Record<string, string>,
     ),
+    mode: "onChange",
   });
 
-  const requiredFields = fields.filter(isFieldRequired);
-  const allValues = watch();
-
   useEffect(() => {
-    if (!onValidityChange) return;
-    const allFilled = requiredFields.every((field) => {
-      const value = allValues[field.name];
-      return typeof value === "string" && value.trim().length > 0;
-    });
-    onValidityChange(allFilled);
-  }, [allValues, requiredFields, onValidityChange]);
+    onValidityChange?.(isValid);
+  }, [isValid, onValidityChange]);
 
   const onFormSubmit = handleSubmit((data) => {
     const inputs: Record<string, unknown> = {};
@@ -130,24 +146,14 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
                 />
               ) : field.type === "object" || field.type === "json" ? (
                 <Textarea
-                  {...register(field.name, {
-                    ...(isFieldRequired(field) && {
-                      validate: (v: string) =>
-                        v.trim().length > 0 || "This field is required",
-                    }),
-                  })}
+                  {...register(field.name)}
                   placeholder={`Enter ${field.name}...`}
                   rows={4}
                   disabled={isRunning}
                 />
               ) : (
                 <Input
-                  {...register(field.name, {
-                    ...(isFieldRequired(field) && {
-                      validate: (v: string) =>
-                        v.trim().length > 0 || "This field is required",
-                    }),
-                  })}
+                  {...register(field.name)}
                   placeholder={`Enter ${field.name}...`}
                   inputMode={
                     field.type === "integer" || field.type === "int"
