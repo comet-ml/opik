@@ -19,7 +19,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
-from . import verifiers
+from ...e2e import verifiers
 
 
 def _build_otlp_exporter(config: opik_config.OpikConfig) -> OTLPSpanExporter:

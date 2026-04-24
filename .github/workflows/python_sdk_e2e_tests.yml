@@ -82,7 +82,6 @@ jobs:
           run: |
             cd ${{ github.workspace }}/sdks/python
             pip install -r tests/test_requirements.txt
-            pip install -r tests/e2e/test_requirements.txt
             pip list
 
         - name: Run tests
