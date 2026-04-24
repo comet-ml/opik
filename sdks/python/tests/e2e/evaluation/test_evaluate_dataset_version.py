@@ -64,8 +64,6 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only__happyflow
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     # Should have evaluated only 2 items (from v1), not 4 (from v2/current)
     assert len(result.test_results) == 2
 

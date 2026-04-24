@@ -70,6 +70,9 @@ class Supervisor:
         watch: Optional[bool] = None,
         bridge_key: Optional[bytes] = None,
         runner_type: RunnerType = RunnerType.ENDPOINT,
+        heartbeat_interval_seconds: float = _HEARTBEAT_INTERVAL_SECONDS,
+        graceful_timeout_seconds: float = _GRACEFUL_TIMEOUT_SECONDS,
+        main_loop_tick_seconds: float = 0.5,
     ) -> None:
         self._command = command
         self._env = env
@@ -83,6 +86,9 @@ class Supervisor:
         self._on_command_end = on_command_end
         self._bridge_key = bridge_key
         self._runner_type = runner_type
+        self._heartbeat_interval_seconds = heartbeat_interval_seconds
+        self._graceful_timeout_seconds = graceful_timeout_seconds
+        self._main_loop_tick_seconds = main_loop_tick_seconds
         if command is None:
             self._watch = False
         elif watch is None:
@@ -168,11 +174,11 @@ class Supervisor:
             with self._child_lock:
                 child = self._child
             if child is None:
-                self._shutdown_event.wait(0.5)
+                self._shutdown_event.wait(self._main_loop_tick_seconds)
                 continue
 
             try:
-                exit_code = child.wait(timeout=0.5)
+                exit_code = child.wait(timeout=self._main_loop_tick_seconds)
             except subprocess.TimeoutExpired:
                 continue
 
@@ -253,9 +259,9 @@ class Supervisor:
         with self._stderr_lock:
             return "\n".join(self._stderr_buffer)
 
-    def _stop_child(
-        self, graceful_timeout: int = _GRACEFUL_TIMEOUT_SECONDS
-    ) -> Optional[int]:
+    def _stop_child(self, graceful_timeout: Optional[float] = None) -> Optional[int]:
+        if graceful_timeout is None:
+            graceful_timeout = self._graceful_timeout_seconds
         with self._child_lock:
             child = self._child
             if child is None:
@@ -326,7 +332,7 @@ class Supervisor:
             if old_child.poll() is None:
                 try:
                     old_child.send_signal(signal.SIGTERM)
-                    old_child.wait(timeout=_GRACEFUL_TIMEOUT_SECONDS)
+                    old_child.wait(timeout=self._graceful_timeout_seconds)
                 except (OSError, subprocess.TimeoutExpired):
                     try:
                         old_child.kill()
@@ -394,7 +400,7 @@ class Supervisor:
             except Exception:
                 LOGGER.debug("Heartbeat error", exc_info=True)
 
-            self._shutdown_event.wait(_HEARTBEAT_INTERVAL_SECONDS)
+            self._shutdown_event.wait(self._heartbeat_interval_seconds)
 
     def _install_signal_handlers(self) -> None:
         def handler(signum: int, frame: object) -> None:

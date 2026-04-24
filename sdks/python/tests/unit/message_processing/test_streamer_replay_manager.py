@@ -92,7 +92,7 @@ def streamer_with_mock_replay(
         yield tested, mock_replay_manager, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
 
 
 @pytest.fixture
@@ -119,7 +119,7 @@ def streamer_with_real_replay(
         yield tested, rm, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
         if rm is not None and rm.is_alive():
             rm.close()
             rm.join(timeout=2)
@@ -168,7 +168,7 @@ class TestStreamerCloseLifecycle:
         """Streamer.close() must call close() on the ReplayManager."""
         tested, mock_rm, _ = streamer_with_mock_replay
 
-        tested.close(timeout=5)
+        tested.close(flush=False)
 
         mock_rm.close.assert_called_once()
 
@@ -203,7 +203,7 @@ class TestStreamerCloseLifecycle:
 
         tested._close_queue_consumers = tracked_close_consumers
 
-        tested.close(timeout=5)
+        tested.close(flush=False)
 
         assert "replay_manager_close" in call_order
         assert "queue_consumers_close" in call_order
@@ -222,7 +222,7 @@ class TestStreamerCloseLifecycle:
 
         assert rm.is_alive()
 
-        tested.close(timeout=5)
+        tested.close(flush=False)
         rm.join(timeout=2)
 
         assert not rm.is_alive()
@@ -307,7 +307,7 @@ class TestReplayCallbackFlow:
         tested, rm, mock_processor = streamer_with_real_replay
 
         # Close the streamer to set drain mode
-        tested.close(timeout=5)
+        tested.close(flush=False)
         mock_processor.process.reset_mock()
 
         # Now try to put a message (simulates a late replay callback)
@@ -348,7 +348,7 @@ class TestStreamerReplayManagerLifecycleEndToEnd:
         assert mock_processor.process.call_count >= 1
 
         # Close everything
-        tested.close(timeout=5)
+        tested.close(flush=False)
         rm.join(timeout=2)
 
         # Verify cleanup
@@ -381,7 +381,7 @@ class TestStreamerReplayManagerLifecycleEndToEnd:
         assert mock_processor.process.call_count >= 1
 
         # 4. Clean up
-        tested.close(timeout=5)
+        tested.close(flush=False)
         rm.join(timeout=2)
 
         assert not rm.is_alive()

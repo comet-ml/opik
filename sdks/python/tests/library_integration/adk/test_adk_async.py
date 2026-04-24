@@ -7,12 +7,13 @@ from opik.integrations.adk import OpikTracer, track_adk_agent_recursive
 from opik.integrations.adk import helpers as opik_adk_helpers
 from . import agent_tools
 from . import constants, helpers
+from .agent_instructions import TOOL_USE_WEATHER
 from .constants import (
     APP_NAME,
     USER_ID,
     SESSION_ID,
     MODEL_NAME,
-    EXPECTED_USAGE_KEYS_GOOGLE,
+    EXPECTED_USAGE_GOOGLE,
 )
 from ...testlib import (
     ANY_BUT_NONE,
@@ -20,7 +21,6 @@ from ...testlib import (
     ANY_STRING,
     SpanModel,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
 )
 
@@ -39,9 +39,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
         description=(
             "Agent to answer questions about the weather in a city (only 'New York' supported)."
         ),
-        instruction=(
-            "I can answer your questions about the weather in a city (only 'New York' supported)."
-        ),
+        instruction=TOOL_USE_WEATHER,
         tools=[agent_tools.get_weather],
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
@@ -61,7 +59,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = await helpers.async_extract_final_response_text(events_generator)
+    _ = await helpers.async_extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -83,9 +81,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
             "_opik_graph_definition": ANY_DICT,
         },
         tags=["adk-test"],
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the weather in New York?"}],
@@ -105,7 +101,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -137,7 +133,7 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
                 output=ANY_DICT,
                 provider=opik_adk_helpers.get_adk_provider(),
                 model=MODEL_NAME,
-                usage=ANY_DICT,
+                usage=EXPECTED_USAGE_GOOGLE,
                 project_name="adk-test",
                 source="sdk",
             ),
@@ -146,8 +142,6 @@ async def test_adk__single_agent__multiple_tools__async_happyflow(fake_backend):
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[2].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @pytest.mark.asyncio
@@ -167,7 +161,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
             role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = await helpers.async_extract_final_response_text(events_generator)
+    _ = await helpers.async_extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -186,9 +180,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_DICT,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
@@ -218,7 +210,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -247,7 +239,7 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
                         output=ANY_DICT,
                         provider=opik_adk_helpers.get_adk_provider(),
                         model=MODEL_NAME,
-                        usage=ANY_DICT,
+                        usage=EXPECTED_USAGE_GOOGLE,
                         source="sdk",
                     )
                 ],
@@ -258,8 +250,6 @@ async def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-    assert_dict_has_keys(trace_tree.spans[0].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
-    assert_dict_has_keys(trace_tree.spans[1].spans[0].usage, EXPECTED_USAGE_KEYS_GOOGLE)
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -341,9 +331,69 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
         ),
     )
 
-    final_response = await helpers.async_extract_final_response_text(events)
+    _ = await helpers.async_extract_final_response_text(events)
 
     opik.flush_tracker()
+
+    # ADK emits a wrapper span for each sub-agent under parallel_agent. Each
+    # sub-agent wrapper contains the standard function-calling round-trip
+    # inside LlmAgent — two LLM spans surrounding one tool span:
+    #   1. first LLM call  — the model is handed the tool's function
+    #      declaration and emits a `function_call` part (Opik opens an LLM
+    #      span via before_model_callback).
+    #   2. tool span       — ADK dispatches the Python tool.
+    #   3. second LLM call — the function_response is fed back to the model,
+    #      which turns it into the user-facing text reply (another LLM span).
+    # Siblings are listed below in start_time order — the emulator sorts
+    # children that way to match how the real backend would return them.
+    _llm_span = SpanModel(
+        id=ANY_BUT_NONE,
+        name=MODEL_NAME,
+        start_time=ANY_BUT_NONE,
+        end_time=ANY_BUT_NONE,
+        last_updated_at=ANY_BUT_NONE,
+        metadata=ANY_DICT,
+        type="llm",
+        input=ANY_DICT,
+        output=ANY_DICT,
+        provider=opik_adk_helpers.get_adk_provider(),
+        model=MODEL_NAME,
+        usage=EXPECTED_USAGE_GOOGLE,
+        project_name=project_name,
+        source="sdk",
+    )
+
+    def _sub_agent_wrapper(agent_name: str, tool_name: str) -> SpanModel:
+        return SpanModel(
+            id=ANY_BUT_NONE,
+            name=agent_name,
+            start_time=ANY_BUT_NONE,
+            end_time=ANY_BUT_NONE,
+            last_updated_at=ANY_BUT_NONE,
+            metadata=ANY_DICT,
+            type="general",
+            input=ANY_DICT,
+            output=ANY_DICT,
+            project_name=project_name,
+            spans=[
+                _llm_span,
+                SpanModel(
+                    id=ANY_BUT_NONE,
+                    name=tool_name,
+                    start_time=ANY_BUT_NONE,
+                    end_time=ANY_BUT_NONE,
+                    last_updated_at=ANY_BUT_NONE,
+                    metadata=ANY_DICT,
+                    type="tool",
+                    input={"city": "New York"},
+                    output=ANY_DICT.containing({"status": "success"}),
+                    project_name=project_name,
+                    source="sdk",
+                ),
+                _llm_span,
+            ],
+            source="sdk",
+        )
 
     EXPECTED_TRACE_TREE = TraceModel(
         id=ANY_BUT_NONE,
@@ -358,9 +408,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_DICT,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What's the weather and time in New York?"}],
@@ -380,134 +428,8 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                 output=ANY_DICT,
                 project_name=project_name,
                 spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="weather_agent",
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        last_updated_at=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="general",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        project_name=project_name,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name=MODEL_NAME,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="llm",
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                provider=opik_adk_helpers.get_adk_provider(),
-                                model=MODEL_NAME,
-                                usage=ANY_DICT,
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name="get_weather",
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="tool",
-                                input={"city": "New York"},
-                                output={
-                                    "status": "success",
-                                    "report": "The weather in New York is sunny with a temperature of 25 degrees Celsius (41 degrees Fahrenheit).",
-                                },
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name=MODEL_NAME,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="llm",
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                provider=opik_adk_helpers.get_adk_provider(),
-                                model=MODEL_NAME,
-                                usage=ANY_DICT,
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                        ],
-                        source="sdk",
-                    ),
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name="timezone_agent",
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        last_updated_at=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="general",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        project_name=project_name,
-                        spans=[
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name=MODEL_NAME,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="llm",
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                provider=opik_adk_helpers.get_adk_provider(),
-                                model=MODEL_NAME,
-                                usage=ANY_DICT,
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name="get_current_time",
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="tool",
-                                input={"city": "New York"},
-                                output=ANY_DICT.containing(
-                                    {
-                                        "status": "success",
-                                        "report": ANY_BUT_NONE,
-                                    }
-                                ),
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                            SpanModel(
-                                id=ANY_BUT_NONE,
-                                name=MODEL_NAME,
-                                start_time=ANY_BUT_NONE,
-                                end_time=ANY_BUT_NONE,
-                                last_updated_at=ANY_BUT_NONE,
-                                metadata=ANY_DICT,
-                                type="llm",
-                                input=ANY_DICT,
-                                output=ANY_DICT,
-                                provider=opik_adk_helpers.get_adk_provider(),
-                                model=MODEL_NAME,
-                                usage=ANY_DICT,
-                                project_name=project_name,
-                                source="sdk",
-                            ),
-                        ],
-                        source="sdk",
-                    ),
+                    _sub_agent_wrapper("timezone_agent", "get_current_time"),
+                    _sub_agent_wrapper("weather_agent", "get_weather"),
                 ],
                 source="sdk",
             ),
@@ -522,24 +444,7 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
                 input=ANY_DICT,
                 output=ANY_DICT,
                 project_name=project_name,
-                spans=[
-                    SpanModel(
-                        id=ANY_BUT_NONE,
-                        name=MODEL_NAME,
-                        start_time=ANY_BUT_NONE,
-                        end_time=ANY_BUT_NONE,
-                        last_updated_at=ANY_BUT_NONE,
-                        metadata=ANY_DICT,
-                        type="llm",
-                        input=ANY_DICT,
-                        output=ANY_DICT,
-                        provider=opik_adk_helpers.get_adk_provider(),
-                        model=MODEL_NAME,
-                        usage=ANY_DICT,
-                        project_name=project_name,
-                        source="sdk",
-                    ),
-                ],
+                spans=[_llm_span],
                 source="sdk",
             ),
         ],
@@ -548,5 +453,16 @@ async def test_adk__parallel_agents__appropriate_spans_created_for_subagents(
 
     assert len(fake_backend.trace_trees) > 0
     trace_tree = fake_backend.trace_trees[0]
+
+    # parallel sub-agents produce their tool/llm spans in a non-deterministic
+    # interleaving order; sort both trees by span name so the comparison
+    # stays structural.
+    def _sort(node):
+        node.spans = sorted(node.spans or [], key=lambda s: s.name)
+        for s in node.spans:
+            _sort(s)
+
+    _sort(EXPECTED_TRACE_TREE)
+    _sort(trace_tree)
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_tree)

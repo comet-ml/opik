@@ -1,4 +1,4 @@
-from typing import Iterator, Optional, Union, AsyncIterator
+from typing import AsyncIterator, Iterator, List, Optional, Union
 
 import google
 import pytest
@@ -36,21 +36,19 @@ def extract_final_response_text(
 ) -> Optional[str]:
     """
     Exhausts the iterator of ADK events and returns the response text
-    from the last event (presumably the final root agent response).
+    from the last event that actually carries content.
+
+    ADK (1.31+) sometimes emits a trailing terminator event with content=None
+    after the real final response, so we walk the list in reverse to find
+    the last event whose content.parts is populated.
     """
-    events_generator = list(events_generator)
-    if len(events_generator) == 0:
+    events = list(events_generator)
+    if len(events) == 0:
         # As the error might occur in the background, we raise an exception here
         raise Exception("Agent failed to execute.")
 
-    last_event: adk_events.Event = events_generator[-1]
-    # Don't use only event.is_final_response() because it may be true for nested agents as well!
-    assert (
-        last_event.is_final_response()
-        and last_event.content
-        and last_event.content.parts
-    )
-    return last_event.content.parts[0].text
+    final_event = _pick_final_response_event(events)
+    return final_event.content.parts[0].text
 
 
 async def async_build_runner(
@@ -71,7 +69,8 @@ async def async_extract_final_response_text(
 ) -> Optional[str]:
     """
     Exhausts the async iterator of ADK events and returns the response text
-    from the last event (presumably the final root agent response).
+    from the last event that actually carries content. See the sync variant
+    for the rationale on scanning in reverse.
     """
     collected_events = []
     async for event in events_generator:
@@ -81,14 +80,33 @@ async def async_extract_final_response_text(
         # As the error might occur in the background, we raise an exception here
         raise Exception("Agent failed to execute.")
 
-    last_event: adk_events.Event = collected_events[-1]
-    # Don't use only event.is_final_response() because it may be true for nested agents as well!
-    assert (
-        last_event.is_final_response()
-        and last_event.content
-        and last_event.content.parts
+    final_event = _pick_final_response_event(collected_events)
+    return final_event.content.parts[0].text
+
+
+def _pick_final_response_event(
+    events: List[adk_events.Event],
+) -> adk_events.Event:
+    """Return the last event that is a final agent response with text
+    content. Skips trailing terminator events (content=None) that ADK
+    1.31+ sometimes emits, and skips intermediate events such as
+    pre-tool model messages or function_call/function_response parts —
+    otherwise tool-failure tests (which never reach a final text
+    response) would silently pick up a pre-tool chatter event and stop
+    raising. Raises if no qualifying event is found."""
+    for event in reversed(events):
+        if not event.is_final_response():
+            continue
+        content = event.content
+        if content is None or not content.parts:
+            continue
+        if content.parts[0].text is None:
+            continue
+        return event
+    raise AssertionError(
+        f"No final-response event with text content found among {len(events)} events. "
+        f"Last event: {events[-1]!r}"
     )
-    return last_event.content.parts[0].text
 
 
 def root_agent_sequential_with_translator_and_summarizer(
@@ -98,6 +116,7 @@ def root_agent_sequential_with_translator_and_summarizer(
         name="Translator",
         model=MODEL_NAME,
         description="Translates text to English.",
+        instruction="Translate to English.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,
@@ -108,6 +127,7 @@ def root_agent_sequential_with_translator_and_summarizer(
         name="Summarizer",
         model=MODEL_NAME,
         description="Summarizes text to 1 sentence.",
+        instruction="Summarize to one sentence.",
         before_agent_callback=opik_tracer.before_agent_callback,
         after_agent_callback=opik_tracer.after_agent_callback,
         before_model_callback=opik_tracer.before_model_callback,

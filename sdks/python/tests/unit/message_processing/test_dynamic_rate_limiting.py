@@ -24,7 +24,7 @@ def streamer_with_mock_message_processor(fake_file_upload_manager):
 
     yield streamer, mock_message_processor
 
-    streamer.close(None)
+    streamer.close(flush=False)
 
 
 def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(

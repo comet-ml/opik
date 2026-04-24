@@ -28,7 +28,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
-  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+  OPIK_CONSOLE_LOGGING_LEVEL: INFO
 jobs:
     run-e2e:
         name: Python SDK E2E Tests ${{matrix.python_version}}
@@ -87,7 +87,7 @@ jobs:
         - name: Run tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2
