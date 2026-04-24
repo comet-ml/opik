@@ -172,7 +172,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canViewDatasets, canDeleteOptimizationRuns },
+    permissions: {
+      canViewDatasets,
+      canDeleteOptimizationRuns,
+      canUseOptimizationStudio,
+    },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -337,15 +341,21 @@ const OptimizationsPage: React.FunctionComponent = () => {
           description={
             "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
           }
-          primaryActionLabel="Create optimization run"
-          onPrimaryAction={handleNewOptimizationClick}
+          primaryActionLabel={
+            canUseOptimizationStudio ? "Create optimization run" : undefined
+          }
+          onPrimaryAction={
+            canUseOptimizationStudio ? handleNewOptimizationClick : undefined
+          }
           docsUrl={buildDocsUrl(
             "/development/optimization-runs/optimization_studio",
           )}
         />
       ) : (
         <>
-          {isOptimizationStudioEnabled && <StudioTemplates />}
+          {isOptimizationStudioEnabled && canUseOptimizationStudio && (
+            <StudioTemplates />
+          )}
           <div className="pt-4">
             <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
               Optimization runs
@@ -407,7 +417,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               }}
               noData={
                 <DataTableNoData title={noDataText}>
-                  {noData && (
+                  {noData && canUseOptimizationStudio && (
                     <Button variant="link" onClick={handleNewOptimizationClick}>
                       Create optimization
                     </Button>

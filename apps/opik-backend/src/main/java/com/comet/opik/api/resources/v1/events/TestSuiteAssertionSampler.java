@@ -135,7 +135,7 @@ public class TestSuiteAssertionSampler {
             return;
         }
 
-        Map<String, Mono<List<PreparedEvaluator>>> datasetEvaluatorsCache = new HashMap<>();
+        Map<String, Mono<DatasetEvaluatorsResult>> datasetEvaluatorsCache = new HashMap<>();
 
         decrementIncomplete
                 .thenMany(Flux.fromIterable(completeTraces)
@@ -156,7 +156,7 @@ public class TestSuiteAssertionSampler {
 
     private Mono<List<TraceToScoreLlmAsJudge>> processTrace(
             Trace trace, TracesCreated tracesBatch,
-            Map<String, Mono<List<PreparedEvaluator>>> datasetEvaluatorsCache,
+            Map<String, Mono<DatasetEvaluatorsResult>> datasetEvaluatorsCache,
             String modelName, Duration fetchTimeout) {
 
         var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
@@ -188,7 +188,6 @@ public class TestSuiteAssertionSampler {
                     datasetId, versionHash != null ? versionHash : "latest");
             return fetchDatasetEvaluators(datasetId, versionHash)
                     .timeout(fetchTimeout)
-                    .map(result -> evaluatorMapper.prepareEvaluators(result.evaluators(), modelName))
                     .cache();
         });
 
@@ -208,12 +207,15 @@ public class TestSuiteAssertionSampler {
         var itemId = itemIdOpt.get();
 
         return datasetEvaluatorsMono
-                .flatMap(datasetEvals -> fetchItemEvaluators(itemId, modelName)
-                        .map(itemEvals -> {
-                            var allEvaluators = new ArrayList<PreparedEvaluator>(datasetEvals);
-                            allEvaluators.addAll(itemEvals);
-                            return allEvaluators;
-                        }))
+                .flatMap(result -> {
+                    var datasetEvals = evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
+                    return fetchItemEvaluators(itemId, result.versionId(), modelName)
+                            .map(itemEvals -> {
+                                var allEvaluators = new ArrayList<>(datasetEvals);
+                                allEvaluators.addAll(itemEvals);
+                                return allEvaluators;
+                            });
+                })
                 .flatMap(allEvaluators -> {
                     if (allEvaluators.isEmpty()) {
                         log.debug("No evaluators found for trace '{}', dataset item '{}'",
@@ -275,8 +277,8 @@ public class TestSuiteAssertionSampler {
         });
     }
 
-    private Mono<List<PreparedEvaluator>> fetchItemEvaluators(UUID itemId, String modelName) {
-        return datasetItemService.get(itemId)
+    private Mono<List<PreparedEvaluator>> fetchItemEvaluators(UUID itemId, UUID versionId, String modelName) {
+        return datasetItemService.get(itemId, versionId)
                 .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
                 .map(item -> Optional.ofNullable(item.evaluators())
                         .filter(evaluators -> !evaluators.isEmpty())

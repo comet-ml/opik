@@ -26,6 +26,7 @@ export interface Permissions {
   canAnnotateTraceSpanThread: boolean;
   canTagTrace: boolean;
   canUsePlayground: boolean;
+  canUseOptimizationStudio: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -62,6 +63,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canAnnotateTraceSpanThread: true,
     canTagTrace: true,
     canUsePlayground: true,
+    canUseOptimizationStudio: true,
   },
   isPending: false,
 };
