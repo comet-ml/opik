@@ -32,6 +32,7 @@ runs:
         REPO: ${{ github.repository }}
         EVENT: ${{ github.event_name }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
+        BEFORE: ${{ github.event.before }}
         SHA: ${{ github.sha }}
       run: |
         set -euo pipefail
@@ -41,7 +42,12 @@ runs:
         fi
         if [ "$EVENT" = "pull_request" ]; then
             FILES=$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files" --jq '.[].filename')
+        elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            # Aggregate across the full push range so multi-commit pushes (rebase-merge, direct pushes)
+            # don't miss SDK-touching files landed in non-tip commits.
+            FILES=$(gh api "repos/$REPO/compare/$BEFORE...$SHA" --jq '.files[].filename')
         else
+            # Branch creation / force-push: before is zero or missing; fall back to tip.
             FILES=$(gh api "repos/$REPO/commits/$SHA" --jq '.files[].filename')
         fi
         # Default to full matrix on empty file list so a degenerate API response
