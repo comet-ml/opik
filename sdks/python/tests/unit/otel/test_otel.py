@@ -1,15 +1,12 @@
 from unittest.mock import MagicMock
 
-from opik.otel.helpers import (
-    extract_opik_distributed_trace_attributes,
-    attach_to_parent,
-)
-from opik.otel.types import OpikDistributedTraceAttributes
+from opik.otel import distributed_trace
+from opik.otel import types as otel_types
 
 
 class TestOpikDistributedTraceAttributes:
     def test_as_attributes__with_trace_id_and_parent_span_id__returns_both(self):
-        attrs = OpikDistributedTraceAttributes(
+        attrs = otel_types.OpikDistributedTraceAttributes(
             opik_trace_id="trace-123",
             opik_parent_span_id="span-456",
         )
@@ -21,7 +18,7 @@ class TestOpikDistributedTraceAttributes:
         }
 
     def test_as_attributes__with_trace_id_only__returns_trace_id_only(self):
-        attrs = OpikDistributedTraceAttributes(
+        attrs = otel_types.OpikDistributedTraceAttributes(
             opik_trace_id="trace-123",
             opik_parent_span_id=None,
         )
@@ -40,7 +37,7 @@ class TestExtractOpikDistributedTraceAttributes:
             "opik_parent_span_id": "span-def",
         }
 
-        result = extract_opik_distributed_trace_attributes(headers)
+        result = distributed_trace.extract_opik_distributed_trace_attributes(headers)
 
         assert result is not None
         assert result.as_attributes() == {
@@ -53,7 +50,7 @@ class TestExtractOpikDistributedTraceAttributes:
     ):
         headers = {"opik_trace_id": "trace-abc"}
 
-        result = extract_opik_distributed_trace_attributes(headers)
+        result = distributed_trace.extract_opik_distributed_trace_attributes(headers)
 
         assert result is not None
         assert result.as_attributes() == {"opik.trace_id": "trace-abc"}
@@ -61,12 +58,12 @@ class TestExtractOpikDistributedTraceAttributes:
     def test_extract__headers_without_trace_id__returns_none(self):
         headers = {"opik_parent_span_id": "span-def", "other_header": "value"}
 
-        result = extract_opik_distributed_trace_attributes(headers)
+        result = distributed_trace.extract_opik_distributed_trace_attributes(headers)
 
         assert result is None
 
     def test_extract__empty_headers__returns_none(self):
-        result = extract_opik_distributed_trace_attributes({})
+        result = distributed_trace.extract_opik_distributed_trace_attributes({})
 
         assert result is None
 
@@ -78,7 +75,7 @@ class TestExtractOpikDistributedTraceAttributes:
             "content-type": "application/json",
         }
 
-        result = extract_opik_distributed_trace_attributes(headers)
+        result = distributed_trace.extract_opik_distributed_trace_attributes(headers)
 
         assert result is not None
         assert result.as_attributes() == {
@@ -95,7 +92,7 @@ class TestAttachToParent:
             "opik_parent_span_id": "span-def",
         }
 
-        result = attach_to_parent(span, headers)
+        result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is True
         span.set_attributes.assert_called_once_with(
@@ -111,7 +108,7 @@ class TestAttachToParent:
         span = MagicMock()
         headers = {"opik_trace_id": "trace-abc"}
 
-        result = attach_to_parent(span, headers)
+        result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is True
         span.set_attributes.assert_called_once_with({"opik.trace_id": "trace-abc"})
@@ -122,7 +119,7 @@ class TestAttachToParent:
         span = MagicMock()
         headers = {"opik_parent_span_id": "span-def"}
 
-        result = attach_to_parent(span, headers)
+        result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is False
         span.set_attributes.assert_not_called()
@@ -130,7 +127,7 @@ class TestAttachToParent:
     def test_attach_to_parent__empty_headers__returns_false(self):
         span = MagicMock()
 
-        result = attach_to_parent(span, {})
+        result = distributed_trace.attach_to_parent(span, {})
 
         assert result is False
         span.set_attributes.assert_not_called()

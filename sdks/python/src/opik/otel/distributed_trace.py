@@ -1,6 +1,6 @@
 from typing import Dict, Optional, TYPE_CHECKING
 
-from opik.otel.types import OpikDistributedTraceAttributes
+from opik.otel import types as otel_types
 
 if TYPE_CHECKING:
     from opentelemetry import trace
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 def extract_opik_distributed_trace_attributes(
     http_headers: Dict[str, str],
-) -> Optional[OpikDistributedTraceAttributes]:
+) -> Optional[otel_types.OpikDistributedTraceAttributes]:
     """
     Extracts Opik distributed trace attributes from HTTP headers.
 
@@ -26,7 +26,7 @@ def extract_opik_distributed_trace_attributes(
         Returns None if `opik_trace_id` is not found.
     """
     if "opik_trace_id" in http_headers:
-        return OpikDistributedTraceAttributes(
+        return otel_types.OpikDistributedTraceAttributes(
             opik_trace_id=http_headers["opik_trace_id"],
             opik_parent_span_id=http_headers.get("opik_parent_span_id", None),
         )
