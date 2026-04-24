@@ -203,7 +203,7 @@ def import_projects_from_directory(
                         )
 
                         trace = client.trace(
-                            id=id_helpers.generate_id(timestamp=original_start_time),
+                            id=original_trace_id or id_helpers.generate_id(timestamp=original_start_time),
                             name=trace_info.get("name", "imported_trace"),
                             start_time=original_start_time,
                             end_time=(
@@ -246,7 +246,10 @@ def import_projects_from_directory(
                             )
 
                             original_span_id = span_info.get("id")
-                            # Translate parent_span_id to the new ID if it was already created
+                            # Translate parent_span_id using the original→imported ID map.
+                            # When original IDs are preserved this is an identity map, but
+                            # it also handles older exports that had no span id or cases
+                            # where original_span_id was absent.
                             original_parent_span_id = span_info.get("parent_span_id")
 
                             new_parent_span_id = None
@@ -263,6 +266,7 @@ def import_projects_from_directory(
                             usage_data = clean_usage_for_import(span_info.get("usage"))
 
                             span = client.span(
+                                id=original_span_id or id_helpers.generate_id(),
                                 name=span_info.get("name", "imported_span"),
                                 type=span_info.get("type", "general"),
                                 start_time=(
@@ -298,7 +302,9 @@ def import_projects_from_directory(
                                 project_name=project_name,
                             )
 
-                            # Map original span ID to new span ID for parent relationship mapping
+                            # Record the original→imported span ID mapping so that
+                            # parent_span_id lookups (above) resolve correctly.
+                            # When original IDs are preserved, span.id == original_span_id.
                             if original_span_id and span.id:
                                 span_id_map[original_span_id] = span.id
 
