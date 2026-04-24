@@ -169,7 +169,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canViewDatasets, canDeleteOptimizationRuns },
+    permissions: {
+      canViewDatasets,
+      canDeleteOptimizationRuns,
+      canUseOptimizationStudio,
+    },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -324,7 +328,9 @@ const OptimizationsPage: React.FunctionComponent = () => {
       <ExplainerDescription
         {...EXPLAINERS_MAP[EXPLAINER_ID.whats_an_optimization_run]}
       />
-      {isOptimizationStudioEnabled && <StudioTemplates />}
+      {isOptimizationStudioEnabled && canUseOptimizationStudio && (
+        <StudioTemplates />
+      )}
       <div className="pt-6">
         <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
           Optimization runs
@@ -386,7 +392,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
           }}
           noData={
             <DataTableNoData title={noDataText}>
-              {noData && (
+              {noData && canUseOptimizationStudio && (
                 <Button variant="link" onClick={handleNewOptimizationClick}>
                   Create new optimization
                 </Button>

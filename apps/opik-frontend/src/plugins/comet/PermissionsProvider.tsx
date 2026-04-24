@@ -34,6 +34,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
     canAnnotateTraceSpanThread,
     canTagTrace,
     canUsePlayground,
+    canUseOptimizationStudio,
     isPending,
   } = useUserPermission();
 
@@ -67,6 +68,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
         canAnnotateTraceSpanThread,
         canTagTrace,
         canUsePlayground,
+        canUseOptimizationStudio,
       },
       isPending,
     }),
@@ -98,6 +100,7 @@ const PermissionsProvider: React.FC<{ children: ReactNode }> = ({
       canAnnotateTraceSpanThread,
       canTagTrace,
       canUsePlayground,
+      canUseOptimizationStudio,
       isPending,
     ],
   );
