@@ -476,25 +476,29 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </MediaProvider>
         </TabsContent>
-        <TabsContent value="feedback_scores" className="px-4">
-          <ConfigurableFeedbackScoreTable
-            onDeleteFeedbackScore={
-              canAnnotateTraceSpanThread ? handleDeleteFeedbackScore : undefined
-            }
-            feedbackScores={threadFeedbackScores}
-            onAddHumanReview={() =>
-              setActiveSection(DetailsActionSection.Annotate)
-            }
-            entityType="thread"
-          />
-          {canAnnotateTraceSpanThread && (
-            <ThreadFeedbackScoresInfo
+        <TabsContent value="feedback_scores">
+          <div style={bodyStyle} className="overflow-y-auto px-4">
+            <ConfigurableFeedbackScoreTable
+              onDeleteFeedbackScore={
+                canAnnotateTraceSpanThread
+                  ? handleDeleteFeedbackScore
+                  : undefined
+              }
               feedbackScores={threadFeedbackScores}
               onAddHumanReview={() =>
                 setActiveSection(DetailsActionSection.Annotate)
               }
+              entityType="thread"
             />
-          )}
+            {canAnnotateTraceSpanThread && (
+              <ThreadFeedbackScoresInfo
+                feedbackScores={threadFeedbackScores}
+                onAddHumanReview={() =>
+                  setActiveSection(DetailsActionSection.Annotate)
+                }
+              />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     );
@@ -536,7 +540,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   hotkey="A"
                 />
               </div>
-              <div ref={ref} className="relative flex-auto">
+              <div ref={ref} className="relative min-h-0 flex-auto">
                 <div className="px-4 pb-6 pt-4" data-panel-header="true">
                   {renderHeader()}
                 </div>
