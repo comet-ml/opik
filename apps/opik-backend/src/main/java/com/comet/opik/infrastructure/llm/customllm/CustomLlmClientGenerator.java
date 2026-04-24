@@ -5,6 +5,7 @@ import com.comet.opik.domain.llm.langchain4j.OpikOpenAiChatModel;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
+import dev.langchain4j.http.client.HttpClientBuilder;
 import dev.langchain4j.http.client.jdk.JdkHttpClient;
 import dev.langchain4j.http.client.jdk.JdkHttpClientBuilder;
 import dev.langchain4j.model.chat.ChatModel;
@@ -33,16 +34,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(baseUrl)
+                .httpClientBuilder(newHttpClientBuilder(config))
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
-
-        // Only wire our decorator when the provider actually uses an OPIK-4551
-        // feature. Legacy providers (Ollama, vLLM, bare OpenAI-compat) fall back
-        // to LangChain4j's default HTTP client so their path is byte-identical
-        // to pre-OPIK-4551 behaviour.
-        if (requiresInterceptingBuilder(config)) {
-            openAiClientBuilder.httpClientBuilder(newInterceptingHttpClientBuilder(config));
-        }
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -78,15 +72,11 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
+                .httpClientBuilder(newHttpClientBuilder(config))
                 .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
-
-        // See the comment in newCustomLlmClient — decorator only wired when needed.
-        if (requiresInterceptingBuilder(config)) {
-            builder.httpClientBuilder(newInterceptingHttpClientBuilder(config));
-        }
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -114,10 +104,15 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         return newCustomProviderChatLanguageModel(config, modelParameters);
     }
 
-    /// Builds the Custom LLM decorator over a fresh `JdkHttpClientBuilder`. Only
-    /// invoked when the provider actually needs request mutation; keeps the HTTP/1.1
-    /// pinning that vLLM (FastAPI) relies on in place for the mutated path.
-    private InterceptingHttpClientBuilder newInterceptingHttpClientBuilder(LlmProviderClientApiConfig config) {
+    /// Builds the HTTP client builder passed to LangChain4j. The underlying
+    /// `JdkHttpClientBuilder` is always returned (HTTP/1.1 pinning for vLLM
+    /// / FastAPI servers is pre-OPIK-4551 behaviour that must be preserved
+    /// for every Custom LLM provider). Only the `InterceptingHttpClientBuilder`
+    /// wrapper is conditional — applied when the provider actually needs
+    /// request mutation (OPIK-4551 config keys or `{model}` placeholder).
+    /// Legacy providers therefore see a plain `JdkHttpClientBuilder` — the
+    /// same object LangChain4j received before OPIK-4551.
+    private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_1_1);
@@ -125,6 +120,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        if (!requiresInterceptingBuilder(config)) {
+            return jdkHttpClientBuilder;
+        }
         return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey());
     }
 
