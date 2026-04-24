@@ -45,6 +45,9 @@ jobs:
       python_versions: ${{ steps.pick.outputs.versions }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/select-e2e-matrix
+          sparse-checkout-cone-mode: false
       - uses: ./.github/actions/select-e2e-matrix
         id: pick
         with:
