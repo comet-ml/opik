@@ -1,29 +1,27 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import copy from "clipboard-copy";
 import {
-  Book,
+  ArrowUpRight,
   Check,
   Copy,
-  GraduationCap,
-  Grip,
   KeyRound,
   LogOut,
   Settings,
   Settings2,
   Shield,
+  Sparkles,
   UserPlus,
 } from "lucide-react";
 
-import { useOpenQuickStartDialog } from "@/hooks/useOpenQuickStartDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import SupportHubSubMenu from "@/shared/SupportHub/SupportHubSubMenu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/ui/avatar";
-import { Button } from "@/ui/button";
+import { Switch } from "@/ui/switch";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuSub,
@@ -37,8 +35,14 @@ import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { buildDocsUrl, cn, maskAPIKey } from "@/lib/utils";
-import useAppStore from "@/store/AppStore";
+import { cn, maskAPIKey } from "@/lib/utils";
+import useAppStore, { useDetectedWorkspaceVersion } from "@/store/AppStore";
+import {
+  getNewExperienceOptIn,
+  getVersionOverride,
+  navigateToWorkspaceRoot,
+  setNewExperienceOptIn,
+} from "@/lib/workspaceVersion";
 import api from "./api";
 import { ORGANIZATION_ROLE_TYPE } from "./types";
 import useOrganizations from "./useOrganizations";
@@ -55,8 +59,11 @@ const UserMenu = () => {
   const { toast } = useToast();
   const { theme, themeOptions, CurrentIcon, handleThemeSelect } =
     useThemeOptions();
-  const { open: openQuickstart } = useOpenQuickStartDialog();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const detectedWorkspaceVersion = useDetectedWorkspaceVersion();
+  const hasOptedIn = getNewExperienceOptIn();
+  const showNewExperienceToggle =
+    detectedWorkspaceVersion === "v1" && getVersionOverride() === null;
 
   const { data: user } = useUser();
   const { data: organizations, isLoading } = useOrganizations({
@@ -131,45 +138,6 @@ const UserMenu = () => {
     );
   };
 
-  const renderAppSelector = () => {
-    if (isLLMOnlyOrganization) {
-      return null;
-    }
-
-    return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-2xs">
-            <Grip />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Your apps</DropdownMenuLabel>
-
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              className="flex cursor-pointer flex-row gap-3"
-              onClick={handleSwitchToEM}
-            >
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-experiment-management)] text-[8px] font-medium text-white">
-                EM
-              </span>
-              <span>Experiment management</span>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem className="flex cursor-pointer flex-row gap-3">
-              <span className="flex size-6 items-center justify-center rounded-[6px] bg-[var(--feature-llm)] text-[8px] font-medium text-white">
-                LLM
-              </span>
-
-              <span>LLM Evaluation (Opik)</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    );
-  };
-
   const renderInviteMembers = () => {
     if (isCollaboratorsTabEnabled) {
       if (!canInviteMembers) {
@@ -220,7 +188,7 @@ const UserMenu = () => {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>{renderAvatar(true)}</DropdownMenuTrigger>
-        <DropdownMenuContent className="w-60" align="end">
+        <DropdownMenuContent className="w-64" align="end">
           <div className="flex items-center gap-2 px-4 py-2">
             {renderAvatar()}
             <TooltipWrapper content={user.userName}>
@@ -257,7 +225,7 @@ const UserMenu = () => {
                   <span>API Key</span>
                 </DropdownMenuSubTrigger>
                 <DropdownMenuPortal>
-                  <DropdownMenuSubContent className="w-60">
+                  <DropdownMenuSubContent className="w-64">
                     <div className="flex h-10 items-center justify-between gap-2 px-4">
                       <span className="comet-body-s truncate text-foreground">
                         {maskAPIKey(user.apiKeys[0])}
@@ -293,21 +261,7 @@ const UserMenu = () => {
             {renderInviteMembers()}
           </DropdownMenuGroup>
           <DropdownMenuSeparator />
-          <DropdownMenuGroup>
-            <DropdownMenuItem
-              onClick={openQuickstart}
-              className="cursor-pointer"
-            >
-              <GraduationCap className="mr-2 size-4" />
-              <span>Quickstart guide</span>
-            </DropdownMenuItem>
-            <a href={buildDocsUrl()} target="_blank" rel="noreferrer">
-              <DropdownMenuItem className="cursor-pointer">
-                <Book className="mr-2 size-4" />
-                <span>Docs</span>
-              </DropdownMenuItem>
-            </a>
-          </DropdownMenuGroup>
+          <SupportHubSubMenu />
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuSub>
@@ -335,7 +289,40 @@ const UserMenu = () => {
                 </DropdownMenuSubContent>
               </DropdownMenuPortal>
             </DropdownMenuSub>
+            {showNewExperienceToggle && (
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onSelect={(e) => {
+                  e.preventDefault();
+                  setNewExperienceOptIn(!hasOptedIn);
+                  navigateToWorkspaceRoot(workspaceName);
+                }}
+              >
+                <Sparkles className="mr-2 size-4" />
+                <span>New Opik experience</span>
+                <Switch
+                  checked={hasOptedIn}
+                  className="pointer-events-none ml-auto"
+                  size="sm"
+                />
+              </DropdownMenuItem>
+            )}
           </DropdownMenuGroup>
+          {!isLLMOnlyOrganization && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="cursor-pointer"
+                onClick={handleSwitchToEM}
+              >
+                <span className="mr-2 flex size-4 items-center justify-center rounded bg-[var(--feature-experiment-management)] text-[6px] font-medium text-white">
+                  EM
+                </span>
+                <span className="truncate">Experiment Management</span>
+                <ArrowUpRight className="ml-auto size-4 shrink-0 text-light-slate" />
+              </DropdownMenuItem>
+            </>
+          )}
           <DropdownMenuItem
             className="cursor-pointer"
             onClick={async () => {
@@ -373,12 +360,7 @@ const UserMenu = () => {
     );
   };
 
-  return (
-    <div className="flex shrink-0 items-center gap-3">
-      {renderAppSelector()}
-      {renderUserMenu()}
-    </div>
-  );
+  return renderUserMenu();
 };
 
 export default UserMenu;

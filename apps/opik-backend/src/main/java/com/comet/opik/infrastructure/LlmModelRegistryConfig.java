@@ -10,5 +10,9 @@ public class LlmModelRegistryConfig {
 
     private String localOverridePath;
 
+    private boolean remoteEnabled = false;
+
+    private String remoteUrl;
+
     @Min(10) private int refreshIntervalSeconds = 300;
 }

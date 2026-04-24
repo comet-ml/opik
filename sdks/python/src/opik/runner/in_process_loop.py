@@ -6,7 +6,6 @@ import contextvars
 import inspect
 import json
 import logging
-import random
 import threading
 import time
 from typing import Any, Callable, Optional
@@ -15,16 +14,18 @@ from ..api_objects import type_helpers
 
 from ..api_objects.agent_config.context import agent_config_context
 from .. import id_helpers
+
 from ..rest_api.client import OpikApi
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types.local_runner_job import LocalRunnerJob
 from . import registry
+from .bridge_handlers import common as bridge_common
 from .context import reset_job_id, set_job_id
 from .log_streamer import LogStreamer
 
 LOGGER = logging.getLogger(__name__)
 
-POLL_IDLE_INTERVAL_SECONDS = 0.5
+_POLL_IDLE_INTERVAL_SECONDS = 0.5
 _CANCELLED_JOBS_TTL_SECONDS = 300
 _CANCELLED_JOBS_MAX_SIZE = 10_000
 
@@ -122,23 +123,19 @@ class InProcessRunnerLoop:
                 job = self._api.runners.next_job(self._runner_id)
                 _poll_failures = 0
             except ApiError as e:
-                if e.status_code == 204:
-                    job = None
-                    _poll_failures = 0
+                _poll_failures += 1
+                if _poll_failures == 1:
+                    LOGGER.warning(
+                        "Unable to reach Opik server (API %s). Retrying...",
+                        e.status_code,
+                    )
                 else:
-                    _poll_failures += 1
-                    if _poll_failures == 1:
-                        LOGGER.warning(
-                            "Unable to reach Opik server (API %s). Retrying...",
-                            e.status_code,
-                        )
-                    else:
-                        LOGGER.debug(
-                            "Poll error (API %s)", e.status_code, exc_info=True
-                        )
-                    self._backoff_wait(backoff)
-                    backoff = min(backoff * 2, self._backoff_cap_seconds)
-                    continue
+                    LOGGER.debug("Poll error (API %s)", e.status_code, exc_info=True)
+                bridge_common.backoff_wait(
+                    self._shutdown_event, backoff, self._backoff_cap_seconds
+                )
+                backoff = min(backoff * 2, self._backoff_cap_seconds)
+                continue
             except Exception:
                 _poll_failures += 1
                 if _poll_failures == 1:
@@ -147,13 +144,15 @@ class InProcessRunnerLoop:
                     )
                 else:
                     LOGGER.debug("Error polling for jobs", exc_info=True)
-                self._backoff_wait(backoff)
+                bridge_common.backoff_wait(
+                    self._shutdown_event, backoff, self._backoff_cap_seconds
+                )
                 backoff = min(backoff * 2, self._backoff_cap_seconds)
                 continue
 
             if job is None:
                 backoff = 1.0
-                self._shutdown_event.wait(POLL_IDLE_INTERVAL_SECONDS)
+                self._shutdown_event.wait(_POLL_IDLE_INTERVAL_SECONDS)
                 continue
 
             backoff = 1.0
@@ -163,7 +162,9 @@ class InProcessRunnerLoop:
     def _heartbeat_loop(self) -> None:
         while not self._shutdown_event.is_set():
             try:
-                resp = self._api.runners.heartbeat(self._runner_id)
+                resp = self._api.runners.heartbeat(
+                    self._runner_id, capabilities=["jobs", "bridge"]
+                )
 
                 cancelled_job_ids = resp.cancelled_job_ids or []
                 now = time.monotonic()
@@ -237,6 +238,7 @@ class InProcessRunnerLoop:
 
         func: Callable = entry["func"]
         mask_id = job.mask_id
+        blueprint_name = job.blueprint_name
 
         trace_id = id_helpers.generate_id()
 
@@ -259,7 +261,7 @@ class InProcessRunnerLoop:
             _inject_trace_id(inputs, trace_id)
             timeout = job.timeout
             if inspect.iscoroutinefunction(func):
-                with agent_config_context(mask_id):
+                with agent_config_context(mask_id, blueprint_name):
                     coro = func(**inputs)
                     if timeout:
                         result = await asyncio.wait_for(coro, timeout=timeout)
@@ -268,7 +270,7 @@ class InProcessRunnerLoop:
             else:
 
                 def _run_with_mask() -> object:
-                    with agent_config_context(mask_id):
+                    with agent_config_context(mask_id, blueprint_name):
                         return func(**inputs)
 
                 if timeout:
@@ -328,7 +330,3 @@ class InProcessRunnerLoop:
             del self._cancelled_jobs[oldest_key]
         while len(self._cancelled_jobs) > _CANCELLED_JOBS_MAX_SIZE:
             self._cancelled_jobs.popitem(last=False)
-
-    def _backoff_wait(self, backoff: float) -> None:
-        wait = min(backoff, self._backoff_cap_seconds) * (0.5 + random.random() * 0.5)
-        self._shutdown_event.wait(wait)

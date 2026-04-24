@@ -28,7 +28,7 @@ import {
   getOptimizerLabel,
   getBestOptimizationScore,
 } from "@/lib/optimizations";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
 
@@ -51,7 +51,7 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
     },
     {
       id: "dataset",
-      label: "Evaluation suite",
+      label: "Test suite",
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       customMeta: {

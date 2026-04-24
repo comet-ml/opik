@@ -12,11 +12,14 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
+import { ExternalLink, RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
-import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  DATE_RANGE_PRESET_ALLTIME,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import {
@@ -39,7 +42,11 @@ import {
 } from "@/lib/table";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
-import NoThreadsPage from "@/v2/pages/LogsPage/ThreadsTab/NoThreadsPage";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import { buildDocsUrl } from "@/v2/lib/utils";
+import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Button } from "@/ui/button";
@@ -65,7 +72,7 @@ import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPa
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
@@ -286,6 +293,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
   logsType,
   onLogsTypeChange,
 }) => {
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
   const {
@@ -295,7 +303,9 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQueryAndStorage();
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+  });
   const [search = "", setSearch] = useQueryParam(
     "threads_search",
     StringParam,
@@ -675,6 +685,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
+            hideAlltime
           />
         </div>
       </PageBodyStickyContainer>
@@ -691,6 +702,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
@@ -767,7 +779,32 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoThreadsPage />}
+        emptyState={
+          <DataTableEmptyContent
+            title="No threads yet"
+            description="Threads will appear here once your agent starts receiving requests."
+            lightImageUrl={emptyLogsLightUrl}
+            darkImageUrl={emptyLogsDarkUrl}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openQuickstart}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Quickstart guide
+              </button>
+              <a
+                href={buildDocsUrl("/tracing/advanced/log_chat_conversations")}
+                target="_blank"
+                rel="noreferrer"
+                className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"
+              >
+                View docs
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
+          </DataTableEmptyContent>
+        }
         skeleton
       >
         <DataTable

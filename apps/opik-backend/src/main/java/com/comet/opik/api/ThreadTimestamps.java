@@ -1,7 +1,11 @@
 package com.comet.opik.api;
 
+import lombok.Builder;
+import lombok.NonNull;
+
 import java.time.Instant;
 import java.util.UUID;
 
-public record ThreadTimestamps(UUID firstTraceId, Instant lastUpdatedAt) {
+@Builder(toBuilder = true)
+public record ThreadTimestamps(@NonNull UUID firstTraceId, @NonNull Instant maxLastUpdatedAt, Source firstTraceSource) {
 }

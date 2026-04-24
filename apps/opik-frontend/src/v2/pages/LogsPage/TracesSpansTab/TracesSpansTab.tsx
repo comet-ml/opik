@@ -11,14 +11,17 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw } from "lucide-react";
+import { ExternalLink, RotateCw } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
 import isArray from "lodash/isArray";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
-import { useMetricDateRangeWithQueryAndStorage } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
+import {
+  useMetricDateRangeWithQueryAndStorage,
+  DATE_RANGE_PRESET_ALLTIME,
+} from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
 
 import useTracesOrSpansList, {
@@ -50,8 +53,12 @@ import {
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
 import { getJSONPaths } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
-import NoTracesPage from "@/v2/pages/LogsPage/NoTracesPage";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
@@ -98,7 +105,7 @@ import { isAgentConfigurationMetadata } from "@/v2/pages-shared/traces/TraceDeta
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import GuardrailsCell from "@/shared/DataTableCells/GuardrailsCell";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import {
   DetailsActionSection,
   DetailsActionSectionParam,
@@ -117,6 +124,7 @@ import MetricsSummary from "@/v2/pages-shared/traces/MetricsSummary/MetricsSumma
 const getRowId = (d: Trace | Span) => d.id;
 
 const REFETCH_INTERVAL = 30000;
+const EMPTY_FILTERS: unknown[] = [];
 
 const SPAN_FEEDBACK_SCORE_SUFFIX = " (span)";
 
@@ -357,6 +365,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   projectId,
   projectName,
 }) => {
+  const { open: openQuickstart } = useOpenQuickStartDialog();
   const truncationEnabled = useTruncationEnabled();
 
   const {
@@ -366,7 +375,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     intervalEnd,
     minDate,
     maxDate,
-  } = useMetricDateRangeWithQueryAndStorage();
+  } = useMetricDateRangeWithQueryAndStorage({
+    excludePresets: [DATE_RANGE_PRESET_ALLTIME],
+  });
   const [search = "", setSearch] = useQueryParam(
     `${type}_search`,
     StringParam,
@@ -420,7 +431,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = [], setFilters] = useQueryParam(
+  const [filters = EMPTY_FILTERS, setFilters] = useQueryParam(
     `${type}_filters`,
     JsonParam,
     {
@@ -1252,6 +1263,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             onChangeValue={handleDateRangeChange}
             minDate={minDate}
             maxDate={maxDate}
+            hideAlltime
           />
         </div>
       </PageBodyStickyContainer>
@@ -1268,6 +1280,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
+          logsSource={LOGS_SOURCE.sdk}
         />
       </PageBodyStickyContainer>
       {selectedRows.length > 0 ? (
@@ -1355,7 +1368,34 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       <DataTableStateHandler
         isLoading={isTableLoading}
         isEmpty={showEmptyState}
-        emptyState={<NoTracesPage type={type} />}
+        emptyState={
+          <DataTableEmptyContent
+            title={`No ${type} yet`}
+            description={`${
+              type === TRACE_DATA_TYPE.spans ? "Spans" : "Traces"
+            } will appear here once your agent starts receiving requests.`}
+            lightImageUrl={emptyLogsLightUrl}
+            darkImageUrl={emptyLogsDarkUrl}
+          >
+            <div className="flex items-center gap-3">
+              <button
+                onClick={openQuickstart}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Quickstart guide
+              </button>
+              <a
+                href={buildDocsUrl("/tracing/advanced/log_traces")}
+                target="_blank"
+                rel="noreferrer"
+                className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"
+              >
+                View docs
+                <ExternalLink className="size-3" />
+              </a>
+            </div>
+          </DataTableEmptyContent>
+        }
         skeleton
       >
         <DataTable

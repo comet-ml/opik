@@ -6,6 +6,7 @@ metadata:
   labels:
     {{- include "opik.labels" $  | nindent 4 }}
 spec:
+  suspend: {{ .Values.clickhouse.backup.suspend | default false }}
   schedule: "{{ .Values.clickhouse.backup.schedule }}"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: {{ .Values.clickhouse.backup.successfulJobsHistoryLimit }}

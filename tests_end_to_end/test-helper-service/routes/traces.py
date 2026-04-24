@@ -2,6 +2,7 @@
 
 from flask import Blueprint, request, abort
 from werkzeug.exceptions import HTTPException
+import datetime
 import io
 import logging
 import os
@@ -83,9 +84,13 @@ def create_traces_client():
             project_name=project_name,
             input={"input": "test input"},
             output={"output": "test output"},
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
-        _ = client_trace.span(
-            name="span", input={"input": "test input"}, output={"output": "test output"}
+        client_trace.span(
+            name="span",
+            input={"input": "test input"},
+            output={"output": "test output"},
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
 
     return success_response({"traces_created": traces_number})
@@ -110,11 +115,12 @@ def create_traces_and_get_url():
     try:
         client = get_opik_client()
         for i in range(traces_number):
-            client.trace(
+            trace = client.trace(
                 name=f"{prefix}{i}",
                 project_name=project_name,
                 input={"input": "test input"},
                 output={"output": "test output"},
+                end_time=datetime.datetime.now(datetime.timezone.utc),
             )
         capture_handler.flush()
         terminal_output = log_capture.getvalue()
@@ -155,6 +161,7 @@ def create_traces_with_spans_client():
             metadata=trace_config.get("metadata", {}),
             feedback_scores=trace_config.get("feedback_scores", []),
             project_name=project_name,
+            end_time=datetime.datetime.now(datetime.timezone.utc),
         )
 
         for span_index in range(span_config["count"]):
@@ -164,6 +171,7 @@ def create_traces_with_spans_client():
                 output={"output": f"output-{span_index}"},
                 tags=span_config.get("tags", []),
                 metadata=span_config.get("metadata", {}),
+                end_time=datetime.datetime.now(datetime.timezone.utc),
             )
 
             for score in span_config.get("feedback_scores", []):
@@ -226,6 +234,7 @@ def create_trace_with_attachment_client():
         input={"instruction": "Analyze the document, ..."},
         project_name=project_name,
         attachments=[Attachment(data=attachment_path)],
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
 
     return success_response({"attachment_name": os.path.basename(attachment_path)})
@@ -264,6 +273,7 @@ def create_trace_with_span_attachment():
         project_name=project_name,
         input={"user_question": "Hello, how are you?"},
         output={"response": "Comment ça va?"},
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
 
     span_name = "Add prompt template"
@@ -275,6 +285,7 @@ def create_trace_with_span_attachment():
         },
         output={"text": "Translate the following text to French: hello, how are you?"},
         attachments=[Attachment(data=attachment_path)],
+        end_time=datetime.datetime.now(datetime.timezone.utc),
     )
 
     return success_response(
@@ -296,6 +307,29 @@ def get_traces():
     )
 
     return success_response({"traces": traces_response.dict()["content"]})
+
+
+@traces_bp.route("/search-traces", methods=["POST"])
+def search_traces():
+    data = request.get_json()
+    validate_required_fields(data, ["project_name"])
+
+    project_name = data["project_name"]
+    max_results = data.get("max_results", 1000)
+    truncate = data.get("truncate", True)
+    exclude = data.get("exclude", None)
+    filter_string = data.get("filter_string", None)
+    client = get_opik_client()
+
+    traces = client.search_traces(
+        project_name=project_name,
+        max_results=max_results,
+        truncate=truncate,
+        exclude=exclude,
+        filter_string=filter_string,
+    )
+
+    return success_response({"traces": [t.dict() for t in traces]})
 
 
 @traces_bp.route("/delete-traces", methods=["DELETE"])

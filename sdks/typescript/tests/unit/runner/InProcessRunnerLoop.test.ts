@@ -3,7 +3,6 @@ import { register } from "@/runner/registry";
 import { createMockHttpResponsePromise } from "@tests/mockUtils";
 import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
 import type { LocalRunnerJob } from "@/rest_api/api/types/LocalRunnerJob";
-import { OpikApiError } from "@/rest_api/errors/OpikApiError";
 import { GoneError } from "@/rest_api/api/errors/GoneError";
 
 function createMockApi() {
@@ -12,9 +11,7 @@ function createMockApi() {
       heartbeat: vi.fn(() =>
         createMockHttpResponsePromise({ cancelledJobIds: [] })
       ),
-      nextJob: vi.fn(() => {
-        throw new OpikApiError({ statusCode: 204 });
-      }),
+      nextJob: vi.fn(() => createMockHttpResponsePromise(null)),
       reportJobResult: vi.fn(() => createMockHttpResponsePromise(undefined)),
       registerAgents: vi.fn(() => createMockHttpResponsePromise(undefined)),
       appendJobLogs: vi.fn(() => createMockHttpResponsePromise(undefined)),
@@ -120,7 +117,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -173,7 +170,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -201,7 +198,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -244,7 +241,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -293,7 +290,7 @@ describe("InProcessRunnerLoop", () => {
           await new Promise((resolve) => setTimeout(resolve, 200));
           return { data: job, rawResponse: {} };
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 
@@ -331,8 +328,8 @@ describe("InProcessRunnerLoop", () => {
       project: "default",
       params: [
         { name: "query", type: "string" },
-        { name: "count", type: "number" },
-        { name: "score", type: "number" },
+        { name: "count", type: "float" },
+        { name: "score", type: "float" },
         { name: "active", type: "boolean" },
       ],
       docstring: "",
@@ -347,7 +344,7 @@ describe("InProcessRunnerLoop", () => {
     (api.runners.nextJob as ReturnType<typeof vi.fn>).mockImplementation(() => {
       callCount++;
       if (callCount === 1) return createMockHttpResponsePromise(job);
-      throw new OpikApiError({ statusCode: 204 });
+      return createMockHttpResponsePromise(null);
     });
 
     const loop = new InProcessRunnerLoop(api, "runner-1");
@@ -391,7 +388,7 @@ describe("InProcessRunnerLoop", () => {
         if (callCount === 1) {
           return createMockHttpResponsePromise(job);
         }
-        throw new OpikApiError({ statusCode: 204 });
+        return createMockHttpResponsePromise(null);
       }
     );
 

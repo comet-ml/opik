@@ -5,6 +5,7 @@ import pick from "lodash/pick";
 import { LogExperiment, PlaygroundPromptType } from "@/types/playground";
 import { JsonObject } from "@/types/shared";
 import { Filters } from "@/types/filters";
+import { DATASET_TYPE } from "@/types/datasets";
 import isUndefined from "lodash/isUndefined";
 import get from "lodash/get";
 import lodashSet from "lodash/set";
@@ -110,7 +111,10 @@ export type PlaygroundStore = {
   datasetSize: number;
   progressTotal: number;
   progressCompleted: number;
+  progressPhase: "running" | "evaluating" | null;
   experimentNamePrefix: string | null;
+  datasetType: DATASET_TYPE | null;
+  experimentByPromptId: Record<string, string>;
 
   setPromptMap: (
     promptIds: string[],
@@ -149,8 +153,11 @@ export type PlaygroundStore = {
   setDatasetSize: (size: number) => void;
   resetDatasetFilters: () => void;
   setProgress: (completed: number, total: number) => void;
+  setProgressPhase: (phase: "running" | "evaluating" | null) => void;
   resetProgress: () => void;
   setLastActiveProjectId: (projectId: string | null) => void;
+  setDatasetType: (type: DATASET_TYPE | null) => void;
+  setExperimentByPromptId: (map: Record<string, string>) => void;
 };
 
 const usePlaygroundStore = create<PlaygroundStore>()(
@@ -172,7 +179,10 @@ const usePlaygroundStore = create<PlaygroundStore>()(
       datasetSize: 100,
       progressTotal: 0,
       progressCompleted: 0,
+      progressPhase: null,
       experimentNamePrefix: null,
+      datasetType: null,
+      experimentByPromptId: {},
 
       updatePrompt: (promptId, changes) => {
         set((state) => {
@@ -332,6 +342,7 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           return {
             ...state,
             createdExperiments: [],
+            experimentByPromptId: {},
           };
         });
       },
@@ -402,23 +413,73 @@ const usePlaygroundStore = create<PlaygroundStore>()(
           };
         });
       },
+      setProgressPhase: (phase) => {
+        set((state) => ({ ...state, progressPhase: phase }));
+      },
       resetProgress: () => {
         set((state) => {
           return {
             ...state,
             progressCompleted: 0,
             progressTotal: 0,
+            progressPhase: null,
           };
         });
       },
       setLastActiveProjectId: (projectId) => {
         set((state) => ({ ...state, lastActiveProjectId: projectId }));
       },
+      setDatasetType: (type) => {
+        set((state) => ({ ...state, datasetType: type }));
+      },
+      setExperimentByPromptId: (map) => {
+        set((state) => {
+          // Test suites run on the BE, so updateOutput is never called and outputMap
+          // entries are never created. Seed empty entries so stale tracking works
+          // when the user changes prompt settings after a run.
+          const newOutputMap = { ...state.outputMap };
+          for (const promptId of Object.keys(map)) {
+            newOutputMap[promptId] ??= {
+              isLoading: false,
+              value: null,
+              stale: false,
+            };
+          }
+          return {
+            ...state,
+            experimentByPromptId: map,
+            outputMap: newOutputMap,
+          };
+        });
+      },
     }),
     {
       name: "PLAYGROUND_STATE",
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      partialize: ({ datasetSampleData, ...rest }) => rest,
+      partialize: (state) => {
+        /* eslint-disable @typescript-eslint/no-unused-vars */
+        const {
+          datasetSampleData,
+          progressPhase,
+          progressTotal,
+          progressCompleted,
+          isRunning,
+          isRunningMap,
+          ...rest
+        } = state;
+        /* eslint-enable @typescript-eslint/no-unused-vars */
+
+        // skipInitialPromptLoad is only meaningful within a single session
+        const cleanedPromptMap = Object.fromEntries(
+          Object.entries(rest.promptMap).map(([id, prompt]) => {
+            if (!prompt.skipInitialPromptLoad) return [id, prompt];
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { skipInitialPromptLoad, ...cleanPrompt } = prompt;
+            return [id, cleanPrompt];
+          }),
+        );
+
+        return { ...rest, promptMap: cleanedPromptMap };
+      },
     },
   ),
 );
@@ -480,6 +541,14 @@ export const useOutputStaleStatusByPromptDatasetItemId = (
     useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
   );
 };
+
+export const useIsPromptOutputStale = (promptId: string) =>
+  usePlaygroundStore((state) => {
+    const entry = state.outputMap?.[promptId];
+    if (!entry) return false;
+    if (!isPlaygroundOutputWithDatasetItem(entry)) return entry.stale;
+    return Object.values(entry.datasetItemMap).some((o) => o.stale);
+  });
 
 export const usePromptMap = () =>
   usePlaygroundStore((state) => state.promptMap);
@@ -623,6 +692,12 @@ export const useProgressCompleted = () =>
 export const useSetProgress = () =>
   usePlaygroundStore((state) => state.setProgress);
 
+export const useProgressPhase = () =>
+  usePlaygroundStore((state) => state.progressPhase);
+
+export const useSetProgressPhase = () =>
+  usePlaygroundStore((state) => state.setProgressPhase);
+
 export const useResetProgress = () =>
   usePlaygroundStore((state) => state.resetProgress);
 
@@ -631,5 +706,20 @@ export const useLastActiveProjectId = () =>
 
 export const useSetLastActiveProjectId = () =>
   usePlaygroundStore((state) => state.setLastActiveProjectId);
+
+export const useDatasetType = () =>
+  usePlaygroundStore((state) => state.datasetType);
+
+export const useSetDatasetType = () =>
+  usePlaygroundStore((state) => state.setDatasetType);
+
+export const useExperimentByPromptId = () =>
+  usePlaygroundStore((state) => state.experimentByPromptId);
+
+export const useExperimentIdByPromptId = (promptId: string) =>
+  usePlaygroundStore((state) => state.experimentByPromptId[promptId] ?? null);
+
+export const useSetExperimentByPromptId = () =>
+  usePlaygroundStore((state) => state.setExperimentByPromptId);
 
 export default usePlaygroundStore;

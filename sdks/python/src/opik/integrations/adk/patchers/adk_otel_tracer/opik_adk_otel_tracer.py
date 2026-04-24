@@ -10,7 +10,6 @@ from opik.decorator import (
     arguments_helpers,
     error_info_collector,
 )
-from opik.api_objects import opik_client
 from opik.types import DistributedTraceHeadersDict
 
 from . import llm_span_helpers
@@ -50,15 +49,18 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
     _ADK_INTERNAL_SPAN_NAME_SKIP_LIST = [
         "invocation",  # This is the span that is created by ADK when the invocation is started.
+        "call_llm",  # Wrapper span around LLM calls, added in ADK 1.29.0.
     ]
 
     def __init__(
         self,
-        opik_client: opik_client.Opik,
         distributed_headers: Optional[DistributedTraceHeadersDict],
     ) -> None:
-        self.opik_client = opik_client
         self._distributed_headers = distributed_headers
+
+    @property
+    def opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     def start_span(
         self,

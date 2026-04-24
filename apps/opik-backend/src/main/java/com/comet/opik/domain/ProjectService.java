@@ -16,6 +16,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
@@ -143,6 +144,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull AnalyticsService analyticsService;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -178,6 +180,13 @@ class ProjectServiceImpl implements ProjectService {
 
                 return newProject;
             });
+
+            analyticsService.trackEvent("project_created", Map.of(
+                    "project_id", newProject.id().toString(),
+                    "project_name", newProject.name(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "date", Instant.now().toString()));
 
             return get(newProject.id(), workspaceId);
         } catch (UnableToExecuteStatementException e) {
@@ -621,6 +630,7 @@ class ProjectServiceImpl implements ProjectService {
         });
 
         return projects
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .map(project -> {
                     Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                             .nonTransaction(connection -> {

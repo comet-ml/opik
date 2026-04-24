@@ -195,11 +195,15 @@ public class DatasetItemResultMapper {
                 .datasetItemId(datasetItemId)
                 .experimentItems(experimentItems)
                 .runSummariesByExperiment(AssertionResultMapper.computeRunSummaries(experimentItems))
-                .lastUpdatedAt(row.get("last_updated_at", Instant.class))
-                .createdAt(row.get("created_at", Instant.class))
+                .lastUpdatedAt(nullIfEpoch(row.get("last_updated_at", Instant.class)))
+                .createdAt(nullIfEpoch(row.get("created_at", Instant.class)))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
                 .build();
+    }
+
+    static Instant nullIfEpoch(Instant instant) {
+        return instant == null || instant.equals(Instant.EPOCH) ? null : instant;
     }
 
     private static final TypeReference<List<EvaluatorItem>> EVALUATOR_LIST_TYPE = new TypeReference<>() {

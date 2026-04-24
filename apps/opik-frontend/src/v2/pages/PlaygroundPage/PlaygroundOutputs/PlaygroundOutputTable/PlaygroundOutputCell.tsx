@@ -9,11 +9,17 @@ import {
   useOutputValueByPromptDatasetItemId,
   useSelectedRuleIdsByPromptDatasetItemId,
   useTraceIdByPromptDatasetItemId,
+  useDatasetType,
+  useExperimentIdByPromptId,
 } from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
-import { cn } from "@/lib/utils";
+import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
+import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
+import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
 import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
 import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
@@ -64,6 +70,14 @@ const PlaygroundOutputCell: React.FunctionComponent<
     originalRow.dataItemId,
   );
 
+  const datasetType = useDatasetType();
+  const experimentId = useExperimentIdByPromptId(promptId);
+  const { datasetId: versionedDatasetId } = usePlaygroundDataset();
+  const plainDatasetId =
+    parseDatasetVersionKey(versionedDatasetId)?.datasetId || versionedDatasetId;
+
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+
   const activeProjectId = useActiveProjectId();
 
   const handleTraceLinkClick = (event: React.MouseEvent<HTMLButtonElement>) => {
@@ -79,26 +93,20 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
   };
 
-  const hasOutput = value !== null || isLoading;
+  const hasOutput =
+    !stale && (value !== null || isLoading || (isTestSuite && !!experimentId));
   const promptColor =
     PLAYGROUND_PROMPT_COLORS[
       (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
     ];
+  const noRunsColor = isTestSuite ? "var(--click-blue)" : promptColor.bg;
 
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
     }
 
-    return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
-        {value}
-      </MarkdownPreview>
-    );
+    return <MarkdownPreview>{value}</MarkdownPreview>;
   };
 
   return (
@@ -122,16 +130,34 @@ const PlaygroundOutputCell: React.FunctionComponent<
             </TooltipWrapper>
           )}
           <div className="mb-2 min-h-[var(--cell-top-height)]">
-            <PlaygroundOutputScoresContainer
-              traceId={traceId}
-              selectedRuleIds={selectedRuleIds}
-              stale={stale}
-            />
+            {isTestSuite ? (
+              <PlaygroundOutputAssertionStatus
+                experimentId={experimentId}
+                datasetItemId={originalRow.dataItemId}
+                datasetId={plainDatasetId || ""}
+              />
+            ) : (
+              <PlaygroundOutputScoresContainer
+                traceId={traceId}
+                selectedRuleIds={selectedRuleIds}
+                stale={stale}
+              />
+            )}
           </div>
-          <div className="flex-1 overflow-y-auto">{renderContent()}</div>
+          <div className="flex-1 overflow-y-auto">
+            {isTestSuite ? (
+              <PlaygroundTestSuiteLastRunOutput
+                experimentId={experimentId}
+                datasetItemId={originalRow.dataItemId}
+                datasetId={plainDatasetId || ""}
+              />
+            ) : (
+              renderContent()
+            )}
+          </div>
         </div>
       ) : (
-        <PlaygroundNoRunsYet color={promptColor.bg} />
+        <PlaygroundNoRunsYet color={noRunsColor} />
       )}
     </CellWrapper>
   );

@@ -69,7 +69,6 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
-import uk.co.jemos.podam.api.PodamUtils;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -148,8 +147,6 @@ class FindTraceThreadsResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
     private final FilterQueryBuilder filterQueryBuilder = new FilterQueryBuilder();
 
-    private String baseURI;
-    private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
@@ -159,16 +156,15 @@ class FindTraceThreadsResourceTest {
     @BeforeAll
     void setUpAll(ClientSupport client, com.comet.opik.domain.IdGenerator idGenerator) {
 
-        this.baseURI = TestUtils.getBaseUrl(client);
-        this.client = client;
+        var baseURI = TestUtils.getBaseUrl(client);
 
         ClientSupportUtils.config(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID);
 
-        this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
-        this.traceResourceClient = new TraceResourceClient(this.client, baseURI);
-        this.spanResourceClient = new SpanResourceClient(this.client, baseURI);
+        this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
+        this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.annotationQueuesResourceClient = new AnnotationQueuesResourceClient(client, baseURI);
         this.idGenerator = idGenerator;
     }
@@ -221,10 +217,6 @@ class FindTraceThreadsResourceTest {
 
     private String getInvalidValue(Field field) {
         return FilterTestUtils.getInvalidValue(field);
-    }
-
-    private static int randomNumber(int minValue, int maxValue) {
-        return PodamUtils.getIntegerInRange(minValue, maxValue);
     }
 
     private void batchCreateSpansAndAssert(List<Span> expectedSpans, String apiKey, String workspaceName) {
@@ -776,7 +768,11 @@ class FindTraceThreadsResourceTest {
                     Arguments.of(false, Source.PLAYGROUND, Source.EXPERIMENT),
                     Arguments.of(true, Source.PLAYGROUND, Source.EXPERIMENT),
                     Arguments.of(false, Source.EXPERIMENT, Source.PLAYGROUND),
-                    Arguments.of(true, Source.EXPERIMENT, Source.PLAYGROUND));
+                    Arguments.of(true, Source.EXPERIMENT, Source.PLAYGROUND),
+                    Arguments.of(false, Source.OPTIMIZATION, Source.PLAYGROUND),
+                    Arguments.of(true, Source.EXPERIMENT, Source.OPTIMIZATION),
+                    Arguments.of(false, Source.SDK, Source.PLAYGROUND),
+                    Arguments.of(true, Source.SDK, Source.PLAYGROUND));
         }
 
         @ParameterizedTest(name = "stream={0}, source={1}")
@@ -1114,23 +1110,21 @@ class FindTraceThreadsResourceTest {
             List<FeedbackScoreItem.FeedbackScoreBatchItemThread> expectedScores = allThreadIds
                     .stream()
                     .filter(threadId -> isExpected(expectedThreadIndices, threadId, allThreadIds))
-                    .flatMap(threadId -> {
-                        return matchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
-                                .map(item -> item.toBuilder()
-                                        .threadId(threadId.toString())
-                                        .projectName(projectName)
-                                        .build());
-                    }).collect(Collectors.toList());
+                    .flatMap(threadId -> matchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
+                            .map(item -> item.toBuilder()
+                                    .threadId(threadId.toString())
+                                    .projectName(projectName)
+                                    .build()))
+                    .collect(Collectors.toList());
 
             List<FeedbackScoreItem.FeedbackScoreBatchItemThread> unexpectedScores = allThreadIds.stream()
                     .filter(threadId -> !isExpected(expectedThreadIndices, threadId, allThreadIds))
-                    .flatMap(threadId -> {
-                        return unmatchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
-                                .map(item -> item.toBuilder()
-                                        .threadId(threadId.toString())
-                                        .projectName(projectName)
-                                        .build());
-                    }).collect(Collectors.toList());
+                    .flatMap(threadId -> unmatchingScoreFunction.apply(targetScoreName, targetScoreValue).stream()
+                            .map(item -> item.toBuilder()
+                                    .threadId(threadId.toString())
+                                    .projectName(projectName)
+                                    .build()))
+                    .collect(Collectors.toList());
 
             List<FeedbackScoreItem.FeedbackScoreBatchItemThread> scoreItems = Stream
                     .concat(expectedScores.stream(), unexpectedScores.stream())
@@ -1457,10 +1451,10 @@ class FindTraceThreadsResourceTest {
 
             List<Trace> allTraces = List.of(
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            lowerBound.plus(Duration.ofMinutes(5)), "Within bounds"),
-                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                            lowerBound.plus(Duration.ofMinutes(5))),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            upperBound.minus(Duration.ofMinutes(5)), "Within bounds"));
+                            upperBound.minus(Duration.ofMinutes(5))));
 
             createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
 
@@ -1495,13 +1489,11 @@ class FindTraceThreadsResourceTest {
 
             List<Trace> allTraces = List.of(
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            startTime.plus(Duration.ofMinutes(10)), "Should be included: near start of range"),
-                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), withinBoundsTime,
-                            "Should be included: within range"),
+                            startTime.plus(Duration.ofMinutes(10))),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), withinBoundsTime),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            endTime.minus(Duration.ofMinutes(10)), "Should be included: near end of range"),
-                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), outsideBoundsTime,
-                            "Should NOT be included: outside range"));
+                            endTime.minus(Duration.ofMinutes(10))),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), outsideBoundsTime));
 
             createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
 
@@ -1535,14 +1527,14 @@ class FindTraceThreadsResourceTest {
 
             List<Trace> allTraces = List.of(
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            lowerBound.plus(Duration.ofMinutes(10)), "Within bounds"),
-                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                            lowerBound.plus(Duration.ofMinutes(10))),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            upperBound.minus(Duration.ofMinutes(10)), "Within bounds"),
+                            upperBound.minus(Duration.ofMinutes(10))),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            lowerBound.minus(Duration.ofMinutes(10)), "Outside bounds (before lower)"),
+                            lowerBound.minus(Duration.ofMinutes(10))),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            upperBound.plus(Duration.ofMinutes(10)), "Outside bounds (after upper)"));
+                            upperBound.plus(Duration.ofMinutes(10))));
 
             createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
 
@@ -1577,10 +1569,10 @@ class FindTraceThreadsResourceTest {
 
             List<Trace> allTraces = List.of(
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            lowerBound.plus(Duration.ofMinutes(10)), "Within bounds"),
-                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime, "Within bounds"),
+                            lowerBound.plus(Duration.ofMinutes(10))),
+                    createTraceAtTimestamp(projectName, UUID.randomUUID().toString(), baseTime),
                     createTraceAtTimestamp(projectName, UUID.randomUUID().toString(),
-                            lowerBound.minus(Duration.ofMinutes(10)), "Outside bounds (before lower)"));
+                            lowerBound.minus(Duration.ofMinutes(10))));
 
             createAndCloseThreads(allTraces, projectName, apiKey, workspaceName);
 
@@ -1641,7 +1633,7 @@ class FindTraceThreadsResourceTest {
             );
         }
 
-        private Trace createTraceAtTimestamp(String projectName, String threadId, Instant timestamp, String comment) {
+        private Trace createTraceAtTimestamp(String projectName, String threadId, Instant timestamp) {
             return createTrace().toBuilder()
                     .projectName(projectName)
                     .threadId(threadId)
@@ -1750,7 +1742,7 @@ class FindTraceThreadsResourceTest {
                 threadUsage.entrySet().stream()
                         .sorted(Map.Entry.comparingByKey())
                         .forEach(entry -> expectedStats.add(
-                                (ProjectStats.AvgValueStat) ProjectStats.AvgValueStat.builder()
+                                ProjectStats.AvgValueStat.builder()
                                         .name("usage_sum." + entry.getKey())
                                         .value(entry.getValue().doubleValue())
                                         .type(ProjectStats.StatsType.AVG)

@@ -26,7 +26,7 @@ import useRulesList from "@/api/automations/useRulesList";
 import { useIsRunning } from "@/store/PlaygroundStore";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { Dataset, DatasetItemColumn } from "@/types/datasets";
+import { Dataset, DatasetItemColumn, DATASET_TYPE } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import {
   buildDatasetFilterColumns,
@@ -46,6 +46,7 @@ interface RunOnDatasetDialogProps {
     datasetId: string;
     versionId?: string;
     datasetName: string;
+    datasetType: DATASET_TYPE;
     selectedRuleIds: string[] | null;
     experimentNamePrefix: string;
     filters: Filters;
@@ -54,7 +55,46 @@ interface RunOnDatasetDialogProps {
   initialDatasetId?: string | null;
   initialSelectedRuleIds?: string[] | null;
   initialFilters?: Filters;
+  datasetType?: DATASET_TYPE;
 }
+
+const TYPE_CONFIG = {
+  [DATASET_TYPE.DATASET]: {
+    title: "Test on dataset",
+    description:
+      "Run your prompt suite against a dataset and score results with selected metrics.",
+    selectLabel: "Dataset",
+    submitLabel: "Use dataset",
+    emptyTooltip: "Selected dataset is empty",
+    showMetrics: true,
+  },
+  [DATASET_TYPE.TEST_SUITE]: {
+    title: "Test on test suite",
+    description:
+      "Run your prompt suite against a test suite. Results will be scored using the assertions defined on the suite.",
+    selectLabel: "Test suite",
+    submitLabel: "Use test suite",
+    emptyTooltip: "Selected test suite is empty",
+    showMetrics: false,
+  },
+} as const;
+
+const getRunDisabledTooltip = ({
+  isRunning,
+  isDatasetEmpty,
+  hasFilters,
+  emptyTooltip,
+}: {
+  isRunning: boolean;
+  isDatasetEmpty: boolean;
+  hasFilters: boolean;
+  emptyTooltip: string;
+}): string | undefined => {
+  if (isRunning) return "An experiment is already running";
+  if (isDatasetEmpty && hasFilters) return "No items match the current filters";
+  if (isDatasetEmpty) return emptyTooltip;
+  return undefined;
+};
 
 const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   open,
@@ -64,7 +104,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
   initialDatasetId = null,
   initialSelectedRuleIds = null,
   initialFilters = [],
+  datasetType,
 }) => {
+  const config = TYPE_CONFIG[datasetType ?? DATASET_TYPE.DATASET];
   const [datasetId, setDatasetId] = useState<string | null>(initialDatasetId);
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[] | null>(
     initialSelectedRuleIds,
@@ -101,8 +143,9 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     { enabled: open && !!activeProjectId },
   );
   const datasets = datasetsData?.content || EMPTY_DATASETS;
-  const datasetName =
-    datasets.find((ds) => ds.id === plainDatasetId)?.name || null;
+  const selectedDataset = datasets.find((ds) => ds.id === plainDatasetId);
+  const datasetName = selectedDataset?.name || null;
+  const selectedDatasetType = selectedDataset?.type ?? null;
 
   const { data: versionsData } = useDatasetVersionsList(
     { datasetId: plainDatasetId!, page: 1, size: MAX_VERSIONS_TO_FETCH },
@@ -162,7 +205,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     },
     { enabled: !!activeProjectId && open },
   );
-  const rules = rulesData?.content || [];
+  const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
   const handleDatasetChange = useCallback((value: string | null) => {
     setDatasetId(value);
@@ -172,11 +215,19 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
 
   const handleRun = useCallback(() => {
     if (!datasetId || !datasetName) return;
+
+    const resolvedRuleIds = config.showMetrics
+      ? selectedRuleIds === null && rules.length > 0
+        ? rules.map((r) => r.id)
+        : selectedRuleIds
+      : [];
+
     onRun({
       datasetId,
       versionId: parsedDatasetId?.versionId,
       datasetName,
-      selectedRuleIds,
+      datasetType: selectedDatasetType ?? DATASET_TYPE.DATASET,
+      selectedRuleIds: resolvedRuleIds,
       experimentNamePrefix: experimentPrefix,
       filters,
     });
@@ -185,7 +236,10 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
     datasetId,
     datasetName,
     parsedDatasetId?.versionId,
+    selectedDatasetType,
+    config,
     selectedRuleIds,
+    rules,
     experimentPrefix,
     filters,
     onRun,
@@ -207,16 +261,13 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader className="pb-0">
-            <DialogTitle>Run on dataset</DialogTitle>
-            <DialogDescription>
-              Run your prompt suite against a dataset and score results with
-              selected metrics.
-            </DialogDescription>
+            <DialogTitle>{config.title}</DialogTitle>
+            <DialogDescription>{config.description}</DialogDescription>
           </DialogHeader>
 
           <div className="flex flex-col gap-4 overflow-y-auto pb-2">
             <div className="flex flex-col gap-1.5">
-              <Label>Dataset</Label>
+              <Label>{config.selectLabel}</Label>
               <div className="flex items-center gap-2">
                 <div className="min-w-0 flex-1">
                   <DatasetVersionSelectBox
@@ -225,6 +276,7 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
                     onChange={handleDatasetChange}
                     projectId={activeProjectId ?? undefined}
                     buttonClassName="w-full"
+                    datasetType={datasetType}
                   />
                 </div>
                 {datasetId && (
@@ -239,19 +291,20 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               </div>
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <Label>Metrics</Label>
-              <MetricSelector
-                rules={rules}
-                selectedRuleIds={selectedRuleIds}
-                onSelectionChange={setSelectedRuleIds}
-                datasetId={datasetId}
-                onCreateRuleClick={() => setIsRuleDialogOpen(true)}
-                workspaceName={workspaceName}
-                projectId={activeProjectId ?? undefined}
-                canUsePlayground={!!activeProjectId || canCreateProjects}
-              />
-            </div>
+            {config.showMetrics && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Metrics</Label>
+                <MetricSelector
+                  rules={rules}
+                  selectedRuleIds={selectedRuleIds}
+                  onSelectionChange={setSelectedRuleIds}
+                  onCreateRuleClick={() => setIsRuleDialogOpen(true)}
+                  workspaceName={workspaceName}
+                  projectId={activeProjectId ?? undefined}
+                  canUsePlayground={!!activeProjectId || canCreateProjects}
+                />
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -259,22 +312,19 @@ const RunOnDatasetDialog: React.FC<RunOnDatasetDialogProps> = ({
               <Button variant="outline">Cancel</Button>
             </DialogClose>
             <TooltipWrapper
-              content={
-                isRunning
-                  ? "An experiment is already running"
-                  : isDatasetEmpty && filters.length > 0
-                    ? "No items match the current filters"
-                    : isDatasetEmpty
-                      ? "Selected dataset is empty"
-                      : undefined
-              }
+              content={getRunDisabledTooltip({
+                isRunning,
+                isDatasetEmpty,
+                hasFilters: filters.length > 0,
+                emptyTooltip: config.emptyTooltip,
+              })}
             >
               <Button
                 onClick={handleRun}
                 disabled={isRunDisabled}
                 style={isRunDisabled ? { pointerEvents: "auto" } : {}}
               >
-                Use dataset
+                {config.submitLabel}
               </Button>
             </TooltipWrapper>
           </DialogFooter>

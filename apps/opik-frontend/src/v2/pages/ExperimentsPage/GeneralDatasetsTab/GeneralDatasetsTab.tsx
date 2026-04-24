@@ -1,6 +1,11 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ChartLine, Info, RotateCw } from "lucide-react";
-import { ColumnSort, Row, RowSelectionState } from "@tanstack/react-table";
+import React, { useCallback, useMemo, useState } from "react";
+import { ChartLine, RotateCw } from "lucide-react";
+import {
+  CellContext,
+  ColumnSort,
+  Row,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
 import useLocalStorageState from "use-local-storage-state";
 import {
@@ -24,13 +29,12 @@ import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import {
   transformExperimentScores,
   getScoreDisplayName,
@@ -48,7 +52,6 @@ import {
 } from "@/types/shared";
 import { DELETED_ENTITY_LABEL } from "@/constants/groups";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
-import AddExperimentDialog from "@/v2/pages-shared/experiments/AddExperimentDialog/AddExperimentDialog";
 import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsActionsPanel/ExperimentsActionsPanel";
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
@@ -72,7 +75,7 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
@@ -82,7 +85,30 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import { EXPERIMENT_STATUS } from "@/types/datasets";
+import { Skeleton } from "@/ui/skeleton";
+
 const PASS_RATE_LABEL = "Pass rate";
+
+const withRunningSkeleton = <TValue,>(
+  Cell: React.ComponentType<CellContext<GroupedExperiment, TValue>>,
+) => {
+  const WrappedCell = (context: CellContext<GroupedExperiment, TValue>) => {
+    const { row } = context;
+    if (
+      !getIsGroupRow(row) &&
+      row.original?.status === EXPERIMENT_STATUS.RUNNING
+    ) {
+      return (
+        <div className="flex size-full items-center p-2">
+          <Skeleton className="size-full" />
+        </div>
+      );
+    }
+    return <Cell {...context} />;
+  };
+  return WrappedCell;
+};
 
 const STORAGE_KEY_PREFIX = "experiments";
 const PAGINATION_SIZE_KEY = "experiments-pagination-size";
@@ -91,10 +117,10 @@ const COLUMNS_SORT_KEY = "experiments-columns-sort";
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
+  "pass_rate",
   "created_at",
   "duration.p50",
   "total_estimated_cost_avg",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
 ];
 
@@ -103,13 +129,13 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   COLUMN_NAME_ID,
   COLUMN_DATASET_ID,
   "dataset_version",
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "duration.p90",
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   "prompt",
@@ -121,17 +147,16 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
 
-const GeneralDatasetsTab: React.FC = () => {
+type GeneralDatasetsTabProps = {
+  onNewExperimentClick?: () => void;
+};
+
+const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
+  onNewExperimentClick,
+}) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
   const navigate = useNavigate();
-  const resetDialogKeyRef = useRef(0);
-  const [query] = useQueryParam("new", JsonParam);
-
-  const [openDialog, setOpenDialog] = useState<boolean>(
-    Boolean(query?.experiment),
-  );
-
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
     updateType: "replaceIn",
   });
@@ -189,7 +214,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Evaluation suite",
+        label: "Test suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -200,7 +225,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: "dataset_version",
-        label: "Evaluation suite version",
+        label: "Test suite version",
         type: COLUMN_TYPE.string,
         iconType: "version" as const,
         accessorFn: (row: GroupedExperiment) =>
@@ -223,7 +248,7 @@ const GeneralDatasetsTab: React.FC = () => {
         label: "Duration (avg.)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p50,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p50",
@@ -234,7 +259,7 @@ const GeneralDatasetsTab: React.FC = () => {
         label: "Duration (p90)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p90,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p90",
@@ -245,7 +270,7 @@ const GeneralDatasetsTab: React.FC = () => {
         label: "Duration (p99)",
         type: COLUMN_TYPE.duration,
         accessorFn: (row) => row.duration?.p99,
-        cell: DurationCell as never,
+        cell: withRunningSkeleton(DurationCell) as never,
         aggregatedCell: DurationCell.Aggregation as never,
         customMeta: {
           aggregationKey: "duration.p99",
@@ -271,18 +296,17 @@ const GeneralDatasetsTab: React.FC = () => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
+        cell: withRunningSkeleton(TextCell) as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
         },
       },
       {
         id: "total_estimated_cost",
         label: "Total estimated cost",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost",
@@ -292,7 +316,7 @@ const GeneralDatasetsTab: React.FC = () => {
         id: "total_estimated_cost_avg",
         label: "Cost per trace (avg.)",
         type: COLUMN_TYPE.cost,
-        cell: CostCell as never,
+        cell: withRunningSkeleton(CostCell) as never,
         aggregatedCell: CostCell.Aggregation as never,
         customMeta: {
           aggregationKey: "total_estimated_cost_avg",
@@ -304,7 +328,7 @@ const GeneralDatasetsTab: React.FC = () => {
         type: COLUMN_TYPE.number,
         iconType: "pass_rate",
         accessorFn: (row) => row.pass_rate,
-        cell: PassRateCell as never,
+        cell: withRunningSkeleton(PassRateCell) as never,
         aggregatedCell: PassRateCell.Aggregation as never,
         customMeta: {
           aggregationKey: "pass_rate",
@@ -315,7 +339,7 @@ const GeneralDatasetsTab: React.FC = () => {
         label: "Feedback Scores",
         type: COLUMN_TYPE.numberDictionary,
         accessorFn: transformExperimentScores,
-        cell: FeedbackScoreListCell as never,
+        cell: withRunningSkeleton(FeedbackScoreListCell) as never,
         aggregatedCell: FeedbackScoreListCell.Aggregation as never,
         customMeta: {
           getHoverCardName: (row: GroupedExperiment) => row.name,
@@ -461,11 +485,6 @@ const GeneralDatasetsTab: React.FC = () => {
 
   const hasGroups = Boolean(groups.length);
 
-  const handleNewExperimentClick = useCallback(() => {
-    setOpenDialog(true);
-    resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
-  }, []);
-
   const renderCustomRowCallback = useCallback(
     (row: Row<GroupedExperiment>) => {
       return renderCustomRow(row, setGroupLimit);
@@ -507,7 +526,7 @@ const GeneralDatasetsTab: React.FC = () => {
           id: datasetId,
           name: [
             {
-              label: "Evaluation suite",
+              label: "Test suite",
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -548,7 +567,7 @@ const GeneralDatasetsTab: React.FC = () => {
                   label: calculateGroupLabel(groups[index]),
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted evaluation suite"
+                      ? "Deleted test suite"
                       : label || value || "Undefined",
                 };
               }),
@@ -581,7 +600,7 @@ const GeneralDatasetsTab: React.FC = () => {
           scores[s.name] = s.value;
         });
         if (
-          isEvalSuiteExperiment(experiment) &&
+          isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate)
         ) {
           scores[PASS_RATE_LABEL] = experiment.pass_rate;
@@ -618,7 +637,11 @@ const GeneralDatasetsTab: React.FC = () => {
     groupFieldNames,
   ]);
 
-  if (isPending || isFeedbackScoresPending) {
+  if (
+    isPending ||
+    isFeedbackScoresPending ||
+    (isPlaceholderData && experiments.length === 0)
+  ) {
     return <Loader />;
   }
 
@@ -702,14 +725,6 @@ const GeneralDatasetsTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -733,8 +748,8 @@ const GeneralDatasetsTab: React.FC = () => {
         noData={
           <DataTableNoData title={noDataText}>
             {noData && (
-              <Button variant="link" onClick={handleNewExperimentClick}>
-                Create new experiment
+              <Button variant="link" onClick={onNewExperimentClick}>
+                Create experiment
               </Button>
             )}
           </DataTableNoData>
@@ -759,13 +774,6 @@ const GeneralDatasetsTab: React.FC = () => {
           ></DataTablePagination>
         )}
       </PageBodyStickyContainer>
-      <AddExperimentDialog
-        key={resetDialogKeyRef.current}
-        open={openDialog}
-        setOpen={setOpenDialog}
-        datasetName={query?.datasetName}
-        projectId={activeProjectId}
-      />
     </>
   );
 };

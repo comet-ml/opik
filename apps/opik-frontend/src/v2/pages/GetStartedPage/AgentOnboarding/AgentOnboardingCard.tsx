@@ -19,7 +19,7 @@ const AgentOnboardingCard: React.FC<AgentOnboardingCardProps> = ({
   showFooterSeparator = false,
 }) => {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-soft-background pt-24">
+    <div className="flex items-start justify-center pt-24">
       <div className="flex h-fit max-h-[calc(100vh-8rem)] w-[40.5rem] flex-col gap-5 rounded-md border bg-background p-5 shadow-lg">
         {title && (
           <div className="flex flex-col gap-1.5">

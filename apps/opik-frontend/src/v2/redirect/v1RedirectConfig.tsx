@@ -9,9 +9,8 @@ type V1RedirectEntry = {
 
 const V1_REDIRECT_PATHS: V1RedirectEntry[] = [
   { from: "/experiments", to: "/experiments", catchAll: true },
-  { from: "/evaluation-suites", to: "/evaluation-suites", catchAll: true },
-  { from: "/datasets", to: "/evaluation-suites", catchAll: true },
-  { from: "/prompts", to: "/prompts", catchAll: true },
+  { from: "/test-suites", to: "/test-suites", catchAll: true },
+  { from: "/datasets", to: "/test-suites", catchAll: true },
   { from: "/playground", to: "/playground" },
   { from: "/optimizations", to: "/optimizations", catchAll: true },
   { from: "/online-evaluation", to: "/online-evaluation" },

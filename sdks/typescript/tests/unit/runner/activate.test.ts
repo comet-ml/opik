@@ -72,6 +72,9 @@ describe("activateRunner", () => {
 
   afterEach(() => {
     process.env = originalEnv;
+    process.removeAllListeners("SIGTERM");
+    process.removeAllListeners("SIGINT");
+    process.removeAllListeners("exit");
     vi.restoreAllMocks();
   });
 
@@ -182,5 +185,83 @@ describe("activateRunner", () => {
     await new Promise((r) => setImmediate(r));
 
     expect(registerAgentsMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("prints warning when process exits without signal", async () => {
+    registryMap.set("agent-a", {
+      name: "agent-a",
+      func: () => {},
+      project: "p",
+      params: [],
+      docstring: "",
+    });
+
+    const exitHandlers: (() => void)[] = [];
+    const processOnSpy = vi.spyOn(process, "on").mockImplementation(((event: string, handler: () => void) => {
+      if (event === "exit") exitHandlers.push(handler);
+      return process;
+    }) as typeof process.on);
+
+    const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { activateRunner } = await import("@/runner/activate");
+    activateRunner();
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    exitHandlers.forEach((h) => h());
+
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringContaining("exited without blocking")
+    );
+
+    processOnSpy.mockRestore();
+    stderrSpy.mockRestore();
+  });
+
+  it("does not print warning when shutdown was triggered by signal", async () => {
+    registryMap.set("agent-a", {
+      name: "agent-a",
+      func: () => {},
+      project: "p",
+      params: [],
+      docstring: "",
+    });
+
+    const exitHandlers: (() => void)[] = [];
+    const signalHandlers: Map<string, () => void> = new Map();
+    const processOnSpy = vi.spyOn(process, "on").mockImplementation(((event: string, handler: () => void) => {
+      if (event === "exit") exitHandlers.push(handler);
+      return process;
+    }) as typeof process.on);
+    const processOnceSpy = vi.spyOn(process, "once").mockImplementation(((event: string, handler: () => void) => {
+      signalHandlers.set(event, handler);
+      return process;
+    }) as typeof process.once);
+
+    const stderrSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const { activateRunner } = await import("@/runner/activate");
+    activateRunner();
+    await new Promise((r) => setImmediate(r));
+    await new Promise((r) => setImmediate(r));
+
+    const sigterm = signalHandlers.get("SIGTERM");
+    expect(sigterm).toBeDefined();
+
+    const exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as never);
+    sigterm!();
+    await new Promise((r) => setImmediate(r));
+
+    exitHandlers.forEach((h) => h());
+
+    expect(stderrSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("exited without blocking")
+    );
+
+    processOnSpy.mockRestore();
+    processOnceSpy.mockRestore();
+    exitSpy.mockRestore();
+    stderrSpy.mockRestore();
   });
 });

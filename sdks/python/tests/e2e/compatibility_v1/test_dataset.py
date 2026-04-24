@@ -293,6 +293,38 @@ def test_get_version_view__returns_items_from_specific_version(
     assert v3_view.items_total == 1
 
 
+def test_get_items__dataset_created_without_project_name__returns_inserted_items(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Regression test for OPIK-5704.
+
+    Datasets created via the Opik 1.0 UI (or REST API without project_name) have
+    project_id=NULL in the DB. When the SDK fetches such a dataset via get_dataset()
+    and then calls get_items(), items must be returned — not an empty list.
+    """
+    # Simulate Opik 1.0 UI: create dataset at workspace level (no project_name)
+    opik_client._rest_client.datasets.create_dataset(name=dataset_name)
+
+    # SDK lookup — this is the path that used to return [] for items
+    dataset = opik_client.get_dataset(dataset_name)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "What is the capital of France?"},
+                "expected_output": {"output": "Paris"},
+            }
+        ]
+    )
+
+    items = dataset.get_items()
+    assert len(items) == 1, (
+        f"Expected 1 item but got {len(items)}. "
+        "Dataset items are not returned for datasets created without project_name (OPIK-5704)."
+    )
+    assert items[0]["input"] == {"question": "What is the capital of France?"}
+    assert items[0]["expected_output"] == {"output": "Paris"}
+
+
 def test_get_version_view__version_not_found__raises_exception(
     opik_client: opik.Opik, dataset_name: str
 ):

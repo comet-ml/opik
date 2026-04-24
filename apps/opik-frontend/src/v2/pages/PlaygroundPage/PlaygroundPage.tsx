@@ -194,6 +194,8 @@ const PlaygroundPage = () => {
     datasetItems,
     datasetName,
     datasetVersionId: parsedVersionId || undefined,
+    datasetId: plainDatasetId || undefined,
+    versionHash: versionHash || undefined,
     projectName: activeProject?.name,
   });
 
@@ -253,6 +255,8 @@ const PlaygroundPage = () => {
                   workspaceName={workspaceName}
                   providerKeys={providerKeys}
                   isPendingProviderKeys={isPendingProviderKeys}
+                  runSingle={runSingle}
+                  stopSingle={stopSingle}
                 />
               </div>
 

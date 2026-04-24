@@ -14,6 +14,7 @@ import opik.dict_utils as dict_utils
 import opik.llm_usage as llm_usage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
+from opik.llm_usage import litellm_provider_mapping
 from opik.types import LLMProvider
 
 import litellm
@@ -59,18 +60,6 @@ SENSITIVE_PARAMS_TO_EXCLUDE: List[str] = [
     "openrouter_api_key",
 ]
 
-PROVIDER_MAPPING: Dict[str, LLMProvider] = {
-    "openai": LLMProvider.OPENAI,
-    "vertex_ai": LLMProvider.GOOGLE_VERTEXAI,
-    "vertex_ai-language-models": LLMProvider.GOOGLE_VERTEXAI,
-    "gemini": LLMProvider.GOOGLE_AI,
-    "anthropic": LLMProvider.ANTHROPIC,
-    "vertex_ai-anthropic_models": LLMProvider.ANTHROPIC_VERTEXAI,
-    "bedrock": LLMProvider.BEDROCK,
-    "bedrock_converse": LLMProvider.BEDROCK,
-    "groq": LLMProvider.GROQ,
-}
-
 
 def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
     try:
@@ -78,7 +67,9 @@ def _extract_provider_from_model(model_name: str) -> Optional[LLMProvider]:
         provider_name = provider_info[1] if len(provider_info) > 1 else None
         if provider_name is None:
             return None
-        return PROVIDER_MAPPING.get(provider_name, None)
+        return litellm_provider_mapping.LITELLM_PROVIDER_MAPPING.get(
+            provider_name, None
+        )
     except Exception:
         return None
 

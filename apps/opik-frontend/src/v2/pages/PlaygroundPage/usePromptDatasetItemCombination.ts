@@ -1,8 +1,8 @@
-import { useCallback, RefObject } from "react";
+import { useCallback } from "react";
 import { LogProcessor } from "@/api/playground/createLogPlaygroundProcessor";
 import { DatasetItem } from "@/types/datasets";
 import { PlaygroundPromptType } from "@/types/playground";
-import {
+import usePlaygroundStore, {
   usePromptIds,
   usePromptMap,
   useUpdateOutput,
@@ -141,19 +141,21 @@ const transformMessageIntoProviderMessage = (
 
 interface UsePromptDatasetItemCombinationArgs {
   datasetItems: DatasetItem[];
-  isToStopRef: RefObject<boolean>;
   workspaceName: string;
   datasetName: string | null;
   datasetVersionId?: string;
   selectedRuleIds: string[] | null;
-  addAbortController: (key: string, value: AbortController) => void;
+  addAbortController: (
+    key: string,
+    value: AbortController,
+    promptId: string,
+  ) => void;
   deleteAbortController: (key: string) => void;
   throttlingSeconds: number;
 }
 
 const usePromptDatasetItemCombination = ({
   datasetItems,
-  isToStopRef,
   workspaceName,
   datasetName,
   datasetVersionId,
@@ -193,7 +195,7 @@ const usePromptDatasetItemCombination = ({
       { datasetItem, prompt }: DatasetItemPromptCombination,
       logProcessor: LogProcessor,
     ) => {
-      if (isToStopRef.current) {
+      if (!usePlaygroundStore.getState().isRunningMap[prompt.id]) {
         return;
       }
 
@@ -203,7 +205,7 @@ const usePromptDatasetItemCombination = ({
       const datasetItemData = await hydrateDatasetItemData(datasetItem);
       const key = datasetItemId ? `${datasetItemId}-${prompt.id}` : prompt.id;
 
-      addAbortController(key, controller);
+      addAbortController(key, controller, prompt.id);
 
       try {
         updateOutput(prompt.id, datasetItemId, {
@@ -296,8 +298,10 @@ const usePromptDatasetItemCombination = ({
       } finally {
         deleteAbortController(key);
 
-        // Apply throttling delay if configured
-        if (throttlingSeconds > 0 && !isToStopRef.current) {
+        if (
+          throttlingSeconds > 0 &&
+          usePlaygroundStore.getState().isRunningMap[prompt.id]
+        ) {
           await new Promise((resolve) =>
             setTimeout(resolve, throttlingSeconds * 1000),
           );
@@ -306,7 +310,6 @@ const usePromptDatasetItemCombination = ({
     },
 
     [
-      isToStopRef,
       hydrateDatasetItemData,
       hydratePromptMetadata,
       addAbortController,

@@ -84,7 +84,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
               <span className="comet-body-s-accented truncate">{e.name}</span>
             </div>
             <div className="comet-body-s truncate pl-6 text-light-slate">
-              Evaluation suite: {e.dataset_name ?? "Deleted evaluation suite"}
+              Test suite: {e.dataset_name ?? "Deleted test suite"}
             </div>
           </div>
         </label>
@@ -99,7 +99,7 @@ const FilterExperimentsToCompareDialog: React.FunctionComponent<
           <DialogTitle>Select experiments to compare</DialogTitle>
         </DialogHeader>
         <div className="w-full overflow-hidden">
-          <ExplainerDescription description="You can only compare experiments that use the same evaluation suite. Please make sure all the experiments use the same evaluation suite." />
+          <ExplainerDescription description="You can only compare experiments that use the same test suite. Please make sure all the experiments use the same test suite." />
           <div className="my-4 flex max-h-[400px] min-h-36 max-w-full flex-col justify-stretch gap-2.5 overflow-y-auto">
             {renderListItems()}
           </div>

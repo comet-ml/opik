@@ -29,7 +29,6 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
 import TextCell from "@/shared/DataTableCells/TextCell";
-import TraceCountCell from "@/v2/pages-shared/traces/TraceCountCell/TraceCountCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -54,7 +53,7 @@ import {
 } from "@/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";
@@ -79,10 +78,10 @@ export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "prompt",
   COLUMN_DATASET_ID,
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "total_estimated_cost_avg",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
 ];
@@ -93,13 +92,13 @@ const DEFAULT_COLUMNS_ORDER: string[] = [
   "prompt",
   COLUMN_DATASET_ID,
   "dataset_version",
+  "pass_rate",
   "trace_count",
   "duration.p50",
   "duration.p90",
   "duration.p99",
   "total_estimated_cost_avg",
   "total_estimated_cost",
-  "pass_rate",
   COLUMN_FEEDBACK_SCORES_ID,
   "created_at",
   COLUMN_COMMENTS_ID,
@@ -208,7 +207,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Evaluation suite",
+        label: "Test suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -219,7 +218,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: "dataset_version",
-        label: "Evaluation suite version",
+        label: "Test suite version",
         type: COLUMN_TYPE.string,
         iconType: "version" as const,
         accessorFn: (row: GroupedExperiment) =>
@@ -274,11 +273,10 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
         id: "trace_count",
         label: "Trace count",
         type: COLUMN_TYPE.number,
-        cell: TraceCountCell as never,
+        cell: TextCell as never,
         aggregatedCell: TextCell.Aggregation as never,
         customMeta: {
           aggregationKey: "trace_count",
-          tooltip: "View experiment traces",
         },
       },
       {

@@ -1,0 +1,175 @@
+---
+description: Start here to integrate Opik into your Microsoft Agent Framework-based
+  genai application for end-to-end LLM observability, unit testing, and optimization.
+headline: Microsoft Agent Framework | Opik Documentation
+og:description: Build and deploy AI agents with the Microsoft Agent Framework, featuring
+  multi-language support and advanced orchestration. Enhance your workflows today.
+og:site_name: Opik Documentation
+og:title: Microsoft Agent Framework - Opik Integration
+title: Observability for Microsoft Agent Framework (Python) with Opik
+---
+
+[Microsoft Agent Framework](https://github.com/microsoft/agent-framework) is a comprehensive multi-language framework for building, orchestrating, and deploying AI agents and multi-agent workflows with support for both Python and .NET implementations.
+
+The framework provides everything from simple chat agents to complex multi-agent workflows with graph-based orchestration, built-in OpenTelemetry integration for distributed tracing and monitoring, and a flexible middleware system for request/response processing.
+
+## Account Setup
+
+[Comet](https://www.comet.com/site?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework&utm_campaign=opik) provides a hosted version of the Opik platform, [simply create an account](https://www.comet.com/signup?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework&utm_campaign=opik) and grab your API Key.
+
+> You can also run the Opik platform locally, see the [installation guide](https://www.comet.com/docs/opik/self-host/overview/?from=llm&utm_source=opik&utm_medium=colab&utm_content=agent-framework&utm_campaign=opik) for more information.
+
+<Frame>
+  <img src="/img/tracing/microsoft-agent-framework_integration.png" alt="Microsoft Agent Framework tracing" />
+</Frame>
+
+## Getting started
+
+To use the Microsoft Agent Framework integration with Opik, you will need to have the Agent Framework and the required OpenTelemetry packages installed:
+
+```bash
+pip install --pre agent-framework opentelemetry-api opentelemetry-sdk opentelemetry-exporter-otlp
+```
+
+In addition, you will need to set the following environment variables to configure OpenTelemetry to send data to Opik:
+
+<Tabs>
+    <Tab value="Opik Cloud" title="Opik Cloud">
+        If you are using Opik Cloud, you will need to set the following
+        environment variables:
+            
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://www.comet.com/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Enterprise deployment" title="Enterprise deployment">
+        If you are using an Enterprise deployment of Opik, you will need to set the following
+        environment variables:
+
+        ```bash wordWrap
+        export OTEL_EXPORTER_OTLP_ENDPOINT=https://<comet-deployment-url>/opik/api/v1/private/otel
+        export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default'
+        ```
+
+        <Tip>
+            To log the traces to a specific project, you can add the
+            `projectName` parameter to the `OTEL_EXPORTER_OTLP_HEADERS`
+            environment variable:
+
+            ```bash wordWrap
+            export OTEL_EXPORTER_OTLP_HEADERS='Authorization=<your-api-key>,Comet-Workspace=default,projectName=<your-project-name>'
+            ```
+
+            You can also update the `Comet-Workspace` parameter to a different
+            value if you would like to log the data to a different workspace.
+        </Tip>
+    </Tab>
+    <Tab value="Self-hosted instance" title="Self-hosted instance">
+
+    If you are self-hosting Opik, you will need to set the following environment
+    variables:
+
+    ```bash
+    export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:5173/api/v1/private/otel
+    ```
+
+    <Tip>
+        To log the traces to a specific project, you can add the `projectName`
+        parameter to the `OTEL_EXPORTER_OTLP_HEADERS` environment variable:
+
+        ```bash
+        export OTEL_EXPORTER_OTLP_HEADERS='projectName=<your-project-name>'
+        ```
+
+    </Tip>
+    </Tab>
+
+</Tabs>
+
+## Using Opik with Microsoft Agent Framework
+
+The Microsoft Agent Framework has built-in OpenTelemetry instrumentation. Once you've configured the environment variables above, you can start creating agents and their traces will automatically be sent to Opik:
+
+```python
+import asyncio
+import os
+
+os.environ["ENABLE_OTEL"] = "True"
+os.environ["ENABLE_SENSITIVE_DATA"] = "True"
+
+from agent_framework.openai import OpenAIChatClient
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+
+def setup_telemetry():
+    """Configure OpenTelemetry with HTTP exporter"""
+    # Create a resource with service name and other metadata
+    resource = Resource.create(
+        {
+            "service.name": "agent-framework-demo",
+            "service.version": "1.0.0",
+            "deployment.environment": "development",
+        }
+    )
+
+    # Create TracerProvider with the resource
+    provider = TracerProvider(resource=resource)
+
+    # Create BatchSpanProcessor with OTLPSpanExporter
+    processor = BatchSpanProcessor(OTLPSpanExporter())
+    provider.add_span_processor(processor)
+
+    # Set the TracerProvider
+    trace.set_tracer_provider(provider)
+
+    tracer = trace.get_tracer(__name__)
+
+    return tracer, provider
+
+
+setup_telemetry()
+
+
+async def main():
+    # Initialize a chat agent with Azure OpenAI Responses
+    agent = OpenAIChatClient(model_id="gpt-4.1").create_agent(
+        name="HaikuBot",
+        instructions="You are an upbeat assistant that writes beautifully.",
+    )
+
+    # This will automatically create a trace in Opik
+    result = await agent.run("Write a haiku about Microsoft Agent Framework.")
+    print(result)
+
+
+asyncio.run(main())
+```
+
+The framework will automatically:
+- Create traces for agent executions
+- Log input prompts and outputs
+- Track token usage and performance metrics
+- Capture any errors or exceptions
+
+## Further improvements
+
+If you would like to see us improve this integration, simply open a new feature
+request on [Github](https://github.com/comet-ml/opik/issues).

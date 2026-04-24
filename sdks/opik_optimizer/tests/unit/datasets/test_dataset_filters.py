@@ -31,6 +31,7 @@ def test_load_hf_dataset_slice_appends_filter_suffix(
         records: list[dict[str, str]],
         expected_size: int,
         test_mode: bool,
+        project_name: str | None = None,
     ) -> mock.Mock:
         captured["dataset_name"] = dataset_name
         return mock.Mock(name="dataset")

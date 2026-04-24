@@ -30,7 +30,7 @@
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
-        <redisson.version>3.52.0</redisson.version>
+        <redisson.version>4.3.1</redisson.version>
         <opentelmetry.version>2.26.0</opentelmetry.version>
         <aws.java.sdk.version>2.42.4</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
@@ -63,7 +63,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.12.2</version>
+                <version>1.13.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -248,6 +248,11 @@
         <dependency>
             <groupId>com.clickhouse</groupId>
             <artifactId>clickhouse-http-client</artifactId>
+            <version>${clickhouse-java.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.clickhouse</groupId>
+            <artifactId>client-v2</artifactId>
             <version>${clickhouse-java.version}</version>
         </dependency>
         <dependency>

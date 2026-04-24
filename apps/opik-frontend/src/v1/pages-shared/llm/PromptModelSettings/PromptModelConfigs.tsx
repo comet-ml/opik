@@ -29,7 +29,7 @@ import GeminiModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/provid
 import VertexAIModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/VertexAIModelConfigs";
 import CustomModelConfigs from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/CustomModelConfig";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { parseComposedProviderType } from "@/lib/provider";
 
 interface PromptModelConfigsProps {

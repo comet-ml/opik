@@ -41,6 +41,7 @@ interface LLMPromptMessagesProps {
   improvePromptConfig?: ImprovePromptConfig;
   hideAddButton?: boolean;
   jsonTreeData?: JsonObject | null;
+  compact?: boolean;
 }
 
 const LLMPromptMessages = ({
@@ -55,6 +56,7 @@ const LLMPromptMessages = ({
   improvePromptConfig,
   hideAddButton = false,
   jsonTreeData,
+  compact = false,
 }: LLMPromptMessagesProps) => {
   const lastFocusedMessageIdRef = useRef<string | null>(null);
   const messageRefsMap = useRef<Map<string, LLMPromptMessageHandle>>(new Map());
@@ -97,28 +99,6 @@ const LLMPromptMessages = ({
     (messageId: string, changes: Partial<LLMMessage>) => {
       onChange(
         messages.map((m) => (m.id !== messageId ? m : { ...m, ...changes })),
-      );
-    },
-    [onChange, messages],
-  );
-
-  const handleReplaceWithChatPrompt = useCallback(
-    (newMessages: LLMMessage[]) => {
-      // Replace all messages with the chat prompt's messages
-      onChange(newMessages);
-    },
-    [onChange],
-  );
-
-  const handleClearOtherPromptLinks = useCallback(
-    (currentMessageId: string) => () => {
-      // Clear prompt links from all messages except the current one
-      onChange(
-        messages.map((m) =>
-          m.id !== currentMessageId
-            ? { ...m, promptId: undefined, promptVersionId: undefined }
-            : m,
-        ),
       );
     },
     [onChange, messages],
@@ -179,14 +159,13 @@ const LLMPromptMessages = ({
               onChangeMessage={(changes) =>
                 handleChangeMessage(message.id, changes)
               }
-              onReplaceWithChatPrompt={handleReplaceWithChatPrompt}
-              onClearOtherPromptLinks={handleClearOtherPromptLinks(message.id)}
               onFocus={() => handleMessageFocus(message.id)}
               message={message}
               disableMedia={disableMedia}
               promptVariables={promptVariables}
               improvePromptConfig={improvePromptConfig}
               jsonTreeData={jsonTreeData}
+              compact={compact}
             />
           ))}
         </div>

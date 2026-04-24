@@ -15,7 +15,7 @@ import { Label } from "@/ui/label";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { cn } from "@/lib/utils";
 import { BreakdownConfig } from "@/types/dashboard";

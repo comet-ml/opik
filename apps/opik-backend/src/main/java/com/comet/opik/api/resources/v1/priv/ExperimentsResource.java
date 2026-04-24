@@ -4,6 +4,8 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.DeleteIdsHolder;
 import com.comet.opik.api.Experiment;
 import com.comet.opik.api.ExperimentBatchUpdate;
+import com.comet.opik.api.ExperimentExecutionRequest;
+import com.comet.opik.api.ExperimentExecutionResponse;
 import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupResponse;
@@ -29,6 +31,7 @@ import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.ExperimentSortingFactory;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentExecutionService;
 import com.comet.opik.domain.ExperimentItemBulkIngestionService;
 import com.comet.opik.domain.ExperimentItemSearchCriteria;
 import com.comet.opik.domain.ExperimentItemService;
@@ -107,6 +110,7 @@ public class ExperimentsResource {
     private final @NonNull ExperimentItemBulkIngestionService experimentItemBulkIngestionService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull ExperimentGroupingFactory groupingFactory;
+    private final @NonNull ExperimentExecutionService experimentExecutionService;
 
     @GET
     @Operation(operationId = "findExperiments", summary = "Find experiments", description = "Find experiments", responses = {
@@ -572,6 +576,29 @@ public class ExperimentsResource {
                 feedbackScoreNames.scores().size(), experimentIds, projectId, workspaceId);
 
         return Response.ok(feedbackScoreNames).build();
+    }
+
+    @POST
+    @Path("/execute")
+    @Operation(operationId = "executeExperiment", summary = "Create and execute experiment", description = "Creates experiments for each prompt variant and asynchronously processes all dataset items", responses = {
+            @ApiResponse(responseCode = "202", description = "Experiments created and processing started", content = @Content(schema = @Schema(implementation = ExperimentExecutionResponse.class))),
+    })
+    @RequiredPermissions(WorkspaceUserPermission.EXPERIMENT_VIEW)
+    public Response execute(@NotNull @Valid ExperimentExecutionRequest request) {
+        var context = requestContext.get();
+        var workspaceId = context.getWorkspaceId();
+        var userName = context.getUserName();
+
+        log.info("Executing experiment for dataset '{}', workspaceId '{}', prompts '{}'",
+                request.datasetName(), workspaceId, request.prompts().size());
+
+        var response = experimentExecutionService.createAndExecute(request)
+                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
+                .block();
+
+        return Response.status(Response.Status.ACCEPTED)
+                .entity(response)
+                .build();
     }
 
 }

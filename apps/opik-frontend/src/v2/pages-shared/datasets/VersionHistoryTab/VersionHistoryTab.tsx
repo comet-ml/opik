@@ -15,6 +15,7 @@ import { convertColumnDataToColumn } from "@/lib/table";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import VersionChangeSummaryCell from "./VersionChangeSummaryCell";
+import VersionNoteCell from "./VersionNoteCell";
 import VersionRowActionsCell from "./VersionRowActionsCell";
 
 interface VersionHistoryTabProps {
@@ -44,6 +45,7 @@ const COLUMNS: ColumnData<DatasetVersion>[] = [
     id: "change_description",
     label: "Version note",
     type: COLUMN_TYPE.string,
+    cell: VersionNoteCell as never,
   },
   {
     id: "tags",

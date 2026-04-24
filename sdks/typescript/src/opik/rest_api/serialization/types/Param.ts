@@ -3,15 +3,18 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { ParamPresence } from "./ParamPresence.js";
 
 export const Param: core.serialization.ObjectSchema<serializers.Param.Raw, OpikApi.Param> = core.serialization.object({
     name: core.serialization.string(),
     type: core.serialization.string(),
+    presence: ParamPresence.optional(),
 });
 
 export declare namespace Param {
     export interface Raw {
         name: string;
         type: string;
+        presence?: ParamPresence.Raw | null;
     }
 }

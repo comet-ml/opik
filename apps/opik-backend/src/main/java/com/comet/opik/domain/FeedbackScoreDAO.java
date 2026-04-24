@@ -32,8 +32,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspace;
-import static com.comet.opik.infrastructure.DatabaseUtils.getLogComment;
-import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 
 @ImplementedBy(FeedbackScoreDAOImpl.class)
@@ -68,8 +68,6 @@ public interface FeedbackScoreDAO {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Slf4j
 class FeedbackScoreDAOImpl implements FeedbackScoreDAO {
-
-    static final String SUITE_ASSERTION_CATEGORY = "suite_assertion";
 
     private static final String BULK_INSERT_FEEDBACK_SCORE = """
             INSERT INTO <if(author)>authored_feedback_scores<else>feedback_scores<endif>(

@@ -1,10 +1,3 @@
-# Setting up a demo project
-#
-# Evaluation traces & spans
-# We start with evaluation so it shows up at the bottom.
-# The evaluation is going to be tracked into a separate project from the demo traces.
-# It was run using a simple context with 3 sentences, and 3 questions asking about it.
-
 import opik
 import json
 import urllib.request
@@ -14,10 +7,24 @@ import datetime
 import time
 import uuid
 import random
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import opik.rest_api
-from opik_backend.demo_data import demo_traces, demo_spans, demo_thread_feedback_scores, demo_projects, demo_prompt, experiment_traces_grouped_by_project, experiment_spans_grouped_by_project, demo_datasets, demo_dataset_items, demo_experiments, demo_experiment_items, demo_optimizations
+from opik.rest_api.types.trace_write import TraceWrite
+from opik.rest_api.types.span_write import SpanWrite
+from opik.rest_api.types.feedback_score_batch_item import FeedbackScoreBatchItem
+from opik.rest_api.types.experiment_item import ExperimentItem as RestExperimentItem
+from opik_backend.demo_data import (
+    demo_traces,
+    demo_spans,
+    demo_thread_feedback_scores,
+    demo_test_suite_items,
+    demo_test_suite_global_assertion,
+    demo_agent_config_blueprints,
+    demo_test_suite_experiments,
+    demo_agent_prompt_name,
+    demo_agent_prompt_v1,
+    demo_agent_prompt_v2,
+)
 from opentelemetry import trace
 from dataclasses import dataclass, field
 
@@ -30,10 +37,6 @@ class DemoDataContext:
     This prevents race conditions when multiple users sign up concurrently."""
     uuid_map: dict = field(default_factory=dict)
     trace_time_shift: dict = field(default_factory=dict)
-    dataset_ids: dict = field(default_factory=dict)
-    dataset_item_ids: dict = field(default_factory=dict)
-    prompt_names: dict = field(default_factory=dict)
-    prompt_commits: dict = field(default_factory=dict)
 
 
 def make_http_request(base_url, message, workspace_name, comet_api_key):
@@ -106,9 +109,9 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
 
-def project_exists(base_url, workspace_name, comet_api_key, project_name):
+def create_project(base_url, workspace_name, comet_api_key, project_name):
     request = {
-        "url": "/v1/private/projects/retrieve",
+        "url": "/v1/private/projects",
         "method": "POST",
         "payload": {
             "name": project_name,
@@ -116,7 +119,7 @@ def project_exists(base_url, workspace_name, comet_api_key, project_name):
     }
 
     _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-    return status_code == 200
+    return status_code
 
 def calculate_time_shift_to_now(traces):
     """
@@ -178,60 +181,89 @@ def get_time_shift(context: DemoDataContext, trace_id):
         return time_shift
     return datetime.timedelta(0)
 
-def process_traces_with_time_shift(traces, context: DemoDataContext, client: opik.Opik):
+def process_traces_with_time_shift(traces, context: DemoDataContext, project_name: str):
     """
-    Process traces with proper time shifts and time-based UUIDs.
-    
+    Process traces with proper time shifts and time-based UUIDs, returning a list of
+    TraceWrite objects ready for a single synchronous POST /v1/private/traces/batch call.
+
     Shifts all trace timestamps to present time while preserving temporal relationships,
     and generates time-based UUIDs for consistent ordering.
-    
+
     Calculates time shift from the latest end_time across traces only
     to ensure all data is brought to present while preserving time distances.
-    
+
     Parameters:
     - traces: List of trace dictionaries to process
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging traces
-    
+    - project_name: Project name to attach to every TraceWrite
+
     Returns:
-    - datetime.timedelta: The time shift applied to all data (to be used for spans)
+    - tuple: (list[TraceWrite] ready to POST, datetime.timedelta time_shift applied)
     """
     # Calculate time shift from traces only to move latest trace end_time to now
     # This same shift will be applied to spans to preserve all time distances
     time_shift = calculate_time_shift_to_now(traces)
-    
+
+    # Track per-millisecond counters to break ties when multiple traces share the same
+    # start_time down to the millisecond. uuid7_from_datetime derives the UUID's temporal
+    # prefix from the ms-resolution timestamp, so two traces landing on the same ms can
+    # produce UUIDs that collide (or get silently deduplicated by the backend). Adding a
+    # monotonic microsecond offset ensures each trace gets a distinct UUID7 prefix.
+    ms_counter: dict = {}
+    trace_writes: list = []
+
     for idx, original_trace in enumerate(sorted(traces, key=lambda x: x["id"])):
         # Create a copy to avoid mutating the original demo_data
         trace = dict(original_trace)
         # Store the old ID before modification
         old_trace_id = trace["id"]
         # Apply time shift to maintain time differences
-        trace["start_time"] = apply_time_shift(trace["start_time"], time_shift)
-        trace["end_time"] = apply_time_shift(trace["end_time"], time_shift)
+        shifted_start = apply_time_shift(trace["start_time"], time_shift)
+        shifted_end = apply_time_shift(trace["end_time"], time_shift)
+
+        # Deduplicate sub-millisecond timestamps: if multiple traces land on the same
+        # millisecond after the shift, offset each by 1 µs so their UUID7s are distinct.
+        ms_key = int(shifted_start.timestamp() * 1000)
+        offset_us = ms_counter.get(ms_key, 0)
+        ms_counter[ms_key] = offset_us + 1
+        if offset_us > 0:
+            shifted_start = shifted_start + datetime.timedelta(microseconds=offset_us)
+            # Shift end_time by the same amount so duration is preserved and we never
+            # end up with end_time < start_time (would violate ordering invariants).
+            shifted_end = shifted_end + datetime.timedelta(microseconds=offset_us)
+
+        trace["start_time"] = shifted_start
+        trace["end_time"] = shifted_end
         new_id = get_new_uuid_by_time(context, old_trace_id, trace["start_time"])
         trace["id"] = new_id
-        # Remove fields that shouldn't be in the trace data
+        # Attach project_name directly so the TraceWrite targets the right project.
+        trace["project_name"] = project_name
+        # Remove fields that shouldn't be in the trace payload
         trace.pop("project_id", None)
         trace.pop("workspace_id", None)
         set_time_shift(context, new_id, time_shift)
-        client.trace(**trace)
-    
-    return time_shift
+        trace_writes.append(TraceWrite(**trace))
 
-def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, client: opik.Opik):
+    return trace_writes, time_shift
+
+def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, project_name: str):
     """
-    Process spans with the same time shift as their parent traces.
-    
+    Process spans with the same time shift as their parent traces, returning a list of
+    SpanWrite objects ready for a single synchronous POST /v1/private/spans/batch call.
+
     Spans use the time shift passed from trace processing to maintain relative timing.
-    
+
     First pass generates all time-based UUIDs and stores time shifts.
-    Second pass logs all spans with properly shifted times and parent_span_id mappings.
-    
+    Second pass builds all SpanWrite objects with properly shifted times and parent_span_id mappings.
+
     Parameters:
     - spans: List of span dictionaries to process
     - time_shift: The time shift to apply (from traces)
     - context: DemoDataContext object holding state
-    - client: opik.Opik client for logging spans
+    - project_name: Project name to attach to every SpanWrite
+
+    Returns:
+    - list[SpanWrite]: Spans ready to POST
     """
     # First pass: Generate all time-based UUIDs and store time shifts for spans
     # This ensures all parent span IDs are mapped before we reference them
@@ -252,7 +284,8 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         # Store the time shift for use in second pass
         span_time_shifts[old_span_id] = (span["start_time"], span["end_time"], time_shift)
 
-    # Second pass: Log all spans with properly shifted times and parent_span_id mappings
+    # Second pass: build SpanWrite objects with properly shifted times and parent_span_id mappings
+    span_writes: list = []
     for original_span in sorted(spans, key=lambda x: x["id"]):
         # Create a copy to avoid mutating the original demo_data
         span = dict(original_span)
@@ -266,10 +299,14 @@ def process_spans_with_time_shift(spans, time_shift, context: DemoDataContext, c
         if "parent_span_id" in span:
             new_parent_span_id = get_new_uuid(context, span["parent_span_id"])
             span["parent_span_id"] = new_parent_span_id
-        # Remove fields that shouldn't be in the span data
+        # Attach project_name directly so the SpanWrite targets the right project.
+        span["project_name"] = project_name
+        # Remove fields that shouldn't be in the span payload
         span.pop("project_id", None)
         span.pop("workspace_id", None)
-        client.span(**span)
+        span_writes.append(SpanWrite(**span))
+
+    return span_writes
 
 def uuid7_from_datetime(dt: datetime.datetime) -> uuid.UUID:
 
@@ -328,121 +365,36 @@ def get_new_uuid_by_time(context: DemoDataContext, old_id, datetime):
         context.uuid_map[old_id] = new_id
     return new_id
 
-def create_demo_evaluation_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_evaluation_project"):
-        client: opik.Opik = None
-        try:
-
-            project_name = "Opik Demo Assistant"
-
-            # Find project ID by project name
-            project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Assistant"), None)
-           
-            if project_id is None:
-                logger.error("Could not find project ID for 'Opik Assistant'")
-                return
-            
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            client = opik.Opik(
-                project_name=project_name,
-                workspace=workspace_name,
-                host=base_url,
-                api_key=comet_api_key,
-                _use_batching=True,
-            )
-
-            evaluation_traces = experiment_traces_grouped_by_project[project_id]
-            evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
-            process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
-            client.flush()
-            
-            # Prompts
-            # We now create 3 versions of a Q&A prompt. The final version is from llama-index.
-            for version in demo_prompt["versions"]:
-                prompt = client.create_prompt(
-                    name="Demo - " + demo_prompt["name"],
-                    prompt=version["template"],
-                )
-                context.prompt_names[version["id"]] = prompt.name
-                context.prompt_commits[version["id"]] = prompt.commit
-
-            # Dataset
-            dataset_name = "Opik Questions"
-            dataset = next((x for x in demo_datasets if x["name"] == dataset_name), None)
-            opik_dataset = client.get_or_create_dataset(name="Opik Demo Questions", description=dataset["description"])
-            
-            context.dataset_ids[dataset["id"]] = opik_dataset.id
-
-            dataset_item_ids = {}
-            new_items = []
-            for item in demo_dataset_items[dataset["id"]]:
-                new_id = str(uuid6.uuid7())
-                dataset_item_ids[item["id"]] = new_id
-                context.dataset_item_ids[item["id"]] = new_id
-                new_item = {
-                    **item["data"],
-                    "id": new_id,
-                }
-                new_items.append(new_item)
-
-            opik_dataset.insert(new_items)
-
-            # In addition to creating the dataset, we also create a mapping from the dataset items to the traces. This will be handy for creating the experiment.
-            items = opik_dataset.get_items()
-
-            # Experiment
-            # The experiment is constructed by joining the traces with the dataset items.
-            experiments = [x for x in demo_experiments if x["name"] in ["opik-assistant-v1", "opik-assistant-v2"]]
-
-            for item in experiments:
-                commits =  [sub_item.decode() for sublist in item["prompt_versions"].values() for sub_item in sublist]
-                
-                prompts = []
-                for version in commits:
-                    prompt = client.get_prompt(name=context.prompt_names[version], commit=context.prompt_commits[version])
-                    prompts.append(prompt)
-                
-                experiment = client.create_experiment(name="Demo-" + item["name"], dataset_name=opik_dataset.name, prompts=prompts)
-                experiment_items = []
-                
-                for experiment_item in demo_experiment_items[item["id"]]:
-                    trace_id = get_new_uuid(context, experiment_item["trace_id"])
-                    dataset_item_id = dataset_item_ids[experiment_item["dataset_item_id"]]
-                    
-                    if dataset_item_id is not None:
-                        experiment_items.append(
-                            opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                                dataset_item_id=dataset_item_id, trace_id=trace_id
-                            )
-                        )
-
-                experiment.insert(experiment_items)
-
-        except Exception as e:
-            logger.error(e)
-        finally:
-            # Close the client
-            if client:
-                client.flush()
-                client.end()
-
 def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
+    """Seed the demo chatbot project. Returns True when fresh data was written,
+    False when the project already existed (409) and the seed was skipped."""
     with tracer.start_as_current_span("create_demo_chatbot_project"):
         client: opik.Opik = None
 
         try:
             project_name = "Opik Demo Agent Observability"
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
 
-            # Demo traces and spans
-            # We have a simple chatbot application built using llama-index.
-            # We gave it the content of Opik documentation as context, and then asked it a few questions.
+            # Create the project explicitly before sending traces.
+            # This is the single source of truth for whether demo data creation proceeds:
+            # - 201: project created, continue
+            # - 409: project already exists (signup hook re-run), skip entirely — idempotent
+            # - other: likely API key not yet propagated on fresh signup, retry with backoff
+            # We can't rely on implicit project creation via the SDK's batch trace endpoint because
+            # it silently swallows 4xx errors (flush() returns True even when backend rejects traces).
+            max_retries = 5
+            status_code = None
+            for attempt in range(max_retries):
+                status_code = create_project(base_url, workspace_name, comet_api_key, project_name)
+                if status_code == 201 or status_code == 409:
+                    break
+                if attempt == max_retries - 1:
+                    logger.error("Failed to create project %s for workspace %s after %d retries (last status=%s), aborting demo data creation", project_name, workspace_name, max_retries, status_code)
+                    return False
+                time.sleep(2 ** attempt)
+
+            if status_code == 409:
+                logger.info("%s project already exists for workspace %s, skipping demo data creation", project_name, workspace_name)
+                return False
 
             client = opik.Opik(
                 project_name=project_name,
@@ -452,13 +404,39 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                 _use_batching=True,
             )
 
-            # Extract thread IDs before processing traces
-            threads = [trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None]
-            
-            time_shift = process_traces_with_time_shift(demo_traces, context, client)
-            process_spans_with_time_shift(demo_spans, time_shift, context, client)
-            client.flush()
+            # Sanity check: warn if the demo dataset itself contains duplicate trace IDs
+            # (these would collapse to a single row on ingest).
+            trace_ids = [t["id"] for t in demo_traces]
+            seen_trace_ids: set = set()
+            for tid in trace_ids:
+                if tid in seen_trace_ids:
+                    logger.warning("Duplicate trace id found in demo data: %s", tid)
+                seen_trace_ids.add(tid)
+            logger.info("Found %d unique trace IDs in demo data", len(seen_trace_ids))
 
+            # Extract unique thread IDs before processing traces
+            threads = list({trace["thread_id"] for trace in demo_traces if "thread_id" in trace and trace["thread_id"] is not None})
+
+            logger.info("Creating %d threads, %d traces, %d spans for workspace %s",
+                        len(threads), len(demo_traces), len(demo_spans), workspace_name)
+
+            # Build the full TraceWrite / SpanWrite payloads up-front, then POST them
+            # synchronously via the REST client. This deliberately bypasses the SDK's
+            # batch queue because:
+            #   - batch queue silently swallows 401s via the unauthorized-message
+            #     registry (10s block), so client.flush() can return True even when
+            #     nothing landed on the backend;
+            #   - the raw REST call returns a real HTTP status and raises ApiError on
+            #     non-2xx, which propagates up to our outer except as a loud failure;
+            #   - no ClickHouse read is needed for verification, so we avoid false
+            #     positives from CH replica lag.
+            trace_writes, time_shift = process_traces_with_time_shift(demo_traces, context, project_name)
+            logger.info("Posting %d traces synchronously via REST for workspace %s", len(trace_writes), workspace_name)
+            client.rest_client.traces.create_traces(traces=trace_writes)
+
+            span_writes = process_spans_with_time_shift(demo_spans, time_shift, context, project_name)
+            logger.info("Posting %d spans synchronously via REST for workspace %s", len(span_writes), workspace_name)
+            client.rest_client.spans.create_spans(spans=span_writes)
 
             done = False
             max_attempts = 10
@@ -470,7 +448,7 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                     done = True
                     attempts = 0
                 except Exception as e:
-                    logger.error(f"Error closing threads {threads} attempt {attempts}: {e}")
+                    logger.error("Error closing threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
                     attempts += 1
                     time.sleep(0.5)
 
@@ -504,35 +482,221 @@ def create_demo_chatbot_project(context: DemoDataContext, base_url: str, workspa
                         done = True
                         attempts = 0
                     except Exception as e:
-                        logger.error(f"Error scoring batch of threads attempt {attempts}: {e}")
+                        logger.error("Error scoring batch of threads for workspace %s attempt %d: status=%s, body=%s", workspace_name, attempts, getattr(e, 'status_code', 'unknown'), getattr(e, 'body', str(e)))
                         attempts += 1
                         time.sleep(0.5)
                 if not done:
-                    logger.error("Failed to score batch of threads after %d attempts", max_attempts)
+                    logger.error("Failed to score batch of threads for workspace %s after %d attempts", workspace_name, max_attempts)
+
+            return True
         except Exception as e:
-            logger.error(e)
+            logger.error("Error creating demo chatbot project for workspace %s: %s", workspace_name, e, exc_info=True)
+            return False
         finally:
             # Close the client
             if client:
                 client.flush()
                 client.end()
 
-def create_demo_optimizer_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_optimizer_project"):
+def retrieve_project_id_by_name(base_url, workspace_name, comet_api_key, project_name):
+    request = {
+        "url": "/v1/private/projects/retrieve",
+        "method": "POST",
+        "payload": {"name": project_name},
+    }
+    data, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    if status_code == 200 and data and "id" in data:
+        return data["id"]
+    return None
+
+
+def create_agent_config_blueprint(base_url, workspace_name, comet_api_key, project_id, blueprint_values, description):
+    """Create or patch an agent config blueprint and return its id+name.
+
+    Checks GET /latest to decide between POST (no config yet) and PATCH
+    (adding another blueprint to existing config). POST fails with 409 when
+    a config already exists, which is why we dispatch explicitly instead of
+    always using POST.
+
+    The POST response uses the Write JsonView which omits the auto-generated
+    name, and PATCH returns no body at all. We fetch via GET /latest
+    afterwards (Public view) to obtain the name.
+    """
+    latest_request = {
+        "url": f"/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
+        "method": "GET",
+    }
+    _, latest_status = make_http_request(base_url, latest_request, workspace_name, comet_api_key)
+    method = "POST" if latest_status == 404 else "PATCH"
+    create_request = {
+        "url": "/v1/private/agent-configs/blueprints",
+        "method": method,
+        "payload": {
+            "project_id": project_id,
+            "blueprint": {
+                "type": "blueprint",
+                "description": description,
+                "values": blueprint_values,
+            },
+        },
+    }
+    data, status_code = make_http_request(base_url, create_request, workspace_name, comet_api_key)
+    if status_code not in (200, 201):
+        logger.error("Failed to create blueprint: status=%s, data=%s", status_code, data)
+        return None, None
+
+    # Response omits name (Write view). Re-fetch as Public view to get the name.
+    latest_request = {
+        "url": f"/v1/private/agent-configs/blueprints/latest/projects/{project_id}",
+        "method": "GET",
+    }
+    latest_data, latest_status = make_http_request(base_url, latest_request, workspace_name, comet_api_key)
+    if latest_status != 200 or not latest_data:
+        logger.error("Failed to fetch latest blueprint after create: status=%s", latest_status)
+        return None, None
+    return latest_data.get("id"), latest_data.get("name")
+
+
+def tag_agent_config_env(base_url, workspace_name, comet_api_key, project_id, env_name, blueprint_name):
+    request = {
+        "url": f"/v1/private/agent-configs/blueprints/environments/{env_name}/projects/{project_id}",
+        "method": "PUT",
+        "payload": {"blueprint_name": blueprint_name},
+    }
+    _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
+    if status_code != 204:
+        logger.error("Failed to tag env '%s' → '%s': status=%s", env_name, blueprint_name, status_code)
+
+
+def _build_suite_span_tree(trace_id, question, answer, trace_start, trace_end,
+                           project_name, model, env):
+    """Build an 8-span agent tree mirroring the existing chatbot demo structure.
+
+    Structure:
+      handle_query (root, general)
+      ├── classify_query (general)
+      │   └── chat_completion_create (llm)
+      ├── contact_insight_tool (tool)
+      │   ├── retrieve_documents_rag (general)
+      │   └── chat_completion_create (llm)
+      └── format_response (general)
+          └── chat_completion_create (llm)
+    """
+    total = (trace_end - trace_start).total_seconds()
+    # Divide the trace into 6 sequential segments (3 main stages × 2 sub-stages).
+    seg = datetime.timedelta(seconds=total / 6.0)
+
+    s0, s1, s2, s3, s4, s5, s6 = [trace_start + i * seg for i in range(7)]
+    # s0..s1: classify_query | s1..s3: contact_insight_tool | s3..s5: format_response
+
+    root_id = str(uuid6.uuid7())
+    classify_id = str(uuid6.uuid7())
+    classify_llm_id = str(uuid6.uuid7())
+    tool_id = str(uuid6.uuid7())
+    retrieve_id = str(uuid6.uuid7())
+    tool_llm_id = str(uuid6.uuid7())
+    format_id = str(uuid6.uuid7())
+    format_llm_id = str(uuid6.uuid7())
+
+    def llm_span(span_id, parent_id, start, end, user_prompt, assistant_output,
+                 prompt_tokens, completion_tokens):
+        return SpanWrite(
+            id=span_id, trace_id=trace_id, parent_span_id=parent_id,
+            project_name=project_name, name="chat_completion_create", type="llm",
+            start_time=start, end_time=end,
+            input={"messages": [
+                {"role": "system", "content": "You are a helpful support agent."},
+                {"role": "user", "content": user_prompt},
+            ]},
+            output={"choices": [
+                {"index": 0, "finish_reason": "stop",
+                 "message": {"role": "assistant", "content": assistant_output}}
+            ]},
+            model=model, provider="openai",
+            usage={
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
+            tags=[env],
+            source="experiment",
+        )
+
+    return [
+        SpanWrite(
+            id=root_id, trace_id=trace_id, parent_span_id=None,
+            project_name=project_name, name="handle_query", type="general",
+            start_time=trace_start, end_time=trace_end,
+            input={"question": question},
+            output={"answer": answer},
+            tags=[env],
+            source="experiment",
+        ),
+        SpanWrite(
+            id=classify_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="classify_query", type="general",
+            start_time=s0, end_time=s1,
+            input={"query": question, "model": model},
+            output={"category": "support"},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(classify_llm_id, classify_id, s0, s1,
+                 user_prompt=f"Classify the following user query into a support category: {question}",
+                 assistant_output="support",
+                 prompt_tokens=65, completion_tokens=3),
+        SpanWrite(
+            id=tool_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="contact_insight_tool", type="tool",
+            start_time=s1, end_time=s3,
+            input={"query": question, "model": model},
+            output={"documents_found": 3, "context_preview": answer[:120]},
+            tags=[env],
+            source="experiment",
+        ),
+        SpanWrite(
+            id=retrieve_id, trace_id=trace_id, parent_span_id=tool_id,
+            project_name=project_name, name="retrieve_documents_rag", type="general",
+            start_time=s1, end_time=s2,
+            input={"category": "support"},
+            output={"documents": [{"title": "Opik docs excerpt", "snippet": answer[:160]}]},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(tool_llm_id, tool_id, s2, s3,
+                 user_prompt=(f"Given the retrieved context about Opik, answer the user's question: "
+                              f"{question}"),
+                 assistant_output=answer,
+                 prompt_tokens=180, completion_tokens=max(32, len(answer.split()) * 2)),
+        SpanWrite(
+            id=format_id, trace_id=trace_id, parent_span_id=root_id,
+            project_name=project_name, name="format_response", type="general",
+            start_time=s3, end_time=s5,
+            input={"user_query": question, "raw_tool_output": answer, "model": model},
+            output={"answer": answer},
+            tags=[env],
+            source="experiment",
+        ),
+        llm_span(format_llm_id, format_id, s3, s5,
+                 user_prompt=(f"Format the following answer as a clear, concise reply: {answer}"),
+                 assistant_output=answer,
+                 prompt_tokens=120, completion_tokens=max(24, len(answer.split()) * 2)),
+    ]
+
+
+def create_demo_test_suite_and_experiments(base_url: str, workspace_name, comet_api_key, project_name):
+    """Seed a test suite, agent-config blueprints, and two experiments.
+
+    Assumes the demo project was just created. Uses the existing feedback-score
+    batch endpoint with category_name='suite_assertion' to route scores to the
+    assertion_results table (ScoreDestination.ASSERTION_RESULTS).
+    """
+    with tracer.start_as_current_span("create_demo_test_suite_and_experiments"):
         client: opik.Opik = None
         try:
-
-            project_name = "Opik Demo Optimizer"
-
-            # Find project ID by project name
-            project_id = next((pid for pid, pname in demo_projects.items() if pname == "Opik Optimizer"), None)
-           
+            project_id = retrieve_project_id_by_name(base_url, workspace_name, comet_api_key, project_name)
             if project_id is None:
-                logger.error("Could not find project ID for 'Opik Optimizer'")
-                return
-            
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
+                logger.error("Demo project '%s' not found, skipping test suite creation", project_name)
                 return
 
             client = opik.Opik(
@@ -543,111 +707,244 @@ def create_demo_optimizer_project(context: DemoDataContext, base_url: str, works
                 _use_batching=True,
             )
 
-            evaluation_traces = experiment_traces_grouped_by_project[project_id]
-            evaluation_spans = experiment_spans_grouped_by_project[project_id]
-            time_shift = process_traces_with_time_shift(evaluation_traces, context, client)
-            process_spans_with_time_shift(evaluation_spans, time_shift, context, client)
+            # Step 1 — evaluation suite (renamed to "test suite" on main, but this
+            # codepath uses the 1.10.56 SDK naming for evaluation suites).
+            suite_name = "Customer support regression suite"
+            suite = client.get_or_create_evaluation_suite(
+                name=suite_name,
+                description="Demo regression tests for the support agent.",
+                assertions=[demo_test_suite_global_assertion],
+                project_name=project_name,
+            )
+            if suite.get_items():
+                logger.info("Evaluation suite '%s' already populated, skipping", suite_name)
+                return
+
+            suite.add_items([
+                {
+                    "data": {"question": template["question"]},
+                    "assertions": template["assertions"],
+                }
+                for template in demo_test_suite_items
+            ])
             client.flush()
 
-            dataset_name = "Opik Demo Questions"
-            
-            for optimization in demo_optimizations:
+            # After insert, map back: question text → backend-assigned item id.
+            inserted_items = suite.get_items()
+            item_id_by_question = {item["data"]["question"]: item["id"] for item in inserted_items}
+            logger.info("Inserted %d evaluation suite items for workspace %s",
+                        len(inserted_items), workspace_name)
 
-                new_optimization = client.create_optimization(
-                    name=optimization["name"],
-                    dataset_name=dataset_name,
-                    objective_name=optimization["objective_name"],
-                    metadata=optimization["metadata"],
+            # Step 2a — create the support agent system prompt with two commits.
+            # Each blueprint pins the `system_prompt` key to the commit matching
+            # its prompt_version so the UI shows a real prompt link, not a raw string.
+            prompt_v1 = client.create_prompt(
+                name=demo_agent_prompt_name,
+                prompt=demo_agent_prompt_v1,
+                description="Support agent system prompt used by the demo project.",
+                project_name=project_name,
+            )
+            prompt_v2 = client.create_prompt(
+                name=demo_agent_prompt_name,
+                prompt=demo_agent_prompt_v2,
+                change_description="Ground answers in retrieved context and enforce 120-word cap.",
+                project_name=project_name,
+            )
+            prompt_commit_by_version = {"v1": prompt_v1.commit, "v2": prompt_v2.commit}
+            logger.info("Created prompt '%s' with commits v1=%s v2=%s",
+                        demo_agent_prompt_name, prompt_v1.commit, prompt_v2.commit)
+
+            # Step 2b — agent config blueprints. The helper auto-detects POST vs PATCH.
+            blueprint_by_env = {}
+            for bp in demo_agent_config_blueprints:
+                values_with_prompt = list(bp["values"]) + [{
+                    "key": "system_prompt",
+                    "type": "prompt",
+                    "value": prompt_commit_by_version[bp["prompt_version"]],
+                    "description": f"System prompt pinned to {bp['prompt_version']}",
+                }]
+                bp_id, bp_name = create_agent_config_blueprint(
+                    base_url, workspace_name, comet_api_key, project_id,
+                    values_with_prompt, bp["description"],
                 )
-            
-                # Experiment
-                # The experiment is constructed by joining the traces with the dataset items.
-                experiments = [x for x in demo_experiments if x.get("optimization_id") == optimization["id"]]
+                if bp_id is None:
+                    logger.error("Aborting test suite seed — blueprint creation failed for env %s", bp["env"])
+                    return
+                blueprint_by_env[bp["env"]] = {"id": bp_id, "name": bp_name}
+                tag_agent_config_env(base_url, workspace_name, comet_api_key, project_id, bp["env"], bp_name)
 
-                for item in experiments:
-                    commits =  [item.decode() for sublist in item.get("prompt_versions", {}).values() for item in sublist]
-                    
-                    prompts = []
-                    for version in commits:
-                        prompt = client.get_prompt(name=context.prompt_names[version], commit=context.prompt_commits[version])
-                        prompts.append(prompt)
-                    
-                    experiment = client.create_experiment(
-                        name="Demo-" + item["name"],
-                        dataset_name=dataset_name,
-                        prompts=prompts,
-                        optimization_id=new_optimization.id,
-                        experiment_config = {
-                            **item.get("metadata", {}),
-                            "dataset": dataset_name,
-                        },
-                        type=item["type"]
-                    )
+            # Step 3 — experiments + traces + scores.
+            suite_dataset_name = suite.dataset.name
+            now = datetime.datetime.now()
 
-                    experiment_items = []
-                    
-                    for experiment_item in demo_experiment_items.get(item["id"], []):
-                        trace_id = get_new_uuid(context, experiment_item["trace_id"])
-                        dataset_item_id = context.dataset_item_ids[experiment_item["dataset_item_id"]]
-                        
-                        if dataset_item_id is not None:
-                            experiment_items.append(
-                                opik.api_objects.experiment.experiment_item.ExperimentItemReferences(
-                                    dataset_item_id=dataset_item_id, trace_id=trace_id
-                                )
+            for exp_cfg in demo_test_suite_experiments:
+                env = exp_cfg["tag"]
+                blueprint = blueprint_by_env[env]
+                # Resolve the model value from the blueprint for realistic LLM span metadata.
+                model_value = next(
+                    (v["value"] for v in next(
+                        bp["values"] for bp in demo_agent_config_blueprints if bp["env"] == env
+                    ) if v["key"] == "model"),
+                    "gpt-4o-mini",
+                )
+
+                experiment = client.create_experiment(
+                    name=exp_cfg["name"],
+                    dataset_name=suite_dataset_name,
+                    evaluation_method="evaluation_suite",
+                    tags=[env],
+                    project_name=project_name,
+                    experiment_config={
+                        "agent_configuration": {
+                            "_blueprint_id": blueprint["id"],
+                            "blueprint_version": blueprint["name"],
+                        }
+                    },
+                )
+
+                # For each suite item: one trace (with full span tree), one experiment_item,
+                # per-item + global assertion scores.
+                traces_to_create = []
+                spans_to_create = []
+                experiment_refs = []
+                score_items = []
+
+                for i, template in enumerate(demo_test_suite_items):
+                    trace_id = str(uuid6.uuid7())
+                    dataset_item_id = item_id_by_question[template["question"]]
+
+                    # Per-env answer: prod may have a weaker variant that legitimately
+                    # fails the assertions marked False in pass_mask_prod; staging
+                    # always uses the "good" answer that satisfies every assertion.
+                    # Items without an answer_prod override use the same answer in both.
+                    if env == "prod":
+                        answer = template.get("answer_prod") or template["answer_staging"]
+                    else:
+                        answer = template["answer_staging"]
+
+                    # Spread traces across the last ~30 minutes in reverse order.
+                    start = now - datetime.timedelta(minutes=len(demo_test_suite_items) - i)
+                    end = start + datetime.timedelta(seconds=random.randint(4, 12))
+
+                    traces_to_create.append(TraceWrite(
+                        id=trace_id,
+                        name="handle_query",
+                        project_name=project_name,
+                        start_time=start,
+                        end_time=end,
+                        input={"question": template["question"]},
+                        output={"answer": answer},
+                        tags=[env],
+                        source="experiment",
+                    ))
+
+                    spans_to_create.extend(_build_suite_span_tree(
+                        trace_id=trace_id,
+                        question=template["question"],
+                        answer=answer,
+                        trace_start=start,
+                        trace_end=end,
+                        project_name=project_name,
+                        model=model_value,
+                        env=env,
+                    ))
+
+                    experiment_refs.append(RestExperimentItem(
+                        experiment_id=experiment.id,
+                        dataset_item_id=dataset_item_id,
+                        trace_id=trace_id,
+                        # Pin project_name so the backend resolves project_id
+                        # deterministically via projectService.retrieveByNamesOrCreate
+                        # instead of falling back to a trace lookup — that lookup
+                        # races with ClickHouse ingestion of the traces we just
+                        # POSTed and can return null in prod.
+                        project_name=project_name,
+                    ))
+
+                    # Assertion scores. Pass mode drives fail patterns. Name = full
+                    # assertion text (matching real LLM-judge output after
+                    # scoreNameMapping), reason = why it passed or failed.
+                    pass_mode = exp_cfg["pass_mode"]
+                    assertions = template["assertions"]
+                    mask = (template["pass_mask_prod"]
+                            if pass_mode == "prod"
+                            else [True] * len(assertions))
+                    fail_reasons = (template.get("fail_reasons_prod") or {}) if pass_mode == "prod" else {}
+
+                    # Global suite-level assertion — always passes in the demo.
+                    score_items.append(FeedbackScoreBatchItem(
+                        id=trace_id,
+                        project_name=project_name,
+                        name=demo_test_suite_global_assertion,
+                        category_name="suite_assertion",
+                        value=1.0,
+                        reason="The response is written entirely in clear, fluent English.",
+                        source="online_scoring",
+                    ))
+
+                    for idx, (assertion_text, passed) in enumerate(zip(assertions, mask)):
+                        if passed:
+                            reason = (f"The response satisfies the assertion: "
+                                      f"it clearly {assertion_text[0].lower() + assertion_text[1:]}.")
+                        else:
+                            reason = fail_reasons.get(
+                                idx,
+                                f"The response does not satisfy the assertion: "
+                                f"it fails to {assertion_text[0].lower() + assertion_text[1:]}.",
                             )
+                        score_items.append(FeedbackScoreBatchItem(
+                            id=trace_id,
+                            project_name=project_name,
+                            name=assertion_text,
+                            category_name="suite_assertion",
+                            value=1.0 if passed else 0.0,
+                            reason=reason,
+                            source="online_scoring",
+                        ))
 
-                    experiment.insert(experiment_items)
-                    
-                client.rest_client.optimizations.update_optimizations_by_id(
-                    id=new_optimization.id,
-                    status="completed"
+                # Use synchronous REST for every write. The SDK's async streamer
+                # (experiment.insert / client.flush) silently drops messages on
+                # timeout in production — client.flush() returns True even when
+                # it couldn't drain the queue before the signup handler exits,
+                # which leaves the experiment with zero items in the UI even
+                # though the "Seeded experiment" log fires. Posting directly to
+                # the REST endpoint guarantees a 2xx-or-raise before we log.
+                client.rest_client.traces.create_traces(traces=traces_to_create)
+                client.rest_client.spans.create_spans(spans=spans_to_create)
+                client.rest_client.experiments.create_experiment_items(
+                    experiment_items=experiment_refs,
                 )
+                client.rest_client.traces.score_batch_of_traces(scores=score_items)
+
+                logger.info("Seeded experiment '%s' with %d traces / %d spans / %d items / %d assertion scores",
+                            exp_cfg["name"], len(traces_to_create), len(spans_to_create),
+                            len(experiment_refs), len(score_items))
 
         except Exception as e:
-            logger.error(e)
+            logger.error("Error creating demo test suite for workspace %s: %s",
+                         workspace_name, e, exc_info=True)
         finally:
-            # Close the client
             if client:
                 client.flush()
                 client.end()
 
-def create_demo_playground_project(context: DemoDataContext, base_url: str, workspace_name, comet_api_key):
-    with tracer.start_as_current_span("create_demo_playground_project"):
-        try:
-            project_name = "playground"
-            if project_exists(base_url, workspace_name, comet_api_key, project_name):
-                logger.info("%s project already exists", project_name)
-                return
-
-            request = {
-                "url": "/v1/private/projects",
-                "method": "POST",
-                "payload": {
-                    "name": project_name,
-                },
-            }
-
-            _, status_code = make_http_request(base_url, request, workspace_name, comet_api_key)
-            if status_code in [201, 200]:
-                logger.info("%s project created successfully", project_name)
-            else:
-                logger.error("Failed to create playground project, status code: %s", status_code)
-        except Exception as e:
-            logger.error("Error creating playground project: %s", e)
 
 def create_demo_data(base_url: str, workspace_name, comet_api_key):
     with tracer.start_as_current_span("create_demo_data"):
         # Create a fresh context for this invocation to prevent race conditions
         # when multiple users sign up concurrently
         context = DemoDataContext()
-        
+        project_name = "Opik Demo Agent Observability"
+
         try:
-            create_demo_evaluation_project(context, base_url, workspace_name, comet_api_key)
-            create_demo_optimizer_project(context, base_url, workspace_name, comet_api_key)
-            create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
-            create_demo_playground_project(context, base_url, workspace_name, comet_api_key)
+            chatbot_seeded = create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+            # Only run the test-suite seed when the chatbot project was freshly created.
+            # If the chatbot flow short-circuited on 409 (project already exists), the
+            # suite/prompt/blueprints/experiments were seeded on the prior run too —
+            # a second pass must be a no-op to stay idempotent under signup retries.
+            if chatbot_seeded:
+                create_demo_test_suite_and_experiments(base_url, workspace_name, comet_api_key, project_name)
             logger.info("Demo data created successfully")
         except Exception as e:
             logger.error(e)

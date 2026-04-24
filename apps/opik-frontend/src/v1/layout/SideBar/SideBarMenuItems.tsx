@@ -27,13 +27,19 @@ interface SideBarMenuItemsProps {
 const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   const { activeWorkspaceName: workspaceName } = useAppStore();
   const {
-    permissions: { canViewExperiments, canViewDashboards, canViewDatasets },
+    permissions: {
+      canViewExperiments,
+      canViewDashboards,
+      canViewDatasets,
+      canUsePlayground,
+    },
   } = usePermissions();
 
   const menuItems = getMenuItems({
     canViewExperiments,
     canViewDashboards,
     canViewDatasets,
+    canUsePlayground,
   });
 
   const { data: projectData } = useProjectsList(
@@ -161,7 +167,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
 
   const countDataMap: Record<string, number | undefined> = {
     projects: projectData?.total,
-    evaluation_suites: datasetsData?.total,
+    test_suites: datasetsData?.total,
     experiments: experimentsData?.total,
     prompts: promptsData?.total,
     rules: rulesData?.total,

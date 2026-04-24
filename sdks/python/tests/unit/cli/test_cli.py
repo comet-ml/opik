@@ -114,7 +114,6 @@ class TestSmokeTestCommand:
         assert "Error" in result.output or "Missing" in result.output
 
     @patch("opik.cli.healthcheck.cli.standard_check.run")
-    @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
     @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
@@ -129,7 +128,6 @@ class TestSmokeTestCommand:
         mock_update_trace,
         mock_start_trace,
         mock_opik_class,
-        mock_get_client_cached,
         mock_healthcheck_run,
     ):
         """Test healthcheck --smoke-test command with workspace and --project-name arguments."""
@@ -141,9 +139,6 @@ class TestSmokeTestCommand:
             side_effect=AttributeError("Mock client - search_traces not available")
         )
         mock_opik_class.return_value = mock_client
-
-        mock_cached_client = MagicMock()
-        mock_get_client_cached.return_value = mock_cached_client
 
         # Mock the context manager for start_as_current_trace
         @contextmanager
@@ -188,17 +183,11 @@ class TestSmokeTestCommand:
         assert call_kwargs["project_name"] == "test-project"
         # Verify trace was started
         mock_start_trace.assert_called_once()
-        # Verify cached client is NOT flushed (since _temporary_client_context patches
-        # get_client_cached to return mock_client, not mock_cached_client)
-        mock_cached_client.flush.assert_not_called()
         # Verify explicit client was flushed and ended
-        # Note: _temporary_client_context patches get_client_cached to return mock_client,
-        # so when start_as_current_trace calls get_client_cached().flush(), it flushes mock_client
         mock_client.flush.assert_called_once()
         mock_client.end.assert_called_once()
 
     @patch("opik.cli.healthcheck.cli.standard_check.run")
-    @patch("opik.api_objects.opik_client.get_client_cached")
     @patch("opik.cli.healthcheck.smoke_test.opik.Opik")
     @patch("opik.cli.healthcheck.smoke_test.opik.start_as_current_trace")
     @patch("opik.cli.healthcheck.smoke_test.opik_context.update_current_trace")
@@ -213,7 +202,6 @@ class TestSmokeTestCommand:
         mock_update_trace,
         mock_start_trace,
         mock_opik_class,
-        mock_get_client_cached,
         mock_healthcheck_run,
     ):
         """Test healthcheck --smoke-test command with workspace only (uses default project name)."""
@@ -225,9 +213,6 @@ class TestSmokeTestCommand:
             side_effect=AttributeError("Mock client - search_traces not available")
         )
         mock_opik_class.return_value = mock_client
-
-        mock_cached_client = MagicMock()
-        mock_get_client_cached.return_value = mock_cached_client
 
         # Mock the context manager for start_as_current_trace
         @contextmanager

@@ -10,6 +10,9 @@ class FilterByResponseStatusCode(event_filter.EventFilter):
         self._status_codes_to_drop = status_codes_to_drop
 
     def process_event(self, event: Event, hint: Hint) -> bool:
+        if event.get("tags", {}).get("cli_command"):
+            return True
+
         status_code = _try_get_status_code_from_error_tracking_extra(event)
 
         if status_code is None:

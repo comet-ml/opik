@@ -75,6 +75,12 @@ class RedisCacheManager implements CacheManager {
     }
 
     @Override
+    public boolean putIfAbsentSync(@NonNull String key, @NonNull Object value, @NonNull Duration ttlDuration) {
+        var json = JsonUtils.writeValueAsString(value);
+        return nonReactiveRedisClient.getBucket(key).setIfAbsent(json, ttlDuration);
+    }
+
+    @Override
     public <T> T getSync(@NonNull String key, @NonNull Class<T> clazz) {
         var json = nonReactiveRedisClient.<String>getBucket(key).get();
         if (StringUtils.isEmpty(json)) {

@@ -1,15 +1,19 @@
 package com.comet.opik.api.resources.utils.resources;
 
+import com.comet.opik.api.runner.BridgeCommand;
+import com.comet.opik.api.runner.BridgeCommandBatchResponse;
+import com.comet.opik.api.runner.BridgeCommandNextRequest;
+import com.comet.opik.api.runner.BridgeCommandResultRequest;
+import com.comet.opik.api.runner.BridgeCommandSubmitRequest;
+import com.comet.opik.api.runner.BridgeCommandSubmitResponse;
 import com.comet.opik.api.runner.CreateLocalRunnerJobRequest;
 import com.comet.opik.api.runner.LocalRunner;
-import com.comet.opik.api.runner.LocalRunnerConnectRequest;
-import com.comet.opik.api.runner.LocalRunnerConnectResponse;
+import com.comet.opik.api.runner.LocalRunnerHeartbeatRequest;
 import com.comet.opik.api.runner.LocalRunnerHeartbeatResponse;
 import com.comet.opik.api.runner.LocalRunnerJob;
 import com.comet.opik.api.runner.LocalRunnerJobResultRequest;
 import com.comet.opik.api.runner.LocalRunnerLogEntry;
-import com.comet.opik.api.runner.LocalRunnerPairRequest;
-import com.comet.opik.api.runner.LocalRunnerPairResponse;
+import com.comet.opik.api.runner.LocalRunnerStatus;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.GenericType;
 import jakarta.ws.rs.core.HttpHeaders;
@@ -33,42 +37,24 @@ public class LocalRunnersResourceClient {
     private final ClientSupport client;
     private final String baseURI;
 
-    public LocalRunnerPairResponse generatePairingCode(UUID projectId, String apiKey, String workspaceName) {
-        LocalRunnerPairRequest request = LocalRunnerPairRequest.builder().projectId(projectId).build();
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("pairs")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            return response.readEntity(LocalRunnerPairResponse.class);
-        }
-    }
-
-    public LocalRunnerConnectResponse connect(LocalRunnerConnectRequest request, String apiKey,
-            String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("connections")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
-            return response.readEntity(LocalRunnerConnectResponse.class);
-        }
-    }
-
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, String apiKey, String workspaceName) {
-        return listRunners(projectId, 0, 25, apiKey, workspaceName);
+        return listRunners(projectId, null, 0, 25, apiKey, workspaceName);
     }
 
     public LocalRunner.LocalRunnerPage listRunners(UUID projectId, int page, int size, String apiKey,
             String workspaceName) {
+        return listRunners(projectId, null, page, size, apiKey, workspaceName);
+    }
+
+    public LocalRunner.LocalRunnerPage listRunners(UUID projectId, LocalRunnerStatus status, int page, int size,
+            String apiKey, String workspaceName) {
         var target = client.target(RESOURCE_PATH.formatted(baseURI))
                 .queryParam("page", page)
                 .queryParam("size", size)
                 .queryParam("project_id", projectId);
+        if (status != null) {
+            target = target.queryParam("status", status.getValue());
+        }
         try (var response = target.request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
@@ -110,7 +96,7 @@ public class LocalRunnersResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(""))) {
+                .post(Entity.json(LocalRunnerHeartbeatRequest.builder().build()))) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
             return response.readEntity(LocalRunnerHeartbeatResponse.class);
         }
@@ -217,15 +203,6 @@ public class LocalRunnersResourceClient {
         }
     }
 
-    public Response callConnect(LocalRunnerConnectRequest request, String apiKey, String workspaceName) {
-        return client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("connections")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request));
-    }
-
     public Response callGetRunner(UUID runnerId, String apiKey, String workspaceName) {
         return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(runnerId.toString())
@@ -253,7 +230,7 @@ public class LocalRunnersResourceClient {
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(""));
+                .post(Entity.json(LocalRunnerHeartbeatRequest.builder().build()));
     }
 
     public Response callCreateJob(CreateLocalRunnerJobRequest request, String apiKey, String workspaceName) {
@@ -345,5 +322,101 @@ public class LocalRunnersResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(""));
+    }
+
+    // ========== Bridge Command Methods ==========
+
+    public LocalRunnerHeartbeatResponse heartbeatWithCapabilities(UUID runnerId, List<String> capabilities,
+            String apiKey, String workspaceName) {
+        LocalRunnerHeartbeatRequest request = LocalRunnerHeartbeatRequest.builder()
+                .capabilities(capabilities).build();
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("heartbeats")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(LocalRunnerHeartbeatResponse.class);
+        }
+    }
+
+    public BridgeCommandSubmitResponse createBridgeCommand(UUID runnerId, BridgeCommandSubmitRequest request,
+            String apiKey, String workspaceName) {
+        try (var response = callSubmitBridgeCommand(runnerId, request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_CREATED);
+            return response.readEntity(BridgeCommandSubmitResponse.class);
+        }
+    }
+
+    public Response callSubmitBridgeCommand(UUID runnerId, BridgeCommandSubmitRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("bridge")
+                .path("commands")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public BridgeCommandBatchResponse nextBridgeCommands(UUID runnerId, BridgeCommandNextRequest request,
+            String apiKey, String workspaceName) {
+        try (var response = callNextBridgeCommands(runnerId, request, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(BridgeCommandBatchResponse.class);
+        }
+    }
+
+    public Response callNextBridgeCommands(UUID runnerId, BridgeCommandNextRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("bridge")
+                .path("commands")
+                .path("next")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public Response callReportBridgeResult(UUID runnerId, UUID commandId, BridgeCommandResultRequest request,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("bridge")
+                .path("commands")
+                .path(commandId.toString())
+                .path("results")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
+    public BridgeCommand getBridgeCommand(UUID runnerId, UUID commandId, boolean wait, int timeout,
+            String apiKey, String workspaceName) {
+        try (var response = callGetBridgeCommand(runnerId, commandId, wait, timeout, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+            return response.readEntity(BridgeCommand.class);
+        }
+    }
+
+    public Response callGetBridgeCommand(UUID runnerId, UUID commandId, boolean wait, int timeout,
+            String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(runnerId.toString())
+                .path("bridge")
+                .path("commands")
+                .path(commandId.toString())
+                .queryParam("wait", wait)
+                .queryParam("timeout", timeout)
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .get();
     }
 }

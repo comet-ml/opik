@@ -22,11 +22,17 @@ public record KpiCardRequest(
         @NotNull EntityType entityType,
         String filters,
         @NotNull Instant intervalStart,
-        @NotNull Instant intervalEnd) {
+        Instant intervalEnd) {
 
     @JsonIgnore
-    @AssertTrue(message = "intervalStart must be before intervalEnd") public boolean isStartBeforeEnd() {
-        return intervalStart == null || intervalEnd == null || intervalStart.isBefore(intervalEnd);
+    @AssertTrue(message = "intervalStart must be before intervalEnd or current time") public boolean isStartBeforeEnd() {
+        if (intervalStart == null) {
+            return true;
+        }
+        if (intervalEnd != null) {
+            return intervalStart.isBefore(intervalEnd);
+        }
+        return intervalStart.isBefore(Instant.now());
     }
 
     @Getter

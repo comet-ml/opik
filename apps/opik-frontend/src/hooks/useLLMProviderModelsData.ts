@@ -109,6 +109,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
 
   [PROVIDER_TYPE.ANTHROPIC]: [
     {
+      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      label: "Claude Opus 4.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
       label: "Claude Opus 4.6",
     },
@@ -276,6 +280,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.6",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_6_FAST,
+      label: "anthropic/claude-opus-4.6-fast",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7,
+      label: "anthropic/claude-opus-4.7",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -304,8 +316,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/spotlight",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW,
+      label: "arcee-ai/trinity-large-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE,
       label: "arcee-ai/trinity-large-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING,
+      label: "arcee-ai/trinity-large-thinking",
     },
     {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_MINI,
@@ -346,6 +366,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_VL_424B_A47B,
       label: "baidu/ernie-4.5-vl-424b-a47b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
+      label: "baidu/qianfan-ocr-fast:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_1_6,
@@ -617,6 +641,22 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemma-3n-e4b-it:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_26B_A4B_IT,
+      label: "google/gemma-4-26b-a4b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_26B_A4B_IT_FREE,
+      label: "google/gemma-4-26b-a4b-it:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT,
+      label: "google/gemma-4-31b-it",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMMA_4_31B_IT_FREE,
+      label: "google/gemma-4-31b-it:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_LYRIA_3_CLIP_PREVIEW,
       label: "google/lyria-3-clip-preview",
     },
@@ -643,6 +683,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
       label: "inception/mercury-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
+      label: "inclusionai/ling-2.6-1t:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
+      label: "inclusionai/ling-2.6-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
@@ -767,6 +815,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B,
       label: "meta-llama/llama-guard-4-12b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.META_LLAMA_LLAMA_GUARD_4_12B_FREE,
+      label: "meta-llama/llama-guard-4-12b:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_MAI_DS_R1,
@@ -1031,6 +1083,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_5,
       label: "moonshotai/kimi-k2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_6,
+      label: "moonshotai/kimi-k2.6",
     },
     {
       value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_K2_FREE,
@@ -1313,6 +1369,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_IMAGE_2,
+      label: "openai/gpt-5.4-image-2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_MINI,
       label: "openai/gpt-5.4-mini",
     },
@@ -1409,6 +1469,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/bodybuilder",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_ELEPHANT_ALPHA,
+      label: "openrouter/elephant-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_FREE,
       label: "openrouter/free",
     },
@@ -1419,6 +1483,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_HUNTER_ALPHA,
       label: "openrouter/hunter-alpha",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
+      label: "openrouter/pareto-code",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
@@ -1673,8 +1741,16 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.5-plus-02-15",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS,
+      label: "qwen/qwen3.6-plus",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_PREVIEW_FREE,
       label: "qwen/qwen3.6-plus-preview:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS_FREE,
+      label: "qwen/qwen3.6-plus:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.QWEN_QWQ_32B,
@@ -1687,6 +1763,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.REKA_REKA_EDGE,
       label: "reka/reka-edge",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.REKAAI_REKA_EDGE,
+      label: "rekaai/reka-edge",
     },
     {
       value: PROVIDER_MODEL_TYPE.REKAAI_REKA_FLASH_3,
@@ -1739,6 +1819,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
+      label: "tencent/hy3-preview:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
@@ -1857,6 +1941,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "xiaomi/mimo-v2-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
+      label: "xiaomi/mimo-v2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
+      label: "xiaomi/mimo-v2.5-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
       label: "z-ai/glm-4-32b",
     },
@@ -1904,12 +1996,28 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_TURBO,
       label: "z-ai/glm-5-turbo",
     },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5_1,
+      label: "z-ai/glm-5.1",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
+      label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_LATEST,
+      label: "~anthropic/claude-opus-latest",
+    },
   ],
 
   [PROVIDER_TYPE.GEMINI]: [
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_PRO,
       label: "Gemini 3.1 Pro Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
+      label: "Gemini 3.1 Flash TTS Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,

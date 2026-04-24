@@ -13,6 +13,7 @@ import useProjectKpiCards, {
   KpiMetricType,
 } from "@/api/projects/useProjectKpiCards";
 import { Filters } from "@/types/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMetricsWidget/MetricChart/MetricChartContainer";
 import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
@@ -96,6 +97,11 @@ const ERROR_RATE_METRIC_MAP: Partial<Record<KpiEntityType, METRIC_NAME_TYPE>> =
     spans: METRIC_NAME_TYPE.SPAN_ERROR_RATE,
   };
 
+const ERROR_RATE_LINE_NAME_MAP: Partial<Record<KpiEntityType, string>> = {
+  traces: "trace_error_rate",
+  spans: "span_error_rate",
+};
+
 const AVG_DURATION_LINE_NAME_MAP: Record<KpiEntityType, string> = {
   traces: "trace_average_duration",
   spans: "span_average_duration",
@@ -123,7 +129,7 @@ const getChartConfig = (
       return {
         metricName: ERROR_RATE_METRIC_MAP[entityType]!,
         chartType: CHART_TYPE.bar,
-        colorMap: { [entityType]: CHART_RED },
+        colorMap: { [ERROR_RATE_LINE_NAME_MAP[entityType]!]: CHART_RED },
       };
     case "avg_duration":
       return {
@@ -166,7 +172,9 @@ const ChartEmptyState: React.FC = () => (
   <div className="relative">
     <ChartPlaceholderBars />
     <div className="absolute inset-0 flex items-center justify-center">
-      <span className="comet-body-s text-light-slate">Data not available</span>
+      <span className="comet-body-s text-muted-slate">
+        No data from this period
+      </span>
     </div>
   </div>
 );
@@ -181,6 +189,7 @@ export type MetricsSummaryProps = {
   intervalStart?: string;
   intervalEnd?: string;
   dateRange: DateRangeValue;
+  logsSource?: LOGS_SOURCE;
 };
 
 const MetricsSummary: React.FC<MetricsSummaryProps> = ({
@@ -191,6 +200,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
   intervalStart,
   intervalEnd,
   dateRange,
+  logsSource,
 }) => {
   const [selectedMetric, setSelectedMetric] = useState<KpiMetricType>("count");
 
@@ -212,6 +222,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
       filters,
       intervalStart: intervalStart ?? chartIntervalConfig.intervalStart,
       intervalEnd: intervalEnd ?? chartIntervalConfig.intervalEnd,
+      logsSource,
     },
     {
       refetchInterval: REFETCH_INTERVAL,
@@ -316,6 +327,9 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             colorMap={chartConfig.colorMap}
             filterLineCallback={chartConfig.filterLineCallback}
             labelsMap={chartConfig.labelsMap}
+            logsSource={logsSource}
+            tooltipPosition={{ y: 0 }}
+            targetTickCount={2}
             {...chartFilters}
           />
         ) : (

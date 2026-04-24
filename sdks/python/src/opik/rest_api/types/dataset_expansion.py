@@ -32,6 +32,11 @@ class DatasetExpansion(UniversalBaseModel):
     Custom prompt to use for generation instead of auto-generated one
     """
 
+    max_completion_tokens: typing.Optional[int] = pydantic.Field(default=None)
+    """
+    Maximum number of tokens for the LLM response. Required by Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults to 4000 for Anthropic models only.
+    """
+
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2
     else:

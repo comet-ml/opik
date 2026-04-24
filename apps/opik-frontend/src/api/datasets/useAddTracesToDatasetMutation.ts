@@ -3,6 +3,8 @@ import get from "lodash/get";
 import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { AxiosError } from "axios";
 import { useToast } from "@/ui/use-toast";
+import { Evaluator } from "@/types/datasets";
+import { ExecutionPolicy } from "@/types/test-suites";
 
 export type TraceEnrichmentOptions = {
   include_spans: boolean;
@@ -18,6 +20,8 @@ type UseAddTracesToDatasetMutationParams = {
   traceIds: string[];
   enrichmentOptions: TraceEnrichmentOptions;
   workspaceName: string;
+  evaluators?: Evaluator[];
+  executionPolicy?: ExecutionPolicy;
 };
 
 const useAddTracesToDatasetMutation = () => {
@@ -30,6 +34,8 @@ const useAddTracesToDatasetMutation = () => {
       traceIds,
       enrichmentOptions,
       workspaceName,
+      evaluators,
+      executionPolicy,
     }: UseAddTracesToDatasetMutationParams) => {
       const { data } = await api.post(
         `${DATASETS_REST_ENDPOINT}${datasetId}/items/from-traces`,
@@ -37,6 +43,8 @@ const useAddTracesToDatasetMutation = () => {
           trace_ids: traceIds,
           enrichment_options: enrichmentOptions,
           workspace_name: workspaceName,
+          ...(evaluators && { evaluators }),
+          ...(executionPolicy && { execution_policy: executionPolicy }),
         },
       );
       return data;
@@ -64,6 +72,7 @@ const useAddTracesToDatasetMutation = () => {
         queryClient.invalidateQueries({ queryKey: context.queryKey });
       }
       queryClient.invalidateQueries({ queryKey: ["project-datasets"] });
+      queryClient.invalidateQueries({ queryKey: ["dataset-versions"] });
       return queryClient.invalidateQueries({
         queryKey: ["datasets"],
       });

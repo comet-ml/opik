@@ -29,7 +29,7 @@ FAILED_TO_PARSE_OPENAI_STREAM_CONTENT = "Failed to parse openai Stream content. 
 
 FAILED_TO_PROCESS_MESSAGE_IN_BACKGROUND_STREAMER = "Failed to process %s. Error: %s"
 
-MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "This error may be due to incorrect configuration. For configuration help, see: https://www.comet.com/docs/opik/tracing/sdk_configuration"
+MAKE_SURE_OPIK_IS_CONFIGURED_CORRECTLY = "This error may be due to incorrect configuration. For configuration help, see: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 
 HALLUCINATION_DETECTION_FAILED = "Failed hallucination detection"
 
@@ -67,6 +67,12 @@ PARSE_API_KEY_TOO_MANY_PARTS = "Too many parts (%d) found in the Opik API key: %
 LLM_PROVIDER_RATE_LIMIT_ERROR_DETECTED_IN_EVALUATE_FUNCTION = "LLM provider rate limit error detected. We recommend reducing the amount of parallel requests by setting `task_threads` evaluation parameter to a smaller number"
 
 WARNING_TOKEN_USAGE_DATA_IS_NOT_AVAILABLE = "You didn't specify argument `stream_usage=True` during LLM initialization. Token usage data is not available for .stream() or .astream() methods."
+
+BATCHING_UPDATE_DATA_LOSS_WARNING = (
+    "Calling %s shortly after creation with batching enabled may cause data loss. "
+    "See https://www.comet.com/docs/opik/tracing/batching_and_updates for details and recommended alternatives."
+)
+
 
 # Storing all the messages in this module is considered a deprecated practice.
 # Do it only if your message is used in more than one place.

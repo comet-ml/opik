@@ -210,6 +210,30 @@ describe("API backward compatibility — no projectName specified anywhere", () 
       expect(experiments.length).toBeGreaterThanOrEqual(1);
       expect(experiments[0]).toBeInstanceOf(Experiment);
     });
+
+    it("getTestSuiteExperiments(suiteName) works without projectName", async () => {
+      vi.spyOn(
+        client.api.experiments,
+        "findExperiments"
+      ).mockImplementation(() =>
+        createMockHttpResponsePromise({
+          content: [
+            {
+              id: "exp-id-456",
+              datasetId: "ds-id",
+              datasetName: "my-suite",
+              name: "my-experiment",
+            },
+          ],
+          total: 1,
+        })
+      );
+
+      const experiments = await client.getTestSuiteExperiments("my-suite");
+
+      expect(experiments.length).toBeGreaterThanOrEqual(1);
+      expect(experiments[0]).toBeInstanceOf(Experiment);
+    });
   });
 
   describe("Prompt operations without projectName", () => {

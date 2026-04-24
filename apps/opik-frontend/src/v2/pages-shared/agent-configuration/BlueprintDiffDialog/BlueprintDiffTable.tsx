@@ -21,13 +21,15 @@ export type BlueprintVersionInfo = {
 type BlueprintDiffTableProps = {
   base: BlueprintVersionInfo;
   diff: BlueprintVersionInfo;
+  defaultOnlyDiff?: boolean;
 };
 
 const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
   base,
   diff,
+  defaultOnlyDiff = false,
 }) => {
-  const [onlyDiff, setOnlyDiff] = useState(false);
+  const [onlyDiff, setOnlyDiff] = useState(defaultOnlyDiff);
 
   const { data: fetchedBaseConfig, isPending: baseLoading } =
     useAgentConfigById({
@@ -123,30 +125,28 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
         />
       </div>
       <div className="max-h-[60vh] overflow-y-auto">
-        {(!onlyDiff || descChanged) && descChanged && (
-          <div className="mb-4 grid grid-cols-2 gap-4">
-            <div>
-              <p className="comet-body-xs-accented mb-1 text-muted-slate">
-                Description {base.label}
-              </p>
-              <DiffCellBox
-                text={baseConfig?.description ?? ""}
-                changed
-                side="base"
-              />
-            </div>
-            <div>
-              <p className="comet-body-xs-accented mb-1 text-muted-slate">
-                Description {diff.label}
-              </p>
-              <DiffCellBox
-                text={diffConfig?.description ?? ""}
-                changed
-                side="diff"
-              />
-            </div>
+        <div className="mb-4 grid grid-cols-2 gap-4">
+          <div>
+            <p className="comet-body-xs-accented mb-1 text-muted-slate">
+              Description {base.label}
+            </p>
+            <DiffCellBox
+              text={baseConfig?.description ?? ""}
+              changed={descChanged}
+              side="base"
+            />
           </div>
-        )}
+          <div>
+            <p className="comet-body-xs-accented mb-1 text-muted-slate">
+              Description {diff.label}
+            </p>
+            <DiffCellBox
+              text={diffConfig?.description ?? ""}
+              changed={descChanged}
+              side="diff"
+            />
+          </div>
+        </div>
         <Table>
           <TableHeader>
             <TableRow>

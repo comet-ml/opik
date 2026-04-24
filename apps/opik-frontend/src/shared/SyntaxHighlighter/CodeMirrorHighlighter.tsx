@@ -30,6 +30,8 @@ export interface CodeMirrorHighlighterProps {
   scrollRef?: React.RefObject<HTMLDivElement>;
   onScroll?: (e: React.UIEvent<HTMLDivElement>) => void;
   maxHeight?: string;
+  transparent?: boolean;
+  fullHeight?: boolean;
 }
 
 const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
@@ -43,9 +45,11 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
   scrollRef,
   onScroll,
   maxHeight,
+  transparent,
+  fullHeight,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
-  const theme = useCodemirrorTheme();
+  const theme = useCodemirrorTheme({ transparent });
   const searchPanelTheme = useSearchPanelTheme();
 
   const {
@@ -98,6 +102,8 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
 
   return (
     <SyntaxHighlighterLayout
+      transparent={transparent}
+      fullHeight={fullHeight}
       leftHeader={modeSelector}
       rightHeader={
         <>
@@ -130,7 +136,7 @@ const CodeMirrorHighlighter: React.FC<CodeMirrorHighlighterProps> = ({
           base64Extension,
           EXTENSION_MAP[codeOutput.mode] as LRLanguage,
         ]}
-        maxHeight={maxHeight || "700px"}
+        maxHeight={fullHeight ? undefined : maxHeight || "700px"}
         onCreateEditor={handleCreateEditor}
       />
     </SyntaxHighlighterLayout>

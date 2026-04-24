@@ -49,6 +49,7 @@ module.exports = {
         warning: "hsl(var(--warning))",
         success: "hsl(var(--success))",
         "light-slate": "hsl(var(--light-slate))",
+        "tree-line": "hsl(var(--tree-line))",
         primary: {
           DEFAULT: "hsl(var(--primary))",
           foreground: "hsl(var(--primary-foreground))",
@@ -119,6 +120,8 @@ module.exports = {
         "warning-box-icon-bg": "hsl(var(--warning-box-icon-bg))",
         "warning-box-icon-text": "hsl(var(--warning-box-icon-text))",
 
+        "library-loaded": "hsl(var(--library-loaded))",
+
         /* Chart colors (Figma Design System) */
         "chart-blue": "var(--chart-blue)",
         "chart-yellow": "var(--chart-yellow)",
@@ -150,10 +153,25 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "ollie-breathe": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.95" },
+          "50%": { transform: "scale(1.04)", opacity: "1" },
+        },
+        "ollie-blink": {
+          "0%, 92%, 100%": { transform: "scaleY(1)" },
+          "95%": { transform: "scaleY(0.1)" },
+        },
+        "ollie-text-in": {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "ollie-breathe": "ollie-breathe 3.2s ease-in-out infinite",
+        "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
+        "ollie-text-in": "ollie-text-in 300ms ease-out",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

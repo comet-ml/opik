@@ -55,7 +55,7 @@ class TestHeartbeatLoop:
         loop._heartbeat_interval_seconds = 0.05
         call_count = 0
 
-        def heartbeat_side_effect(runner_id):
+        def heartbeat_side_effect(runner_id, **kwargs):
             nonlocal call_count
             call_count += 1
             if call_count == 1:
@@ -81,7 +81,7 @@ class TestPollLoop:
             call_count += 1
             if call_count >= 3:
                 shutdown_event.set()
-            raise ApiError(status_code=204)
+            return None
 
         mock_api.runners.next_job.side_effect = side_effect
         loop._loop = asyncio.new_event_loop()
@@ -129,7 +129,7 @@ class TestPollLoop:
             if call_count == 1:
                 return job
             shutdown_event.set()
-            raise ApiError(status_code=204)
+            return None
 
         mock_api.runners.next_job.side_effect = side_effect
 

@@ -12,7 +12,7 @@ of the prompts you are using. While manual iteration is common, a structured app
 Before attempting to improve prompts, it's crucial to establish how you'll measure success. Without a clear evaluation strategy, it's impossible to know if your changes are beneficial.
 
 <Info>
-  We strongly recommend using an [LLM evaluation platform](/evaluation/evaluate_prompt). By defining: - A relevant
+  We strongly recommend using an [LLM evaluation platform](/v1/evaluation/evaluate_prompt). By defining: - A relevant
   **dataset** of test cases. - A set of **metrics** (e.g., accuracy, ROUGE, Levenshtein distance, custom business
   metrics). You can objectively assess whether changes to your prompts lead to genuine improvements.
 </Info>
@@ -56,7 +56,7 @@ LLMs perform better when given relevant context and examples of the desired inpu
   Assistant: Merci
   ```
 
-  _Opik Connection_: The [FewShotBayesianOptimizer](/agent_optimization/algorithms/fewshot_bayesian_optimizer) is specifically designed to automate the selection of the optimal number and combination of few-shot examples from your dataset for **chat models**.
+  _Opik Connection_: The [FewShotBayesianOptimizer](/v1/agent_optimization/algorithms/fewshot_bayesian_optimizer) is specifically designed to automate the selection of the optimal number and combination of few-shot examples from your dataset for **chat models**.
 
   ```python
   # Example: Initializing FewShotBayesianOptimizer
@@ -122,7 +122,7 @@ Prompt engineering is rarely a one-shot process. Continuous iteration is key. A 
 - **Manual Iteration**: Test, analyze failures, refine, repeat.
 - **Meta-Prompting**: Use an LLM to help you improve your prompts. For example, "Critique this prompt for clarity and suggest 3 ways to make it more effective for a customer service chatbot."
 
-  - _Opik Connection_: The [MetaPrompt Optimizer](/agent_optimization/algorithms/metaprompt_optimizer) directly automates this concept. It uses an LLM (the "reasoning model"), guided by an internal meta-prompt, to iteratively generate and evaluate improved versions of your initial prompt.
+  - _Opik Connection_: The [MetaPrompt Optimizer](/v1/agent_optimization/algorithms/metaprompt_optimizer) directly automates this concept. It uses an LLM (the "reasoning model"), guided by an internal meta-prompt, to iteratively generate and evaluate improved versions of your initial prompt.
 
   ```python
   # Example: Initializing MetaPromptOptimizer
@@ -140,7 +140,7 @@ Prompt engineering is rarely a one-shot process. Continuous iteration is key. A 
 
 Evolutionary or genetic algorithms can be applied to "evolve" prompts over generations, using principles of selection, crossover, and mutation to find high-performing prompt structures.
 
-- _Opik Connection_: The [Evolutionary Optimizer](/agent_optimization/algorithms/evolutionary_optimizer) implements this approach. It can explore a wide range of prompt variations, and even use LLMs to perform more intelligent "semantic" mutations and crossovers.
+- _Opik Connection_: The [Evolutionary Optimizer](/v1/agent_optimization/algorithms/evolutionary_optimizer) implements this approach. It can explore a wide range of prompt variations, and even use LLMs to perform more intelligent "semantic" mutations and crossovers.
 
   ```python
   # Example: Initializing EvolutionaryOptimizer
@@ -155,12 +155,12 @@ Evolutionary or genetic algorithms can be applied to "evolve" prompts over gener
 
 ## Systematic Prompt Optimization with Opik Agent Optimizer
 
-While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/agent_optimization/cookbooks/optimizer_introduction_cookbook) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
+While the techniques above are valuable for manual prompt engineering, the [Opik Agent Optimizer SDK](/v1/agent_optimization/cookbooks/optimizer_introduction_cookbook) offers a systematic and data-driven way to automate and enhance this process. By leveraging a dataset and evaluation metrics, optimizers can explore a vast design space to find high-performing prompts.
 
 We provide several distinct optimization algorithms, each suited for different scenarios:
 
-1.  [**MetaPrompt Optimizer**](/agent_optimization/algorithms/metaprompt_optimizer): Uses an LLM to iteratively refine your prompt based on a meta-level reasoning process. Good for general prompt improvement.
-2.  [**Few-shot Bayesian Optimizer**](/agent_optimization/algorithms/fewshot_bayesian_optimizer): Finds the optimal set and number of few-shot examples for **chat models** by using Bayesian optimization.
-3.  [**Evolutionary Optimizer**](/agent_optimization/algorithms/evolutionary_optimizer): Evolves prompts using genetic algorithms, capable of multi-objective optimization (e.g., performance vs. length) and using LLMs for advanced genetic operations.
+1.  [**MetaPrompt Optimizer**](/v1/agent_optimization/algorithms/metaprompt_optimizer): Uses an LLM to iteratively refine your prompt based on a meta-level reasoning process. Good for general prompt improvement.
+2.  [**Few-shot Bayesian Optimizer**](/v1/agent_optimization/algorithms/fewshot_bayesian_optimizer): Finds the optimal set and number of few-shot examples for **chat models** by using Bayesian optimization.
+3.  [**Evolutionary Optimizer**](/v1/agent_optimization/algorithms/evolutionary_optimizer): Evolves prompts using genetic algorithms, capable of multi-objective optimization (e.g., performance vs. length) and using LLMs for advanced genetic operations.
 
-Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/agent_optimization/cookbooks/optimizer_introduction_cookbook).
+Refer to each optimizer's specific documentation to understand its strengths and how it aligns with different prompt engineering challenges. For general guidance on getting started, see the [Opik Agent Optimizer Quickstart](/v1/agent_optimization/cookbooks/optimizer_introduction_cookbook).

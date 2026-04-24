@@ -2,8 +2,7 @@ import { Button } from "@/ui/button";
 import { Book, PenLine } from "lucide-react";
 import React from "react";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v1/lib/utils";
 const entityCopy = {
   thread: "threads",
   trace: "traces/LLM calls",

@@ -190,7 +190,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     If set to True, Opik will send the information about the errors to Sentry.
     """
 
-    sentry_dsn: str = "https://34bd6f9621ca2783be63f320e35de0dc@o168229.ingest.us.sentry.io/4508620148441088"  # 24.07.2025
+    sentry_dsn: str = "https://fbde8a9ef528f379de25bdfb19749ca5@o168229.ingest.us.sentry.io/4508620148441088"  # 16.04.2026
     """
     Sentry project DSN which is used as a destination for sentry events.
     In case there is a need to update reporting rules and stop receiving events from existing users,
@@ -286,6 +286,14 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
+    suppress_batching_update_warning: bool = False
+    """
+    Suppress the warning about potential data loss when calling .end() or .update()
+    on spans/traces with batching enabled. Set to True if your updates happen well
+    after creation and the warning is not relevant.
+    Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -349,6 +357,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         config_file_content["opik"] = {
             "url_override": self.url_override,
             "workspace": self.workspace,
+            "project_name": self.project_name,
         }
 
         if self.api_key is not None:
@@ -450,7 +459,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
             error_message = (
                 "The API key must be specified to log data to https://www.comet.com/opik.\n"
                 "You can use `opik configure` CLI command to configure your environment for logging.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration.\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration.\n"
             )
             return True, error_message
 
@@ -476,7 +485,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
         ):
             error_message = (
                 "Open source installations do not support workspace specification. Only `default` is available.\n"
-                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/sdk_configuration\n"
+                "See the configuration details in the docs: https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration\n"
                 "If you need advanced workspace management - you may consider using our cloud offer (https://www.comet.com/site/pricing/)\n"
                 "or contact our team for purchasing and setting up a self-hosted installation.\n"
             )

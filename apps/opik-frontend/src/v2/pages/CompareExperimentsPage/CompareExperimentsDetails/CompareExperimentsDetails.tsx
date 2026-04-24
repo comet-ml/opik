@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo } from "react";
 import sortBy from "lodash/sortBy";
 import isNumber from "lodash/isNumber";
-import { CircleCheck } from "lucide-react";
+import { CircleCheck, Database } from "lucide-react";
 
 import useBreadcrumbsStore from "@/store/BreadcrumbsStore";
 import { Experiment } from "@/types/datasets";
@@ -20,7 +20,7 @@ import {
 } from "@/types/shared";
 import { getScoreDisplayName } from "@/lib/feedback-scores";
 import { generateExperimentIdFilter } from "@/lib/filters";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import { LOGS_SOURCE } from "@/types/traces";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import ExperimentTagsList from "@/v2/pages/CompareExperimentsPage/ExperimentTagsList";
@@ -95,9 +95,9 @@ const CompareExperimentsDetails: React.FunctionComponent<
   };
 
   return (
-    <div className="pb-4 pt-6">
+    <div className="py-4">
       <div className="mb-4 flex min-h-8 items-center justify-between">
-        <h1 className="comet-title-l truncate break-words">{title}</h1>
+        <h1 className="comet-title-xs truncate break-words">{title}</h1>
       </div>
       <div className="mb-1 flex gap-2 overflow-x-auto">
         {!isCompare && (
@@ -106,11 +106,21 @@ const CompareExperimentsDetails: React.FunctionComponent<
             resource={RESOURCE_TYPE.experiment}
           />
         )}
-        <NavigationTag
-          id={experiment?.dataset_id}
-          name={experiment?.dataset_name && `Go to ${experiment.dataset_name}`}
-          resource={RESOURCE_TYPE.dataset}
-        />
+        {experiment?.dataset_id && (
+          <Tag
+            size="md"
+            variant="transparent"
+            className="flex shrink-0 items-center gap-1"
+          >
+            <Database
+              className="size-3 shrink-0"
+              style={{ color: "var(--color-yellow)" }}
+            />
+            <span className="comet-body-s-accented truncate text-muted-slate">
+              {experiment.dataset_name || "Deleted test suite"}
+            </span>
+          </Tag>
+        )}
         {experiment?.prompt_versions &&
           experiment.prompt_versions.length > 0 && (
             <NavigationTag
@@ -129,7 +139,7 @@ const CompareExperimentsDetails: React.FunctionComponent<
           />
         )}
         {!isCompare &&
-          isEvalSuiteExperiment(experiment) &&
+          isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate) && (
             <TooltipWrapper
               content={formatPassRate(

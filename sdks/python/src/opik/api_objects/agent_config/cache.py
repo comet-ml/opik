@@ -47,11 +47,9 @@ class SharedConfigCache:
             if self._refresh_callback is None:
                 self._refresh_callback = callback
 
-    def register_fields(
-        self, prefixed_field_types: typing.Dict[str, typing.Any]
-    ) -> None:
+    def register_fields(self, field_types: typing.Dict[str, typing.Any]) -> None:
         with self._lock:
-            self._registered_field_types.update(prefixed_field_types)
+            self._registered_field_types.update(field_types)
 
     @property
     def all_field_types(self) -> typing.Dict[str, typing.Any]:
@@ -195,13 +193,13 @@ def init_cache_entry(
     project_name: str,
     env: typing.Optional[str],
     mask_id: typing.Optional[str],
-    prefixed_field_types: typing.Dict[str, typing.Any],
+    field_types: typing.Dict[str, typing.Any],
     agent_config_manager: typing.Any,
     blueprint: typing.Optional[Blueprint] = None,
     version: typing.Optional[str] = None,
 ) -> None:
     shared_cache = _registry.get(project_name, env, mask_id, version)
-    shared_cache.register_fields(prefixed_field_types)
+    shared_cache.register_fields(field_types)
 
     if blueprint is not None:
         shared_cache.update(blueprint)

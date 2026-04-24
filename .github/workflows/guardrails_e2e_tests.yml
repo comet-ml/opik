@@ -1,0 +1,138 @@
+name: Guardrails E2E Tests
+run-name: "Guardrails E2E Tests ${{ github.ref_name }} by @${{ github.actor }}"
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'apps/opik-guardrails-backend/**'
+      - 'sdks/python/src/opik/guardrails/**'
+      - 'sdks/python/tests/e2e/test_guardrails.py'
+      - '.github/workflows/guardrails_e2e_tests.yml'
+  push:
+    branches:
+      - 'main'
+    paths:
+      - 'apps/opik-guardrails-backend/**'
+      - 'apps/opik-backend/**'
+      - 'sdks/python/src/opik/**'
+      - 'sdks/python/tests/e2e/test_guardrails.py'
+      - '.github/workflows/guardrails_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
+  OPIK_SENTRY_ENABLE: False
+  OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+  OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
+  OPIK_URL_OVERRIDE: http://localhost:8080
+  OPIK_GUARDRAILS_URL_OVERRIDE: http://localhost:5000
+  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+
+jobs:
+  e2e-tests:
+    name: Guardrails E2E Tests ${{matrix.python_version}}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python ${{matrix.python_version}}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{matrix.python_version}}
+
+      - name: Run latest Opik server with guardrails
+        env:
+          OPIK_USAGE_REPORT_ENABLED: false
+          COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --backend --port-mapping --guardrails --build
+
+      - name: Check Opik server availability
+        shell: bash
+        run: |
+          chmod +x ${{ github.workspace }}/tests_end_to_end/installer_utils/*.sh
+          cd ${{ github.workspace }}/deployment/docker-compose
+          echo "Check Docker pods are up"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_docker_compose_pods.sh
+          echo "Check backend health"
+          ${{ github.workspace }}/tests_end_to_end/installer_utils/check_backend.sh
+
+      - name: Install opik SDK
+        run: |
+          cd ${{ github.workspace }}/sdks/python
+          pip install .
+
+      - name: Install test requirements
+        run: |
+          cd ${{ github.workspace }}/sdks/python
+          pip install -r tests/test_requirements.txt
+          pip list
+
+      - name: Run guardrails E2E tests
+        run: |
+          cd ${{ github.workspace }}/sdks/python
+          pytest tests/e2e/test_guardrails.py -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_guardrails_${{matrix.python_version}}.xml
+
+      - name: Publish Test Report
+        uses: EnricoMi/publish-unit-test-result-action/linux@v2
+        if: always()
+        with:
+          action_fail: true
+          comment_mode: failures
+          check_name: Guardrails E2E Tests Results (Python ${{matrix.python_version}})
+          files: ${{ github.workspace }}/test_results_guardrails_${{matrix.python_version}}.xml
+
+      - name: Keep BE log in case of failure
+        if: failure()
+        run: |
+          docker logs opik-backend-1 > ${{ github.workspace }}/opik-backend_guardrails_p${{matrix.python_version}}.log || true
+          docker logs opik-guardrails-backend-1 > ${{ github.workspace }}/opik-guardrails-backend_p${{matrix.python_version}}.log || true
+
+      - name: Attach BE log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: opik-guardrails-logs-p${{matrix.python_version}}
+          path: |
+            ${{ github.workspace }}/opik-backend_guardrails_p${{matrix.python_version}}.log
+            ${{ github.workspace }}/opik-guardrails-backend_p${{matrix.python_version}}.log
+
+      - name: Stop opik server
+        if: always()
+        run: |
+          cd ${{ github.workspace }}
+          ./opik.sh --stop --guardrails
+
+  notify-slack:
+    name: "📢 Slack Notification"
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: always() && needs.e2e-tests.result == 'failure' && github.event_name != 'pull_request'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Send Slack failure notification
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: .github/scripts/notify-slack-test-failure.sh "Guardrails E2E Tests"

@@ -54,6 +54,7 @@ import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -202,6 +203,34 @@ class AlertResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @Nested
+    @DisplayName("Required permissions")
+    class RequiredPermissionsTest {
+
+        @Test
+        @DisplayName("Create alert returns 403 when ALERT_UPDATE permission is denied")
+        void createAlertReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ALERT_UPDATE.getValue());
+
+            var alert = Alert.builder()
+                    .name("Test Alert: " + UUID.randomUUID())
+                    .webhook(factory.manufacturePojo(Webhook.class).toBuilder()
+                            .createdBy(null)
+                            .createdAt(null)
+                            .secretToken(UUID.randomUUID().toString())
+                            .build())
+                    .build();
+
+            try (var response = alertResourceClient.createAlertWithResponse(alert, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

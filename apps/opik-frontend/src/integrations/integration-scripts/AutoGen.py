@@ -12,7 +12,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-opik.configure()  # HIGHLIGHTED_LINE
+opik.configure(project_name="PROJECT_NAME_PLACEHOLDER")  # HIGHLIGHTED_LINE
 
 # Configure Opik
 opik_config = opik.config.get_from_user_inputs()  # HIGHLIGHTED_LINE

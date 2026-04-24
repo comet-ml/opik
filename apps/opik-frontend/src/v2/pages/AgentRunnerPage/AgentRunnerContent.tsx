@@ -1,21 +1,30 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Play, RotateCcw } from "lucide-react";
+import { Pause, Play, RotateCcw, Unplug } from "lucide-react";
 
 import { Button } from "@/ui/button";
-import Loader from "@/shared/Loader/Loader";
+import { HotkeyDisplay } from "@/ui/hotkey-display";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import useSandboxPairCode from "@/api/agent-sandbox/useSandboxPairCode";
-import useSandboxConnectionStatus from "@/api/agent-sandbox/useSandboxConnectionStatus";
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/ui/resizable";
 import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
+import useDisconnectRunnerMutation from "@/api/agent-sandbox/useDisconnectRunnerMutation";
 import {
-  SandboxConnectionStatus,
+  RunnerConnectionStatus,
   SandboxJobStatus,
 } from "@/types/agent-sandbox";
+import useTraceById from "@/api/traces/useTraceById";
+import usePairingState from "@/hooks/usePairingState";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
-import AgentRunnerExecutionPanel from "./AgentRunnerExecutionPanel";
+
+const TRACE_POLL_INTERVAL = 1000;
 
 type AgentRunnerContentProps = {
   projectId: string;
@@ -25,37 +34,64 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   projectId,
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [traceOpen, setTraceOpen] = useState(false);
+  const [tracePanelSpanId, setTracePanelSpanId] = useState<
+    string | null | undefined
+  >("");
 
-  const {
-    data: pairCodeData,
-    isPending: isPairCodePending,
-    refetch: refetchPairCode,
-  } = useSandboxPairCode({ projectId });
+  const pairing = usePairingState(projectId, "endpoint");
 
-  const pairCode = pairCodeData?.pair_code ?? "";
+  const isConnected = pairing.status === RunnerConnectionStatus.CONNECTED;
+  const agentName = pairing.runner?.agents?.[0]?.name ?? "";
+  const isReady = isConnected && Boolean(agentName);
 
-  const { data: runnerData } = useSandboxConnectionStatus({ projectId });
-
-  const isConnected = runnerData?.status === SandboxConnectionStatus.CONNECTED;
-
+  const { permissions } = usePermissions();
+  const { canConfigureWorkspaceSettings } = permissions;
   const createJobMutation = useSandboxCreateJobMutation();
+  const disconnectMutation = useDisconnectRunnerMutation();
 
   const { data: jobData } = useSandboxJobStatus({
     jobId: activeJobId ?? "",
   });
 
-  const agentName = runnerData?.agents?.[0]?.name ?? "";
+  // Clear job state on disconnect so results/errors from the previous session don't persist.
+  useEffect(() => {
+    if (!isConnected) {
+      setActiveJobId(null);
+    }
+  }, [isConnected]);
 
-  const handleRun = (inputs: Record<string, unknown>, maskId?: string) => {
+  const traceId = jobData?.trace_id ?? "";
+  const isTraceOpen = traceOpen && Boolean(traceId);
+
+  const isJobRunning =
+    jobData?.status === SandboxJobStatus.RUNNING ||
+    jobData?.status === SandboxJobStatus.PENDING;
+
+  const { data: traceData } = useTraceById(
+    { traceId, stripAttachments: true },
+    {
+      enabled: Boolean(traceId),
+      refetchInterval: isJobRunning ? TRACE_POLL_INTERVAL : false,
+    },
+  );
+
+  const handleRun = (
+    inputs: Record<string, unknown>,
+    blueprintName?: string,
+    maskId?: string,
+  ) => {
     if (!agentName) {
       return;
     }
+    handleStop();
     createJobMutation.mutate(
       {
         agent_name: agentName,
         project_id: projectId,
         inputs,
         mask_id: maskId,
+        blueprint_name: blueprintName,
       },
       {
         onSuccess: (data) => {
@@ -65,19 +101,34 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     );
   };
 
-  const handleReset = () => {
+  const [resetKey, setResetKey] = useState(0);
+
+  const handleStop = () => {
     setActiveJobId(null);
+    setTraceOpen(false);
+  };
+
+  const handleReset = () => {
+    handleStop();
+    setResetKey((k) => k + 1);
   };
 
   const handleSubmitForm = useCallback(() => {
-    if (createJobMutation.isPending) return;
+    if (createJobMutation.isPending || isJobRunning) return;
     const form = document.getElementById("agent-runner-form");
     if (form) {
       form.dispatchEvent(
         new Event("submit", { cancelable: true, bubbles: true }),
       );
     }
-  }, [createJobMutation.isPending]);
+  }, [createJobMutation.isPending, isJobRunning]);
+
+  const handleViewTrace = useCallback(() => {
+    if (jobData?.trace_id) {
+      setTracePanelSpanId("");
+      setTraceOpen(true);
+    }
+  }, [jobData?.trace_id]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -91,15 +142,10 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     return () => window.removeEventListener("keydown", handler);
   }, [isConnected, handleSubmitForm]);
 
-  if (isPairCodePending) {
-    return <Loader />;
-  }
-
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
-      <div className="flex items-center gap-3 border-b px-5 py-2.5">
-        <h1 className="comet-title-s">Agent sandbox</h1>
+      <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
+        <h1 className="comet-title-xs">Agent playground</h1>
 
         {isConnected ? (
           <TooltipWrapper content="Your agent is connected to Opik">
@@ -118,70 +164,102 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         <div className="ml-auto flex items-center gap-2">
           {isConnected && (
             <>
-              <Button
-                size="sm"
-                onClick={handleSubmitForm}
-                disabled={createJobMutation.isPending || !agentName}
-                className="gap-2"
-              >
-                <span className="flex items-center gap-1.5">
-                  <Play className="size-3.5" />
+              {isJobRunning ? (
+                <Button variant="outline" size="2xs" onClick={handleStop}>
+                  <Pause className="mr-1 size-3.5" />
+                  Stop run
+                </Button>
+              ) : (
+                <Button
+                  size="2xs"
+                  onClick={handleSubmitForm}
+                  disabled={createJobMutation.isPending || !isReady}
+                >
+                  <Play className="mr-1 size-3.5" />
                   Run
-                </span>
-                <span className="flex items-center gap-1">
-                  <kbd className="bg-white/20 inline-flex h-5 w-7 items-center justify-center rounded text-lg">
-                    ⇧
-                  </kbd>
-                  <kbd className="bg-white/20 inline-flex h-5 w-7 items-center justify-center rounded text-lg">
-                    ↩
-                  </kbd>
-                </span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleReset}>
-                <RotateCcw className="mr-1.5 size-3.5" />
+                  <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+                  <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
+                </Button>
+              )}
+              <Button variant="ghost" size="2xs" onClick={handleReset}>
+                <RotateCcw className="mr-1 size-3.5" />
                 Reset
               </Button>
+              {canConfigureWorkspaceSettings && (
+                <TooltipWrapper content="Disconnect agent">
+                  <Button
+                    variant="outline"
+                    size="2xs"
+                    disabled={disconnectMutation.isPending}
+                    onClick={() => {
+                      if (pairing.runnerId) {
+                        disconnectMutation.mutate(pairing.runnerId);
+                      }
+                    }}
+                  >
+                    <Unplug className="mr-1 size-3.5" />
+                    Disconnect
+                  </Button>
+                </TooltipWrapper>
+              )}
             </>
           )}
         </div>
       </div>
 
-      {/* Content */}
-      {isConnected ? (
-        <div className="flex min-h-0 flex-1">
-          {/* Left panel */}
-          <div className="flex flex-1 flex-col overflow-y-auto">
+      {isConnected && pairing.runner ? (
+        <ResizablePanelGroup
+          direction="vertical"
+          autoSaveId="agent-sandbox-layout"
+          className="min-h-0 flex-1"
+        >
+          <ResizablePanel
+            id="agent-input"
+            defaultSize={50}
+            minSize={20}
+            className="overflow-y-auto"
+          >
             <AgentRunnerConnectedState
               projectId={projectId}
-              runner={runnerData!}
+              runner={pairing.runner}
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
-              result={<AgentRunnerResult job={jobData ?? null} />}
+              resetKey={resetKey}
             />
-          </div>
+          </ResizablePanel>
 
-          {/* Right panel - Trajectory */}
-          <div className="w-2/5 shrink-0 overflow-y-auto border-l">
-            <AgentRunnerExecutionPanel
-              traceId={jobData?.trace_id ?? null}
-              projectId={projectId}
-              isJobRunning={
-                jobData?.status === SandboxJobStatus.RUNNING ||
-                jobData?.status === SandboxJobStatus.PENDING
-              }
-              hasJob={!!activeJobId}
+          <ResizableHandle />
+
+          <ResizablePanel id="agent-result" defaultSize={50} minSize={15}>
+            <AgentRunnerResult
+              job={jobData ?? null}
+              onViewTrace={handleViewTrace}
+              hasTraceData={Boolean(traceData)}
+              duration={traceData?.duration}
+              startTime={traceData?.start_time}
+              endTime={traceData?.end_time}
+              totalTokens={traceData?.usage?.total_tokens}
+              totalEstimatedCost={traceData?.total_estimated_cost}
             />
-          </div>
-        </div>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          <AgentRunnerEmptyState
-            pairCode={pairCode}
-            expiresInSeconds={pairCodeData?.expires_in_seconds}
-            createdAt={pairCodeData?.created_at}
-            onRefreshPairCode={() => refetchPairCode()}
-          />
+          <AgentRunnerEmptyState />
         </div>
+      )}
+
+      {/* Trace side panel - only mount when open to avoid stale cache */}
+      {isTraceOpen && (
+        <TraceDetailsPanel
+          projectId={projectId}
+          traceId={traceId}
+          spanId={String(tracePanelSpanId ?? "")}
+          setSpanId={setTracePanelSpanId}
+          open
+          onClose={() => setTraceOpen(false)}
+          refetchInterval={TRACE_POLL_INTERVAL}
+        />
       )}
     </div>
   );

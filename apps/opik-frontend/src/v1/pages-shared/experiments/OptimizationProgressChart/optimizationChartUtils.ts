@@ -176,11 +176,11 @@ const buildAncestorSet = (
  *
  * During optimization: baseline → running → evaluating → passed/pruned
  * After completion: baseline, passed (has descendants or best), pruned (rest)
- * Non-evaluation-suite: all scored = passed (no pruning)
+ * Non-test-suite: all scored = passed (no pruning)
  */
 export const computeCandidateStatuses = (
   candidates: AggregatedCandidate[],
-  isEvaluationSuite = true,
+  isTestSuite = true,
   isInProgress = false,
   inProgressInfo?: InProgressInfo,
 ): Map<string, TrialStatus> => {
@@ -195,7 +195,7 @@ export const computeCandidateStatuses = (
   for (const c of candidates) {
     if (c.stepIndex === 0) {
       statusMap.set(c.candidateId, "baseline");
-    } else if (!isEvaluationSuite) {
+    } else if (!isTestSuite) {
       statusMap.set(c.candidateId, c.score == null ? "running" : "passed");
     } else if (c.score == null) {
       statusMap.set(c.candidateId, "running");
@@ -218,13 +218,13 @@ export const computeCandidateStatuses = (
  */
 export const buildCandidateChartData = (
   candidates: AggregatedCandidate[],
-  isEvaluationSuite = true,
+  isTestSuite = true,
   isInProgress = false,
   inProgressInfo?: InProgressInfo,
 ): CandidateDataPoint[] => {
   const statusMap = computeCandidateStatuses(
     candidates,
-    isEvaluationSuite,
+    isTestSuite,
     isInProgress,
     inProgressInfo,
   );

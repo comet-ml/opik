@@ -66,7 +66,7 @@ class Guardrail:
 
         """
         self.guards = guards
-        self._client = opik_client.get_client_cached()
+        self._client = opik_client.get_global_client()
 
         self.config_ = config.get_from_user_inputs(
             guardrail_timeout=guardrail_timeout,

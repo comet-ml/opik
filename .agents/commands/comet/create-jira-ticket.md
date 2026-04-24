@@ -32,6 +32,16 @@ Every Task or Story **must** have a parent epic. Follow this logic:
 
 Set the parent via `"parent": "OPIK-XXXX"` in `additional_fields`.
 
+## Assignee Pod Label
+
+After an assignee is chosen, also add that assignee's `pod-<name>` label alongside any other labels on the ticket.
+
+- Known pods: `pod-whale`, `pod-frontier`, `pod-andromeda`, `pod-air`, `pod-iberi`.
+- If you already know the assignee's pod (e.g., from memory, prior tickets in the same area, or the user's own profile), add the matching `pod-<name>` label automatically — no need to ask.
+- **If uncertain, use `AskUserQuestion` to let the user pick the pod** from the list above. Include a final "Skip (no pod label)" option.
+- If no assignee is set, skip this step — do not add a pod label.
+- Never add more than one `pod-*` label.
+
 ## Template Sections to Fill
 
 Ask the user to provide details for each section, then format the description using the template below.
@@ -39,15 +49,15 @@ Ask the user to provide details for each section, then format the description us
 ### Description Template
 
 ```
-h2. Description
+## Description
 
 [Brief overview of what needs to be done and why. Explain the context and motivation for this work.]
 
-h2. User Story
+## User Story
 
 As a [type of user], I want to [action/goal] so that I can [benefit/outcome].
 
-h2. User Journey
+## User Journey
 
 [Describe the step-by-step flow of how a user will interact with this feature:]
 1. User navigates to [location]
@@ -56,35 +66,35 @@ h2. User Journey
 4. User sees [result]
 [Continue as needed...]
 
-h2. Requirements
+## Requirements
 
-h3. Functional Requirements
+### Functional Requirements
 
 [List the functional requirements - what the system should DO]
 
-*1. [Requirement Category]*
-* [Specific requirement]
-* [Specific requirement]
+**1. [Requirement Category]**
+- [Specific requirement]
+- [Specific requirement]
 
-*2. [Requirement Category]*
-* [Specific requirement]
-* [Specific requirement]
+**2. [Requirement Category]**
+- [Specific requirement]
+- [Specific requirement]
 
-h3. Non-Functional Requirements
+### Non-Functional Requirements
 
 [List non-functional requirements - performance, security, scalability, etc.]
-* [Requirement]
-* [Requirement]
+- [Requirement]
+- [Requirement]
 
-h2. Acceptance Criteria
+## Acceptance Criteria
 
 [Checklist of criteria that must be met for the ticket to be considered complete]
-* [ ] [Criterion 1]
-* [ ] [Criterion 2]
-* [ ] [Criterion 3]
-* [ ] No lint errors or TypeScript errors (if applicable)
-* [ ] Unit tests added (if applicable)
-* [ ] Documentation updated (if applicable)
+- [ ] [Criterion 1]
+- [ ] [Criterion 2]
+- [ ] [Criterion 3]
+- [ ] No lint errors or TypeScript errors (if applicable)
+- [ ] Unit tests added (if applicable)
+- [ ] Documentation updated (if applicable)
 ```
 
 ## Example Conversation Flow
@@ -103,6 +113,7 @@ h2. Acceptance Criteria
 12. Ask: "Add to the **active sprint** or the **next sprint**?"
 13. Ask: "Set a due date? (today / tomorrow / a week from today / leave unset)"
 14. Ask: "Should this be assigned to anyone?"
+15. If an assignee is chosen, determine their pod and add the corresponding `pod-<name>` label. If uncertain, ask the user to pick from the known pods (see **Assignee Pod Label**).
 
 ## Creating the Ticket
 
@@ -165,6 +176,6 @@ Never display the ticket key as plain text — always wrap it in a markdown link
 ## Notes
 
 - The project key is always `OPIK`
-- Description uses Jira wiki markup (h2. for headers, * for bullets, *bold* for bold)
-- Acceptance criteria should be checkboxes using `* [ ]` syntax
+- Description uses Markdown format (## for headers, - for bullets, **bold** for bold). The Jira MCP tool converts Markdown to Jira wiki markup automatically.
+- Acceptance criteria should be checkboxes using `- [ ]` syntax
 - Always include standard acceptance criteria like "No lint errors" and "Tests added" where applicable

@@ -1,0 +1,119 @@
+---
+description: Start here to integrate Opik into your Cloudflare Workers AI-based genai
+  application for end-to-end LLM observability, unit testing, and optimization.
+headline: Cloudflare Workers AI | Opik Documentation
+og:description: Monitor and debug your Cloudflare Workers AI applications with Opik's
+  seamless integration for comprehensive tracing and visualization.
+og:site_name: Opik Documentation
+og:title: Optimize Cloudflare Workers AI Tracing - Opik
+title: Observability for Cloudflare Workers AI with Opik
+---
+
+Opik provides seamless integration with [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) allowing you to trace, monitor, and debug your Cloudflare Workers AI applications.
+
+## Features
+
+- **Comprehensive Tracing**: Automatically trace Cloudflare Workers AI requests
+- **Hierarchical Visualization**: View your Cloudflare Workers AI requests as structured traces with parent-child relationships
+- **Custom Tagging**: Add custom tags to organize and filter your traces
+
+## Installation
+
+### Option 1: Using npm
+
+```bash
+npm install opik
+```
+
+### Option 2: Using yarn
+
+```bash
+yarn add opik
+```
+
+### Requirements
+
+- Node.js ≥ 18
+- Opik SDK
+
+### Enable Node.js compatibility mode
+
+The Opik SDK requires Node.js compatibility mode to be enabled in Cloudflare Workers AI. You can enable it by adding the following to your `wrangler.toml` file:
+
+```json
+{
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "compatibility_date": "2024-09-23"
+}
+```
+
+See the [Cloudflare documentation](https://developers.cloudflare.com/workers/runtime-apis/nodejs/) for more details.
+
+## Basic Usage
+
+### Using with LLM Calls
+
+Here is an example of how to use the Opik SDK with Cloudflare Workers AI:
+
+```typescript
+/**
+ * Welcome to Cloudflare Workers! This is your first worker.
+ *
+ * - Run `npm run dev` in your terminal to start a development server
+ * - Open a browser tab at http://localhost:8787/ to see your worker in action
+ * - Run `npm run deploy` to publish your worker
+ *
+ * Bind resources to your worker in `wrangler.jsonc`. After adding bindings, a type definition for the
+ * `Env` object can be regenerated with `npm run cf-typegen`.
+ *
+ * Learn more at https://developers.cloudflare.com/workers/
+ */
+import { Opik } from 'opik';
+
+const client = new Opik({
+	apiKey: '<API-KEY>',
+	apiUrl: 'https://www.comet.com/opik/api',
+	projectName: 'demo-cloudflare-workers-ai',
+	workspaceName: '<YOUR-WORKSPACE>',
+});
+
+export default {
+	async fetch(request, env) {
+		const input = 'What is the origin of the phrase Hello, World';
+		const response = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+			prompt: input,
+		});
+
+		const someTrace = client.trace({
+			name: `Trace`,
+			input: {
+				prompt: input,
+			},
+			output: {
+				response: response,
+			},
+		});
+
+		const someSpan = someTrace.span({
+			name: `Span`,
+			type: 'llm',
+			input: {
+				prompt: input,
+			},
+			output: {
+				response: response,
+			},
+		});
+		someSpan.end();
+
+		someTrace.end();
+
+		await client.flush();
+
+		return new Response(JSON.stringify(response));
+	},
+} satisfies ExportedHandler<Env>;
+
+```

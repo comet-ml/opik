@@ -17,7 +17,7 @@ import PlaygroundOutputCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/Pl
 import PlaygroundOutputColumnHeader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundOutputColumnHeader";
 import PlaygroundVariableCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { useIncrementalDatasetHydration } from "@/v2/pages/PlaygroundPage/useIncrementalDatasetHydration";
 import PlaygroundTagsCell from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 
@@ -87,7 +87,7 @@ const PlaygroundOutputTable = ({
     const retVal: ColumnDef<PlaygroundOutputTableData>[] = [];
     const explainer =
       EXPLAINERS_MAP[
-        EXPLAINER_ID.how_do_i_use_the_evaluation_suite_in_the_playground
+        EXPLAINER_ID.how_do_i_use_the_test_suite_in_the_playground
       ];
 
     const inputColumns = [...datasetColumns]
@@ -139,7 +139,7 @@ const PlaygroundOutputTable = ({
     const outputColumns = promptIds.map((promptId, promptIdx) => {
       return {
         id: `output-${promptId}`,
-        label: `Output ${getAlphabetLetter(promptIdx)}`,
+        label: `Prompt ${getAlphabetLetter(promptIdx)}`,
         type: COLUMN_TYPE.string,
         header: PlaygroundOutputColumnHeader as never,
         cell: PlaygroundOutputCell as never,

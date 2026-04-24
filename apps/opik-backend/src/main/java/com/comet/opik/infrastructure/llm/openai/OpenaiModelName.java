@@ -62,6 +62,7 @@ public enum OpenaiModelName implements StructuredOutputSupported {
     GPT_IMAGE_1("gpt-image-1", false),
     GPT_IMAGE_1_MINI("gpt-image-1-mini", false),
     GPT_IMAGE_1_5("gpt-image-1.5", false),
+    GPT_IMAGE_2("gpt-image-2", false),
     GPT_O1("o1", false),
     GPT_O1_2024_12_17("o1-2024-12-17", false),
     GPT_O1_MINI("o1-mini", false),

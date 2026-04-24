@@ -3,12 +3,17 @@
 import type * as OpikApi from "../../api/index.js";
 import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
+import { JsonNode } from "./JsonNode.js";
 
-export const Message: core.serialization.Schema<serializers.Message.Raw, OpikApi.Message> = core.serialization.record(
-    core.serialization.string(),
-    core.serialization.unknown(),
-);
+export const Message: core.serialization.ObjectSchema<serializers.Message.Raw, OpikApi.Message> =
+    core.serialization.object({
+        role: core.serialization.string(),
+        content: JsonNode,
+    });
 
 export declare namespace Message {
-    export type Raw = Record<string, unknown>;
+    export interface Raw {
+        role: string;
+        content: JsonNode.Raw;
+    }
 }

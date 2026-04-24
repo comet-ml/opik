@@ -1,16 +1,14 @@
-import { z } from "zod";
 import {
   serializeValue,
   deserializeValue,
-  getSchemaPrefix,
 } from "@/typeHelpers";
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 
-function makePromptLike(commit: string): BasePrompt {
+function makePromptLike(commit: string | undefined): BasePrompt {
   const obj = Object.create(BasePrompt.prototype);
-  obj.commit = commit;
-  obj.versionId = "version-id-123";
+  Object.defineProperty(obj, "commit", { get: () => commit, configurable: true });
+  Object.defineProperty(obj, "versionId", { get: () => "version-id-123", configurable: true });
   return obj;
 }
 
@@ -61,8 +59,7 @@ describe("serializeValue", () => {
   });
 
   it("throws for BasePrompt without commit", () => {
-    const prompt = makePromptLike(undefined as unknown as string);
-    (prompt as { commit: unknown }).commit = undefined;
+    const prompt = makePromptLike(undefined);
     expect(() => serializeValue(prompt)).toThrow("without a commit");
   });
 
@@ -132,26 +129,13 @@ describe("serializeValue — explicit backendType for prompt types", () => {
   });
 
   it('throws when serializing BasePrompt without commit and backendType "prompt"', () => {
-    const prompt = makePromptLike(undefined as unknown as string);
-    (prompt as { commit: unknown }).commit = undefined;
+    const prompt = makePromptLike(undefined);
     expect(() => serializeValue(prompt, "prompt")).toThrow("without a commit");
   });
 
   it('serializes PromptVersion with backendType "prompt_commit" → returns commit', () => {
     const pv = makePromptVersion("commit-xyz789");
     expect(serializeValue(pv, "prompt_commit")).toBe("commit-xyz789");
-  });
-});
-
-describe("getSchemaPrefix", () => {
-  it("throws TypeError when schema is missing .describe()", () => {
-    const Schema = z.object({ x: z.number() });
-    expect(() => getSchemaPrefix(Schema)).toThrow(TypeError);
-  });
-
-  it("returns the schema description as prefix", () => {
-    const Schema = z.object({ x: z.number() }).describe("MyConfig");
-    expect(getSchemaPrefix(Schema)).toBe("MyConfig");
   });
 });
 

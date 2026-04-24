@@ -2,7 +2,9 @@ import SideDialog from "@/shared/SideDialog/SideDialog";
 import React from "react";
 import { SheetTitle } from "@/ui/sheet";
 import { IntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer";
-import { useOpenQuickStartDialog } from "@/hooks/useOpenQuickStartDialog";
+import { useLayoutDialog } from "@/hooks/useLayoutDialog";
+
+const useOpenQuickStartDialog = () => useLayoutDialog("quickstart");
 
 const QuickstartDialog: React.FC = () => {
   const { isOpen, setOpen } = useOpenQuickStartDialog();

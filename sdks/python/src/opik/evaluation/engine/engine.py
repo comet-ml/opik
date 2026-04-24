@@ -258,6 +258,7 @@ class EvaluationEngine:
         with evaluation_tasks_executor.StreamingExecutor[test_result.TestResult](
             workers=self._workers,
             verbose=self._verbose,
+            client=self._client,
             desc=description,
             total=total_items,
             show_score_postfix=show_scores_in_progress_bar,
@@ -378,6 +379,7 @@ class EvaluationEngine:
             workers=self._workers,
             verbose=self._verbose,
             desc="LLM task spans evaluation",
+            client=self._client,
         )
 
         LOGGER.debug(
@@ -520,6 +522,7 @@ class EvaluationEngine:
             evaluation_tasks=evaluation_tasks,
             workers=self._workers,
             verbose=self._verbose,
+            client=self._client,
         )
 
         return test_results

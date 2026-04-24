@@ -29,7 +29,7 @@ const StudioTemplates: React.FC = () => {
   };
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
         Run an optimization
       </h2>

@@ -97,7 +97,7 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
         prompt: promptTemplate,
         metadata: { testCase: "single-trace-prompt" },
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Create a trace
       const trace = client.trace({
@@ -142,19 +142,19 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
         name: `prompt-1-${timestamp}`,
         prompt: "First prompt: {{var1}}",
       });
-      createdPromptIds.push(prompt1.id);
+      createdPromptIds.push(prompt1.id!);
 
       const prompt2 = await client.createPrompt({
         name: `prompt-2-${timestamp}`,
         prompt: "Second prompt: {{var2}}",
       });
-      createdPromptIds.push(prompt2.id);
+      createdPromptIds.push(prompt2.id!);
 
       const prompt3 = await client.createPrompt({
         name: `prompt-3-${timestamp}`,
         prompt: "Third prompt: {{var3}}",
       });
-      createdPromptIds.push(prompt3.id);
+      createdPromptIds.push(prompt3.id!);
 
       // Create a trace
       const trace = client.trace({
@@ -213,7 +213,7 @@ describe.skipIf(!shouldRunApiTests)("Trace Prompts Integration Tests", () => {
         name: promptName,
         prompt: "Test: {{test}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Create a trace with existing metadata
       const trace = client.trace({

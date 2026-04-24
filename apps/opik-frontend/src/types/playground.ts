@@ -9,6 +9,7 @@ import {
 } from "@/types/providers";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { SPAN_TYPE } from "@/types/traces";
+import { EVALUATION_METHOD } from "@/types/datasets";
 
 export interface PromptLibraryMetadata {
   name: string;
@@ -22,6 +23,9 @@ export interface PromptLibraryMetadata {
   };
 }
 
+import type { BlueprintPromptRef } from "@/types/agent-configs";
+export type { BlueprintPromptRef } from "@/types/agent-configs";
+
 export interface PlaygroundPromptType {
   name: string;
   id: string;
@@ -30,6 +34,7 @@ export interface PlaygroundPromptType {
   provider: COMPOSED_PROVIDER_TYPE | "";
   configs: LLMPromptConfigsType;
   loadedChatPromptId?: string;
+  loadedBlueprintRef?: BlueprintPromptRef;
   skipInitialPromptLoad?: boolean;
 }
 
@@ -122,6 +127,7 @@ export interface LogExperiment {
   datasetVersionId?: string;
   name?: string;
   metadata?: object;
+  evaluationMethod?: EVALUATION_METHOD;
   prompt_versions?: LogExperimentPromptVersion[];
 }
 

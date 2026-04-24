@@ -7,6 +7,10 @@ og:title: Evaluate Prompt Function - Opik
 title: evaluatePrompt Function
 ---
 
+<Note>
+  In Opik 2.0, experiments are project-scoped. Make sure to specify a `projectName` when calling `evaluatePrompt()` so results are associated with the correct project.
+</Note>
+
 The `evaluatePrompt` function provides a streamlined way to evaluate prompt templates against a dataset. It automatically formats message templates with dataset variables, generates LLM responses, and evaluates the results using specified metrics.
 
 ## Overview
@@ -59,9 +63,7 @@ interface EvaluatePromptOptions extends Omit<EvaluateOptions, "task"> {
 - **Description**: The dataset to evaluate prompts against. Each dataset item will be used to format the message templates and generate responses.
 
 ```typescript
-const dataset = await client.getOrCreateDataset({
-  name: "my-dataset",
-});
+const dataset = await client.getOrCreateDataset("my-dataset", "Evaluation dataset", "my-project");
 ```
 
 #### messages
@@ -152,9 +154,10 @@ experimentConfig: {
 - **Description**: Array of Opik Prompt objects to link to this experiment. Useful for tracking which prompt versions were used.
 
 ```typescript
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "translation-prompt",
   prompt: "Translate to {{language}}: {{text}}",
+  projectName: "my-project",
 });
 
 prompts: [prompt];
@@ -212,7 +215,7 @@ Simple prompt evaluation with default settings:
 import { Opik, evaluatePrompt } from "opik";
 
 const client = new Opik();
-const dataset = await client.getOrCreateDataset({ name: "qa-dataset" });
+const dataset = await client.getOrCreateDataset("qa-dataset", "Evaluation dataset", "my-project");
 
 await dataset.insert([
   {
@@ -236,6 +239,7 @@ const result = await evaluatePrompt({
     { role: "user", content: "{{question}}" },
   ],
   model: "gpt-5-nano",
+  projectName: "my-project",
 });
 
 console.log(`Experiment ID: ${result.experimentId}`);
@@ -251,7 +255,7 @@ import { evaluatePrompt } from "opik";
 import { Hallucination, ExactMatch } from "opik";
 
 // Create dataset with expected answers
-const dataset = await client.getOrCreateDataset({ name: "geography-qa" });
+const dataset = await client.getOrCreateDataset("geography-qa", "Geography evaluation dataset", "my-project");
 await dataset.insert([
   {
     country: "France",
@@ -277,6 +281,7 @@ await evaluatePrompt({
     new Hallucination(), // Check for hallucinations
   ],
   experimentName: "Geography Quiz Evaluation",
+  projectName: "my-project",
 });
 ```
 
@@ -299,6 +304,7 @@ await evaluatePrompt({
     model_provider: "openai",
     model_name: "gpt-5-nano",
   },
+  projectName: "my-project",
 });
 ```
 
@@ -327,14 +333,13 @@ model: claude;
 Track which prompt versions are used in evaluations:
 
 ```typescript
-import { Opik, evaluatePrompt } from "opik";
-
-const client = new Opik();
+import { Opik, Prompt, evaluatePrompt } from "opik";
 
 // Create or get a prompt
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "customer-support-prompt",
   prompt: "{{system_message}}\n\nUser: {{user_query}}",
+  projectName: "my-project",
 });
 
 // Link the prompt to the evaluation
@@ -347,6 +352,7 @@ await evaluatePrompt({
   model: "gpt-5-nano",
   prompts: [prompt], // Link to prompt
   experimentName: "Customer Support - v2.1",
+  projectName: "my-project",
 });
 ```
 
@@ -364,6 +370,7 @@ await evaluatePrompt({
     },
   ],
   templateType: "mustache", // This is the default
+  projectName: "my-project",
 });
 ```
 
@@ -379,6 +386,7 @@ await evaluatePrompt({
     },
   ],
   templateType: "jinja2",
+  projectName: "my-project",
 });
 ```
 
@@ -398,6 +406,7 @@ await evaluatePrompt({
     input: "question",
     expected: "reference_answer",
   },
+  projectName: "my-project",
 });
 ```
 
@@ -411,6 +420,7 @@ await evaluatePrompt({
   messages: [{ role: "user", content: "{{prompt}}" }],
   nbSamples: 5, // Only evaluate first 5 items
   experimentName: "Quick Test",
+  projectName: "my-project",
 });
 ```
 
@@ -458,6 +468,7 @@ Begin with basic prompt evaluation, then add metrics as needed:
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
+  projectName: "my-project",
 });
 
 // Step 2: Add metrics after reviewing outputs
@@ -465,6 +476,7 @@ await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
   scoringMetrics: [new Hallucination()],
+  projectName: "my-project",
 });
 ```
 
@@ -491,6 +503,7 @@ await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "Answer: {{question}}" }],
   prompts: [prompt],
+  projectName: "my-project",
 });
 ```
 
@@ -504,12 +517,14 @@ await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
   nbSamples: 10,
+  projectName: "my-project",
 });
 
 // Full evaluation once satisfied
 await evaluatePrompt({
   dataset,
   messages: [{ role: "user", content: "{{input}}" }],
+  projectName: "my-project",
   // Evaluate entire dataset
 });
 ```

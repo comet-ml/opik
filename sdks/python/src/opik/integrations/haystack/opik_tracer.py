@@ -5,9 +5,9 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 
 from haystack import tracing
 
-from opik import tracing_runtime_config, url_helpers
+import opik
+from opik import context_storage, tracing_runtime_config, url_helpers
 from opik.decorator import arguments_helpers, span_creation_handler
-from opik.api_objects import opik_client
 from opik.api_objects import span as opik_span
 from opik.api_objects import trace as opik_trace
 from opik.types import SpanType
@@ -23,7 +23,7 @@ class OpikTracer(tracing.Tracer):
 
     def __init__(
         self,
-        opik_client: opik_client.Opik,
+        opik_client: Optional["opik.Opik"] = None,
         name: str = "Haystack",
         project_name: Optional[str] = None,
     ) -> None:
@@ -31,7 +31,9 @@ class OpikTracer(tracing.Tracer):
         Initialize OpikTracer.
 
         Args:
-            opik_client: The Opik client instance.
+            opik_client: Deprecated. The client is now resolved lazily via
+                ``opik.get_global_client()``. This parameter is accepted
+                for backwards compatibility but ignored.
             name: The name of the pipeline or component.
             project_name: The name of the project for tracing (optional).
         """
@@ -41,7 +43,6 @@ class OpikTracer(tracing.Tracer):
                 "To enable, set the HAYSTACK_CONTENT_TRACING_ENABLED environment variable to true "
                 "before importing Haystack."
             )
-        self._opik_client = opik_client
         self._context: List[opik_span_bridge.OpikSpanBridge] = []
         self._name = name
         self._project_name = project_name
@@ -49,6 +50,10 @@ class OpikTracer(tracing.Tracer):
             os.getenv(constants.HAYSTACK_OPIK_ENFORCE_FLUSH_ENV_VAR, "false").lower()
             == "true"
         )
+
+    @property
+    def _opik_client(self) -> opik.Opik:
+        return opik.get_global_client()
 
     @contextlib.contextmanager
     def trace(
@@ -88,7 +93,9 @@ class OpikTracer(tracing.Tracer):
             name=final_name,
             type="general",
             metadata=metadata,
-            project_name=self._project_name,
+            project_name=context_storage.resolve_project_name(
+                self._project_name, "OpikTracer"
+            ),
         )
 
         result = span_creation_handler.create_span_respecting_context(

@@ -33,8 +33,9 @@ from harbor.models.verifier.result import VerifierResult
 from harbor.trial.trial import Trial
 from harbor.verifier.verifier import Verifier
 
+import opik
 from opik import datetime_helpers, id_helpers, opik_context, track
-from opik.api_objects import opik_client, span
+from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.types import FeedbackScoreDict, SpanType
 
@@ -193,7 +194,7 @@ def _patch_step_class() -> None:
         parent_span_id = parent_span.id if parent_span else None
 
         try:
-            client = opik_client.get_client_cached()
+            client = opik.get_global_client()
 
             input_dict: Dict[str, Any] = {}
             if self.message:

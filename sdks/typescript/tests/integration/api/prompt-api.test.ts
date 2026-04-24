@@ -49,7 +49,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt: "Hello {{name}}, welcome to {{place}}!",
         metadata: { author: "integration-test", version: "1.0" },
       });
-      createdPromptIds.push(created.id);
+      createdPromptIds.push(created.id!);
 
       expect(created.name).toBe(promptName);
       expect(created.prompt).toBe("Hello {{name}}, welcome to {{place}}!");
@@ -82,8 +82,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
       expect(retrieved?.metadata?.version).toBe("2.0");
 
       // DELETE - both versions should have same parent prompt ID
-      expect(created.id).toBe(updated.id); // Verify they share the same promptId
-      await client.deletePrompts([created.id]);
+      expect(created.id!).toBe(updated.id!); // Verify they share the same promptId
+      await client.deletePrompts([created.id!]);
 
       // Verify deletion - should return null since prompt is deleted
       const deletedPrompt = await client.getPrompt({ name: promptName });
@@ -111,7 +111,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
           },
         },
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       expect(prompt.metadata).toMatchObject({
         model: "gpt-4",
@@ -139,7 +139,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt: "Version 1: {{text}}",
         metadata: { version: "1.0" },
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
 
       // Create version 2
       await client.createPrompt({
@@ -178,7 +178,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Original: {{message}}",
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
 
       const v2 = await client.createPrompt({
         name: promptName,
@@ -202,7 +202,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt: "Original template: {{input}}",
         metadata: { stable: true },
       });
-      createdPromptIds.push(original.id);
+      createdPromptIds.push(original.id!);
 
       // Create "bad" version
       const bad = await client.createPrompt({
@@ -238,7 +238,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test {{variable}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const versions = await prompt.getVersions();
       expect(versions.length).toBeGreaterThan(0);
@@ -261,24 +261,24 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Version 1 template",
       });
-      createdPromptIds.push(v1.id);
-      await client.updatePromptVersionTags([v1.versionId], {
+      createdPromptIds.push(v1.id!);
+      await client.updatePromptVersionTags([v1.versionId!], {
         tags: ["production", "stable"],
       });
       const v2 = await client.createPrompt({
         name: promptName,
         prompt: "Version 2 template",
       });
-      createdPromptIds.push(v2.id);
-      await client.updatePromptVersionTags([v2.versionId], {
+      createdPromptIds.push(v2.id!);
+      await client.updatePromptVersionTags([v2.versionId!], {
         tags: ["experimental", "beta"],
       });
       const v3 = await client.createPrompt({
         name: promptName,
         prompt: "Version 3 template",
       });
-      createdPromptIds.push(v3.id);
-      await client.updatePromptVersionTags([v3.versionId], {
+      createdPromptIds.push(v3.id!);
+      await client.updatePromptVersionTags([v3.versionId!], {
         tags: ["production", "tested"],
       });
 
@@ -303,17 +303,17 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: `This template contains ${searchTerm} for testing`,
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
       const v2 = await client.createPrompt({
         name: promptName,
         prompt: "This template has different content",
       });
-      createdPromptIds.push(v2.id);
+      createdPromptIds.push(v2.id!);
       const v3 = await client.createPrompt({
         name: promptName,
         prompt: `Another template with ${searchTerm} included`,
       });
-      createdPromptIds.push(v3.id);
+      createdPromptIds.push(v3.id!);
 
       // Search for versions containing the search term
       const searchResults = await v1.getVersions({
@@ -334,17 +334,17 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Version 1",
       });
-      createdPromptIds.push(v1.id);
+      createdPromptIds.push(v1.id!);
       const v2 = await client.createPrompt({
         name: promptName,
         prompt: "Version 2",
       });
-      createdPromptIds.push(v2.id);
+      createdPromptIds.push(v2.id!);
       const v3 = await client.createPrompt({
         name: promptName,
         prompt: "Version 3",
       });
-      createdPromptIds.push(v3.id);
+      createdPromptIds.push(v3.id!);
 
       const sortedVersions = await v1.getVersions({
         sorting: JSON.stringify([{ field: "template", direction: "DESC" }]),
@@ -365,7 +365,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: originalName,
         prompt: "Test {{input}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Update properties
       const updatedName = `${originalName}-renamed`;
@@ -395,7 +395,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test {{value}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Update only tags
       await prompt.updateProperties({
@@ -421,7 +421,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Delete me {{now}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Delete via instance method
       await prompt.delete();
@@ -444,7 +444,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt:
           "User: {{user_name}}\nRole: {{role}}\nQuestion: {{question}}\nContext: {{context}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const formatted = prompt.format({
         user_name: "Alice",
@@ -466,7 +466,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt:
           "Count: {{count}}, Score: {{score}}, Active: {{is_active}}, Name: {{name}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const formatted = prompt.format({
         count: 42,
@@ -487,7 +487,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Hello {{name}}, your score is {{score}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Missing 'score' variable should throw
       expect(() => {
@@ -502,7 +502,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "This is a static template with no variables.",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const formatted = prompt.format({});
       expect(formatted).toBe("This is a static template with no variables.");
@@ -518,19 +518,19 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: `${prefix}-prompt-1`,
         prompt: "Template 1: {{var}}",
       });
-      createdPromptIds.push(p1.id);
+      createdPromptIds.push(p1.id!);
 
       const p2 = await client.createPrompt({
         name: `${prefix}-prompt-2`,
         prompt: "Template 2: {{var}}",
       });
-      createdPromptIds.push(p2.id);
+      createdPromptIds.push(p2.id!);
 
       const p3 = await client.createPrompt({
         name: `different-${Date.now()}`,
         prompt: "Different {{var}}",
       });
-      createdPromptIds.push(p3.id);
+      createdPromptIds.push(p3.id!);
 
       // Search with name filter
       const results = await client.searchPrompts(`name contains "${prefix}"`);
@@ -551,7 +551,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: `tagged-${timestamp}-1`,
         prompt: "Tagged 1 {{v}}",
       });
-      createdPromptIds.push(p1.id);
+      createdPromptIds.push(p1.id!);
 
       await p1.updateProperties({
         tags: ["production", "stable"],
@@ -561,7 +561,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: `tagged-${timestamp}-2`,
         prompt: "Tagged 2 {{v}}",
       });
-      createdPromptIds.push(p2.id);
+      createdPromptIds.push(p2.id!);
 
       await p2.updateProperties({
         tags: ["experimental", "beta"],
@@ -591,7 +591,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: `${baseName}-qa`,
         prompt: "QA template {{q}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       await prompt.updateProperties({
         tags: ["qa", "production"],
@@ -636,7 +636,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         description: "Initial description",
         tags: ["initial", "test"],
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Verify local state
       expect(prompt.description).toBe("Initial description");
@@ -658,7 +658,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt: "Simple greeting: Hello {{name}}!",
         metadata: { variant: "A", type: "control" },
       });
-      createdPromptIds.push(versionA.id);
+      createdPromptIds.push(versionA.id!);
 
       // Version B - experiment
       const versionB = await client.createPrompt({
@@ -701,7 +701,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         prompt: "System: {{system_message}}\nUser: {{user_input}}",
         metadata: { type: "base", category: "chat" },
       });
-      createdPromptIds.push(basePrompt.id);
+      createdPromptIds.push(basePrompt.id!);
 
       // Derived prompt that extends base
       const derivedPrompt = await client.createPrompt({
@@ -714,7 +714,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
           category: "chat",
         },
       });
-      createdPromptIds.push(derivedPrompt.id);
+      createdPromptIds.push(derivedPrompt.id!);
 
       // Use derived prompt
       const formatted = derivedPrompt.format({
@@ -744,7 +744,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         });
 
         if (i === 1) {
-          createdPromptIds.push(version.id);
+          createdPromptIds.push(version.id!);
         }
 
         versions.push(version);
@@ -768,7 +768,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Hello {{name}}, you have {{count}} messages.",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Simulate multiple users formatting the same prompt concurrently
       const users = [
@@ -812,7 +812,7 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test {{v}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       const result = await prompt.getVersion("nonexistent123");
       expect(result).toBeNull();
@@ -835,8 +835,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test replace template v1",
       });
-      createdPromptIds.push(version1.id);
-      await client.updatePromptVersionTags([version1.versionId], {
+      createdPromptIds.push(version1.id!);
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: ["tag1", "tag2"],
       });
 
@@ -844,14 +844,14 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test replace template v2",
       });
-      createdPromptIds.push(version2.id);
-      await client.updatePromptVersionTags([version2.versionId], {
+      createdPromptIds.push(version2.id!);
+      await client.updatePromptVersionTags([version2.versionId!], {
         tags: ["tag3", "tag4"],
       });
 
       const newTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-        [version1.versionId, version2.versionId],
+        [version1.versionId!, version2.versionId!],
         {
           tags: newTags,
           mergeTags: false,
@@ -875,22 +875,22 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test default replace template v1",
       });
-      createdPromptIds.push(version1.id);
-      await client.updatePromptVersionTags([version1.versionId], {
+      createdPromptIds.push(version1.id!);
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: ["tag1", "tag2"],
       });
       const version2 = await client.createPrompt({
         name: promptName,
         prompt: "Test default replace template v2",
       });
-      createdPromptIds.push(version2.id);
-      await client.updatePromptVersionTags([version2.versionId], {
+      createdPromptIds.push(version2.id!);
+      await client.updatePromptVersionTags([version2.versionId!], {
         tags: ["tag3", "tag4"],
       });
 
       const newTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-        [version1.versionId, version2.versionId],
+        [version1.versionId!, version2.versionId!],
         {
           tags: newTags,
         }
@@ -913,12 +913,12 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test clear empty array",
       });
-      createdPromptIds.push(version1.id);
-      await client.updatePromptVersionTags([version1.versionId], {
+      createdPromptIds.push(version1.id!);
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: ["tag1", "tag2"],
       });
 
-      await client.updatePromptVersionTags([version1.versionId], {
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: [],
       });
 
@@ -935,13 +935,13 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test preserve null array",
       });
-      createdPromptIds.push(version1.id);
+      createdPromptIds.push(version1.id!);
       const tags1 = ["tag1", "tag2"];
-      await client.updatePromptVersionTags([version1.versionId], {
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: tags1,
       });
 
-      await client.updatePromptVersionTags([version1.versionId], {
+      await client.updatePromptVersionTags([version1.versionId!], {
         mergeTags: false,
       });
 
@@ -959,8 +959,8 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test merge template v1",
       });
-      createdPromptIds.push(version1.id);
-      await client.updatePromptVersionTags([version1.versionId], {
+      createdPromptIds.push(version1.id!);
+      await client.updatePromptVersionTags([version1.versionId!], {
         tags: tags1,
       });
 
@@ -969,14 +969,14 @@ describe.skipIf(!shouldRunApiTests)("Prompt Real API Integration", () => {
         name: promptName,
         prompt: "Test merge template v2",
       });
-      createdPromptIds.push(version2.id);
-      await client.updatePromptVersionTags([version2.versionId], {
+      createdPromptIds.push(version2.id!);
+      await client.updatePromptVersionTags([version2.versionId!], {
         tags: tags2,
       });
 
       const additionalTags = ["tag5", "tag6"];
       await client.updatePromptVersionTags(
-        [version1.versionId, version2.versionId],
+        [version1.versionId!, version2.versionId!],
         {
           tags: additionalTags,
           mergeTags: true,

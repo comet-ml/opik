@@ -33,6 +33,8 @@ type ResizableSidePanelProps = {
   minWidth?: number;
   ignoreHotkeys?: boolean;
   closeOnClickOutside?: boolean;
+  closeButtonPosition?: "left" | "right";
+  hideDefaultControls?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
   container?: HTMLElement | null;
@@ -50,7 +52,10 @@ const calculateLeftPosition = (
   minWidth?: number,
 ) => {
   if (minWidth) {
-    return Math.min(containerWidth * percentage, containerWidth - minWidth);
+    return Math.max(
+      0,
+      Math.min(containerWidth * percentage, containerWidth - minWidth),
+    );
   } else {
     return containerWidth * percentage;
   }
@@ -67,6 +72,8 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   minWidth,
   ignoreHotkeys = false,
   closeOnClickOutside = true,
+  closeButtonPosition = "left",
+  hideDefaultControls = false,
   horizontalNavigation,
   verticalNavigation,
   container,
@@ -283,7 +290,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
     <div
       className={cn(
         "absolute inset-0 z-10",
-        !open && "pointer-events-none w-0",
+        !open && "pointer-events-none overflow-hidden",
       )}
     >
       {open && closeOnClickOutside && (
@@ -305,26 +312,41 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               onMouseDown={startResizing as never}
             ></div>
             <div className="relative flex size-full">
-              <div className="absolute inset-x-0 top-0 flex h-[60px] items-center pl-6 pr-5">
-                <div className="flex items-center gap-2">
-                  <TooltipWrapper
-                    content={`Close ${entity}`}
-                    hotkeys={ESC_HOTKEYS}
+              <div
+                className={cn(
+                  "absolute inset-x-0 top-0 flex h-[47px] items-center overflow-hidden pr-4",
+                  hideDefaultControls ? "pl-2" : "pl-6",
+                )}
+              >
+                {!hideDefaultControls && (
+                  <div
+                    className={cn(
+                      "flex items-center gap-2",
+                      closeButtonPosition === "right" && "ml-auto",
+                    )}
+                    style={{
+                      order: closeButtonPosition === "right" ? 2 : 0,
+                    }}
                   >
-                    <Button
-                      data-testid="side-panel-close"
-                      variant="outline"
-                      size="icon-sm"
-                      onClick={onClose}
+                    <TooltipWrapper
+                      content={`Close ${entity}`}
+                      hotkeys={ESC_HOTKEYS}
                     >
-                      <X />
-                    </Button>
-                  </TooltipWrapper>
-                  {renderNavigation()}
-                </div>
+                      <Button
+                        data-testid="side-panel-close"
+                        variant="outline"
+                        size="icon-sm"
+                        onClick={onClose}
+                      >
+                        <X />
+                      </Button>
+                    </TooltipWrapper>
+                    {renderNavigation()}
+                  </div>
+                )}
                 {headerContent && headerContent}
               </div>
-              <div className="absolute inset-x-0 bottom-0 top-[60px] border-t">
+              <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">
                 {children}
               </div>
             </div>

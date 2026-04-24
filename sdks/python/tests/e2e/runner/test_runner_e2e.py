@@ -11,7 +11,7 @@ from typing import Optional
 
 import opik
 import opik.rest_api.client as rest_api_client
-from opik.api_objects.agent_config.config import AgentConfigManager
+from opik.api_objects.agent_config.config import ConfigManager
 from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 from .conftest import RunnerInfo
 
@@ -170,15 +170,15 @@ def test_runner_with_mask(
 
     wait_for_agent_registration(api_client, "echo_config", project_id)
 
-    manager = AgentConfigManager(
+    manager = ConfigManager(
         project_name=OPIK_E2E_TESTS_PROJECT_NAME,
         rest_client_=opik_client.rest_client,
     )
     manager.create_blueprint(
-        parameters={"EchoConfig.greeting": "default-greeting"},
+        parameters={"greeting": "default-greeting"},
     )
     mask_id = manager.create_mask(
-        parameters={"EchoConfig.greeting": custom_greeting},
+        parameters={"greeting": custom_greeting},
     )
 
     submit_job(api_client, "echo_config", message, project_id, mask_id=mask_id)

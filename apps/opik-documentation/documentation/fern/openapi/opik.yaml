@@ -79,6 +79,8 @@ tags:
   description: Resource to ingest Traces and Spans via OpenTelemetry
 - name: Optimizations
   description: Optimization resources
+- name: Pairing
+  description: Pairing sessions for the `opik connect` and `opik endpoint` CLI commands
 - name: Projects
   description: Project related resources
 - name: Prompts
@@ -249,6 +251,49 @@ paths:
               example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
         "404":
           description: Not Found (no config for project)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Write"
+  /v1/private/agent-configs/blueprints/projects/{project_id}/masks/{mask_id}:
+    post:
+      tags:
+      - Agent Configs
+      summary: Create blueprint from mask
+      description: Creates a new blueprint by applying a mask's changes on top of
+        the latest blueprint for the project.
+      operationId: createBlueprintFromMask
+      parameters:
+      - name: project_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: mask_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/agent-configs/blueprints/{blueprint_id}"
+        "404":
+          description: Not Found (no config or mask not found)
           content:
             application/json:
               schema:
@@ -2960,6 +3005,27 @@ paths:
       responses:
         "204":
           description: No content
+  /v1/private/experiments/execute:
+    post:
+      tags:
+      - Experiments
+      summary: Create and execute experiment
+      description: Creates experiments for each prompt variant and asynchronously
+        processes all dataset items
+      operationId: executeExperiment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExperimentExecutionRequest"
+        required: true
+      responses:
+        "202":
+          description: Experiments created and processing started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentExecutionResponse"
   /v1/private/experiments/items/bulk:
     put:
       tags:
@@ -3826,37 +3892,50 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/connections:
+  /v1/private/local-runners/{runnerId}/bridge/commands:
     post:
       tags:
       - Runners
-      summary: Connect a local runner
-      description: Exchange a pairing code or API key for local runner credentials
-      operationId: connectRunner
+      summary: Submit bridge command
+      description: Submit a bridge command for execution by the local daemon
+      operationId: createBridgeCommand
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       requestBody:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/LocalRunnerConnectRequest"
+              $ref: "#/components/schemas/BridgeCommandSubmitRequest"
       responses:
         "201":
-          description: Runner connected
+          description: Command submitted
           headers:
             Location:
-              description: URI of the runner
+              description: URI of the command
               style: simple
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerConnectResponse"
-        "400":
-          description: Bad request
+                $ref: "#/components/schemas/BridgeCommandSubmitResponse"
+        "404":
+          description: Runner not found or not connected
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not found
+        "409":
+          description: Runner does not support bridge
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
           content:
             application/json:
               schema:
@@ -3892,31 +3971,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/pairs:
-    post:
+  /v1/private/local-runners/{runnerId}:
+    get:
       tags:
       - Runners
-      summary: Generate a pairing code
-      description: Generate a pairing code for a local runner in the current workspace
-      operationId: generatePairingCode
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LocalRunnerPairRequest"
+      summary: Get local runner
+      description: Get a single local runner with its registered agents
+      operationId: getRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        "201":
-          description: Pairing code generated
-          headers:
-            Location:
-              description: URI of the runner
-              style: simple
+        "200":
+          description: Runner details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerPairResponse"
+                $ref: "#/components/schemas/LocalRunner"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+    delete:
+      tags:
+      - Runners
+      summary: Disconnect local runner
+      description: "Disconnect a local runner, terminating its connection and failing\
+        \ any pending jobs"
+      operationId: disconnectRunner
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "204":
+          description: No content
+  /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}:
+    get:
+      tags:
+      - Runners
+      summary: Get bridge command
+      description: "Get bridge command status, optionally long-polling for completion"
+      operationId: getBridgeCommand
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commandId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: wait
+        in: query
+        schema:
+          type: boolean
+          default: false
+      - name: timeout
+        in: query
+        schema:
+          type: integer
+          format: int32
+          default: 30
+      responses:
+        "200":
+          description: Command state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommand"
+        "404":
+          description: Command not found
           content:
             application/json:
               schema:
@@ -3948,33 +4086,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-  /v1/private/local-runners/{runnerId}:
-    get:
-      tags:
-      - Runners
-      summary: Get local runner
-      description: Get a single local runner with its registered agents
-      operationId: getRunner
-      parameters:
-      - name: runnerId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-      responses:
-        "200":
-          description: Runner details
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/LocalRunner"
-        "404":
-          description: Not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/{runnerId}/heartbeats:
     post:
       tags:
@@ -3989,6 +4100,11 @@ paths:
         schema:
           type: string
           format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LocalRunnerHeartbeatRequest"
       responses:
         "200":
           description: Heartbeat response
@@ -4068,6 +4184,14 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: status
+        in: query
+        schema:
+          type: string
+          enum:
+          - pairing
+          - connected
+          - disconnected
       - name: page
         in: query
         schema:
@@ -4095,6 +4219,38 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands/next:
+    post:
+      tags:
+      - Runners
+      summary: Poll next bridge commands
+      description: Long-poll for pending bridge commands (batch)
+      operationId: nextBridgeCommands
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandNextRequest"
+      responses:
+        "200":
+          description: Commands batch
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BridgeCommandBatchResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/local-runners/{runnerId}/jobs/next:
     post:
       tags:
@@ -4111,11 +4267,39 @@ paths:
           format: uuid
       responses:
         "200":
-          description: Job available
+          description: "Job available, or null if no pending jobs"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocalRunnerJob"
+                nullable: true
+                allOf:
+                - $ref: "#/components/schemas/LocalRunnerJob"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/checklist:
+    patch:
+      tags:
+      - Runners
+      summary: Patch runner checklist
+      description: Partial update of the runner's checklist (deep merge)
+      operationId: patchChecklist
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
         "204":
           description: No content
         "404":
@@ -4155,6 +4339,46 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/local-runners/{runnerId}/bridge/commands/{commandId}/results:
+    post:
+      tags:
+      - Runners
+      summary: Report bridge command result
+      description: Report bridge command completion or failure
+      operationId: reportBridgeResult
+      parameters:
+      - name: runnerId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: commandId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BridgeCommandResultRequest"
+      responses:
+        "204":
+          description: Result accepted
+        "404":
+          description: Command not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Already completed
           content:
             application/json:
               schema:
@@ -4674,6 +4898,118 @@ paths:
                 $ref: "#/components/schemas/OptimizationStudioLog"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/pairing/sessions/{sessionId}/activate:
+    post:
+      tags:
+      - Pairing
+      summary: Activate a pairing session
+      description: Verify the activation HMAC and flip the runner row to CONNECTED
+      operationId: activatePairingSession
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateRequest"
+      responses:
+        "201":
+          description: Session activated
+          headers:
+            Location:
+              description: URI of the runner
+              style: simple
+        "403":
+          description: Invalid HMAC
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Session already activated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Feature disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/pairing/sessions:
+    post:
+      tags:
+      - Pairing
+      summary: Create a pairing session
+      description: Register a short-lived pairing session that a local daemon will
+        later activate via HMAC
+      operationId: createPairingSession
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateSessionResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "422":
+          description: Unprocessable entity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "429":
+          description: Too many requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "501":
+          description: Feature disabled
           content:
             application/json:
               schema:
@@ -7590,10 +7926,11 @@ paths:
         determination, clients must never derive the version themselves.
 
         Determination logic (priority order):
-        1) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
-        2) Auth one-way V2 gate (authenticated mode only)
-        3) Version 1 entity check (entities without project_id)
-        4) Fallback on failure
+        1) V2 workspace allowlist (TOGGLE_V2_WORKSPACE_ALLOWLIST)
+        2) Feature flag override (TOGGLE_FORCE_WORKSPACE_VERSION)
+        3) Auth one-way V2 gate (authenticated mode only)
+        4) Version 1 entity check (entities without project_id)
+        5) Fallback on failure
 
         In unauthenticated mode (authentication.enabled=false), auth steps are skipped.
         Called by the frontend on workspace load.
@@ -8043,14 +8380,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8068,14 +8397,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     ErrorMessage_Public:
       type: object
       properties:
@@ -8139,14 +8460,6 @@ components:
       - type
       type: object
       properties:
-        id:
-          type: string
-          format: uuid
-          readOnly: true
-        project_id:
-          type: string
-          format: uuid
-          readOnly: true
         key:
           maxLength: 255
           minLength: 0
@@ -8164,14 +8477,6 @@ components:
           - prompt_commit
         description:
           type: string
-        valid_from_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
-        valid_to_blueprint_id:
-          type: string
-          format: uuid
-          readOnly: true
     BlueprintPage_History:
       type: object
       properties:
@@ -10975,7 +11280,16 @@ components:
           additionalProperties:
             type: object
     Message:
+      required:
+      - content
+      - role
       type: object
+      properties:
+        role:
+          minLength: 1
+          type: string
+        content:
+          $ref: "#/components/schemas/JsonNode"
     ResponseFormat:
       type: object
       properties:
@@ -11399,6 +11713,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     Dataset:
       required:
       - name
@@ -11789,6 +12104,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         assertion_results:
           type: array
           readOnly: true
@@ -12016,6 +12333,13 @@ components:
             format: uuid
         enrichment_options:
           $ref: "#/components/schemas/SpanEnrichmentOptions"
+        evaluators:
+          type: array
+          description: Optional evaluators to apply to the created items
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
     SpanEnrichmentOptions:
       type: object
       properties:
@@ -12047,6 +12371,13 @@ components:
             format: uuid
         enrichment_options:
           $ref: "#/components/schemas/TraceEnrichmentOptions"
+        evaluators:
+          type: array
+          description: Optional evaluators to apply to the created items
+          items:
+            $ref: "#/components/schemas/EvaluatorItem"
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
     TraceEnrichmentOptions:
       type: object
       properties:
@@ -12166,6 +12497,13 @@ components:
           type: string
           description: Custom prompt to use for generation instead of auto-generated
             one
+        max_completion_tokens:
+          minimum: 100
+          type: integer
+          description: "Maximum number of tokens for the LLM response. Required by\
+            \ Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults\
+            \ to 4000 for Anthropic models only."
+          format: int32
     DatasetExpansion_Write:
       required:
       - model
@@ -12201,6 +12539,13 @@ components:
           type: string
           description: Custom prompt to use for generation instead of auto-generated
             one
+        max_completion_tokens:
+          minimum: 100
+          type: integer
+          description: "Maximum number of tokens for the LLM response. Required by\
+            \ Anthropic, used as maxOutputTokens for Gemini. If not provided, defaults\
+            \ to 4000 for Anthropic models only."
+          format: int32
     AssertionResult_Compare:
       type: object
       properties:
@@ -12395,6 +12740,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -12469,6 +12815,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         assertion_results:
           type: array
           readOnly: true
@@ -13292,8 +13640,8 @@ components:
           type: string
         value:
           type: number
-      description: Per-assertion average pass rates for evaluation suite experiments.
-        Null for regular experiments.
+      description: Per-assertion average pass rates for test suite experiments. Null
+        for regular experiments.
       readOnly: true
     Experiment:
       required:
@@ -13422,24 +13770,24 @@ components:
           $ref: "#/components/schemas/DatasetVersionSummary"
         pass_rate:
           type: number
-          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
-            for regular experiments.
+          description: Pass rate for test suite experiments (0.0-1.0). Null for regular
+            experiments.
           readOnly: true
         passed_count:
           type: integer
-          description: Number of items that passed for evaluation suite experiments.
-            Null for regular experiments.
+          description: Number of items that passed for test suite experiments. Null
+            for regular experiments.
           format: int64
           readOnly: true
         total_count:
           type: integer
-          description: Total number of items for evaluation suite experiments. Null
-            for regular experiments.
+          description: Total number of items for test suite experiments. Null for
+            regular experiments.
           format: int64
           readOnly: true
         assertion_scores:
           type: array
-          description: Per-assertion average pass rates for evaluation suite experiments.
+          description: Per-assertion average pass rates for test suite experiments.
             Null for regular experiments.
           readOnly: true
           items:
@@ -13608,6 +13956,76 @@ components:
           items:
             type: string
             format: uuid
+    ExperimentExecutionResponse:
+      type: object
+      properties:
+        experiments:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentInfo"
+        total_items:
+          type: integer
+          format: int32
+    ExperimentInfo:
+      type: object
+      properties:
+        experiment_id:
+          type: string
+          format: uuid
+        prompt_index:
+          type: integer
+          format: int32
+    ExperimentExecutionRequest:
+      required:
+      - dataset_id
+      - dataset_name
+      - prompts
+      type: object
+      properties:
+        dataset_name:
+          minLength: 1
+          type: string
+        dataset_version_id:
+          type: string
+          format: uuid
+        prompts:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVariant"
+        project_name:
+          type: string
+        dataset_id:
+          type: string
+          format: uuid
+        version_hash:
+          type: string
+        prompt_versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersionLink"
+    PromptVariant:
+      required:
+      - messages
+      - model
+      type: object
+      properties:
+        model:
+          minLength: 1
+          type: string
+        messages:
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+        configs:
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/JsonNode"
+        prompt_versions:
+          type: array
+          items:
+            $ref: "#/components/schemas/PromptVersionLink"
     Check:
       type: object
       properties:
@@ -14227,8 +14645,8 @@ components:
           type: string
         value:
           type: number
-      description: Per-assertion average pass rates for evaluation suite experiments.
-        Null for regular experiments.
+      description: Per-assertion average pass rates for test suite experiments. Null
+        for regular experiments.
       readOnly: true
     Comment_Public:
       required:
@@ -14415,24 +14833,24 @@ components:
           $ref: "#/components/schemas/DatasetVersionSummary_Public"
         pass_rate:
           type: number
-          description: Pass rate for evaluation suite experiments (0.0-1.0). Null
-            for regular experiments.
+          description: Pass rate for test suite experiments (0.0-1.0). Null for regular
+            experiments.
           readOnly: true
         passed_count:
           type: integer
-          description: Number of items that passed for evaluation suite experiments.
-            Null for regular experiments.
+          description: Number of items that passed for test suite experiments. Null
+            for regular experiments.
           format: int64
           readOnly: true
         total_count:
           type: integer
-          description: Total number of items for evaluation suite experiments. Null
-            for regular experiments.
+          description: Total number of items for test suite experiments. Null for
+            regular experiments.
           format: int64
           readOnly: true
         assertion_scores:
           type: array
-          description: Per-assertion average pass rates for evaluation suite experiments.
+          description: Per-assertion average pass rates for test suite experiments.
             Null for regular experiments.
           readOnly: true
           items:
@@ -15529,31 +15947,32 @@ components:
         text:
           minLength: 1
           type: string
-    LocalRunnerConnectResponse:
+    BridgeCommandSubmitResponse:
       type: object
       properties:
-        runner_id:
+        command_id:
           type: string
           format: uuid
-        workspace_id:
-          type: string
-        project_id:
-          type: string
-          format: uuid
-        project_name:
-          type: string
-    LocalRunnerConnectRequest:
+    BridgeCommandSubmitRequest:
       required:
-      - pairing_code
-      - runner_name
+      - args
+      - type
       type: object
       properties:
-        pairing_code:
-          minLength: 1
+        type:
           type: string
-        runner_name:
-          minLength: 1
-          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
     CreateLocalRunnerJobRequest:
       required:
       - agent_name
@@ -15571,6 +15990,9 @@ components:
         mask_id:
           type: string
           format: uuid
+        blueprint_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         metadata:
           $ref: "#/components/schemas/LocalRunnerJobMetadata"
     LocalRunnerJobMetadata:
@@ -15588,25 +16010,53 @@ components:
         dataset_item_id:
           type: string
           format: uuid
-    LocalRunnerPairResponse:
+    BridgeCommand:
       type: object
       properties:
-        pairing_code:
+        command_id:
           type: string
+          format: uuid
         runner_id:
           type: string
           format: uuid
-        expires_in_seconds:
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        status:
+          type: string
+          enum:
+          - pending
+          - picked_up
+          - completed
+          - failed
+          - timed_out
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
           type: integer
           format: int32
-    LocalRunnerPairRequest:
-      required:
-      - project_id
-      type: object
-      properties:
-        project_id:
+        submitted_at:
           type: string
-          format: uuid
+          format: date-time
+        picked_up_at:
+          type: string
+          format: date-time
+        completed_at:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+          format: int64
     LocalRunnerJob:
       type: object
       properties:
@@ -15641,6 +16091,9 @@ components:
         mask_id:
           type: string
           format: uuid
+        blueprint_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
         metadata:
           $ref: "#/components/schemas/LocalRunnerJobMetadata"
         timeout:
@@ -15699,6 +16152,17 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Agent"
+        capabilities:
+          type: array
+          items:
+            type: string
+        checklist:
+          $ref: "#/components/schemas/JsonNode"
+        type:
+          type: string
+          enum:
+          - connect
+          - endpoint
     Param:
       required:
       - name
@@ -15711,6 +16175,11 @@ components:
         type:
           minLength: 1
           type: string
+        presence:
+          type: string
+          enum:
+          - required
+          - optional
     LocalRunnerHeartbeatResponse:
       type: object
       properties:
@@ -15719,6 +16188,13 @@ components:
           items:
             type: string
             format: uuid
+    LocalRunnerHeartbeatRequest:
+      type: object
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
     LocalRunnerJobPage:
       type: object
       properties:
@@ -15751,6 +16227,62 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/LocalRunner"
+    BridgeCommandBatchResponse:
+      type: object
+      properties:
+        commands:
+          type: array
+          items:
+            $ref: "#/components/schemas/BridgeCommandItem"
+    BridgeCommandItem:
+      type: object
+      properties:
+        command_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - ReadFile
+          - WriteFile
+          - EditFile
+          - ListFiles
+          - SearchFiles
+          - Exec
+        args:
+          $ref: "#/components/schemas/JsonNode"
+        timeout_seconds:
+          type: integer
+          format: int32
+        submitted_at:
+          type: string
+          format: date-time
+    BridgeCommandNextRequest:
+      type: object
+      properties:
+        max_commands:
+          type: integer
+          format: int32
+    BridgeCommandResultRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - pending
+          - picked_up
+          - completed
+          - failed
+          - timed_out
+        result:
+          $ref: "#/components/schemas/JsonNode"
+        error:
+          $ref: "#/components/schemas/JsonNode"
+        duration_ms:
+          type: integer
+          format: int64
     LocalRunnerJobResultRequest:
       required:
       - status
@@ -16394,6 +16926,53 @@ components:
           - cancelled
           - initialized
           - error
+    ActivateRequest:
+      required:
+      - hmac
+      - runner_name
+      type: object
+      properties:
+        runner_name:
+          maxLength: 128
+          minLength: 0
+          type: string
+        hmac:
+          maxLength: 44
+          minLength: 43
+          type: string
+    CreateSessionResponse:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        runner_id:
+          type: string
+          format: uuid
+    CreateSessionRequest:
+      required:
+      - activation_key
+      - project_id
+      - type
+      type: object
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        activation_key:
+          maxLength: 44
+          minLength: 43
+          type: string
+        ttl_seconds:
+          maximum: 600
+          minimum: 60
+          type: integer
+          format: int32
+        type:
+          type: string
+          enum:
+          - connect
+          - endpoint
     PromptPage_Public:
       type: object
       properties:
@@ -16676,7 +17255,6 @@ components:
     KpiCardRequest:
       required:
       - entity_type
-      - interval_end
       - interval_start
       type: object
       properties:
@@ -17046,6 +17624,7 @@ components:
           enum:
           - mustache
           - jinja2
+          - python
         template_structure:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
@@ -17109,6 +17688,7 @@ components:
           enum:
           - mustache
           - jinja2
+          - python
         change_description:
           type: string
         tags:
@@ -17178,6 +17758,7 @@ components:
           enum:
           - mustache
           - jinja2
+          - python
         template_structure:
           type: string
           description: "Template structure type: 'text' or 'chat'. Immutable after\
@@ -17221,6 +17802,7 @@ components:
           enum:
           - mustache
           - jinja2
+          - python
         change_description:
           type: string
         tags:
@@ -17281,16 +17863,6 @@ components:
           enum:
           - text
           - chat
-        exclude_blueprint_update_for_projects:
-          uniqueItems: true
-          type: array
-          description: Optional set of project IDs to exclude from automatic blueprint
-            creation when this prompt version is committed.
-          items:
-            type: string
-            description: Optional set of project IDs to exclude from automatic blueprint
-              creation when this prompt version is committed.
-            format: uuid
         project_id:
           type: string
           description: Project ID. Takes precedence over project_name when both are
@@ -17405,6 +17977,7 @@ components:
           enum:
           - mustache
           - jinja2
+          - python
         change_description:
           type: string
         tags:
@@ -17645,6 +18218,7 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
       type: object
@@ -17693,9 +18267,18 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
+        v2WorkspaceAllowlistIds:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         forceWorkspaceVersion:
           minLength: 1
           type: string
+        v2WorkspaceAllowlist:
+          type: string
+          writeOnly: true
     SpanBatchUpdate:
       required:
       - ids
@@ -18232,6 +18815,36 @@ components:
           type: boolean
           description: "Truncate image included in either input, output or metadata"
           default: true
+        exclude:
+          uniqueItems: true
+          type: array
+          description: Fields to exclude from the response
+          items:
+            type: string
+            description: Fields to exclude from the response
+            enum:
+            - name
+            - type
+            - start_time
+            - end_time
+            - input
+            - output
+            - metadata
+            - model
+            - provider
+            - tags
+            - usage
+            - error_info
+            - created_at
+            - created_by
+            - last_updated_by
+            - feedback_scores
+            - comments
+            - total_estimated_cost
+            - total_estimated_cost_version
+            - duration
+            - ttft
+            - source
         from_time:
           type: string
           description: Filter spans created from this time (ISO-8601 format).
@@ -18949,6 +19562,41 @@ components:
           description: "If true, returns attachment references like [file.png]; if\
             \ false, downloads and reinjects stripped attachments"
           default: false
+        exclude:
+          uniqueItems: true
+          type: array
+          description: Fields to exclude from the response
+          items:
+            type: string
+            description: Fields to exclude from the response
+            enum:
+            - name
+            - start_time
+            - end_time
+            - input
+            - output
+            - metadata
+            - tags
+            - error_info
+            - usage
+            - created_at
+            - created_by
+            - last_updated_by
+            - feedback_scores
+            - span_feedback_scores
+            - comments
+            - guardrails_validations
+            - total_estimated_cost
+            - span_count
+            - llm_span_count
+            - has_tool_spans
+            - duration
+            - ttft
+            - thread_id
+            - visibility_mode
+            - providers
+            - experiment
+            - source
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).

@@ -22,7 +22,7 @@ import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 
@@ -107,11 +107,9 @@ const OptimizationsNewConfigSidebar: React.FC<
           render={({ field }) => (
             <FormItem>
               <FormLabel className="comet-body-s-accented flex items-center gap-1">
-                Evaluation suite
+                Test suite
                 <ExplainerIcon
-                  {...EXPLAINERS_MAP[
-                    EXPLAINER_ID.whats_the_evaluation_suite_section
-                  ]}
+                  {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_section]}
                 />
               </FormLabel>
               <FormControl>

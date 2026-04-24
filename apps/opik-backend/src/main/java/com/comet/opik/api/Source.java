@@ -53,4 +53,12 @@ public enum Source {
         }
         return Optional.empty();
     }
+
+    /**
+     * Returns true for sources originating from SDK logging, i.e. {@link #SDK} or {@code null}
+     * for legacy rows that predate source tracking.
+     */
+    public static boolean isLoggingSource(Source source) {
+        return source == null || source == SDK;
+    }
 }

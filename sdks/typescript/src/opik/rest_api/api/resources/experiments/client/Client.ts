@@ -499,6 +499,97 @@ export class ExperimentsClient {
     }
 
     /**
+     * Creates experiments for each prompt variant and asynchronously processes all dataset items
+     *
+     * @param {OpikApi.ExperimentExecutionRequest} request
+     * @param {ExperimentsClient.RequestOptions} requestOptions - Request-specific configuration.
+     *
+     * @example
+     *     await client.experiments.executeExperiment({
+     *         datasetName: "dataset_name",
+     *         prompts: [{
+     *                 model: "model",
+     *                 messages: [{
+     *                         role: "role",
+     *                         content: {
+     *                             "key": "value"
+     *                         }
+     *                     }]
+     *             }],
+     *         datasetId: "dataset_id"
+     *     })
+     */
+    public executeExperiment(
+        request: OpikApi.ExperimentExecutionRequest,
+        requestOptions?: ExperimentsClient.RequestOptions,
+    ): core.HttpResponsePromise<OpikApi.ExperimentExecutionResponse> {
+        return core.HttpResponsePromise.fromPromise(this.__executeExperiment(request, requestOptions));
+    }
+
+    private async __executeExperiment(
+        request: OpikApi.ExperimentExecutionRequest,
+        requestOptions?: ExperimentsClient.RequestOptions,
+    ): Promise<core.WithRawResponse<OpikApi.ExperimentExecutionResponse>> {
+        const _headers: core.Fetcher.Args["headers"] = mergeHeaders(
+            this._options?.headers,
+            mergeOnlyDefinedHeaders({
+                "Comet-Workspace": requestOptions?.workspaceName ?? this._options?.workspaceName,
+            }),
+            requestOptions?.headers,
+        );
+        const _response = await core.fetcher({
+            url: core.url.join(
+                (await core.Supplier.get(this._options.baseUrl)) ??
+                    (await core.Supplier.get(this._options.environment)) ??
+                    environments.OpikApiEnvironment.Default,
+                "v1/private/experiments/execute",
+            ),
+            method: "POST",
+            headers: _headers,
+            contentType: "application/json",
+            queryParameters: requestOptions?.queryParams,
+            requestType: "json",
+            body: serializers.ExperimentExecutionRequest.jsonOrThrow(request, {
+                unrecognizedObjectKeys: "strip",
+                omitUndefined: true,
+            }),
+            timeoutMs: (requestOptions?.timeoutInSeconds ?? this._options?.timeoutInSeconds ?? 60) * 1000,
+            maxRetries: requestOptions?.maxRetries ?? this._options?.maxRetries,
+            withCredentials: true,
+            abortSignal: requestOptions?.abortSignal,
+            fetchFn: this._options?.fetch,
+            logging: this._options.logging,
+        });
+        if (_response.ok) {
+            return {
+                data: serializers.ExperimentExecutionResponse.parseOrThrow(_response.body, {
+                    unrecognizedObjectKeys: "passthrough",
+                    allowUnrecognizedUnionMembers: true,
+                    allowUnrecognizedEnumValues: true,
+                    skipValidation: true,
+                    breadcrumbsPrefix: ["response"],
+                }),
+                rawResponse: _response.rawResponse,
+            };
+        }
+
+        if (_response.error.reason === "status-code") {
+            throw new errors.OpikApiError({
+                statusCode: _response.error.statusCode,
+                body: _response.error.body,
+                rawResponse: _response.rawResponse,
+            });
+        }
+
+        return handleNonStatusCodeError(
+            _response.error,
+            _response.rawResponse,
+            "POST",
+            "/v1/private/experiments/execute",
+        );
+    }
+
+    /**
      * Record experiment items in bulk with traces, spans, and feedback scores. Maximum request size is 4MB.
      *
      * @param {OpikApi.ExperimentItemBulkUploadExperimentItemBulkWriteView} request

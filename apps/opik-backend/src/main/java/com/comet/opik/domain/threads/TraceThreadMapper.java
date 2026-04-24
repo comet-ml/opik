@@ -1,5 +1,6 @@
 package com.comet.opik.domain.threads;
 
+import com.comet.opik.api.Source;
 import com.comet.opik.api.TraceThreadStatus;
 import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.utils.RowUtils;
@@ -32,7 +33,7 @@ interface TraceThreadMapper {
     @Mapping(target = "lastMessage", ignore = true)
     @Mapping(target = "numberOfMessages", ignore = true)
     TraceThreadModel mapFromThreadIdModel(TraceThreadIdModel traceThread, String userName, TraceThreadStatus status,
-            Instant lastUpdatedAt);
+            Instant lastUpdatedAt, Source source);
 
     default TraceThreadModel mapFromRow(Row row) {
         return TraceThreadModel.builder()
@@ -64,6 +65,8 @@ interface TraceThreadMapper {
                 .firstMessage(RowUtils.getOptionalValue(row, "first_message", String.class))
                 .lastMessage(RowUtils.getOptionalValue(row, "last_message", String.class))
                 .numberOfMessages(RowUtils.getOptionalValue(row, "number_of_messages", Long.class))
+                .source(Source.fromString(RowUtils.getOptionalValue(row, "source", String.class))
+                        .orElse(null))
                 .build();
     }
 

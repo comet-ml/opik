@@ -1,12 +1,14 @@
-import { z } from "zod";
 import { Opik } from "opik";
 import { MockInstance } from "vitest";
-import { AgentConfigManager, Blueprint } from "@/agent-config";
+import { ConfigManager, Blueprint } from "@/agent-config";
+import { getGlobalBlueprintRegistry } from "@/agent-config/blueprintCache";
 import { OpikApiError } from "@/rest_api";
 import * as OpikApi from "@/rest_api/api";
 import { trackStorage } from "@/decorators/track";
 import { Prompt } from "@/prompt/Prompt";
 import { ChatPrompt } from "@/prompt/ChatPrompt";
+import { ConfigMismatchError } from "@/errors/agent-config/errors";
+import { PromptType } from "@/prompt/types";
 import {
   mockAPIFunction,
   createMockHttpResponsePromise,
@@ -28,7 +30,7 @@ const mockBlueprintResponse: OpikApi.AgentBlueprintPublic = {
 };
 
 
-describe("AgentConfigManager", () => {
+describe("ConfigManager", () => {
   let client: Opik;
   let createAgentConfigSpy: MockInstance<
     typeof client.api.agentConfigs.createAgentConfig
@@ -104,7 +106,7 @@ describe("AgentConfigManager", () => {
 
   describe("createBlueprint", () => {
     it("should call createAgentConfig (POST) then getBlueprintById and return a Blueprint", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
 
       const blueprint = await manager.createBlueprint({
         values: [
@@ -132,7 +134,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass serialized values through unchanged", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createBlueprint({
         values: [
           { key: "temperature", value: "0.8", type: "float" },
@@ -154,7 +156,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should use a client-side generated UUID in the POST body", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createBlueprint({ values: [{ key: "key", value: "val", type: "string" }] });
 
       const createCall = createAgentConfigSpy.mock.calls[0][0];
@@ -169,7 +171,7 @@ describe("AgentConfigManager", () => {
 
   describe("updateBlueprint", () => {
     it("should call updateAgentConfig (PATCH) then getBlueprintById and return a Blueprint", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
 
       const blueprint = await manager.updateBlueprint({
         values: [
@@ -196,7 +198,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should use a client-side generated UUID in the PATCH body", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.updateBlueprint({ values: [{ key: "key", value: "val", type: "string" }] });
 
       const updateCall = updateAgentConfigSpy.mock.calls[0][0];
@@ -210,7 +212,7 @@ describe("AgentConfigManager", () => {
 
   describe("createMask", () => {
     it("should call updateAgentConfig (PATCH) with type=mask and return the mask ID", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const maskId = await manager.createMask({
         values: [{ key: "temperature", value: "0.5", type: "float" }],
         description: "A/B variant",
@@ -227,7 +229,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass serialized mask values through unchanged", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.createMask({
         values: [{ key: "temperature", value: "0.5", type: "float" }],
       });
@@ -243,7 +245,7 @@ describe("AgentConfigManager", () => {
 
   describe("getBlueprint", () => {
     it("should call getLatestBlueprint when no options provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint();
 
       expect(retrieveProjectSpy).toHaveBeenCalledOnce();
@@ -255,7 +257,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should call getBlueprintById when id is provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint({ id: "blueprint-id-1" });
 
       expect(retrieveProjectSpy).not.toHaveBeenCalled();
@@ -268,7 +270,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should call getBlueprintByEnv when env is provided", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const blueprint = await manager.getBlueprint({ env: "production" });
 
       expect(retrieveProjectSpy).toHaveBeenCalledOnce();
@@ -281,7 +283,7 @@ describe("AgentConfigManager", () => {
     });
 
     it("should pass maskId to the underlying API call", async () => {
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       await manager.getBlueprint({ id: "bp-1", maskId: "mask-xyz" });
 
       expect(getBlueprintByIdSpy).toHaveBeenCalledWith(
@@ -295,7 +297,7 @@ describe("AgentConfigManager", () => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
 
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const result = await manager.getBlueprint({ id: "nonexistent" });
       expect(result).toBeNull();
     });
@@ -305,22 +307,9 @@ describe("AgentConfigManager", () => {
         throw new OpikApiError({ message: "Not found", statusCode: 404 });
       });
 
-      const manager = new AgentConfigManager("test-project", client);
+      const manager = new ConfigManager("test-project", client);
       const result = await manager.getBlueprint();
       expect(result).toBeNull();
-    });
-  });
-
-  describe("tagBlueprintWithEnv", () => {
-    it("should call createOrUpdateEnvs with correct payload", async () => {
-      const manager = new AgentConfigManager("test-project", client);
-      await manager.tagBlueprintWithEnv("blueprint-id-1", "production");
-
-      expect(retrieveProjectSpy).toHaveBeenCalledOnce();
-      expect(createOrUpdateEnvsSpy).toHaveBeenCalledWith({
-        projectId: "project-id-1",
-        envs: [{ envName: "production", blueprintId: "blueprint-id-1" }],
-      });
     });
   });
 });
@@ -387,7 +376,7 @@ describe("Blueprint prompt class hints", () => {
     return {
       id: "bp-prompt",
       type: "blueprint",
-      values: [{ key: "MyConfig.p", value: commit, type: "prompt" }],
+      values: [{ key: "p", value: commit, type: "prompt" }],
     };
   }
 
@@ -423,7 +412,7 @@ describe("Blueprint prompt class hints", () => {
       makePromptResponse("abc12345"),
       opik
     );
-    expect(bp.values["MyConfig.p"]).toBeInstanceOf(ChatPrompt);
+    expect(bp.values["p"]).toBeInstanceOf(ChatPrompt);
   });
 
   it("templateStructure=text returns Prompt", async () => {
@@ -432,46 +421,440 @@ describe("Blueprint prompt class hints", () => {
       makePromptResponse("abc12345"),
       opik
     );
-    expect(bp.values["MyConfig.p"]).toBeInstanceOf(Prompt);
+    expect(bp.values["p"]).toBeInstanceOf(Prompt);
   });
 });
 
-describe("getAgentConfigVersion option exclusivity", () => {
-  const schema = z.object({ model: z.string() }).describe("Cfg");
+describe("createConfig prompt project validation", () => {
+  let client: Opik;
+
+  /** Build a minimal Prompt with a given projectName (no backend needed). */
+  function makePrompt(projectName?: string): Prompt {
+    return new Prompt(
+      {
+        name: "test-prompt",
+        prompt: "Hello {{name}}",
+        type: PromptType.MUSTACHE,
+        synced: false,
+        projectName,
+      },
+      client,
+    );
+  }
+
+  /** Build a minimal ChatPrompt with a given projectName (no backend needed). */
+  function makeChatPrompt(projectName?: string): ChatPrompt {
+    return new ChatPrompt(
+      {
+        name: "test-chat-prompt",
+        messages: [{ role: "user", content: "Hi" }],
+        type: PromptType.MUSTACHE,
+        synced: false,
+        projectName,
+      },
+      client,
+    );
+  }
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+  });
+
+  it("should throw ConfigMismatchError when a Prompt field belongs to a different project", async () => {
+    const prompt = makePrompt("other-project");
+
+    await expect(
+      client.createConfig(
+        { systemPrompt: prompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError when a ChatPrompt field belongs to a different project", async () => {
+    const chatPrompt = makeChatPrompt("other-project");
+
+    await expect(
+      client.createConfig(
+        { systemPrompt: chatPrompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should include the field name in the error message", async () => {
+    const prompt = makePrompt("wrong-project");
+
+    await expect(
+      client.createConfig(
+        { myField: prompt },
+        { projectName: "test-project" },
+      ),
+    ).rejects.toThrow("myField");
+  });
+
+  it("should not throw ConfigMismatchError when a Prompt field has projectName matching the config project", async () => {
+    const prompt = makePrompt("test-project");
+
+    try {
+      await client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should not throw ConfigMismatchError when a Prompt field has no projectName set", async () => {
+    const prompt = makePrompt(undefined);
+
+    try {
+      await client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should not throw ConfigMismatchError for plain scalar values (no prompt instances)", async () => {
+    const getLatestSpy = vi
+      .spyOn(client.api.agentConfigs, "getLatestBlueprint")
+      .mockImplementation(() =>
+        (() => { throw new OpikApiError({ message: "Not found", statusCode: 404 }); })()
+      );
+    const createSpy = vi
+      .spyOn(client.api.agentConfigs, "createAgentConfig")
+      .mockImplementation(mockAPIFunction);
+    const getBySpy = vi
+      .spyOn(client.api.agentConfigs, "getBlueprintById")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({
+          id: "bp-1",
+          type: "blueprint" as OpikApi.AgentBlueprintPublicType,
+          values: [],
+        } as OpikApi.AgentBlueprintPublic)
+      );
+    const retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({ id: "proj-1", name: "test-project" })
+      );
+
+    await expect(
+      client.createConfig(
+        { temperature: 0.7, model: "gpt-4" },
+        { projectName: "test-project" },
+      ),
+    ).resolves.toBeDefined();
+
+    getLatestSpy.mockRestore();
+    createSpy.mockRestore();
+    getBySpy.mockRestore();
+    retrieveProjectSpy.mockRestore();
+  });
+
+  it("should validate against the resolved project when no explicit projectName option is given", async () => {
+    // client was created with projectName: "test-project", so that's what gets used
+    const prompt = makePrompt("different-project");
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }), // no options.projectName
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError for a prompt with a different projectName (e.g. from getPrompt)", async () => {
+    // Simulates a prompt returned by getPrompt({ projectName: "other-project" })
+    const prompt = new Prompt(
+      {
+        name: "fetched-prompt",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      client,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+
+  it("should throw ConfigMismatchError for a searchPrompts result from a different project", async () => {
+    // searchPrompts uses this.resolveProjectName() → "other-project" if client configured that way
+    const otherClient = new Opik({ projectName: "other-project" });
+    const prompt = new Prompt(
+      {
+        name: "search-result",
+        prompt: "Hello",
+        type: PromptType.MUSTACHE,
+        synced: true,
+        projectName: "other-project",
+      },
+      otherClient,
+    );
+
+    await expect(
+      client.createConfig({ systemPrompt: prompt }, { projectName: "test-project" }),
+    ).rejects.toBeInstanceOf(ConfigMismatchError);
+  });
+});
+
+describe("getOrCreateConfig prompt project validation", () => {
+  let client: Opik;
+  let retrieveProjectSpy: MockInstance<typeof client.api.projects.retrieveProject>;
+  let getBlueprintByEnvSpy: MockInstance<typeof client.api.agentConfigs.getBlueprintByEnv>;
+  let getLatestBlueprintSpy: MockInstance<typeof client.api.agentConfigs.getLatestBlueprint>;
+
+  /** Wrap a getOrCreateConfig call inside the track context required by the implementation. */
+  function callInsideTrack<T extends Record<string, unknown>>(
+    fallback: T,
+    opts?: { projectName?: string },
+  ) {
+    return trackStorage.run(
+      { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<
+        typeof trackStorage.run
+      >[0],
+      () => client.getOrCreateConfig({ fallback, ...opts }),
+    );
+  }
+
+  function makePrompt(projectName?: string): Prompt {
+    return new Prompt(
+      { name: "p", prompt: "Hi", type: PromptType.MUSTACHE, synced: false, projectName },
+      client,
+    );
+  }
+
+  function makeChatPrompt(projectName?: string): ChatPrompt {
+    return new ChatPrompt(
+      { name: "p", messages: [{ role: "user", content: "Hi" }], type: PromptType.MUSTACHE, synced: false, projectName },
+      client,
+    );
+  }
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+
+    retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockImplementation(() =>
+        createMockHttpResponsePromise({ id: "proj-1", name: "test-project" })
+      );
+
+    // Simulate empty project: both env-tagged and project-wide lookups return 404
+    getBlueprintByEnvSpy = vi
+      .spyOn(client.api.agentConfigs, "getBlueprintByEnv")
+      .mockImplementation(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+
+    getLatestBlueprintSpy = vi
+      .spyOn(client.api.agentConfigs, "getLatestBlueprint")
+      .mockImplementation(() => {
+        throw new OpikApiError({ message: "Not found", statusCode: 404 });
+      });
+  });
+
+  afterEach(() => {
+    retrieveProjectSpy.mockRestore();
+    getBlueprintByEnvSpy.mockRestore();
+    getLatestBlueprintSpy.mockRestore();
+  });
+
+  it("should throw ConfigMismatchError when fallback has a Prompt from a different project", async () => {
+    const prompt = makePrompt("other-project");
+
+    await expect(callInsideTrack({ systemPrompt: prompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
+  });
+
+  it("should throw ConfigMismatchError when fallback has a ChatPrompt from a different project", async () => {
+    const chatPrompt = makeChatPrompt("other-project");
+
+    await expect(callInsideTrack({ systemPrompt: chatPrompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
+  });
+
+  it("should include the field name in the error message", async () => {
+    const prompt = makePrompt("wrong-project");
+
+    await expect(callInsideTrack({ myField: prompt })).rejects.toThrow("myField");
+  });
+
+  it("should not throw ConfigMismatchError when fallback prompt belongs to the same project", async () => {
+    const prompt = makePrompt("test-project");
+
+    try {
+      await callInsideTrack({ systemPrompt: prompt });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+      // Other errors (serialization, blueprint field validation, etc.) are acceptable
+    }
+  });
+
+  it("should not throw ConfigMismatchError when fallback prompt has no projectName", async () => {
+    const prompt = makePrompt(undefined);
+
+    try {
+      await callInsideTrack({ systemPrompt: prompt });
+    } catch (error) {
+      if (error instanceof ConfigMismatchError) {
+        throw new Error(`Should not throw ConfigMismatchError, but got: ${(error as Error).message}`);
+      }
+    }
+  });
+
+  it("should validate against the resolved project when no explicit projectName option is given", async () => {
+    // client was created with projectName: "test-project"
+    const prompt = makePrompt("different-project");
+
+    await expect(callInsideTrack({ systemPrompt: prompt })).rejects.toBeInstanceOf(
+      ConfigMismatchError,
+    );
+  });
+});
+
+describe("getOrCreateConfig option exclusivity", () => {
   let client: Opik;
 
   beforeEach(() => {
     client = new Opik({ projectName: "test-project" });
   });
 
-  function callInsideTrack(opts: { fallback: { model: string }; projectName?: string; env?: string; latest?: boolean; version?: string }) {
+  function callInsideTrack(opts: { fallback?: { model: string }; projectName?: string; env?: string; version?: string }) {
     return trackStorage.run(
       { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<typeof trackStorage.run>[0],
-      () => client.getAgentConfigVersion(schema, opts)
+      () => client.getOrCreateConfig(opts as Parameters<typeof client.getOrCreateConfig>[0])
     );
   }
-
-  it("should throw when both latest and version are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, version: "v1" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
-  });
-
-  it("should throw when both latest and env are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
-  });
 
   it("should throw when both version and env are specified", async () => {
     await expect(
       callInsideTrack({ fallback: { model: "gpt-4" }, version: "v1", env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
+    ).rejects.toThrow("Only one of 'version' or 'env'");
+  });
+});
+
+describe("getOrCreateConfig — prompt readiness before auto-create", () => {
+  let client: Opik;
+  const notFound = new OpikApiError({ message: "Not found", statusCode: 404, rawResponse: {} as Response, body: undefined });
+
+  beforeEach(() => {
+    client = new Opik({ projectName: "test-project" });
+    vi.spyOn(client.api.projects, "retrieveProject").mockResolvedValue(
+      { id: "project-id", name: "test-project" } as never
+    );
   });
 
-  it("should throw when all three are specified", async () => {
-    await expect(
-      callInsideTrack({ fallback: { model: "gpt-4" }, latest: true, version: "v1", env: "prod" })
-    ).rejects.toThrow("Only one of 'latest', 'version', or 'env'");
+  afterEach(() => {
+    vi.restoreAllMocks();
+    getGlobalBlueprintRegistry().clear();
+  });
+
+  function callInsideTrack<T extends Record<string, unknown>>(fallback: T) {
+    return trackStorage.run(
+      { span: { update: vi.fn() }, trace: { update: vi.fn() } } as unknown as Parameters<typeof trackStorage.run>[0],
+      () => client.getOrCreateConfig({ fallback })
+    );
+  }
+
+  function makeSyncedPromptLike(): InstanceType<typeof Prompt> {
+    const obj = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(obj, "synced", { get: () => true, configurable: true });
+    Object.defineProperty(obj, "commit", { get: () => "commit-abc", configurable: true });
+    return obj;
+  }
+
+  function makeNeverSyncingPromptLike(): InstanceType<typeof Prompt> {
+    const obj = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(obj, "synced", { get: () => false, configurable: true });
+    Object.defineProperty(obj, "commit", { get: () => undefined, configurable: true });
+    Object.defineProperty(obj, "ready", { value: () => new Promise<void>(() => {}), configurable: true });
+    return obj;
+  }
+
+  it("returns backend config when all prompts are already synced", async () => {
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockImplementation(() =>
+      createMockHttpResponsePromise(mockBlueprintResponse)
+    );
+
+    const prompt = makeSyncedPromptLike();
+    const config = await callInsideTrack({ temperature: prompt });
+
+    expect(config.isFallback).toBe(false);
+    expect(config.blueprintId).toBe("blueprint-id-1");
+  });
+
+  it("returns backend config even when prompt is unsynced", async () => {
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockImplementation(() =>
+      createMockHttpResponsePromise(mockBlueprintResponse)
+    );
+
+    const prompt = makeNeverSyncingPromptLike();
+    const config = await callInsideTrack({ temperature: prompt });
+
+    expect(config.isFallback).toBe(false);
+    expect(config.blueprintId).toBe("blueprint-id-1");
+  });
+
+  it("returns fallback when prompt sync times out before auto-creating config", async () => {
+    vi.useFakeTimers();
+
+    try {
+      // Empty project: both env and latest return 404
+      vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockRejectedValue(notFound);
+      vi.spyOn(client.api.agentConfigs, "getLatestBlueprint").mockRejectedValue(notFound);
+      const createSpy = vi.spyOn(client.api.agentConfigs, "createAgentConfig").mockImplementation(mockAPIFunction);
+
+      // Prompt with ready() that never resolves (simulates sync hanging indefinitely)
+      const prompt = makeNeverSyncingPromptLike();
+
+      const promise = callInsideTrack({ system_prompt: prompt });
+
+      // Advance timers in chunks past AGENT_CONFIG_PROMPT_READY_TIMEOUT_MS (5500ms).
+      // IMPORTANT: We use chunked advancement with vi.advanceTimersByTimeAsync() instead of a single
+      // large advance. This is necessary due to a Vitest fake timer edge case with Promise.allSettled():
+      // _allPromptsSynced() uses Promise.race([Promise.allSettled(prompts.map(v => v.ready())), timeout]).
+      // When advancing timers in one large chunk, the microtask queue (Promise.then callbacks) doesn't
+      // fully flush before the race evaluates, causing the promise chain to hang. Chunked advancement
+      // allows the event loop to fully process microtasks between each timer advance, avoiding the issue.
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      const config = await promise;
+
+      // Unsynced prompts were not persisted to backend due to timeout
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(config.isFallback).toBe(true);
+      expect(config.system_prompt).toBe(prompt);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("returns fallback when prompt sync failed (ready resolved but synced is false)", async () => {
+    // Empty project: both env and latest return 404
+    vi.spyOn(client.api.agentConfigs, "getBlueprintByEnv").mockRejectedValue(notFound);
+    vi.spyOn(client.api.agentConfigs, "getLatestBlueprint").mockRejectedValue(notFound);
+    const createSpy = vi.spyOn(client.api.agentConfigs, "createAgentConfig").mockImplementation(mockAPIFunction);
+
+    // Prompt whose ready() resolves immediately but synced stays false (sync failed)
+    const prompt = Object.create(Prompt.prototype) as InstanceType<typeof Prompt>;
+    Object.defineProperty(prompt, "synced", { get: () => false, configurable: true });
+    Object.defineProperty(prompt, "commit", { get: () => undefined, configurable: true });
+    Object.defineProperty(prompt, "ready", { value: () => Promise.resolve(), configurable: true });
+
+    const config = await callInsideTrack({ system_prompt: prompt });
+
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(config.isFallback).toBe(true);
+    expect(config.system_prompt).toBe(prompt);
   });
 });
