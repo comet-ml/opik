@@ -12,6 +12,7 @@ import WorkspaceGuard from "@/v2/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
+import OptimizationStudioPageGuard from "@/v2/layout/OptimizationStudioPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
@@ -370,11 +371,17 @@ const optimizationsListRoute = createRoute({
 const optimizationsNewRoute = createRoute({
   path: "/new",
   getParentRoute: () => optimizationsRoute,
-  component: OptimizationsNewPage,
+  component: OptimizationStudioPageGuard,
   staticData: {
     param: "optimizationsNew",
     paramValue: "new",
   },
+});
+
+const optimizationsNewIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsNewRoute,
+  component: OptimizationsNewPage,
 });
 
 const optimizationCompareRedirectRoute = createRoute({
@@ -615,7 +622,7 @@ const routeTree = rootRoute.addChildren([
           playgroundRoute.addChildren([playgroundIndexRoute]),
           optimizationsRoute.addChildren([
             optimizationsListRoute,
-            optimizationsNewRoute,
+            optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
             optimizationCompareRedirectRoute,
             optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
           ]),
