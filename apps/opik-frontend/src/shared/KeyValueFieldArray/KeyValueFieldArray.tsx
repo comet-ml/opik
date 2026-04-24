@@ -74,13 +74,18 @@ function KeyValueFieldArray<T extends FieldValues>({
       {fields.length > 0 && (
         <div className="flex flex-col gap-2">
           {fields.map((field, index) => {
+            // React Hook Form stores nested errors by path segments (e.g.
+            // `errors.provider.headers[0].key` for a dotted `name`). Split the
+            // `ArrayPath` on `.` so `get` traverses each segment rather than
+            // treating the whole string as a single literal key.
+            const nameSegments = (name as string).split(".");
             const keyError = get(form.formState.errors, [
-              name as string,
+              ...nameSegments,
               index,
               "key",
             ]);
             const valueError = get(form.formState.errors, [
-              name as string,
+              ...nameSegments,
               index,
               "value",
             ]);

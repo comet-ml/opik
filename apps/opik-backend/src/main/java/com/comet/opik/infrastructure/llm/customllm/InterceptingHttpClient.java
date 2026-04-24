@@ -137,13 +137,24 @@ class InterceptingHttpClient implements HttpClient {
         boolean suppressDefault = Boolean.TRUE.toString().equalsIgnoreCase(
                 StringUtils.trimToNull(configuration.get(SUPPRESS_DEFAULT_AUTH_CONFIG_KEY)));
 
-        if (!addCustomHeader && !suppressDefault) {
+        // Only honour `suppress_default_auth` when there is a custom auth
+        // header to replace it with. Otherwise dropping `Authorization` would
+        // send an unauthenticated request upstream — almost never what the
+        // operator intended.
+        boolean effectiveSuppress = suppressDefault && addCustomHeader;
+        if (suppressDefault && !addCustomHeader) {
+            log.warn(
+                    "'{}' is true but '{}' is blank; keeping default Authorization header to avoid sending an unauthenticated request",
+                    SUPPRESS_DEFAULT_AUTH_CONFIG_KEY, AUTH_HEADER_NAME_CONFIG_KEY);
+        }
+
+        if (!addCustomHeader && !effectiveSuppress) {
             return headers;
         }
 
         var mutated = new LinkedHashMap<String, List<String>>(headers.size() + 1);
         for (Map.Entry<String, List<String>> entry : headers.entrySet()) {
-            if (suppressDefault && AUTHORIZATION_HEADER.equalsIgnoreCase(entry.getKey())) {
+            if (effectiveSuppress && AUTHORIZATION_HEADER.equalsIgnoreCase(entry.getKey())) {
                 continue;
             }
             mutated.put(entry.getKey(), entry.getValue());

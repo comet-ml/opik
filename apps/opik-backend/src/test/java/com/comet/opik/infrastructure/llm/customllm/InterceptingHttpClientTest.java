@@ -10,6 +10,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -161,5 +162,35 @@ class InterceptingHttpClientTest {
         var captor = ArgumentCaptor.forClass(HttpRequest.class);
         verify(delegate).execute(captor.capture());
         assertThat(captor.getValue().url()).isEqualTo(malformed);
+    }
+
+    /// `suppress_default_auth=true` must not cause the decorator to send an
+    /// unauthenticated request upstream. When no custom auth header is
+    /// configured, the suppression flag is ignored and the default
+    /// `Authorization` header is preserved. Guard against the foot-gun flagged
+    /// in PR review.
+    @Test
+    void suppressDefaultAuthIgnoredWhenNoCustomHeaderConfigured() {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder()
+                        .statusCode(200)
+                        .body("{}")
+                        .build());
+
+        var configuration = Map.of("suppress_default_auth", "true");
+        var client = new InterceptingHttpClient(delegate, configuration, "dummy-key");
+        var request = HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/chat/completions")
+                .addHeader("Authorization", "Bearer dummy-key")
+                .body("{\"model\":\"gpt-4o\"}")
+                .build();
+
+        client.execute(request);
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().headers())
+                .containsEntry("Authorization", List.of("Bearer dummy-key"));
     }
 }
