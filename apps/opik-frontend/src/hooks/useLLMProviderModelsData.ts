@@ -368,6 +368,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "baidu/ernie-4.5-vl-424b-a47b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
+      label: "baidu/qianfan-ocr-fast:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_1_6,
       label: "bytedance-seed/seed-1.6",
     },
@@ -679,6 +683,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
       label: "inception/mercury-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
+      label: "inclusionai/ling-2.6-1t:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
@@ -1811,6 +1819,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
+      label: "tencent/hy3-preview:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
