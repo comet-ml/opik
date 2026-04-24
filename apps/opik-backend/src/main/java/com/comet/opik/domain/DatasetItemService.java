@@ -1320,18 +1320,12 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
             int page, int size, String workspaceId) {
-        Optional<DatasetVersion> latestDatasetVersion = versionService.getLatestVersion(criteria.datasetId(),
-                workspaceId);
-
         // Each experiment in ClickHouse carries its own dataset_version_id. This fallback is only used
         // for legacy experiments that predate versioning and have an empty dataset_version_id.
         // The DAO SQL resolves it via: COALESCE(nullIf(dataset_version_id, ''), :versionId)
-        String legacyFallbackVersionId = latestDatasetVersion.map(v -> v.id().toString()).orElseGet(() -> {
-            log.info(
-                    "No versions found for dataset '{}', using empty string as fallback version to query experiment items",
-                    criteria.datasetId());
-            return "";
-        });
+        String legacyFallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId)
+                .map(UUID::toString)
+                .orElse("");
 
         log.info(
                 "Fetching items with experiment items for dataset '{}', legacy fallback version '{}'",
