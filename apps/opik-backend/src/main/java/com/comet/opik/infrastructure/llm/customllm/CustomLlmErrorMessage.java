@@ -60,11 +60,11 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
     /// so Custom LLM providers fronting a real OpenAI-compat backend surface
     /// the same status codes as the native provider (401 for invalid key, 429
     /// for rate limit, etc.). `InvalidAPIVersion` is the only Azure-specific
-    /// code we've actually seen in the wild (OPIK-4551, Standard Bank and
-    /// FAB) and is listed explicitly so the mapping is self-documenting.
-    /// Unrecognized codes fall back to 400 rather than 500, because a
-    /// provider that returned an error body at all is almost always telling
-    /// us the client request was at fault, not that its own server blew up.
+    /// code we've actually seen in the wild (OPIK-4551) and is listed
+    /// explicitly so the mapping is self-documenting. Unrecognized codes fall
+    /// back to 400 rather than 500, because a provider that returned an error
+    /// body at all is almost always telling us the client request was at
+    /// fault, not that its own server blew up.
     private static int getStatusCode(String code) {
         if (StringUtils.isBlank(code)) {
             return DEFAULT_STATUS;

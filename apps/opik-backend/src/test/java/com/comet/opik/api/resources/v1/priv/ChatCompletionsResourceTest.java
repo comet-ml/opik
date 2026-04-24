@@ -811,7 +811,7 @@ class ChatCompletionsResourceTest {
 
             // gpt-4o hits ModelCapabilities.supportsVision() == true, so the normalizer
             // takes the expandImagePlaceholders path and preserves structured content.
-            // AC #5 holds for Standard Bank's deployments (gpt-4o, gpt-4o-mini-ZA).
+            // AC #5 holds for vision-capable deployments fronting OpenAI-compat gateways.
             assertThat(status).isEqualTo(HttpStatus.SC_OK);
             assertThat(upstreamBody)
                     .contains("\"type\" : \"text\"")
