@@ -105,4 +105,61 @@ class InterceptingHttpClientTest {
         verify(delegate).execute(captor.capture());
         assertThat(captor.getValue().url()).isEqualTo(url);
     }
+
+    /// Query parameters must be appended before the fragment, not inside it.
+    /// A naive `contains("?")` check would treat a `?` inside a URL fragment as
+    /// an existing query string and corrupt the output. URIBuilder parses the
+    /// fragment separately and reattaches it after the rebuilt query.
+    @Test
+    void queryParamsRespectExistingFragment() {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder()
+                        .statusCode(200)
+                        .body("{}")
+                        .build());
+
+        var configuration = Map.of(
+                "url_query_params", "{\"api-version\":\"2024-08-01-preview\"}");
+        var client = new InterceptingHttpClient(delegate, configuration, "dummy-key");
+        var request = HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url("https://example.test/chat/completions#section?notAQuery")
+                .body("{\"model\":\"gpt-4o\"}")
+                .build();
+
+        client.execute(request);
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().url())
+                .isEqualTo("https://example.test/chat/completions?api-version=2024-08-01-preview#section?notAQuery");
+    }
+
+    /// Malformed URLs must not bubble a parse error up the call stack. The
+    /// decorator logs and forwards the URL unchanged, so the downstream provider
+    /// can return its own error instead of us crashing the request pipeline.
+    @Test
+    void malformedUrlIsForwardedUnchangedWithWarning() {
+        when(delegate.execute(any(HttpRequest.class)))
+                .thenReturn(SuccessfulHttpResponse.builder()
+                        .statusCode(200)
+                        .body("{}")
+                        .build());
+
+        var configuration = Map.of(
+                "url_query_params", "{\"api-version\":\"2024-08-01-preview\"}");
+        var client = new InterceptingHttpClient(delegate, configuration, "dummy-key");
+        var malformed = "ht!tp://not a url";
+        var request = HttpRequest.builder()
+                .method(HttpMethod.POST)
+                .url(malformed)
+                .body("{\"model\":\"gpt-4o\"}")
+                .build();
+
+        client.execute(request);
+
+        var captor = ArgumentCaptor.forClass(HttpRequest.class);
+        verify(delegate).execute(captor.capture());
+        assertThat(captor.getValue().url()).isEqualTo(malformed);
+    }
 }

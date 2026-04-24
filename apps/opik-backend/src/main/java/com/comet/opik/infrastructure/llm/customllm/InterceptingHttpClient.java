@@ -12,10 +12,10 @@ import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.http.client.utils.URIBuilder;
 
 import java.io.UncheckedIOException;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
+import java.net.URISyntaxException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -156,7 +156,7 @@ class InterceptingHttpClient implements HttpClient {
 
     private String applyQueryParams(String url) {
         String raw = configuration.get(URL_QUERY_PARAMS_CONFIG_KEY);
-        if (StringUtils.isBlank(raw)) {
+        if (StringUtils.isBlank(raw) || StringUtils.isBlank(url)) {
             return url;
         }
 
@@ -174,19 +174,21 @@ class InterceptingHttpClient implements HttpClient {
             return url;
         }
 
-        var sb = new StringBuilder(url);
-        char sep = url.contains("?") ? '&' : '?';
-        for (Map.Entry<String, String> entry : params.entrySet()) {
-            if (StringUtils.isBlank(entry.getKey())) {
-                continue;
+        // URIBuilder parses the URL (validating shape), handles the `?`/`&`
+        // separator, encodes keys/values, and preserves the fragment so the
+        // rebuilt URL stays correct for inputs like `https://host/path#x`.
+        try {
+            var builder = new URIBuilder(url);
+            for (Map.Entry<String, String> entry : params.entrySet()) {
+                if (StringUtils.isBlank(entry.getKey())) {
+                    continue;
+                }
+                builder.addParameter(entry.getKey(), entry.getValue() == null ? "" : entry.getValue());
             }
-            sb.append(sep)
-                    .append(URLEncoder.encode(entry.getKey(), StandardCharsets.UTF_8))
-                    .append('=')
-                    .append(URLEncoder.encode(entry.getValue() == null ? "" : entry.getValue(),
-                            StandardCharsets.UTF_8));
-            sep = '&';
+            return builder.build().toString();
+        } catch (URISyntaxException exception) {
+            log.warn("Failed to parse URL '{}' as URI; forwarding unchanged", url, exception);
+            return url;
         }
-        return sb.toString();
     }
 }
