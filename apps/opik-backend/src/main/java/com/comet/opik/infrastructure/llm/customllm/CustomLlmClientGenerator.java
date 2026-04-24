@@ -16,6 +16,7 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.net.http.HttpClient;
+import java.util.Map;
 import java.util.Optional;
 
 @RequiredArgsConstructor
@@ -25,16 +26,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
 
     public OpenAiClient newCustomLlmClient(@NonNull LlmProviderClientApiConfig config) {
-        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
-        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1);
-
-        JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
-                .httpClientBuilder(httpClientBuilder);
-
-        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
-                config.apiKey());
-
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotBlank)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -42,9 +33,16 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(baseUrl)
-                .httpClientBuilder(interceptingBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
+
+        // Only wire our decorator when the provider actually uses an OPIK-4551
+        // feature. Legacy providers (Ollama, vLLM, bare OpenAI-compat) fall back
+        // to LangChain4j's default HTTP client so their path is byte-identical
+        // to pre-OPIK-4551 behaviour.
+        if (requiresInterceptingBuilder(config)) {
+            openAiClientBuilder.httpClientBuilder(newInterceptingHttpClientBuilder(config));
+        }
 
         Optional.ofNullable(config.headers())
                 .filter(MapUtils::isNotEmpty)
@@ -67,16 +65,6 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
                 .orElseThrow(() -> new IllegalArgumentException(
                         "custom provider client not configured properly, missing url"));
 
-        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
-        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_1_1);
-
-        JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
-                .httpClientBuilder(httpClientBuilder);
-
-        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
-                config.apiKey());
-
         // Extract provider_name from configuration (null for legacy providers)
         String providerName = Optional.ofNullable(config.configuration())
                 .map(configuration -> configuration.get("provider_name"))
@@ -90,11 +78,15 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
-                .httpClientBuilder(interceptingBuilder)
                 .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)
                 .logResponses(true);
+
+        // See the comment in newCustomLlmClient — decorator only wired when needed.
+        if (requiresInterceptingBuilder(config)) {
+            builder.httpClientBuilder(newInterceptingHttpClientBuilder(config));
+        }
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> builder.timeout(connectTimeout.toJavaDuration()));
@@ -120,5 +112,35 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig config,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         return newCustomProviderChatLanguageModel(config, modelParameters);
+    }
+
+    /// Builds the Custom LLM decorator over a fresh `JdkHttpClientBuilder`. Only
+    /// invoked when the provider actually needs request mutation; keeps the HTTP/1.1
+    /// pinning that vLLM (FastAPI) relies on in place for the mutated path.
+    private InterceptingHttpClientBuilder newInterceptingHttpClientBuilder(LlmProviderClientApiConfig config) {
+        // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
+        HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1);
+
+        JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
+                .httpClientBuilder(httpClientBuilder);
+
+        return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey());
+    }
+
+    /// True when the request needs mutation by `InterceptingHttpClient`: the
+    /// provider either declares one of the OPIK-4551 configuration keys or uses
+    /// a `{model}` placeholder in its base URL.
+    private static boolean requiresInterceptingBuilder(LlmProviderClientApiConfig config) {
+        Map<String, String> configuration = config.configuration();
+        boolean hasNewConfigKeys = configuration != null
+                && (StringUtils.isNotBlank(configuration.get(InterceptingHttpClient.URL_QUERY_PARAMS_CONFIG_KEY))
+                        || StringUtils.isNotBlank(configuration.get(InterceptingHttpClient.AUTH_HEADER_NAME_CONFIG_KEY))
+                        || Boolean.TRUE.toString().equalsIgnoreCase(
+                                StringUtils.trimToNull(
+                                        configuration.get(InterceptingHttpClient.SUPPRESS_DEFAULT_AUTH_CONFIG_KEY))));
+        boolean hasModelPlaceholder = config.baseUrl() != null
+                && config.baseUrl().contains(InterceptingHttpClient.MODEL_PLACEHOLDER);
+        return hasNewConfigKeys || hasModelPlaceholder;
     }
 }
