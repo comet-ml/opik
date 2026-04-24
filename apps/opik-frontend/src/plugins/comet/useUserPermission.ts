@@ -234,6 +234,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canUseOptimizationStudio = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.OPTIMIZATION_STUDIO_USE,
+      ),
+    [checkNullablePermission],
+  );
+
   return {
     canInviteMembers,
     isWorkspaceOwner,
@@ -264,6 +272,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canAnnotateTraceSpanThread,
     canTagTrace,
     canUsePlayground,
+    canUseOptimizationStudio,
     isPending: isEnabled && isPending,
   };
 };
