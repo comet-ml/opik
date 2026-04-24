@@ -46,15 +46,14 @@ class ExperimentItemContent:
                 for rest_feedback_score in value.feedback_scores
             ]
 
-        raw_assertions = _extract_extra_field(value, "assertion_results")
-        if raw_assertions is None:
+        if value.assertion_results is None:
             assertion_results: List[AssertionResultDict] = []
         else:
             assertion_results = [
                 ar
                 if isinstance(ar, dict)
                 else {"value": ar.value, "passed": ar.passed, "reason": ar.reason}
-                for ar in raw_assertions
+                for ar in value.assertion_results
             ]
 
         return ExperimentItemContent(
@@ -66,9 +65,3 @@ class ExperimentItemContent:
             feedback_scores=feedback_scores,
             assertion_results=assertion_results,
         )
-
-
-def _extract_extra_field(model: Any, field_name: str) -> Any:
-    if hasattr(model, "model_extra") and model.model_extra:
-        return model.model_extra.get(field_name)
-    return getattr(model, field_name, None)

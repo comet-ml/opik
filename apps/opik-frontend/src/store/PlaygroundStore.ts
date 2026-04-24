@@ -433,7 +433,24 @@ const usePlaygroundStore = create<PlaygroundStore>()(
         set((state) => ({ ...state, datasetType: type }));
       },
       setExperimentByPromptId: (map) => {
-        set((state) => ({ ...state, experimentByPromptId: map }));
+        set((state) => {
+          // Test suites run on the BE, so updateOutput is never called and outputMap
+          // entries are never created. Seed empty entries so stale tracking works
+          // when the user changes prompt settings after a run.
+          const newOutputMap = { ...state.outputMap };
+          for (const promptId of Object.keys(map)) {
+            newOutputMap[promptId] ??= {
+              isLoading: false,
+              value: null,
+              stale: false,
+            };
+          }
+          return {
+            ...state,
+            experimentByPromptId: map,
+            outputMap: newOutputMap,
+          };
+        });
       },
     }),
     {
@@ -524,6 +541,14 @@ export const useOutputStaleStatusByPromptDatasetItemId = (
     useOutputByPromptDatasetItemId(promptId, datasetItemId)?.stale ?? false
   );
 };
+
+export const useIsPromptOutputStale = (promptId: string) =>
+  usePlaygroundStore((state) => {
+    const entry = state.outputMap?.[promptId];
+    if (!entry) return false;
+    if (!isPlaygroundOutputWithDatasetItem(entry)) return entry.stale;
+    return Object.values(entry.datasetItemMap).some((o) => o.stale);
+  });
 
 export const usePromptMap = () =>
   usePlaygroundStore((state) => state.promptMap);
