@@ -49,7 +49,7 @@ jobs:
         id: pick
         with:
           all-versions: ${{ vars.PYTHON_VERSIONS }}
-          match-regex: '^apps/opik-guardrails-backend/|^sdks/python/src/opik/guardrails/|^sdks/python/tests/e2e/test_guardrails\.py$'
+          match-regex: '^apps/opik-guardrails-backend/|^sdks/python/src/opik/guardrails/|^sdks/python/tests/e2e/test_guardrails\.py$|^\.github/workflows/guardrails_e2e_tests\.yml$'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   e2e-tests:

@@ -42,7 +42,7 @@ jobs:
               id: pick
               with:
                   all-versions: ${{ vars.PYTHON_VERSIONS }}
-                  match-regex: '^sdks/python/'
+                  match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
                   github-token: ${{ secrets.GITHUB_TOKEN }}
 
     run-e2e:
