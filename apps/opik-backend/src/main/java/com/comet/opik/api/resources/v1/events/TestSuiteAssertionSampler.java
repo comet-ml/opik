@@ -207,13 +207,15 @@ public class TestSuiteAssertionSampler {
         var itemId = itemIdOpt.get();
 
         return datasetEvaluatorsMono
-                .flatMap(result -> fetchItemEvaluators(itemId, result.versionId(), modelName)
-                        .map(itemEvals -> {
-                            var allEvaluators = new ArrayList<>(
-                                    evaluatorMapper.prepareEvaluators(result.evaluators(), modelName));
-                            allEvaluators.addAll(itemEvals);
-                            return allEvaluators;
-                        }))
+                .flatMap(result -> {
+                    var datasetEvals = evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
+                    return fetchItemEvaluators(itemId, result.versionId(), modelName)
+                            .map(itemEvals -> {
+                                var allEvaluators = new ArrayList<>(datasetEvals);
+                                allEvaluators.addAll(itemEvals);
+                                return allEvaluators;
+                            });
+                })
                 .flatMap(allEvaluators -> {
                     if (allEvaluators.isEmpty()) {
                         log.debug("No evaluators found for trace '{}', dataset item '{}'",
