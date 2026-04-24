@@ -331,7 +331,7 @@ Some custom providers may require additional HTTP headers beyond the API key for
 
 ##### Query Parameters
 
-Some gateways (notably Azure OpenAI behind API Management) require specific query parameters — most commonly `api-version` — on every request. Use the "Query parameters" section to add key/value pairs that Opik will append to every outbound URL.
+Some gateways require specific query parameters — such as a version identifier — on every request. Use the "Query parameters" section to add key/value pairs that Opik will append to every outbound URL.
 
 - Click **"+ Add query parameter"** to add a new pair
 - Enter the parameter name (e.g., `api-version`)
@@ -343,20 +343,20 @@ Parameters are URL-encoded automatically and appended with `?` or `&` as appropr
 
 ##### Auth Header Name and Suppressing the Default Authorization Header
 
-Most OpenAI-compatible providers expect an `Authorization: Bearer <key>` header — Opik sends this automatically. Some gateways (for example, Azure OpenAI behind API Management) expect the key in a differently-named header such as `api-key` or a tenant-specific name, sometimes without any `Authorization` header at all.
+Most OpenAI-compatible providers expect an `Authorization: Bearer <key>` header — Opik sends this automatically. Some gateways instead expect the key in a differently-named header (such as `api-key` or a tenant-specific name), sometimes without any `Authorization` header at all.
 
-- **Auth header name** (optional): If set, Opik sends the API key as `{name}: <key>` *in addition to* the default `Authorization: Bearer <key>` header. Most APIM gateways ignore the extra `Authorization` header, so this alone is often enough.
-- **Suppress default Authorization header** (toggle, default off): Turn this on only if your gateway explicitly rejects requests that include `Authorization: Bearer`. When on, Opik sends only the custom header configured above. Leave off for every existing provider — the default preserves today's behavior.
+- **Auth header name** (optional): If set, Opik sends the API key as `{name}: <key>` *in addition to* the default `Authorization: Bearer <key>` header. Most gateways ignore the extra `Authorization` header, so this alone is often enough.
+- **Suppress default Authorization header** (toggle, default off): Turn this on only if your gateway explicitly rejects requests that include `Authorization: Bearer`. When on, Opik sends only the custom header configured above.
 
 ##### URL Templates with `{model}`
 
-For multi-deployment gateways (for example, Azure OpenAI via APIM with many deployments), the deployment name is baked into the URL path rather than sent in the request body. Rather than creating a separate provider entry per deployment, you can write the URL once with `{model}` as a placeholder:
+When a gateway expects the model or deployment name in the URL path rather than in the request body, you can write the URL once with `{model}` as a placeholder instead of creating one provider entry per model:
 
 ```
-https://my-gateway.azure-api.net/openai/deployments/{model}
+https://my-gateway.example.com/deployments/{model}
 ```
 
-At request time Opik substitutes `{model}` with the deployment name of whichever model the end-user picked from the Models list. The Models field then contains all deployment names (e.g. `gpt-4o, gpt-4o-mini, gpt-4o-mini-ZA`), and the playground / Online Evaluation dropdown shows each one as a selectable model routed to its own upstream path.
+At request time Opik substitutes `{model}` with the name of whichever model the end-user picked from the Models list. The Models field then contains all supported names (e.g. `gpt-4o, gpt-4o-mini, llama-3.1-70b`), and the playground / Online Evaluation dropdown shows each one as a selectable model routed to its own upstream path.
 
 If your URL does not contain `{model}`, the substitution step is skipped and the URL is used verbatim — existing configurations are unaffected.
 
