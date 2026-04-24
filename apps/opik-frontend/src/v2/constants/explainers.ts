@@ -27,11 +27,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.i_added_traces_to_an_test_suite_now_what],
-    docLink: buildDocsUrl("/evaluation/overview", "#running-an-evaluation"),
+    docLink: buildDocsUrl("/evaluation/overview", "#the-evaluation-loop"),
   },
   [EXPLAINER_ID.i_added_items_to_a_dataset_now_what]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.i_added_items_to_a_dataset_now_what],
-    docLink: buildDocsUrl("/evaluation/overview", "#running-an-evaluation"),
+    docLink: buildDocsUrl("/evaluation/overview", "#the-evaluation-loop"),
   },
   [EXPLAINER_ID.hows_the_cost_estimated]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.hows_the_cost_estimated],
@@ -69,7 +69,10 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_the_experiment_configuration]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_experiment_configuration],
-    docLink: buildDocsUrl("/evaluation/concepts", "#experiment-configuration"),
+    docLink: buildDocsUrl(
+      "/evaluation/overview",
+      "#two-approaches-to-evaluation",
+    ),
   },
   [EXPLAINER_ID.what_does_it_mean_to_compare_my_experiments]: {
     ...BASE_EXPLAINERS[
@@ -82,11 +85,17 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.whats_the_test_suite_item]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_test_suite_item],
-    docLink: buildDocsUrl("/evaluation/concepts", "#experiments"),
+    docLink: buildDocsUrl(
+      "/evaluation/concepts",
+      "#test-suites-assertion-based-testing",
+    ),
   },
-  [EXPLAINER_ID.whats_an_test_suite]: {
-    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_an_test_suite],
-    docLink: buildDocsUrl("/evaluation/concepts", "#test-suites"),
+  [EXPLAINER_ID.whats_a_test_suite]: {
+    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_a_test_suite],
+    docLink: buildDocsUrl(
+      "/evaluation/concepts",
+      "#test-suites-assertion-based-testing",
+    ),
   },
   [EXPLAINER_ID.whats_the_prompt_library]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_prompt_library],

@@ -89,9 +89,9 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_test_suite_item],
     docLink: buildDocsUrl("/evaluation/concepts", "#experiments"),
   },
-  [EXPLAINER_ID.whats_an_test_suite]: {
-    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_an_test_suite],
-    docLink: buildDocsUrl("/evaluation/concepts", "#test-suites"),
+  [EXPLAINER_ID.whats_a_test_suite]: {
+    ...BASE_EXPLAINERS[EXPLAINER_ID.whats_a_test_suite],
+    docLink: buildDocsUrl("/evaluation/concepts", "#experiments"),
   },
   [EXPLAINER_ID.whats_the_prompt_library]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.whats_the_prompt_library],
@@ -207,11 +207,11 @@ export const EXPLAINERS_MAP: Record<EXPLAINER_ID, Explainer> = {
   },
   [EXPLAINER_ID.prompt_generation_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_generation_learn_more],
-    docLink: buildDocsUrl("/prompt_engineering/improve", "#generate"),
+    docLink: buildDocsUrl("/prompt_engineering/improve", "#prompt-generator"),
   },
   [EXPLAINER_ID.prompt_improvement_learn_more]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_learn_more],
-    docLink: buildDocsUrl("/prompt_engineering/improve", "#improve"),
+    docLink: buildDocsUrl("/prompt_engineering/improve", "#prompt-improver"),
   },
   [EXPLAINER_ID.prompt_improvement_optimizer]: {
     ...BASE_EXPLAINERS[EXPLAINER_ID.prompt_improvement_optimizer],
