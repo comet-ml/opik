@@ -24,9 +24,12 @@ from . import verifiers
 
 def _build_otlp_exporter(config: opik_config.OpikConfig) -> OTLPSpanExporter:
     """Build an OTLP exporter pointing at the Opik backend."""
-    endpoint = urllib.parse.urljoin(
-        config.url_override, "/api/v1/private/otel/v1/traces"
+    otel_path = (
+        "/api/v1/private/otel/v1/traces"
+        if config.url_override.endswith("5173")
+        else "/v1/private/otel/v1/traces"
     )
+    endpoint = urllib.parse.urljoin(config.url_override, otel_path)
     headers = {"Authorization": config.api_key or ""}
     if config.workspace:
         headers["Comet-Workspace"] = config.workspace
