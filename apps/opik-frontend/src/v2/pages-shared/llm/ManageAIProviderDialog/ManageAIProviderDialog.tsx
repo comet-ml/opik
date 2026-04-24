@@ -39,44 +39,11 @@ import { useProviderOptions } from "@/hooks/useProviderOptions";
 import ProviderSelectionStep from "@/v2/pages-shared/llm/SetupProviderDialog/ProviderSelectionStep";
 import ProviderConfigurationStep from "@/v2/pages-shared/llm/SetupProviderDialog/ProviderConfigurationStep";
 
-/**
- * Converts header array from form state to API-compatible object format
- * @param headersArray - Array of header key-value pairs from form
- * @param isEditing - Whether editing an existing custom provider
- * @returns Headers object, empty object to clear, or undefined
- *
- * Three cases handled:
- * 1. Non-empty array → Convert to object, filtering empty keys
- * 2. Empty array when editing → Return {} to clear headers from backend
- * 3. Empty array when creating → Return undefined (don't send headers field)
- */
-function convertHeadersForAPI(
-  headersArray: Array<{ key: string; value: string }> | undefined,
-  isEditing: boolean,
-): Record<string, string> | undefined {
-  if (headersArray === undefined) {
-    return undefined;
-  }
-
-  // Case 1: Convert non-empty array to object, filtering empty keys
-  if (headersArray.length > 0) {
-    return headersArray.reduce<Record<string, string>>((acc, header) => {
-      const trimmedKey = header.key.trim();
-      if (trimmedKey) {
-        acc[trimmedKey] = header.value;
-      }
-      return acc;
-    }, {});
-  }
-
-  // Case 2: Empty array when editing = clear headers from backend
-  if (isEditing) {
-    return {};
-  }
-
-  // Case 3: Empty array when creating = don't send headers field
-  return undefined;
-}
+import {
+  configStringToQueryParamsArray,
+  convertHeadersForAPI,
+  queryParamsArrayToConfigString,
+} from "./customProviderConfig";
 
 type Step = "select" | "configure";
 
@@ -161,6 +128,12 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
               id: uuidv4(),
             }))
           : [],
+      queryParams: configStringToQueryParamsArray(
+        providerKey?.configuration?.url_query_params,
+      ),
+      authHeaderName: providerKey?.configuration?.auth_header_name ?? "",
+      suppressDefaultAuth:
+        providerKey?.configuration?.suppress_default_auth === "true",
     } as AIProviderFormType,
   });
 
@@ -206,6 +179,9 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
       providerName: "",
       models: "",
       headers: [],
+      queryParams: [],
+      authHeaderName: "",
+      suppressDefaultAuth: false,
     });
     setStep("select");
   }, [form]);
@@ -245,6 +221,20 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
             }))
           : [],
       );
+      form.setValue(
+        "queryParams",
+        configStringToQueryParamsArray(
+          providerData?.configuration?.url_query_params,
+        ),
+      );
+      form.setValue(
+        "authHeaderName",
+        providerData?.configuration?.auth_header_name ?? "",
+      );
+      form.setValue(
+        "suppressDefaultAuth",
+        providerData?.configuration?.suppress_default_auth === "true",
+      );
 
       form.setValue("provider", providerType);
       form.setValue("composedProviderType", composedProviderType);
@@ -281,11 +271,27 @@ const ManageAIProviderDialog: React.FC<ManageAIProviderDialogProps> = ({
     const isOllama = provider === PROVIDER_TYPE.OLLAMA;
     const isCustomLike = isCustom || isBedrock || isOllama;
 
+    const queryParamsArray = form.getValues("queryParams");
+    const authHeaderName = form.getValues("authHeaderName");
+    const suppressDefaultAuth = form.getValues("suppressDefaultAuth");
+    const urlQueryParamsString = isCustomLike
+      ? queryParamsArrayToConfigString(queryParamsArray)
+      : undefined;
+    const trimmedAuthHeaderName =
+      isCustomLike && authHeaderName ? authHeaderName.trim() : "";
+    const authHeaderNameValue =
+      trimmedAuthHeaderName.length > 0 ? trimmedAuthHeaderName : undefined;
+    const suppressDefaultAuthValue =
+      isCustomLike && suppressDefaultAuth === true ? "true" : undefined;
+
     const configuration =
       isVertex || isCustomLike
         ? {
             location: isVertex ? location : undefined,
             models: isCustomLike ? models : undefined,
+            url_query_params: urlQueryParamsString,
+            auth_header_name: authHeaderNameValue,
+            suppress_default_auth: suppressDefaultAuthValue,
           }
         : undefined;
 

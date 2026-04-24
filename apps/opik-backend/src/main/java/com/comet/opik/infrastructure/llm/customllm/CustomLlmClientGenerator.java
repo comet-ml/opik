@@ -32,6 +32,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
+                config.apiKey());
+
         var baseUrl = Optional.ofNullable(config.baseUrl())
                 .filter(StringUtils::isNotBlank)
                 .orElseThrow(() -> new IllegalArgumentException(
@@ -39,7 +42,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var openAiClientBuilder = OpenAiClient.builder()
                 .baseUrl(baseUrl)
-                .httpClientBuilder(jdkHttpClientBuilder)
+                .httpClientBuilder(interceptingBuilder)
                 .logRequests(llmProviderClientConfig.getLogRequests())
                 .logResponses(llmProviderClientConfig.getLogResponses());
 
@@ -71,6 +74,9 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         JdkHttpClientBuilder jdkHttpClientBuilder = JdkHttpClient.builder()
                 .httpClientBuilder(httpClientBuilder);
 
+        var interceptingBuilder = new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(),
+                config.apiKey());
+
         // Extract provider_name from configuration (null for legacy providers)
         String providerName = Optional.ofNullable(config.configuration())
                 .map(configuration -> configuration.get("provider_name"))
@@ -84,7 +90,7 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
 
         var builder = OpikOpenAiChatModel.builder()
                 .baseUrl(baseUrl)
-                .httpClientBuilder(jdkHttpClientBuilder)
+                .httpClientBuilder(interceptingBuilder)
                 .modelName(actualModelName)
                 .apiKey(config.apiKey())
                 .logRequests(true)

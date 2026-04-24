@@ -11,63 +11,76 @@ import { Button } from "@/ui/button";
 import { Plus, Trash2 } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
 
+type KeyValueFieldName = "headers" | "queryParams";
+
 type CustomHeadersFieldProps = {
   form: UseFormReturn<AIProviderFormType>;
+  name?: KeyValueFieldName;
+  label?: string;
+  keyPlaceholder?: string;
+  valuePlaceholder?: string;
+  addButtonLabel?: string;
   description?: string;
 };
 
 const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
   form,
+  name = "headers",
+  label = "Custom headers (optional)",
+  keyPlaceholder = "Header name",
+  valuePlaceholder = "Header value",
+  addButtonLabel = "Add header",
   description = "Custom providers may require additional headers beyond the API key. Add them here as key-value pairs.",
 }) => {
   return (
     <FormField
       control={form.control}
-      name="headers"
+      name={name}
       render={({ field, formState }) => {
-        const headers = field.value || [];
+        const entries =
+          (field.value as Array<{
+            key: string;
+            value: string;
+            id: string;
+          }>) || [];
 
-        const addHeader = () => {
-          field.onChange([...headers, { key: "", value: "", id: uuidv4() }]);
+        const addEntry = () => {
+          field.onChange([...entries, { key: "", value: "", id: uuidv4() }]);
         };
 
-        const removeHeader = (id: string) => {
-          const newHeaders = headers.filter((h) => h.id !== id);
-          field.onChange(newHeaders);
+        const removeEntry = (id: string) => {
+          const next = entries.filter((h) => h.id !== id);
+          field.onChange(next);
         };
 
-        const updateHeader = (id: string, key: string, value: string) => {
-          const newHeaders = headers.map((h) =>
+        const updateEntry = (id: string, key: string, value: string) => {
+          const next = entries.map((h) =>
             h.id === id ? { ...h, key, value } : h,
           );
-          field.onChange(newHeaders);
+          field.onChange(next);
         };
 
-        const getHeaderError = (index: number, fieldName: "key" | "value") => {
-          return get(formState.errors, ["headers", index, fieldName]);
+        const getFieldError = (index: number, fieldName: "key" | "value") => {
+          return get(formState.errors, [name, index, fieldName]);
         };
 
         return (
           <FormItem>
-            <Label>Custom headers (optional)</Label>
+            <Label>{label}</Label>
             <div className="flex flex-col gap-2">
-              {headers.map((header, index) => {
-                const keyError = getHeaderError(index, "key");
-                const valueError = getHeaderError(index, "value");
+              {entries.map((entry, index) => {
+                const keyError = getFieldError(index, "key");
+                const valueError = getFieldError(index, "value");
 
                 return (
-                  <div key={header.id} className="flex flex-col gap-1">
+                  <div key={entry.id} className="flex flex-col gap-1">
                     <div className="flex gap-2">
                       <div className="flex-1">
                         <Input
-                          placeholder="Header name"
-                          value={header.key}
+                          placeholder={keyPlaceholder}
+                          value={entry.key}
                           onChange={(e) =>
-                            updateHeader(
-                              header.id,
-                              e.target.value,
-                              header.value,
-                            )
+                            updateEntry(entry.id, e.target.value, entry.value)
                           }
                           className={cn("w-full", {
                             "border-destructive": Boolean(keyError),
@@ -81,10 +94,10 @@ const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
                       </div>
                       <div className="flex-1">
                         <Input
-                          placeholder="Header value"
-                          value={header.value}
+                          placeholder={valuePlaceholder}
+                          value={entry.value}
                           onChange={(e) =>
-                            updateHeader(header.id, header.key, e.target.value)
+                            updateEntry(entry.id, entry.key, e.target.value)
                           }
                           className={cn("w-full", {
                             "border-destructive": Boolean(valueError),
@@ -100,7 +113,7 @@ const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
                         type="button"
                         variant="ghost"
                         size="icon"
-                        onClick={() => removeHeader(header.id)}
+                        onClick={() => removeEntry(entry.id)}
                         className="shrink-0"
                       >
                         <Trash2 className="comet-body-s" />
@@ -113,11 +126,11 @@ const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={addHeader}
+                onClick={addEntry}
                 className="w-fit"
               >
                 <Plus className="mr-1.5 size-3.5" />
-                Add header
+                {addButtonLabel}
               </Button>
             </div>
             <Description>{description}</Description>
