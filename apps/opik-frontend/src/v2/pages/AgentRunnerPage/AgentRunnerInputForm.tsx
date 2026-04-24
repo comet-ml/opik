@@ -64,7 +64,9 @@ const buildSchema = (fields: AgentParam[]) => {
     } else if (isFieldRequired(field)) {
       shape[field.name] = z
         .string()
-        .refine((v) => v.trim().length > 0, { message: "This field is required" });
+        .refine((v) => v.trim().length > 0, {
+          message: "This field is required",
+        });
     } else {
       shape[field.name] = z.string();
     }
