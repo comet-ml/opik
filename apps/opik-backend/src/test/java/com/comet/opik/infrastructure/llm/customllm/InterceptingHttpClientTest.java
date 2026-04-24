@@ -18,20 +18,25 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/// Unit coverage for behavioural edge cases in the Custom LLM decorator that
-/// are awkward to reach through the WireMock integration tests.
+/**
+ * Unit coverage for behavioural edge cases in the Custom LLM decorator that
+ * are awkward to reach through the WireMock integration tests.
+ */
 @ExtendWith(MockitoExtension.class)
 class InterceptingHttpClientTest {
 
     @Mock
     private HttpClient delegate;
 
-    /// Regression guard for the NPE risk flagged in PR review: if the decorator is
-    /// constructed with `configuration == null` and the incoming URL carries a
-    /// `{model}` placeholder, `mutate()` must still route the request through the
-    /// delegate without dereferencing the null map. The constructor normalizes
-    /// null to `Map.of()` so `applyQueryParams` and `applyAuthHeaders` can call
-    /// `configuration.get(...)` safely.
+    /**
+     * Regression guard for the NPE risk flagged in PR review: if the
+     * decorator is constructed with {@code configuration == null} and the
+     * incoming URL carries a {@code {model}} placeholder, {@code mutate()}
+     * must still route the request through the delegate without dereferencing
+     * the null map. The constructor normalizes null to {@code Map.of()} so
+     * {@code applyQueryParams} and {@code applyAuthHeaders} can call
+     * {@code configuration.get(...)} safely.
+     */
     @Test
     void nullConfigurationWithModelPlaceholderStillSubstitutesWithoutNpe() {
         when(delegate.execute(any(HttpRequest.class)))
@@ -55,9 +60,11 @@ class InterceptingHttpClientTest {
                 .isEqualTo("https://example.test/openai/deployments/gpt-4o-mini-ZA/chat/completions");
     }
 
-    /// Empty configuration + no placeholder is a pure pass-through — the request
-    /// object handed to the delegate must be identity-equal to the one we
-    /// received, proving zero allocations on the legacy no-op path.
+    /**
+     * Empty configuration + no placeholder is a pure pass-through — the
+     * request object handed to the delegate must be identity-equal to the one
+     * we received, proving zero allocations on the legacy no-op path.
+     */
     @Test
     void emptyConfigurationAndNoPlaceholderIsPureNoOp() {
         when(delegate.execute(any(HttpRequest.class)))
@@ -80,10 +87,13 @@ class InterceptingHttpClientTest {
         assertThat(captor.getValue()).isSameAs(request);
     }
 
-    /// Malformed JSON body in the request with a `{model}` placeholder must not
-    /// bubble the parse error up — it logs and forwards the URL unchanged so
-    /// the downstream provider sees what LangChain4j built. Confirms the narrow
-    /// `UncheckedIOException` catch from the Baz review fix.
+    /**
+     * Malformed JSON body in the request with a {@code {model}} placeholder
+     * must not bubble the parse error up — it logs and forwards the URL
+     * unchanged so the downstream provider sees what LangChain4j built.
+     * Confirms the narrow {@code UncheckedIOException} catch from the Baz
+     * review fix.
+     */
     @Test
     void malformedJsonBodyWithPlaceholderForwardsUrlUnchanged() {
         when(delegate.execute(any(HttpRequest.class)))
@@ -107,10 +117,13 @@ class InterceptingHttpClientTest {
         assertThat(captor.getValue().url()).isEqualTo(url);
     }
 
-    /// Query parameters must be appended before the fragment, not inside it.
-    /// A naive `contains("?")` check would treat a `?` inside a URL fragment as
-    /// an existing query string and corrupt the output. URIBuilder parses the
-    /// fragment separately and reattaches it after the rebuilt query.
+    /**
+     * Query parameters must be appended before the fragment, not inside it.
+     * A naive {@code contains("?")} check would treat a {@code ?} inside a
+     * URL fragment as an existing query string and corrupt the output.
+     * URIBuilder parses the fragment separately and reattaches it after the
+     * rebuilt query.
+     */
     @Test
     void queryParamsRespectExistingFragment() {
         when(delegate.execute(any(HttpRequest.class)))
@@ -136,9 +149,12 @@ class InterceptingHttpClientTest {
                 .isEqualTo("https://example.test/chat/completions?api-version=2024-08-01-preview#section?notAQuery");
     }
 
-    /// Malformed URLs must not bubble a parse error up the call stack. The
-    /// decorator logs and forwards the URL unchanged, so the downstream provider
-    /// can return its own error instead of us crashing the request pipeline.
+    /**
+     * Malformed URLs must not bubble a parse error up the call stack. The
+     * decorator logs and forwards the URL unchanged, so the downstream
+     * provider can return its own error instead of us crashing the request
+     * pipeline.
+     */
     @Test
     void malformedUrlIsForwardedUnchangedWithWarning() {
         when(delegate.execute(any(HttpRequest.class)))
@@ -164,11 +180,13 @@ class InterceptingHttpClientTest {
         assertThat(captor.getValue().url()).isEqualTo(malformed);
     }
 
-    /// `suppress_default_auth=true` must not cause the decorator to send an
-    /// unauthenticated request upstream. When no custom auth header is
-    /// configured, the suppression flag is ignored and the default
-    /// `Authorization` header is preserved. Guard against the foot-gun flagged
-    /// in PR review.
+    /**
+     * {@code suppress_default_auth=true} must not cause the decorator to send
+     * an unauthenticated request upstream. When no custom auth header is
+     * configured, the suppression flag is ignored and the default
+     * {@code Authorization} header is preserved. Guard against the foot-gun
+     * flagged in PR review.
+     */
     @Test
     void suppressDefaultAuthIgnoredWhenNoCustomHeaderConfigured() {
         when(delegate.execute(any(HttpRequest.class)))

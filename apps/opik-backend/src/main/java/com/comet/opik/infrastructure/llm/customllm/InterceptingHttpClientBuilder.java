@@ -8,12 +8,14 @@ import lombok.RequiredArgsConstructor;
 import java.time.Duration;
 import java.util.Map;
 
-/// Decorates a `HttpClientBuilder` so the produced `HttpClient` is wrapped with
-/// `InterceptingHttpClient` to apply Custom LLM-specific request mutations
-/// (query params, auth headers, `{model}` substitution).
-///
-/// Timeout setter calls are forwarded to the delegate so existing configuration
-/// behavior (LC4j connect/read timeouts) is preserved intact.
+/**
+ * Decorates an {@link HttpClientBuilder} so the produced {@link HttpClient} is
+ * wrapped with {@link InterceptingHttpClient} to apply Custom LLM-specific
+ * request mutations (query params, auth headers, {@code {model}} substitution).
+ *
+ * <p>Timeout setter calls are forwarded to the delegate so existing
+ * configuration behavior (LC4j connect/read timeouts) is preserved intact.
+ */
 @RequiredArgsConstructor
 class InterceptingHttpClientBuilder implements HttpClientBuilder {
 

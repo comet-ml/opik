@@ -1,28 +1,33 @@
 package com.comet.opik.infrastructure.llm.customllm;
 
 import com.comet.opik.infrastructure.llm.LlmProviderError;
+import com.comet.opik.infrastructure.llm.OpenAiCompatStatusCodes;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.dropwizard.jersey.errors.ErrorMessage;
 import org.apache.commons.lang3.StringUtils;
 
-/// Deserializes error bodies from OpenAI-compatible Custom LLM providers and
-/// maps them into Opik's `ErrorMessage` DTO.
-///
-/// Two error shapes are supported out of the box:
-///   - Text shape: `{"error": "message"}` — historical behavior; the string
-///     value becomes the user-visible message with HTTP 400.
-///   - Object shape: `{"error": {"code": "...", "message": "..."}}` — used by
-///     OpenAI itself, Azure OpenAI, and many APIM-style gateways. The nested
-///     `message` surfaces to the caller; the `code` is mapped to an HTTP
-///     status via the same switch as `OpenAiErrorMessage.getCode`, falling
-///     back to 400 for unrecognized codes (Azure / gateway-specific) instead
-///     of 500. This keeps gateway-level errors represented as client errors
-///     rather than server errors.
-///
-/// Anything else (missing field, null, unexpected shape) falls back to the
-/// JSON-serialized form so the error still reaches the caller rather than
-/// being swallowed into a generic 500.
+/**
+ * Deserializes error bodies from OpenAI-compatible Custom LLM providers and
+ * maps them into Opik's {@link ErrorMessage} DTO.
+ *
+ * <p>Two error shapes are supported out of the box:
+ * <ul>
+ *   <li>Text shape: {@code {"error": "message"}} — historical behavior; the string
+ *       value becomes the user-visible message with HTTP 400.</li>
+ *   <li>Object shape: {@code {"error": {"code": "...", "message": "..."}}} — used by
+ *       OpenAI itself, Azure OpenAI, and many APIM-style gateways. The nested
+ *       {@code message} surfaces to the caller; the {@code code} is mapped to an HTTP
+ *       status via {@link OpenAiCompatStatusCodes} (with Azure-specific codes
+ *       layered on top), falling back to 400 for unrecognized codes instead
+ *       of 500. This keeps gateway-level errors represented as client errors
+ *       rather than server errors.</li>
+ * </ul>
+ *
+ * <p>Anything else (missing field, null, unexpected shape) falls back to the
+ * JSON-serialized form so the error still reaches the caller rather than
+ * being swallowed into a generic 500.
+ */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<JsonNode> {
 
@@ -56,26 +61,27 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
         return error;
     }
 
-    /// Mirrors the OpenAI-compat code mapping in `OpenAiErrorMessage.getCode`
-    /// so Custom LLM providers fronting a real OpenAI-compat backend surface
-    /// the same status codes as the native provider (401 for invalid key, 429
-    /// for rate limit, etc.). `InvalidAPIVersion` is the only Azure-specific
-    /// code we've actually seen in the wild (OPIK-4551) and is listed
-    /// explicitly so the mapping is self-documenting. Unrecognized codes fall
-    /// back to 400 rather than 500, because a provider that returned an error
-    /// body at all is almost always telling us the client request was at
-    /// fault, not that its own server blew up.
+    /**
+     * Maps the error {@code code} string to an HTTP status. Delegates the core
+     * OpenAI-compat codes to {@link OpenAiCompatStatusCodes} so the mapping
+     * stays centralized across every provider wrapper, then layers
+     * Azure/APIM-specific codes we have seen in the wild (OPIK-4551) on top.
+     * Unrecognized codes fall back to 400 rather than 500 because a provider
+     * that returned an error body at all is almost always telling us the
+     * client request was at fault, not that its own server blew up.
+     *
+     * @param code the error code string from the provider (may be blank)
+     * @return the mapped HTTP status
+     */
     private static int getStatusCode(String code) {
         if (StringUtils.isBlank(code)) {
             return DEFAULT_STATUS;
         }
+        Integer mapped = OpenAiCompatStatusCodes.fromCode(code);
+        if (mapped != null) {
+            return mapped;
+        }
         return switch (code) {
-            case "invalid_api_key" -> 401;
-            case "internal_error" -> 500;
-            case "invalid_request_error" -> 400;
-            case "rate_limit_exceeded" -> 429;
-            case "insufficient_quota" -> 402;
-            case "model_not_found" -> 404;
             case "InvalidAPIVersion" -> 400;
             default -> DEFAULT_STATUS;
         };

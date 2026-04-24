@@ -20,27 +20,32 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/// HTTP client decorator for the Custom LLM provider that mutates outgoing
-/// requests based on optional configuration keys.
-///
-/// Current responsibilities:
-///   - Substitutes a `{model}` placeholder in the base URL with the model
-///     name from the outgoing request body. Lets a single provider entry
-///     serve many deployments on gateways that bake the deployment into
-///     the path (e.g. Azure APIM `/deployments/{deployment}/chat/completions`).
-///   - Appends entries from `configuration["url_query_params"]` (JSON-encoded
-///     `Map<String, String>`) to the outgoing URL as query parameters.
-///   - Adds a custom auth header `{name}: {apiKey}` when
-///     `configuration["auth_header_name"]` is set. Appends alongside the
-///     default `Authorization: Bearer` header unless it is suppressed.
-///   - Removes the default `Authorization: Bearer <apiKey>` header when
-///     `configuration["suppress_default_auth"]` is `"true"`. Used by
-///     gateways whose policy rejects an `Authorization` header.
-///
-/// When none of the relevant config keys are set and no `{model}` placeholder
-/// is present, the decorator is a pure no-op — preserving the existing Custom
-/// LLM provider contract byte-for-byte with what LangChain4j's `OpenAiClient`
-/// already produced.
+/**
+ * HTTP client decorator for the Custom LLM provider that mutates outgoing
+ * requests based on optional configuration keys.
+ *
+ * <p>Current responsibilities:
+ * <ul>
+ *   <li>Substitutes a {@code {model}} placeholder in the base URL with the model
+ *       name from the outgoing request body. Lets a single provider entry serve
+ *       many deployments on gateways that bake the deployment into the path
+ *       (e.g. Azure APIM {@code /deployments/{deployment}/chat/completions}).</li>
+ *   <li>Appends entries from {@code configuration["url_query_params"]}
+ *       (JSON-encoded {@code Map<String, String>}) to the outgoing URL as query
+ *       parameters.</li>
+ *   <li>Adds a custom auth header {@code {name}: {apiKey}} when
+ *       {@code configuration["auth_header_name"]} is set. Appends alongside the
+ *       default {@code Authorization: Bearer} header unless it is suppressed.</li>
+ *   <li>Removes the default {@code Authorization: Bearer <apiKey>} header when
+ *       {@code configuration["suppress_default_auth"]} is {@code "true"}. Used
+ *       by gateways whose policy rejects an {@code Authorization} header.</li>
+ * </ul>
+ *
+ * <p>When none of the relevant config keys are set and no {@code {model}}
+ * placeholder is present, the decorator is a pure no-op — preserving the
+ * existing Custom LLM provider contract byte-for-byte with what LangChain4j's
+ * {@code OpenAiClient} already produced.
+ */
 @Slf4j
 class InterceptingHttpClient implements HttpClient {
 
@@ -58,9 +63,12 @@ class InterceptingHttpClient implements HttpClient {
     private final Map<String, String> configuration;
     private final String apiKey;
 
-    /// Normalizes a null `configuration` to an empty map so helpers can call
-    /// `configuration.get(...)` unconditionally. Keeps `{model}`-only providers
-    /// (which may carry no new config keys yet still reach `mutate()`) safe.
+    /**
+     * Normalizes a null {@code configuration} to an empty map so helpers can
+     * call {@code configuration.get(...)} unconditionally. Keeps
+     * {@code {model}}-only providers (which may carry no new config keys yet
+     * still reach {@code mutate()}) safe.
+     */
     InterceptingHttpClient(@NonNull HttpClient delegate, Map<String, String> configuration, String apiKey) {
         this.delegate = delegate;
         this.configuration = configuration != null ? configuration : Map.of();
@@ -198,7 +206,7 @@ class InterceptingHttpClient implements HttpClient {
             }
             return builder.build().toString();
         } catch (URISyntaxException exception) {
-            log.warn("Failed to parse URL '{}' as URI; forwarding unchanged", url, exception);
+            log.warn("Failed to parse custom provider URL as URI; forwarding unchanged", exception);
             return url;
         }
     }

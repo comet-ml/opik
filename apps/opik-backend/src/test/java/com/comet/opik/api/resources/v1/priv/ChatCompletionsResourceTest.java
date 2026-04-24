@@ -399,8 +399,6 @@ class ChatCompletionsResourceTest {
             var status = raw.getStatus();
             var body = raw.readEntity(String.class);
 
-            System.out.printf("[openAiStyle] status=%d body=%s%n", status, body);
-
             // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream
             // status (see CustomLlmErrorMessage.java:10). Message text does propagate cleanly.
             assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
@@ -436,7 +434,6 @@ class ChatCompletionsResourceTest {
             var raw = postChatCompletion(workspaceName, request);
             var status = raw.getStatus();
             var body = raw.readEntity(String.class);
-            System.out.printf("[pathSuffix] status=%d body=%s%n", status, body);
 
             // AC #1, #6, #8: deployment stays in the URL path, not inferred from model.
             WIRE_MOCK.server().verify(postRequestedFor(
@@ -475,7 +472,6 @@ class ChatCompletionsResourceTest {
             var raw = postChatCompletion(workspaceName, request);
             var status = raw.getStatus();
             var body = raw.readEntity(String.class);
-            System.out.printf("[queryInBaseUrl] status=%d body=%s%n", status, body);
 
             // AC #4: api-version must be a real query param. If we put it in baseUrl,
             // LC4j's HttpRequest.Builder.url(baseUrl, path) string-concatenates with "/",
@@ -496,8 +492,6 @@ class ChatCompletionsResourceTest {
             assertThat(requestsWithCleanApiVersion)
                     .as("baseUrl-embedded query param should not produce a clean request with ?api-version=X at /chat/completions")
                     .isEmpty();
-            System.out.printf("[queryInBaseUrl] chat/completions hits=%d cleanApiVersionHits=%d%n",
-                    requestsOnChatCompletions.size(), requestsWithCleanApiVersion.size());
         }
 
         @Test
@@ -527,8 +521,6 @@ class ChatCompletionsResourceTest {
             var raw = postChatCompletion(workspaceName, request);
             var status = raw.getStatus();
             var body = raw.readEntity(String.class);
-
-            System.out.printf("[azureStyle] status=%d body=%s%n", status, body);
 
             // CustomLlmErrorMessage now understands both shapes: the historical
             // {"error": "<string>"} form and Azure's nested {"error": {"code", "message"}}
@@ -722,7 +714,6 @@ class ChatCompletionsResourceTest {
 
             var received = WIRE_MOCK.server().findAll(postRequestedFor(
                     urlPathMatching(".*/chat/completions.*"))).getFirst();
-            System.out.printf("[queryParamsApplied] upstreamUrl=%s%n", received.getUrl());
 
             WIRE_MOCK.server().verify(postRequestedFor(urlPathMatching(".*/chat/completions.*"))
                     .withQueryParam("api-version", equalTo("2024-08-01-preview"))
@@ -769,8 +760,6 @@ class ChatCompletionsResourceTest {
             var received = WIRE_MOCK.server().findAll(postRequestedFor(
                     urlPathMatching(".*/chat/completions"))).getFirst();
 
-            System.out.printf("[legacyContract] status=%d upstreamUrl=%s%n", status, received.getUrl());
-
             // Contract 1: URL is exactly base_url + "/chat/completions". No query params added.
             assertThat(received.getUrl())
                     .as("URL should not be mutated when no new config keys are set")
@@ -807,7 +796,6 @@ class ChatCompletionsResourceTest {
             var responseBody = raw.readEntity(String.class);
 
             var upstreamBody = upstreamBodyOrFail(status, responseBody);
-            System.out.printf("[vision] status=%d upstreamBody=%s%n", status, upstreamBody);
 
             // gpt-4o hits ModelCapabilities.supportsVision() == true, so the normalizer
             // takes the expandImagePlaceholders path and preserves structured content.
@@ -854,7 +842,6 @@ class ChatCompletionsResourceTest {
             var responseBody = raw.readEntity(String.class);
 
             var upstreamBody = upstreamBodyOrFail(status, responseBody);
-            System.out.printf("[nonVision] status=%d upstreamBody=%s%n", status, upstreamBody);
 
             // Non-vision model → normalizer flattens array to string. Upstream never sees the
             // typed array. AC #5 asks for strict pass-through; a `strict_pass_through` config

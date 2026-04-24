@@ -104,14 +104,17 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         return newCustomProviderChatLanguageModel(config, modelParameters);
     }
 
-    /// Builds the HTTP client builder passed to LangChain4j. The underlying
-    /// `JdkHttpClientBuilder` is always returned (HTTP/1.1 pinning for vLLM
-    /// / FastAPI servers is pre-OPIK-4551 behaviour that must be preserved
-    /// for every Custom LLM provider). Only the `InterceptingHttpClientBuilder`
-    /// wrapper is conditional — applied when the provider actually needs
-    /// request mutation (OPIK-4551 config keys or `{model}` placeholder).
-    /// Legacy providers therefore see a plain `JdkHttpClientBuilder` — the
-    /// same object LangChain4j received before OPIK-4551.
+    /**
+     * Builds the HTTP client builder passed to LangChain4j. The underlying
+     * {@code JdkHttpClientBuilder} is always returned (HTTP/1.1 pinning for
+     * vLLM / FastAPI servers is pre-OPIK-4551 behaviour that must be preserved
+     * for every Custom LLM provider). Only the
+     * {@link InterceptingHttpClientBuilder} wrapper is conditional — applied
+     * when the provider actually needs request mutation (OPIK-4551 config keys
+     * or {@code {model}} placeholder). Legacy providers therefore see a plain
+     * {@code JdkHttpClientBuilder} — the same object LangChain4j received
+     * before OPIK-4551.
+     */
     private HttpClientBuilder newHttpClientBuilder(LlmProviderClientApiConfig config) {
         // Force HTTP/1.1 to avoid upgrade. For example, vLLM is built on FastAPI and explicitly uses HTTP/1.1
         HttpClient.Builder httpClientBuilder = HttpClient.newBuilder()
@@ -126,9 +129,11 @@ public class CustomLlmClientGenerator implements LlmProviderClientGenerator<Open
         return new InterceptingHttpClientBuilder(jdkHttpClientBuilder, config.configuration(), config.apiKey());
     }
 
-    /// True when the request needs mutation by `InterceptingHttpClient`: the
-    /// provider either declares one of the OPIK-4551 configuration keys or uses
-    /// a `{model}` placeholder in its base URL.
+    /**
+     * True when the request needs mutation by {@link InterceptingHttpClient}:
+     * the provider either declares one of the OPIK-4551 configuration keys or
+     * uses a {@code {model}} placeholder in its base URL.
+     */
     private static boolean requiresInterceptingBuilder(LlmProviderClientApiConfig config) {
         Map<String, String> configuration = config.configuration();
         boolean hasNewConfigKeys = configuration != null
