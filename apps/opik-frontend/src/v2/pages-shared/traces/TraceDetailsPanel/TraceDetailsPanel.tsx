@@ -46,6 +46,7 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -111,6 +112,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       defaultValue: SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE,
     },
   );
+
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -321,7 +326,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               </div>
             </div>
           </ResizablePanel>
-          {Boolean(activeSection) && (
+          {Boolean(activeSection) && canAnnotateTraceSpanThread && (
             <>
               <ResizableHandle />
               <ResizablePanel

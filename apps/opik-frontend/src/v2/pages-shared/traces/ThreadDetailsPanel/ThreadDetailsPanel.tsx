@@ -526,15 +526,17 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                   buttonVariant="ghost"
                   buttonSize="2xs"
                 />
-                <DetailsActionSectionToggle
-                  activeSection={null}
-                  setActiveSection={setActiveSection}
-                  layoutSize={ButtonLayoutSize.Large}
-                  type={DetailsActionSection.Annotate}
-                  variant="ghost"
-                  buttonSize="2xs"
-                  hotkey="A"
-                />
+                {canAnnotateTraceSpanThread && (
+                  <DetailsActionSectionToggle
+                    activeSection={null}
+                    setActiveSection={setActiveSection}
+                    layoutSize={ButtonLayoutSize.Large}
+                    type={DetailsActionSection.Annotate}
+                    variant="ghost"
+                    buttonSize="2xs"
+                    hotkey="A"
+                  />
+                )}
               </div>
               <div ref={ref} className="relative flex-auto">
                 <div className="px-4 pb-6 pt-4" data-panel-header="true">
@@ -544,7 +546,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
               </div>
             </div>
           </ResizablePanel>
-          {Boolean(currentActiveSection) && (
+          {Boolean(currentActiveSection) && canAnnotateTraceSpanThread && (
             <>
               <ResizableHandle />
               <ResizablePanel
