@@ -1,6 +1,7 @@
 import {
   Link,
   Navigate,
+  useLocation,
   useMatchRoute,
   useParams,
 } from "@tanstack/react-router";
@@ -10,6 +11,7 @@ import React, { useEffect } from "react";
 import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import { DEFAULT_WORKSPACE_NAME } from "@/constants/user";
+import { isLandingRoute } from "@/lib/landingRoutes";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
 import useAppStore, { useSetAppUser } from "@/store/AppStore";
 import { usePostHog } from "posthog-js/react";
@@ -59,6 +61,7 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
     strict: false,
     select: (params) => params["workspaceName"],
   });
+  const { pathname } = useLocation();
   const isRootPath = matchRoute({ to: "/" });
 
   useSegment(user?.userName);
@@ -129,6 +132,20 @@ const WorkspacePreloader: React.FunctionComponent<WorkspacePreloaderProps> = ({
         ? buildUrl("login")
         : buildUrl("login", workspaceNameFromURL);
     return null;
+  }
+
+  // Landing-route fast path (OPIK-6151): /auth/test has enough to paint
+  // /get-started — skip blocking on /workspaces and /organizations. Both
+  // queries still fire in the background (same `enabled: !!user?.loggedIn`)
+  // so the switcher and access-gated UI populate after first paint.
+  if (
+    isLandingRoute(pathname) &&
+    workspaceNameFromURL &&
+    user.defaultWorkspace === workspaceNameFromURL &&
+    !user.suspended
+  ) {
+    useAppStore.getState().setActiveWorkspaceName(workspaceNameFromURL);
+    return children;
   }
 
   if (!allWorkspaces) {
