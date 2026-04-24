@@ -85,7 +85,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 {
-                  "For multi-deployment gateways (e.g. Azure APIM), use `{model}` as a placeholder — Opik substitutes the selected model at request time."
+                  "Use `{model}` as a placeholder in the URL if your gateway expects the model name in the path — Opik substitutes the selected model at request time."
                 }
               </Description>
             </FormItem>
@@ -159,8 +159,8 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               </FormControl>
               <FormMessage />
               <Description>
-                Comma separated list of available models. Example:
-                {`"meta-llama/Meta-Llama-3.1-70B,mistralai/Mistral-7B"`}
+                Comma-separated list of available models. Example:{" "}
+                {`"gpt-4o, gpt-4o-mini, llama-3.1-70b"`}
               </Description>
             </FormItem>
           );
@@ -176,7 +176,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
         keyPlaceholder="Parameter name"
         valuePlaceholder="Parameter value"
         addButtonLabel="Add query parameter"
-        description="Appended to every outgoing request URL. Required by Azure OpenAI gateways (e.g. api-version=2024-08-01-preview)."
+        description="Appended to every outgoing request URL. Some gateways require a version parameter such as api-version=2024-08-01-preview."
       />
 
       <FormField
@@ -205,8 +205,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <Description>
                 If set, the API key is sent as <code>{"{name}: <key>"}</code> in
                 addition to the default <code>Authorization: Bearer</code>{" "}
-                header. Used by Azure APIM gateways that expect{" "}
-                <code>api-key</code> or a tenant-specific header name.
+                header.
               </Description>
             </FormItem>
           );
@@ -230,8 +229,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
             </div>
             <Description>
               Turn on only if your gateway rejects requests that include{" "}
-              <code>Authorization: Bearer</code>. Default off, matching
-              today&apos;s behavior for all existing custom providers.
+              <code>Authorization: Bearer</code>.
             </Description>
           </FormItem>
         )}
