@@ -36,8 +36,8 @@ const OptimizationsEmptyState: React.FC<OptimizationsEmptyStateProps> = ({
 
   return (
     <div className="flex min-h-full flex-1 items-center justify-center gap-16 px-6">
-      <div className="flex w-full max-w-lg flex-col gap-7">
-        <div className="flex flex-col gap-1.5">
+      <div className="flex w-full max-w-lg flex-col gap-6">
+        <div className="flex flex-col gap-2">
           <h2 className="comet-title-s text-foreground">
             No optimization runs yet
           </h2>
