@@ -88,6 +88,7 @@ export enum ManagementPermissionsNames {
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
   PLAYGROUND_USE = "playground_use",
+  OPTIMIZATION_STUDIO_USE = "optimization_studio_use",
 }
 
 export interface UserPermission {
