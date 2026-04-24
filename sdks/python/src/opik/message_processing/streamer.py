@@ -123,6 +123,16 @@ class Streamer:
             # consumers see an empty queue and exit on their own. No joins —
             # daemon threads can finish any in-flight HTTP request in the
             # background without blocking teardown.
+            pending = self._message_queue.size()
+            if pending > 0:
+                LOGGER.warning(
+                    "Streamer.close(flush=False) discarding %d queued message(s) "
+                    "without flushing. Data that had not yet reached the backend "
+                    "will be lost. Use flush=True (the default) if you need "
+                    "durability — flush=False is intended for short-lived "
+                    "tests/teardowns, not production shutdown.",
+                    pending,
+                )
             self._message_queue.clear()
             self._close_queue_consumers()
 

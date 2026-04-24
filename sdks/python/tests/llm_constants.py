@@ -29,7 +29,15 @@ readability and avoids false-coupling with real model identifiers.
 OPENAI_GPT_NANO = "gpt-5-nano"
 OPENAI_SORA = "sora-2"
 
+# gpt-4o-mini kept only for CrewAI v0 — v0's hard pin on litellm==1.74.9
+# reports `stop` as supported for gpt-5-nano, which CrewAI's ReAct loop
+# then injects and the OpenAI API rejects. gpt-4o-mini dodges that. Drop
+# this constant once CrewAI v0 support is removed or once OpenAI sunsets
+# gpt-4o-mini.
+OPENAI_GPT_4O_MINI = "gpt-4o-mini"
+
 LITELLM_OPENAI_GPT_NANO = f"openai/{OPENAI_GPT_NANO}"
+LITELLM_OPENAI_GPT_4O_MINI = f"openai/{OPENAI_GPT_4O_MINI}"
 AISUITE_OPENAI_GPT_NANO = f"openai:{OPENAI_GPT_NANO}"
 
 # gpt-5 family members are reasoning models — they spend `max_tokens` on

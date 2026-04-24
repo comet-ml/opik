@@ -49,7 +49,7 @@ class GEval(base_metric.BaseMetric):
         reasoning_effort: Optional reasoning effort level for the model. Applies to
             providers/models that expose a reasoning_effort parameter (e.g. OpenAI
             gpt-5 family). Supported values typically include "minimal", "low",
-            "medium", "high". Defaults to "low".
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics.llm_judges.g_eval.metric import GEval
@@ -79,7 +79,7 @@ class GEval(base_metric.BaseMetric):
         project_name: Optional[str] = None,
         temperature: float = 0.0,
         seed: Optional[int] = None,
-        reasoning_effort: Optional[str] = "low",
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -327,7 +327,7 @@ class GEvalPreset(GEval):
         project_name: Optional[str] = None,
         temperature: float = 0.0,
         name: Optional[str] = None,
-        reasoning_effort: Optional[str] = "low",
+        reasoning_effort: Optional[str] = None,
     ):
         try:
             definition = GEVAL_PRESETS[preset]

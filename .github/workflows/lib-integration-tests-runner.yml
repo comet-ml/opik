@@ -23,6 +23,7 @@ on:
           - haystack
           - guardrails
           - dspy
+          - crewai_v0
           - crewai_v1
           - genai
           - adk
@@ -153,6 +154,12 @@ jobs:
     uses: ./.github/workflows/lib-dspy-tests.yml
     secrets: inherit
 
+  crewai_v0_tests:
+    needs: [init_environment]
+    if: contains(fromJSON('["crewai_v0", "all"]'), needs.init_environment.outputs.LIBS)
+    uses: ./.github/workflows/lib-crewai-v0-tests.yml
+    secrets: inherit
+
   crewai_v1_tests:
     needs: [init_environment]
     if: contains(fromJSON('["crewai_v1", "all"]'), needs.init_environment.outputs.LIBS)
@@ -220,6 +227,7 @@ jobs:
       - haystack_tests
       - guardrails_tests
       - dspy_tests
+      - crewai_v0_tests
       - crewai_v1_tests
       - genai_tests
       - adk_tests
@@ -263,6 +271,7 @@ jobs:
               "Haystack": "${{ needs.haystack_tests.result }}",
               "Guardrails": "${{ needs.guardrails_tests.result }}",
               "DSPy": "${{ needs.dspy_tests.result }}",
+              "CrewAI v0": "${{ needs.crewai_v0_tests.result }}",
               "CrewAI v1": "${{ needs.crewai_v1_tests.result }}",
               "GenAI": "${{ needs.genai_tests.result }}",
               "ADK": "${{ needs.adk_tests.result }}",

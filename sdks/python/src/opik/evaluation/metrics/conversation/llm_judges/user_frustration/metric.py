@@ -51,7 +51,7 @@ class UserFrustrationMetric(ConversationThreadMetric):
         reasoning_effort: Optional reasoning effort level for the model. Applies to
             providers/models that expose a reasoning_effort parameter (e.g. OpenAI
             gpt-5 family). Supported values typically include "minimal", "low",
-            "medium", "high". Defaults to "low".
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics import UserFrustrationMetric
@@ -79,7 +79,7 @@ class UserFrustrationMetric(ConversationThreadMetric):
         project_name: Optional[str] = None,
         window_size: int = 10,
         temperature: float = 1e-8,
-        reasoning_effort: Optional[str] = "low",
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,

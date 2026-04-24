@@ -671,10 +671,12 @@ class Dataset(DatasetExportOperations):
     def __internal_api__hashes_synced__(self) -> bool:
         """Whether the local hash cache is in sync with the backend.
 
-        Factory paths that construct a Dataset whose backend state is already
-        known (e.g. a freshly-created, empty dataset) can flip this to True to
-        skip the lazy sync that would otherwise fire on the first
-        :meth:`insert` call.
+        `__init__` defaults this to True (a freshly constructed Dataset
+        has no backend state to sync). Factory paths that construct a
+        Dataset from an existing backend state (`from_public`,
+        `rest_operations.get_datasets`) flip it to False so the first
+        :meth:`insert` triggers a one-shot sync instead of paying an
+        N+1 sync at list time.
         """
         return self._hashes_synced
 
