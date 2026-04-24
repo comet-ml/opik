@@ -1,5 +1,5 @@
 import React from "react";
-import { UseFormReturn } from "react-hook-form";
+import { UseFormReturn, useFieldArray } from "react-hook-form";
 import { Label } from "@/ui/label";
 import { AIProviderFormType } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
@@ -32,113 +32,92 @@ const CustomHeadersField: React.FC<CustomHeadersFieldProps> = ({
   addButtonLabel = "Add header",
   description = "Custom providers may require additional headers beyond the API key. Add them here as key-value pairs.",
 }) => {
+  const { fields, append, remove } = useFieldArray({
+    control: form.control,
+    name,
+  });
+
+  const getFieldError = (index: number, fieldName: "key" | "value") =>
+    get(form.formState.errors, [name, index, fieldName]);
+
   return (
-    <FormField
-      control={form.control}
-      name={name}
-      render={({ field, formState }) => {
-        const entries =
-          (field.value as Array<{
-            key: string;
-            value: string;
-            id: string;
-          }>) || [];
+    <FormItem>
+      <Label>{label}</Label>
+      <div className="flex flex-col gap-2">
+        {fields.map((field, index) => {
+          const keyError = getFieldError(index, "key");
+          const valueError = getFieldError(index, "value");
 
-        const addEntry = () => {
-          field.onChange([...entries, { key: "", value: "", id: uuidv4() }]);
-        };
-
-        const removeEntry = (id: string) => {
-          const next = entries.filter((h) => h.id !== id);
-          field.onChange(next);
-        };
-
-        const updateEntry = (id: string, key: string, value: string) => {
-          const next = entries.map((h) =>
-            h.id === id ? { ...h, key, value } : h,
-          );
-          field.onChange(next);
-        };
-
-        const getFieldError = (index: number, fieldName: "key" | "value") => {
-          return get(formState.errors, [name, index, fieldName]);
-        };
-
-        return (
-          <FormItem>
-            <Label>{label}</Label>
-            <div className="flex flex-col gap-2">
-              {entries.map((entry, index) => {
-                const keyError = getFieldError(index, "key");
-                const valueError = getFieldError(index, "value");
-
-                return (
-                  <div key={entry.id} className="flex flex-col gap-1">
-                    <div className="flex gap-2">
-                      <div className="flex-1">
-                        <Input
-                          placeholder={keyPlaceholder}
-                          value={entry.key}
-                          onChange={(e) =>
-                            updateEntry(entry.id, e.target.value, entry.value)
-                          }
-                          className={cn("w-full", {
-                            "border-destructive": Boolean(keyError),
-                          })}
-                        />
-                        {keyError && (
-                          <p className="mt-1 text-xs text-destructive">
-                            {keyError.message as string}
-                          </p>
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <Input
-                          placeholder={valuePlaceholder}
-                          value={entry.value}
-                          onChange={(e) =>
-                            updateEntry(entry.id, entry.key, e.target.value)
-                          }
-                          className={cn("w-full", {
-                            "border-destructive": Boolean(valueError),
-                          })}
-                        />
-                        {valueError && (
-                          <p className="mt-1 text-xs text-destructive">
-                            {valueError.message as string}
-                          </p>
-                        )}
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeEntry(entry.id)}
-                        className="shrink-0"
-                      >
-                        <Trash2 className="comet-body-s" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addEntry}
-                className="w-fit"
-              >
-                <Plus className="mr-1.5 size-3.5" />
-                {addButtonLabel}
-              </Button>
+          return (
+            <div key={field.id} className="flex flex-col gap-1">
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <FormField
+                    control={form.control}
+                    name={`${name}.${index}.key` as const}
+                    render={({ field: innerField }) => (
+                      <Input
+                        placeholder={keyPlaceholder}
+                        {...innerField}
+                        className={cn("w-full", {
+                          "border-destructive": Boolean(keyError),
+                        })}
+                      />
+                    )}
+                  />
+                  {keyError && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {keyError.message as string}
+                    </p>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <FormField
+                    control={form.control}
+                    name={`${name}.${index}.value` as const}
+                    render={({ field: innerField }) => (
+                      <Input
+                        placeholder={valuePlaceholder}
+                        {...innerField}
+                        className={cn("w-full", {
+                          "border-destructive": Boolean(valueError),
+                        })}
+                      />
+                    )}
+                  />
+                  {valueError && (
+                    <p className="mt-1 text-xs text-destructive">
+                      {valueError.message as string}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => remove(index)}
+                  className="shrink-0"
+                >
+                  <Trash2 className="comet-body-s" />
+                </Button>
+              </div>
             </div>
-            <Description>{description}</Description>
-            <FormMessage />
-          </FormItem>
-        );
-      }}
-    />
+          );
+        })}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => append({ key: "", value: "", id: uuidv4() })}
+          className="w-fit"
+        >
+          <Plus className="mr-1.5 size-3.5" />
+          {addButtonLabel}
+        </Button>
+      </div>
+      <Description>{description}</Description>
+      <FormMessage />
+    </FormItem>
   );
 };
 

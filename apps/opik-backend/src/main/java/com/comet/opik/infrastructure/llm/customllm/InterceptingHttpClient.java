@@ -10,10 +10,10 @@ import dev.langchain4j.http.client.SuccessfulHttpResponse;
 import dev.langchain4j.http.client.sse.ServerSentEventListener;
 import dev.langchain4j.http.client.sse.ServerSentEventParser;
 import lombok.NonNull;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 
+import java.io.UncheckedIOException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
@@ -41,7 +41,6 @@ import java.util.Map;
 /// is present, the decorator is a pure no-op — preserving the existing Custom
 /// LLM provider contract byte-for-byte with what LangChain4j's `OpenAiClient`
 /// already produced.
-@RequiredArgsConstructor
 @Slf4j
 class InterceptingHttpClient implements HttpClient {
 
@@ -59,6 +58,15 @@ class InterceptingHttpClient implements HttpClient {
     private final Map<String, String> configuration;
     private final String apiKey;
 
+    /// Normalizes a null `configuration` to an empty map so helpers can call
+    /// `configuration.get(...)` unconditionally. Keeps `{model}`-only providers
+    /// (which may carry no new config keys yet still reach `mutate()`) safe.
+    InterceptingHttpClient(@NonNull HttpClient delegate, Map<String, String> configuration, String apiKey) {
+        this.delegate = delegate;
+        this.configuration = configuration != null ? configuration : Map.of();
+        this.apiKey = apiKey;
+    }
+
     @Override
     public SuccessfulHttpResponse execute(HttpRequest request) throws HttpException, RuntimeException {
         return delegate.execute(mutate(request));
@@ -72,7 +80,7 @@ class InterceptingHttpClient implements HttpClient {
 
     private HttpRequest mutate(HttpRequest request) {
         boolean hasPlaceholder = request.url() != null && request.url().contains(MODEL_PLACEHOLDER);
-        if ((configuration == null || configuration.isEmpty()) && !hasPlaceholder) {
+        if (configuration.isEmpty() && !hasPlaceholder) {
             return request;
         }
 
@@ -103,29 +111,30 @@ class InterceptingHttpClient implements HttpClient {
                     MODEL_PLACEHOLDER);
             return url;
         }
+        JsonNode root;
         try {
-            JsonNode root = JsonUtils.getJsonNodeFromString(body);
-            JsonNode modelNode = root == null ? null : root.get("model");
-            if (modelNode == null || !modelNode.isTextual() || StringUtils.isBlank(modelNode.asText())) {
-                log.warn(
-                        "Base URL contains '{}' but request body has no string 'model' field; forwarding URL unchanged",
-                        MODEL_PLACEHOLDER);
-                return url;
-            }
-            String model = modelNode.asText();
-            return url.replace(MODEL_PLACEHOLDER, model);
-        } catch (RuntimeException exception) {
-            log.warn("Failed to parse request body for '{}' substitution; forwarding URL unchanged",
+            root = JsonUtils.getJsonNodeFromString(body);
+        } catch (UncheckedIOException exception) {
+            log.warn("Failed to parse request body as JSON for '{}' substitution; forwarding URL unchanged",
                     MODEL_PLACEHOLDER, exception);
             return url;
         }
+
+        JsonNode modelNode = root == null ? null : root.get("model");
+        if (modelNode == null || !modelNode.isTextual() || StringUtils.isBlank(modelNode.asText())) {
+            log.warn(
+                    "Base URL contains '{}' but request body has no string 'model' field; forwarding URL unchanged",
+                    MODEL_PLACEHOLDER);
+            return url;
+        }
+        return url.replace(MODEL_PLACEHOLDER, modelNode.asText());
     }
 
     private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {
         String customHeaderName = configuration.get(AUTH_HEADER_NAME_CONFIG_KEY);
         boolean addCustomHeader = StringUtils.isNotBlank(customHeaderName)
                 && StringUtils.isNotBlank(apiKey);
-        boolean suppressDefault = "true".equalsIgnoreCase(
+        boolean suppressDefault = Boolean.TRUE.toString().equalsIgnoreCase(
                 StringUtils.trimToNull(configuration.get(SUPPRESS_DEFAULT_AUTH_CONFIG_KEY)));
 
         if (!addCustomHeader && !suppressDefault) {
@@ -154,9 +163,10 @@ class InterceptingHttpClient implements HttpClient {
         Map<String, String> params;
         try {
             params = JsonUtils.readValue(raw, QUERY_PARAMS_TYPE);
-        } catch (RuntimeException exception) {
-            log.warn("Failed to parse '{}' configuration value as JSON map, forwarding URL unchanged",
-                    URL_QUERY_PARAMS_CONFIG_KEY, exception);
+        } catch (UncheckedIOException exception) {
+            log.warn(
+                    "Failed to parse '{}' configuration value '{}' as JSON map; forwarding URL unchanged",
+                    URL_QUERY_PARAMS_CONFIG_KEY, raw, exception);
             return url;
         }
 
