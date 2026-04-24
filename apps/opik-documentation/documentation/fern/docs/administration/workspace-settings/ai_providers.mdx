@@ -331,12 +331,14 @@ Some custom providers may require additional HTTP headers beyond the API key for
 
 ##### Query Parameters
 
-Some gateways require specific query parameters — such as a version identifier — on every request. Use the "Query parameters" section to add key/value pairs that Opik will append to every outbound URL.
+Some gateways require specific query parameters on every request. For example, Azure OpenAI often requires an `api-version` parameter.
+
+Use the "Query parameters" section to define these key/value pairs, and Opik will automatically append them to every outgoing request.
 
 - Click **"+ Add query parameter"** to add a new pair
 - Enter the parameter name (e.g., `api-version`)
 - Enter the parameter value (e.g., `2024-08-01-preview`)
-- Add multiple parameters as needed
+- Add as many parameters as needed
 - Use the trash icon to remove parameters
 
 Parameters are URL-encoded automatically and appended with `?` or `&` as appropriate. Leave this section empty for providers that don't require extra query parameters.
@@ -345,7 +347,7 @@ Parameters are URL-encoded automatically and appended with `?` or `&` as appropr
 
 Most OpenAI-compatible providers expect an `Authorization: Bearer <key>` header — Opik sends this automatically. Some gateways instead expect the key in a differently-named header (such as `api-key` or a tenant-specific name), sometimes without any `Authorization` header at all.
 
-- **Auth header name** (optional): If set, Opik sends the API key as `{name}: <key>` *in addition to* the default `Authorization: Bearer <key>` header. Most gateways ignore the extra `Authorization` header, so this alone is often enough.
+- **Auth header name** (optional): If set, Opik sends the API key as `{name}: <key>` *in addition to* the `Authorization: Bearer <key>` header. Most gateways ignore the extra `Authorization` header, so this alone is often enough.
 - **Suppress default Authorization header** (toggle, default off): Turn this on only if your gateway explicitly rejects requests that include `Authorization: Bearer`. When on, Opik sends only the custom header configured above.
 
 ##### URL Templates with `{model}`
