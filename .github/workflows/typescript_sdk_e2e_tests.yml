@@ -42,7 +42,7 @@ jobs:
         id: pick
         with:
           all-versions: ${{ vars.NODE_VERSIONS }}
-          match-regex: '^sdks/typescript/|^\.github/workflows/typescript_sdk_e2e_tests\.yml$'
+          match-regex: '^sdks/typescript/'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
   run-e2e:
