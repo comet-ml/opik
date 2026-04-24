@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useForm } from "react-hook-form";
 
 import { Input } from "@/ui/input";
@@ -45,6 +45,7 @@ type AgentRunnerInputFormProps = {
   fields: AgentParam[];
   onSubmit: (inputs: Record<string, unknown>, maskId?: string) => void;
   isRunning: boolean;
+  onValidityChange?: (hasAllRequired: boolean) => void;
 };
 
 const isFieldRequired = (field: AgentParam): boolean => {
@@ -55,6 +56,7 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
   fields,
   onSubmit,
   isRunning,
+  onValidityChange,
 }) => {
   const {
     register,
@@ -71,6 +73,18 @@ const AgentRunnerInputForm: React.FC<AgentRunnerInputFormProps> = ({
       {} as Record<string, string>,
     ),
   });
+
+  const requiredFields = fields.filter(isFieldRequired);
+  const allValues = watch();
+
+  useEffect(() => {
+    if (!onValidityChange) return;
+    const allFilled = requiredFields.every((field) => {
+      const value = allValues[field.name];
+      return typeof value === "string" && value.trim().length > 0;
+    });
+    onValidityChange(allFilled);
+  }, [allValues, requiredFields, onValidityChange]);
 
   const onFormSubmit = handleSubmit((data) => {
     const inputs: Record<string, unknown> = {};
