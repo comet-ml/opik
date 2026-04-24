@@ -38,7 +38,11 @@ type AgentConfigurationDetailViewProps = {
 const AgentConfigurationDetailView: React.FC<
   AgentConfigurationDetailViewProps
 > = ({ item, projectId, versions, onEdit }) => {
-  const { data: agentConfig, isPending } = useAgentConfigById({
+  const {
+    data: agentConfig,
+    isPending,
+    isError,
+  } = useAgentConfigById({
     blueprintId: item.id,
   });
 
@@ -207,6 +211,10 @@ const AgentConfigurationDetailView: React.FC<
 
         {isPending ? (
           <Loader />
+        ) : isError ? (
+          <div className="comet-body-s py-4 text-muted-slate">
+            Failed to load configuration details.
+          </div>
         ) : (
           <BlueprintValuesList
             values={agentConfig?.values ?? []}

@@ -216,7 +216,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const canTagTrace = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.TRACE_TAG),
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.TRACE_SPAN_THREAD_LOG),
     [checkNullablePermission],
   );
 

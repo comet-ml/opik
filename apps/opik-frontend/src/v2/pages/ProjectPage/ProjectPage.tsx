@@ -48,7 +48,22 @@ const ProjectPage = () => {
     return <Loader />;
   }
 
-  if (isError || !data) {
+  if (isError) {
+    return (
+      <NoData
+        title="Something went wrong"
+        message="Failed to load the project. Please try again later."
+      >
+        <div className="pt-5">
+          <Link to="/$workspaceName/projects" params={{ workspaceName }}>
+            <Button>Back to Projects</Button>
+          </Link>
+        </div>
+      </NoData>
+    );
+  }
+
+  if (!data) {
     return (
       <NoData
         icon={<div className="comet-title-m mb-1 text-foreground">404</div>}
