@@ -115,10 +115,7 @@ const PlaygroundPage = () => {
 
   const prevDatasetIdRef = useRef(datasetId);
   useEffect(() => {
-    if (
-      prevDatasetIdRef.current !== null &&
-      prevDatasetIdRef.current !== datasetId
-    ) {
+    if (prevDatasetIdRef.current !== datasetId) {
       clearCreatedExperiments();
     }
     prevDatasetIdRef.current = datasetId;
