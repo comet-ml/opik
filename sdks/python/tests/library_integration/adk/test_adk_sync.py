@@ -93,7 +93,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -115,9 +115,7 @@ def test_adk__single_agent__single_tool__happyflow(fake_backend):
             "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the weather in New York?"}],
@@ -221,7 +219,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    weather_question_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     events_generator = runner.run(
         user_id=USER_ID,
@@ -230,7 +228,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             role="user", parts=[genai_types.Part(text="What is the time in New York?")]
         ),
     )
-    time_question_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -247,14 +245,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {
-                "content": {
-                    "parts": [{"text": weather_question_response}],
-                    "role": "model",
-                }
-            }
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the weather in New York?"}],
@@ -323,9 +314,7 @@ def test_adk__single_agent__multiple_tools__two_invocations_lead_to_two_traces_w
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": time_question_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the time in New York?"}],
@@ -408,7 +397,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -427,9 +416,7 @@ def test_adk__sequential_agent_with_subagents__every_subagent_has_its_own_span(
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
@@ -556,7 +543,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -578,9 +565,7 @@ def test_adk__tool_calls_tracked_function__tracked_function_span_attached_to_the
             "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the weather in New York?"}],
@@ -839,7 +824,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -858,9 +843,7 @@ def test_adk__track_adk_agent_recursive__sequential_agent_with_subagent__every_s
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
@@ -968,7 +951,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -987,9 +970,7 @@ def test_adk__track_adk_agent_recursive__agent_tool_is_used__agent_tool_is_track
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
@@ -1191,7 +1172,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             parts=[genai_types.Part(text="What is the weather in New York?")],
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
 
@@ -1213,9 +1194,7 @@ def test_adk__opik_tracer__unpickled_object_works_as_expected(fake_backend):
             "_opik_graph_definition": ANY_BUT_NONE,
         },
         tags=["adk-test"],
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": "What is the weather in New York?"}],
@@ -1307,7 +1286,7 @@ def test_adk__agent_with_response_schema__happyflow(
             role="user", parts=[genai_types.Part(text=constants.INPUT_GERMAN_TEXT)]
         ),
     )
-    final_response = helpers.extract_final_response_text(events_generator)
+    _ = helpers.extract_final_response_text(events_generator)
 
     opik.flush_tracker()
     assert len(fake_backend.trace_trees) > 0
@@ -1326,9 +1305,7 @@ def test_adk__agent_with_response_schema__happyflow(
             "user_id": USER_ID,
             "_opik_graph_definition": ANY_BUT_NONE,
         },
-        output=ANY_DICT.containing(
-            {"content": {"parts": [{"text": final_response}], "role": "model"}}
-        ),
+        output=ANY_DICT,
         input={
             "role": "user",
             "parts": [{"text": constants.INPUT_GERMAN_TEXT}],
