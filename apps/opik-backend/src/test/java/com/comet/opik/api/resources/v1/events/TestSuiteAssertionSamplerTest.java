@@ -110,7 +110,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(any(UUID.class)))
+            when(datasetItemService.get(any(UUID.class), eq(versionId)))
                     .thenReturn(Mono.just(DatasetItem.builder().id(UUID.randomUUID()).build()));
 
             var datasetItemId = Generators.timeBasedEpochGenerator().generate();
@@ -176,7 +176,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(datasetItemId)
                             .evaluators(List.of(itemEvaluator))
@@ -276,7 +276,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(datasetItemId)
                             .evaluators(List.of(itemEvaluator))
@@ -396,7 +396,7 @@ class TestSuiteAssertionSamplerTest {
             sampler.onTracesCreated(event);
 
             verify(onlineScorePublisher, never()).enqueueMessage(any(), any());
-            verify(datasetItemService, never()).get(any(UUID.class));
+            verify(datasetItemService, never()).get(any(UUID.class), any());
         }
 
         @Test
@@ -468,7 +468,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(itemId1))
+            when(datasetItemService.get(itemId1, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(itemId1)
                             .evaluators(List.of(EvaluatorItem.builder()
@@ -478,7 +478,7 @@ class TestSuiteAssertionSamplerTest {
                                             JsonUtils.writeValueAsString(item1EvalConfig)))
                                     .build()))
                             .build()));
-            when(datasetItemService.get(itemId2))
+            when(datasetItemService.get(itemId2, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder()
                             .id(itemId2)
                             .evaluators(List.of(EvaluatorItem.builder()
@@ -597,9 +597,9 @@ class TestSuiteAssertionSamplerTest {
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
             // Items with no evaluators
-            when(datasetItemService.get(itemId1))
+            when(datasetItemService.get(itemId1, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(itemId1).build()));
-            when(datasetItemService.get(itemId2))
+            when(datasetItemService.get(itemId2, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(itemId2).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
@@ -630,6 +630,91 @@ class TestSuiteAssertionSamplerTest {
                 assertThat(assertions).contains("relevance");
                 assertThat(assertions).contains("accuracy");
             }
+        }
+
+        @Test
+        @DisplayName("fetches item evaluators from requested version, not latest")
+        void fetchesItemEvaluatorsFromRequestedVersionNotLatest() {
+            UUID datasetId = Generators.timeBasedEpochGenerator().generate();
+            UUID v2VersionId = Generators.timeBasedEpochGenerator().generate();
+            UUID datasetItemId = Generators.timeBasedEpochGenerator().generate();
+            UUID ruleId = Generators.timeBasedEpochGenerator().generate();
+            String workspaceId = "test-workspace";
+            String userName = "test-user";
+            String v2VersionHash = "version2hash";
+
+            var evaluatorConfig = new LlmAsJudgeCode(
+                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    List.of(LlmAsJudgeMessage.builder()
+                            .role(ChatMessageType.USER)
+                            .content("Evaluate {input}")
+                            .build()),
+                    Map.of("input", "input"),
+                    List.of(LlmAsJudgeOutputSchema.builder()
+                            .name("v2_check")
+                            .type(LlmAsJudgeOutputSchemaType.BOOLEAN)
+                            .description("V2 assertion")
+                            .build()));
+
+            var v2Evaluator = EvaluatorItem.builder()
+                    .name("v2-evaluator")
+                    .type(EvaluatorType.LLM_JUDGE)
+                    .config(JsonUtils.getJsonNodeFromString(JsonUtils.writeValueAsString(evaluatorConfig)))
+                    .build();
+
+            var v2Version = DatasetVersion.builder()
+                    .id(v2VersionId)
+                    .datasetId(datasetId)
+                    .versionHash(v2VersionHash)
+                    .evaluators(List.of())
+                    .build();
+
+            when(datasetVersionService.resolveVersionId(workspaceId, datasetId, v2VersionHash))
+                    .thenReturn(v2VersionId);
+            when(datasetVersionService.getVersionById(workspaceId, datasetId, v2VersionId))
+                    .thenReturn(v2Version);
+
+            // Mock only the two-arg call with v2VersionId — if the code calls
+            // the single-arg get() or passes the wrong versionId, the mock won't
+            // match and the test will fail (Mono.empty → no messages enqueued).
+            when(datasetItemService.get(datasetItemId, v2VersionId))
+                    .thenReturn(Mono.just(DatasetItem.builder()
+                            .id(datasetItemId)
+                            .evaluators(List.of(v2Evaluator))
+                            .build()));
+            when(idGenerator.generateId()).thenReturn(ruleId);
+
+            var metadata = JsonUtils.getJsonNodeFromString(
+                    "{\"test_suite_dataset_id\": \"%s\", \"test_suite_dataset_version_hash\": \"%s\", \"test_suite_dataset_item_id\": \"%s\"}"
+                            .formatted(datasetId, v2VersionHash, datasetItemId));
+
+            var trace = Trace.builder()
+                    .id(Generators.timeBasedEpochGenerator().generate())
+                    .projectId(Generators.timeBasedEpochGenerator().generate())
+                    .name("test-trace")
+                    .startTime(Instant.now())
+                    .endTime(Instant.now())
+                    .input(JsonUtils.getJsonNodeFromString("{\"messages\": [\"hello\"]}"))
+                    .output(JsonUtils.getJsonNodeFromString("{\"output\": \"world\"}"))
+                    .metadata(metadata)
+                    .build();
+
+            var event = new TracesCreated(List.of(trace), workspaceId, userName);
+            sampler.onTracesCreated(event);
+
+            // Verify the version-aware get was called with the correct versionId
+            verify(datasetItemService).get(datasetItemId, v2VersionId);
+            verify(datasetItemService, never()).get(any(UUID.class));
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<TraceToScoreLlmAsJudge>> captor = ArgumentCaptor.forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+
+            List<TraceToScoreLlmAsJudge> messages = captor.getValue();
+            assertThat(messages).hasSize(1);
+            assertThat(messages.getFirst().ruleName()).isEqualTo("v2-evaluator");
+            assertThat(messages.getFirst().scoreNameMapping()).containsEntry("assertion_1", "v2_check");
         }
 
         private Trace buildTrace(UUID datasetId, String versionHash, UUID datasetItemId) {
@@ -688,7 +773,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
             when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
@@ -779,7 +864,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
             when(testSuiteAssertionCounterService.decrementAndFinishIfComplete(any(), any()))
@@ -859,7 +944,7 @@ class TestSuiteAssertionSamplerTest {
 
             when(datasetVersionService.getLatestVersion(datasetId, workspaceId))
                     .thenReturn(Optional.of(datasetVersion));
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
@@ -937,7 +1022,7 @@ class TestSuiteAssertionSamplerTest {
                     .thenReturn(versionId);
             when(datasetVersionService.getVersionById(workspaceId, datasetId, versionId))
                     .thenReturn(datasetVersion);
-            when(datasetItemService.get(datasetItemId))
+            when(datasetItemService.get(datasetItemId, versionId))
                     .thenReturn(Mono.just(DatasetItem.builder().id(datasetItemId).build()));
             when(idGenerator.generateId()).thenReturn(ruleId);
 
