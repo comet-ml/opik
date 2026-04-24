@@ -16,6 +16,7 @@ import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import Loader from "@/shared/Loader/Loader";
 import AddOptimizationDialog from "@/v1/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import { Button } from "@/ui/button";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import useAppStore from "@/store/AppStore";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -114,6 +115,9 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 const OptimizationRunsSection: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canUseOptimizationStudio },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -182,9 +186,11 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            <Button variant="link" onClick={handleNewOptimizationClick}>
-              Create new optimization
-            </Button>
+            {canUseOptimizationStudio && (
+              <Button variant="link" onClick={handleNewOptimizationClick}>
+                Create new optimization
+              </Button>
+            )}
           </DataTableNoData>
         }
       />
