@@ -33,7 +33,7 @@ jobs:
     run-e2e:
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
-        timeout-minutes: 30   
+        timeout-minutes: 30
         strategy:
             fail-fast: false
             matrix:
@@ -42,12 +42,12 @@ jobs:
         steps:
         - name: Checkout
           uses: actions/checkout@v6
-            
+
         - name: Setup Python ${{matrix.python_version}}
           uses: actions/setup-python@v5
           with:
             python-version: ${{matrix.python_version}}
-      
+
         - name: Run latest Opik server
           env:
             OPIK_USAGE_REPORT_ENABLED: false
@@ -57,7 +57,7 @@ jobs:
           run: |
             cd ${{ github.workspace }}
             ./opik.sh --backend --port-mapping --build
-        
+
         - name: Check Opik server availability
           shell: bash
           run: |
@@ -82,6 +82,7 @@ jobs:
           run: |
             cd ${{ github.workspace }}/sdks/python
             pip install -r tests/test_requirements.txt
+            pip install -r tests/e2e/test_requirements.txt
             pip list
 
         - name: Run tests
