@@ -26,6 +26,7 @@ class DatasetItemServiceFilterDataTest {
             mock(DatasetItemVersionDAO.class),
             mock(DatasetService.class),
             mock(DatasetVersionService.class),
+            mock(ExperimentDAO.class),
             mock(TraceService.class),
             mock(SpanService.class),
             mock(TraceEnrichmentService.class),

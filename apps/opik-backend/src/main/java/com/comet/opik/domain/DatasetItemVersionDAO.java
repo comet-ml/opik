@@ -70,11 +70,12 @@ public interface DatasetItemVersionDAO {
      * @param searchCriteria the search criteria including experiment IDs
      * @param page the page number
      * @param size the page size
-     * @param versionId the dataset version ID
+     * @param legacyFallbackVersionId fallback version ID for legacy experiments that predate versioning;
+     *                                 modern experiments carry their own dataset_version_id in ClickHouse
      * @return a Mono containing the page of dataset items with experiment items
      */
     Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria searchCriteria, int page, int size,
-            String versionId);
+            String legacyFallbackVersionId);
 
     Mono<List<Column>> getExperimentItemsOutputColumns(UUID datasetId, Set<UUID> experimentIds);
 
@@ -2361,10 +2362,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
     @Override
     public Mono<DatasetItemPage> getItemsWithExperimentItems(@NonNull DatasetItemSearchCriteria criteria, int page,
-            int size, @NonNull String versionId) {
+            int size, @NonNull String legacyFallbackVersionId) {
         log.info(
-                "Getting versioned dataset items with experiment items for dataset '{}', version '{}', experiments '{}'",
-                criteria.datasetId(), versionId, criteria.experimentIds());
+                "Getting versioned dataset items with experiment items for dataset '{}', legacy fallback version '{}', experiments '{}'",
+                criteria.datasetId(), legacyFallbackVersionId, criteria.experimentIds());
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2447,7 +2448,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             var statement = connection.createStatement(query)
                                     .bind("workspace_id", workspaceId)
                                     .bind("datasetId", criteria.datasetId())
-                                    .bind("versionId", versionId)
+                                    .bind("versionId", legacyFallbackVersionId)
                                     .bind("limit", size);
 
                             if (pushTopLimit) {
@@ -2488,9 +2489,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                                     .flatMap(DatasetItemResultMapper::mapItem)
                                     .collectList()
                                     .onErrorResume(e -> handleSqlError(e, List.of()))
-                                    .zipWith(getCountWithExperimentFilters(criteria, versionId,
+                                    .zipWith(getCountWithExperimentFilters(criteria, legacyFallbackVersionId,
                                             targetProjectIds, hasAggregated, hasRaw))
-                                    .zipWith(getColumns(criteria.datasetId(), versionId))
+                                    .zipWith(getColumns(criteria.datasetId(), legacyFallbackVersionId))
 
                                     .map(tuple -> {
                                         var itemsAndCount = tuple.getT1();

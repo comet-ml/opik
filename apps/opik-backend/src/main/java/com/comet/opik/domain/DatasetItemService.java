@@ -151,6 +151,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
     private final @NonNull DatasetItemVersionDAO versionDao;
     private final @NonNull DatasetService datasetService;
     private final @NonNull DatasetVersionService versionService;
+    private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull TraceService traceService;
     private final @NonNull SpanService spanService;
     private final @NonNull TraceEnrichmentService traceEnrichmentService;
@@ -1319,13 +1320,13 @@ class DatasetItemServiceImpl implements DatasetItemService {
 
     private Mono<DatasetItemPage> getItemsWithExperimentItems(DatasetItemSearchCriteria criteria,
             int page, int size, String workspaceId) {
-        Optional<UUID> fallbackVersionId = getFallbackVersionId(criteria.datasetId(), workspaceId);
+        Optional<DatasetVersion> latestDatasetVersion = versionService.getLatestVersion(criteria.datasetId(),
+                workspaceId);
 
-        // When the dataset no longer exists (e.g. test suite deleted), version records are gone from MySQL.
-        // Use an empty string as a harmless placeholder: test suite experiments always carry their own explicit
-        // dataset_version_id in ClickHouse, so the empty fallback is never used for matching, and assertion_results
-        // are still returned correctly via the versioned query.
-        String resolvedFallbackVersionId = fallbackVersionId.map(UUID::toString).orElseGet(() -> {
+        // Each experiment in ClickHouse carries its own dataset_version_id. This fallback is only used
+        // for legacy experiments that predate versioning and have an empty dataset_version_id.
+        // The DAO SQL resolves it via: COALESCE(nullIf(dataset_version_id, ''), :versionId)
+        String legacyFallbackVersionId = latestDatasetVersion.map(v -> v.id().toString()).orElseGet(() -> {
             log.info(
                     "No versions found for dataset '{}', using empty string as fallback version to query experiment items",
                     criteria.datasetId());
@@ -1333,11 +1334,54 @@ class DatasetItemServiceImpl implements DatasetItemService {
         });
 
         log.info(
-                "Fetching items with experiment items for dataset '{}', using version '{}' as fallback for experiments without explicit version",
-                criteria.datasetId(), resolvedFallbackVersionId);
+                "Fetching items with experiment items for dataset '{}', legacy fallback version '{}'",
+                criteria.datasetId(), legacyFallbackVersionId);
 
-        return versionDao.getItemsWithExperimentItems(criteria, page, size, resolvedFallbackVersionId)
-                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields()));
+        // Fetch version-level evaluators from the actual version the experiments ran against,
+        // not from the latest version (which may have different evaluators).
+        UUID anyExperimentId = criteria.experimentIds().iterator().next();
+        Mono<List<EvaluatorItem>> versionEvaluatorsMono = experimentDAO.getById(anyExperimentId)
+                .flatMap(experiment -> {
+                    if (experiment.datasetVersionId() == null) {
+                        return Mono.just(List.<EvaluatorItem>of());
+                    }
+                    return Mono.fromCallable(() -> {
+                        DatasetVersion version = versionService.getVersionById(workspaceId,
+                                criteria.datasetId(), experiment.datasetVersionId());
+                        return CollectionUtils.isNotEmpty(version.evaluators())
+                                ? version.evaluators()
+                                : List.<EvaluatorItem>of();
+                    })
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .onErrorResume(NotFoundException.class, e -> {
+                                log.warn("Version '{}' not found for experiment '{}', dataset '{}'",
+                                        experiment.datasetVersionId(), anyExperimentId, criteria.datasetId());
+                                return Mono.just(List.<EvaluatorItem>of());
+                            });
+                })
+                .defaultIfEmpty(List.of());
+
+        return versionEvaluatorsMono.flatMap(versionEvaluators -> versionDao
+                .getItemsWithExperimentItems(criteria, page, size, legacyFallbackVersionId)
+                .map(itemPage -> {
+                    if (versionEvaluators.isEmpty()) {
+                        return itemPage;
+                    }
+                    List<DatasetItem> items = itemPage.content().stream()
+                            .map(item -> applyVersionEvaluators(item, versionEvaluators))
+                            .toList();
+                    return itemPage.toBuilder().content(items).build();
+                })
+                .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields())));
+    }
+
+    DatasetItem applyVersionEvaluators(DatasetItem item, List<EvaluatorItem> versionEvaluators) {
+        if (CollectionUtils.isEmpty(item.evaluators())) {
+            return item.toBuilder().evaluators(versionEvaluators).build();
+        }
+        var merged = new ArrayList<>(versionEvaluators);
+        merged.addAll(item.evaluators());
+        return item.toBuilder().evaluators(merged).build();
     }
 
     public Mono<ProjectStats> getExperimentItemsStats(@NonNull UUID datasetId,
