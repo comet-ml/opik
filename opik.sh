@@ -7,7 +7,8 @@ source "$script_dir/scripts/worktree-utils.sh"
 init_worktree_ports
 
 # Parse --runtime before all other flags so CONTAINER_RUNTIME is available early.
-# This must run before flag parsing below, which uses $OPIK_HOST_GATEWAY.
+# This must run before any function call that uses $CONTAINER_RUNTIME or $COMPOSE_CMD.
+# Also seeds $OPIK_HOST_GATEWAY before the --local-be-fe flag sets OPIK_REVERSE_PROXY_URL.
 CONTAINER_RUNTIME="${OPIK_CONTAINER_RUNTIME:-}"
 _OPIK_NEW_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -19,6 +20,10 @@ while [[ $# -gt 0 ]]; do
       fi
       CONTAINER_RUNTIME="$2"
       shift 2
+      ;;
+    --runtime=*)
+      CONTAINER_RUNTIME="${1#--runtime=}"
+      shift
       ;;
     *) _OPIK_NEW_ARGS+=("$1"); shift ;;
   esac
