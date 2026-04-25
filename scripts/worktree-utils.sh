@@ -99,6 +99,10 @@ resolve_container_runtime() {
             echo "❌ Invalid runtime '$CONTAINER_RUNTIME'. Must be 'docker' or 'podman'."
             exit 1
         fi
+        if ! command -v "$CONTAINER_RUNTIME" >/dev/null 2>&1; then
+            echo "❌ Runtime '$CONTAINER_RUNTIME' was requested but is not installed or not on PATH."
+            exit 1
+        fi
     else
         if docker info >/dev/null 2>&1; then
             CONTAINER_RUNTIME="docker"
