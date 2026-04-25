@@ -133,6 +133,10 @@ log_worktree_config() {
 }
 
 setup_buildx_bake() {
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    export COMPOSE_BAKE=false
+    return
+  fi
   if [[ "${BUILD_MODE}" = "true" ]]; then
     if [[ "${COMPOSE_BAKE:-}" = "false" ]]; then
       echo "ℹ️ COMPOSE_BAKE is explicitly disabled. Skipping Bake-enabled builds"
@@ -202,7 +206,7 @@ get_system_info() {
 
 get_docker_compose_cmd() {
   # Use explicit project name for worktree isolation
-  local cmd="docker compose -p ${COMPOSE_PROJECT_NAME} -f $script_dir/deployment/docker-compose/docker-compose.yaml"
+  local cmd="$COMPOSE_CMD -p ${COMPOSE_PROJECT_NAME} -f $script_dir/deployment/docker-compose/docker-compose.yaml"
   if [[ "$PORT_MAPPING" == "true" ]]; then
     cmd="$cmd -f $script_dir/deployment/docker-compose/docker-compose.override.yaml"
   fi
