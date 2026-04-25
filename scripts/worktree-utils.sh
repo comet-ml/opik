@@ -90,6 +90,46 @@ readonly BASE_ZOOKEEPER_PORT=2181
 readonly BASE_MINIO_API_PORT=9001
 readonly BASE_MINIO_CONSOLE_PORT=9090
 
+# Detect and validate container runtime (docker or podman).
+# Sets CONTAINER_RUNTIME, COMPOSE_CMD, OPIK_HOST_GATEWAY and exports all three.
+# Honors CONTAINER_RUNTIME if already set by caller (e.g. --runtime flag).
+resolve_container_runtime() {
+    if [[ -n "${CONTAINER_RUNTIME:-}" ]]; then
+        if [[ "$CONTAINER_RUNTIME" != "docker" && "$CONTAINER_RUNTIME" != "podman" ]]; then
+            echo "❌ Invalid runtime '$CONTAINER_RUNTIME'. Must be 'docker' or 'podman'."
+            exit 1
+        fi
+    else
+        if docker info >/dev/null 2>&1; then
+            CONTAINER_RUNTIME="docker"
+        elif podman info >/dev/null 2>&1; then
+            CONTAINER_RUNTIME="podman"
+        else
+            echo "❌ Neither Docker nor Podman is available. Please install one first."
+            exit 1
+        fi
+    fi
+
+    if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+        if podman compose version >/dev/null 2>&1; then
+            COMPOSE_CMD="podman compose"
+        elif command -v podman-compose >/dev/null 2>&1; then
+            COMPOSE_CMD="podman-compose"
+        else
+            echo "❌ Podman found but no compose tool available."
+            echo "   Option 1: Upgrade to Podman 4.7+ (includes 'podman compose')"
+            echo "   Option 2: pip install podman-compose>=1.0"
+            exit 1
+        fi
+        export OPIK_HOST_GATEWAY="host.containers.internal"
+    else
+        COMPOSE_CMD="docker compose"
+        export OPIK_HOST_GATEWAY="host.docker.internal"
+    fi
+
+    export CONTAINER_RUNTIME COMPOSE_CMD
+}
+
 # Initialize worktree variables
 # Call this function after sourcing to set up all port variables
 init_worktree_ports() {
