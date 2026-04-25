@@ -285,6 +285,7 @@ print_usage() {
   echo "  --local-be      Start all services EXCEPT backend (for local backend development)"
   echo "  --local-be-fe   Start only infrastructure + Python backend (for local backend + frontend development)"
   echo "  --guardrails    Enable guardrails profile (can be combined with other flags)"
+  echo "  --runtime VALUE Set container runtime: docker or podman (default: auto-detect)"
   echo "  --help          Show this help message"
   echo ""
   echo "If no option is passed, the script will start missing containers and then show the system status."
@@ -706,7 +707,7 @@ fi
 if [[ "$*" == *"--local-be-fe"* ]]; then
   LOCAL_BE_FE=true
   PORT_MAPPING=true  # Required for local processes to connect to infrastructure
-  export OPIK_REVERSE_PROXY_URL="http://host.docker.internal:8080"
+  export OPIK_REVERSE_PROXY_URL="http://${OPIK_HOST_GATEWAY}:8080"
   # Remove the flag from arguments
   set -- ${@/--local-be-fe/}
 fi
