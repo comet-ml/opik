@@ -350,6 +350,7 @@ services:
       OTEL_TRACE: ${OTEL_TRACE:-off}
       OTEL_COLLECTOR_HOST: ${OTEL_COLLECTOR_HOST:-otel-collector}
       OTEL_COLLECTOR_PORT: ${OTEL_COLLECTOR_PORT:-4317}
+      OPIK_HOST_GATEWAY: ${OPIK_HOST_GATEWAY:-host.docker.internal}
       # NGINX_EXTRA_ACCESS_LOG: access_log syslog:server=otel-collector:5140 logger-json;
       # NGINX_EXTRA_ERROR_LOG: error_log syslog:server=otel-collector:5140 error;
       
