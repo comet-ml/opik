@@ -279,10 +279,9 @@ print_usage() {
   echo "If no option is passed, the script will start missing containers and then show the system status."
 }
 
-check_docker_status() {
-  # Ensure Docker is running
-  if ! docker info >/dev/null 2>&1; then
-    echo "❌ Docker is not running or not accessible. Please start Docker first."
+check_runtime_status() {
+  if ! $CONTAINER_RUNTIME info >/dev/null 2>&1; then
+    echo "❌ ${CONTAINER_RUNTIME^} is not running or not accessible. Please start ${CONTAINER_RUNTIME^} first."
     exit 1
   fi
 }
@@ -291,7 +290,7 @@ check_containers_status() {
   local show_output="${1:-false}"
   local all_ok=true
 
-  check_docker_status
+  check_runtime_status
 
   local containers=("${CONTAINERS[@]}")
 
@@ -347,7 +346,7 @@ wait_for_container_completion() {
 }
 
 start_missing_containers() {
-  check_docker_status
+  check_runtime_status
 
   # Generate a run-scoped anonymous ID for this installation session
   uuid=$(generate_uuid)
@@ -426,7 +425,7 @@ start_missing_containers() {
 }
 
 stop_containers() {
-  check_docker_status
+  check_runtime_status
   echo "🛑 Stopping all required containers..."
   local cmd
   cmd=$(get_docker_compose_cmd)
@@ -435,7 +434,7 @@ stop_containers() {
 }
 
 clean_data() {
-  check_docker_status
+  check_runtime_status
   echo "⚠️  WARNING: This will remove ALL Opik data including:"
   echo "   - MySQL (projects, datasets etc.)"
   echo "   - ClickHouse (traces, spans, etc.)"
@@ -450,7 +449,7 @@ clean_data() {
 }
 
 create_demo_data() {
-  check_docker_status
+  check_runtime_status
   echo "📊 Creating demo data..."
 
   setup_buildx_bake
@@ -478,7 +477,7 @@ create_demo_data() {
 }
 
 print_banner() {
-  check_docker_status
+  check_runtime_status
   ui_url=$(get_ui_url)
 
   echo ""
