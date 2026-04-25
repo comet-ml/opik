@@ -6,6 +6,28 @@ WORKTREE_UTILS_ROOT="$script_dir"
 source "$script_dir/scripts/worktree-utils.sh"
 init_worktree_ports
 
+# Parse --runtime before all other flags so CONTAINER_RUNTIME is available early.
+# This must run before flag parsing below, which uses $OPIK_HOST_GATEWAY.
+CONTAINER_RUNTIME="${OPIK_CONTAINER_RUNTIME:-}"
+_OPIK_NEW_ARGS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --runtime)
+      if [[ -z "${2:-}" || "${2:-}" == --* ]]; then
+        echo "❌ --runtime requires a value: docker or podman"
+        exit 1
+      fi
+      CONTAINER_RUNTIME="$2"
+      shift 2
+      ;;
+    *) _OPIK_NEW_ARGS+=("$1"); shift ;;
+  esac
+done
+set -- "${_OPIK_NEW_ARGS[@]}"
+unset _OPIK_NEW_ARGS
+
+resolve_container_runtime
+
 # Container names are derived from COMPOSE_PROJECT_NAME
 INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME}-mysql-1" "${COMPOSE_PROJECT_NAME}-redis-1" "${COMPOSE_PROJECT_NAME}-minio-1" "${COMPOSE_PROJECT_NAME}-zookeeper-1")
 BACKEND_CONTAINERS=("${COMPOSE_PROJECT_NAME}-python-backend-1" "${COMPOSE_PROJECT_NAME}-backend-1")
