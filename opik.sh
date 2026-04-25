@@ -171,37 +171,44 @@ get_system_info() {
     fi
   fi
   
-  # Docker version - safe with fallback
-  local docker_version="unknown"
-  if command -v docker >/dev/null 2>&1; then
-    local docker_output=$(docker --version 2>/dev/null || echo "")
-    if [[ -n "$docker_output" ]]; then
-      # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
-      docker_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
-      [[ -z "$docker_version" ]] && docker_version="unknown"
+  # Runtime version - safe with fallback
+  local runtime_version="unknown"
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    runtime_version=$(podman --version 2>/dev/null | sed -n 's/^podman version \(.*\)/\1/p' || echo "unknown")
+    [[ -z "$runtime_version" ]] && runtime_version="unknown"
+  else
+    if command -v docker >/dev/null 2>&1; then
+      local docker_output=$(docker --version 2>/dev/null || echo "")
+      if [[ -n "$docker_output" ]]; then
+        runtime_version=$(echo "$docker_output" | sed -n 's/^Docker version \([^,]*\).*/\1/p' || echo "unknown")
+        [[ -z "$runtime_version" ]] && runtime_version="unknown"
+      fi
     fi
   fi
-  
-  # Docker Compose version - safe with fallback
-  # Try both V2 (docker compose) and V1 (docker-compose) commands
-  local docker_compose_version="unknown"
-  if command -v docker >/dev/null 2>&1; then
-    # Try Docker Compose V2 (plugin)
-    local compose_output=$(docker compose version 2>/dev/null || echo "")
+
+  # Compose version - safe with fallback
+  local compose_version="unknown"
+  if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
+    local compose_output=$($COMPOSE_CMD version 2>/dev/null || echo "")
     if [[ -n "$compose_output" ]]; then
-      # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
-      docker_compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
-      [[ -z "$docker_compose_version" ]] && docker_compose_version="unknown"
+      compose_version=$(echo "$compose_output" | head -1 | sed 's/.*version[[:space:]]*//' || echo "unknown")
+      [[ -z "$compose_version" ]] && compose_version="unknown"
+    fi
+  else
+    if command -v docker >/dev/null 2>&1; then
+      local compose_output=$(docker compose version 2>/dev/null || echo "")
+      if [[ -n "$compose_output" ]]; then
+        compose_version=$(echo "$compose_output" | sed -n 's/^Docker Compose version \(.*\)$/\1/p' || echo "unknown")
+        [[ -z "$compose_version" ]] && compose_version="unknown"
+      fi
+    fi
+    if [[ "$compose_version" == "unknown" ]] && command -v docker-compose >/dev/null 2>&1; then
+      compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
     fi
   fi
-  
-  # If V2 failed, try Docker Compose V1 (standalone)
-  if [[ "$docker_compose_version" == "unknown" ]] && command -v docker-compose >/dev/null 2>&1; then
-    docker_compose_version=$(docker-compose version --short 2>/dev/null || echo "unknown")
-  fi
-  
-  # Return as tab-delimited string (tabs are extremely unlikely in version strings)
-  printf "%s\t%s\t%s" "$os_info" "$docker_version" "$docker_compose_version"
+
+  # Return as tab-delimited: os, runtime_version, compose_version, runtime_name
+  printf "%s\t%s\t%s\t%s" "$os_info" "$runtime_version" "$compose_version" "$CONTAINER_RUNTIME"
 }
 
 get_docker_compose_cmd() {
@@ -600,11 +607,11 @@ EOF
     event_type="opik_os_install_started"
     
     # Get system info safely - wrapped to prevent script failure
-    system_info=$(get_system_info 2>/dev/null || printf "unknown\tunknown\tunknown")
-    IFS=$'\t' read -r os_info docker_ver docker_compose_ver <<< "$system_info"
-    
-    debugLog "[DEBUG] System info: OS=$os_info, Docker=$docker_ver, Docker Compose=$docker_compose_ver"
-    
+    system_info=$(get_system_info 2>/dev/null || printf "unknown\tunknown\tunknown\tunknown")
+    IFS=$'\t' read -r os_info runtime_ver compose_ver runtime_name <<< "$system_info"
+
+    debugLog "[DEBUG] System info: OS=$os_info, Runtime=$runtime_name $runtime_ver, Compose=$compose_ver"
+
     json_payload=$(cat <<EOF
 {
   "anonymous_id": "$uuid",
@@ -614,8 +621,11 @@ EOF
     "event_ver": "1",
     "script_type": "sh",
     "os": "$os_info",
-    "docker_version": "$docker_ver",
-    "docker_compose_version": "$docker_compose_ver"
+    "container_runtime": "$runtime_name",
+    "runtime_version": "$runtime_ver",
+    "compose_version": "$compose_ver",
+    "docker_version": "$runtime_ver",
+    "docker_compose_version": "$compose_ver"
   }
 }
 EOF
