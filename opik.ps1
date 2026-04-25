@@ -17,6 +17,9 @@ if ($runtimeIdx -ge 0 -and $runtimeIdx + 1 -lt $options.Count) {
 # Env var fallback
 if (-not $Runtime) { $Runtime = $env:OPIK_CONTAINER_RUNTIME }
 
+# Skip runtime detection for --help: no container runtime needed to print usage.
+$_skipRuntime = $options -contains "--help" -or $options -contains "-help"
+
 # Validate if explicitly set
 if ($Runtime -and $Runtime -notin @("docker", "podman")) {
     Write-Host "[ERROR] Invalid -Runtime value: '$Runtime'. Must be 'docker' or 'podman'."
@@ -31,45 +34,48 @@ if ($Runtime) {
     }
 }
 
-# Auto-detect
-if (-not $Runtime) {
-    docker info *>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $Runtime = "docker"
-    } else {
-        podman info *>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            $Runtime = "podman"
-        } else {
+# Auto-detect and compose resolution — skipped for --help invocations
+if (-not $_skipRuntime) {
+    if (-not $Runtime) {
+        if (Get-Command docker -ErrorAction SilentlyContinue) {
+            docker info *>&1 | Out-Null
+            if ($LASTEXITCODE -eq 0) { $Runtime = "docker" }
+        }
+        if (-not $Runtime) {
+            if (Get-Command podman -ErrorAction SilentlyContinue) {
+                podman info *>&1 | Out-Null
+                if ($LASTEXITCODE -eq 0) { $Runtime = "podman" }
+            }
+        }
+        if (-not $Runtime) {
             Write-Host "[ERROR] Neither Docker nor Podman found. Please install one first."
             exit 1
         }
     }
-}
 
-$env:CONTAINER_RUNTIME = $Runtime
+    $env:CONTAINER_RUNTIME = $Runtime
 
-# Resolve compose binary and subcommand args
-if ($Runtime -eq "podman") {
-    $env:OPIK_HOST_GATEWAY = "host.containers.internal"
-    podman compose version *>&1 | Out-Null
-    if ($LASTEXITCODE -eq 0) {
-        $script:ComposeBinary = "podman"
-        $script:ComposeSubArgs = @("compose")
-    } elseif (Get-Command "podman-compose" -ErrorAction SilentlyContinue) {
-        $script:ComposeBinary = "podman-compose"
-        $script:ComposeSubArgs = @()
+    if ($Runtime -eq "podman") {
+        $env:OPIK_HOST_GATEWAY = "host.containers.internal"
+        podman compose version *>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $script:ComposeBinary = "podman"
+            $script:ComposeSubArgs = @("compose")
+        } elseif (Get-Command "podman-compose" -ErrorAction SilentlyContinue) {
+            $script:ComposeBinary = "podman-compose"
+            $script:ComposeSubArgs = @()
+        } else {
+            Write-Host "[ERROR] Podman found but no compose tool available."
+            Write-Host "   Option 1: Upgrade to Podman 4.7+ (includes 'podman compose')"
+            Write-Host "   Option 2: pip install podman-compose>=1.0"
+            exit 1
+        }
+        $env:COMPOSE_BAKE = "false"
     } else {
-        Write-Host "[ERROR] Podman found but no compose tool available."
-        Write-Host "   Option 1: Upgrade to Podman 4.7+ (includes 'podman compose')"
-        Write-Host "   Option 2: pip install podman-compose>=1.0"
-        exit 1
+        $env:OPIK_HOST_GATEWAY = "host.docker.internal"
+        $script:ComposeBinary = "docker"
+        $script:ComposeSubArgs = @("compose")
     }
-    $env:COMPOSE_BAKE = "false"
-} else {
-    $env:OPIK_HOST_GATEWAY = "host.docker.internal"
-    $script:ComposeBinary = "docker"
-    $script:ComposeSubArgs = @("compose")
 }
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
