@@ -2,9 +2,75 @@
 
 [CmdletBinding()]
 param (
+    [string]$Runtime = "",
     [Parameter(ValueFromRemainingArguments = $true)]
     [string[]]$options = @()
 )
+
+# Accept --runtime passed bash-style in $options
+$runtimeIdx = [array]::IndexOf([string[]]$options, "--runtime")
+if ($runtimeIdx -ge 0 -and $runtimeIdx + 1 -lt $options.Count) {
+    $Runtime = $options[$runtimeIdx + 1]
+    $options = $options | Where-Object { $_ -ne "--runtime" -and $_ -ne $Runtime }
+}
+
+# Env var fallback
+if (-not $Runtime) { $Runtime = $env:OPIK_CONTAINER_RUNTIME }
+
+# Validate if explicitly set
+if ($Runtime -and $Runtime -notin @("docker", "podman")) {
+    Write-Host "[ERROR] Invalid -Runtime value: '$Runtime'. Must be 'docker' or 'podman'."
+    exit 1
+}
+
+# Validate binary exists if explicitly set
+if ($Runtime) {
+    if (-not (Get-Command $Runtime -ErrorAction SilentlyContinue)) {
+        Write-Host "[ERROR] Runtime '$Runtime' was requested but is not installed or not on PATH."
+        exit 1
+    }
+}
+
+# Auto-detect
+if (-not $Runtime) {
+    docker info *>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $Runtime = "docker"
+    } else {
+        podman info *>&1 | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            $Runtime = "podman"
+        } else {
+            Write-Host "[ERROR] Neither Docker nor Podman found. Please install one first."
+            exit 1
+        }
+    }
+}
+
+$env:CONTAINER_RUNTIME = $Runtime
+
+# Resolve compose binary and subcommand args
+if ($Runtime -eq "podman") {
+    $env:OPIK_HOST_GATEWAY = "host.containers.internal"
+    podman compose version *>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        $script:ComposeBinary = "podman"
+        $script:ComposeSubArgs = @("compose")
+    } elseif (Get-Command "podman-compose" -ErrorAction SilentlyContinue) {
+        $script:ComposeBinary = "podman-compose"
+        $script:ComposeSubArgs = @()
+    } else {
+        Write-Host "[ERROR] Podman found but no compose tool available."
+        Write-Host "   Option 1: Upgrade to Podman 4.7+ (includes 'podman compose')"
+        Write-Host "   Option 2: pip install podman-compose>=1.0"
+        exit 1
+    }
+    $env:COMPOSE_BAKE = "false"
+} else {
+    $env:OPIK_HOST_GATEWAY = "host.docker.internal"
+    $script:ComposeBinary = "docker"
+    $script:ComposeSubArgs = @("compose")
+}
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -75,6 +141,10 @@ function Write-DebugLog {
 }
 
 function Initialize-BuildxBake {
+    if ($Runtime -eq "podman") {
+        $env:COMPOSE_BAKE = "false"
+        return
+    }
     if ($BUILD_MODE -eq "true") {
         docker buildx bake --help *>&1 | Out-Null
         if ($LASTEXITCODE -eq 0) {
@@ -92,7 +162,7 @@ function Initialize-BuildxBake {
 }
 
 function Get-DockerComposeCommand {
-    $dockerArgs = @("compose", "-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
+    $dockerArgs = $script:ComposeSubArgs + @("-f", (Join-Path $dockerComposeDir "docker-compose.yaml"))
 
     if ($PORT_MAPPING) {
         $dockerArgs += "-f", (Join-Path $dockerComposeDir "docker-compose.override.yaml")
@@ -137,53 +207,64 @@ function Get-SystemInfo {
         Write-DebugLog "[WARN] Failed to get OS info: $_"
     }
     
-    # Docker version - safe with fallback
-    $dockerVersion = "unknown"
+    # Runtime version - safe with fallback
+    $runtimeVersion = "unknown"
     try {
-        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-        if ($dockerCmd) {
-            $dockerOutput = (docker --version 2>&1 | Out-String).Trim()
-            # Extract version: "Docker version 26.1.4, build..." -> "26.1.4"
-            if ($dockerOutput -match 'Docker version ([^,\s]+)') {
-                $dockerVersion = $Matches[1]
+        if ($Runtime -eq "podman") {
+            $podmanOut = (podman --version 2>&1 | Out-String).Trim()
+            if ($podmanOut -match 'podman version (.+)') {
+                $runtimeVersion = $Matches[1].Trim()
             }
-        }
-    } catch {
-        Write-DebugLog "[WARN] Failed to get Docker version: $_"
-    }
-    
-    # Docker Compose version - safe with fallback
-    # Try both V2 (docker compose) and V1 (docker-compose) commands
-    $dockerComposeVersion = "unknown"
-    try {
-        # Try Docker Compose V2 (plugin)
-        $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
-        if ($dockerCmd) {
-            $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
-            # Extract version: "Docker Compose version v2.27.1-desktop.1" -> "v2.27.1-desktop.1"
-            if ($composeOutput -match 'Docker Compose version (.+)$') {
-                $dockerComposeVersion = $Matches[1].Trim()
-            }
-        }
-        
-        # If V2 failed, try Docker Compose V1 (standalone)
-        if ($dockerComposeVersion -eq "unknown") {
-            $dockerComposeCmd = Get-Command docker-compose -ErrorAction SilentlyContinue
-            if ($dockerComposeCmd) {
-                $composeV1Output = (docker-compose version --short 2>&1 | Out-String).Trim()
-                if (-not [string]::IsNullOrWhiteSpace($composeV1Output)) {
-                    $dockerComposeVersion = $composeV1Output
+        } else {
+            $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+            if ($dockerCmd) {
+                $dockerOutput = (docker --version 2>&1 | Out-String).Trim()
+                if ($dockerOutput -match 'Docker version ([^,\s]+)') {
+                    $runtimeVersion = $Matches[1]
                 }
             }
         }
     } catch {
-        Write-DebugLog "[WARN] Failed to get Docker Compose version: $_"
+        Write-DebugLog "[WARN] Failed to get runtime version: $_"
     }
-    
+
+    # Compose version - safe with fallback
+    $composeVersion = "unknown"
+    try {
+        if ($Runtime -eq "podman") {
+            $composeOut = (& $script:ComposeBinary $script:ComposeSubArgs version 2>&1 | Out-String).Trim()
+            if ($composeOut -match 'version\s+(.+)') {
+                $composeVersion = $Matches[1].Trim()
+            }
+        } else {
+            $dockerCmd = Get-Command docker -ErrorAction SilentlyContinue
+            if ($dockerCmd) {
+                $composeOutput = (docker compose version 2>&1 | Out-String).Trim()
+                if ($composeOutput -match 'Docker Compose version (.+)$') {
+                    $composeVersion = $Matches[1].Trim()
+                }
+            }
+            if ($composeVersion -eq "unknown") {
+                $dockerComposeCmd = Get-Command docker-compose -ErrorAction SilentlyContinue
+                if ($dockerComposeCmd) {
+                    $composeV1Output = (docker-compose version --short 2>&1 | Out-String).Trim()
+                    if (-not [string]::IsNullOrWhiteSpace($composeV1Output)) {
+                        $composeVersion = $composeV1Output
+                    }
+                }
+            }
+        }
+    } catch {
+        Write-DebugLog "[WARN] Failed to get compose version: $_"
+    }
+
     return @{
-        Os = $osInfo
-        DockerVersion = $dockerVersion
-        DockerComposeVersion = $dockerComposeVersion
+        Os                   = $osInfo
+        RuntimeName          = $Runtime
+        RuntimeVersion       = $runtimeVersion
+        ComposeVersion       = $composeVersion
+        DockerVersion        = $runtimeVersion
+        DockerComposeVersion = $composeVersion
     }
 }
 
@@ -204,6 +285,8 @@ function Show-Usage {
     Write-Host '  --local-be        Start all services EXCEPT backend (for local backend development)'
     Write-Host '  --local-be-fe     Start only infrastructure + Python backend (for local backend + frontend development)'
     Write-Host '  --guardrails      Enable guardrails profile (can be combined with other flags)'
+    Write-Host '  -Runtime VALUE    Set container runtime: docker or podman (default: auto-detect)'
+    Write-Host '  --runtime VALUE   Same as -Runtime (bash-compatible form, passed via options)'
     Write-Host '  --help            Show this help message'
     Write-Host ''
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
@@ -211,13 +294,13 @@ function Show-Usage {
 
 function Test-DockerStatus {
     try {
-        $dockerInfo = docker info 2>&1
-        if ($dockerInfo -match "error during connect") {
-            Write-Host '[ERROR] Docker is not running or is not accessible. Please start Docker first.'
+        & $Runtime info *>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERROR] ${Runtime} is not running or not accessible. Please start ${Runtime} first."
             exit 1
         }
     } catch {
-        Write-Host '[ERROR] Failed to communicate with Docker. Please check if Docker is running and accessible.'
+        Write-Host "[ERROR] Failed to communicate with ${Runtime}. Please check if it is running."
         exit 1
     }
 }
@@ -233,8 +316,8 @@ function Test-ContainersStatus {
     $containers = Get-Containers
 
     foreach ($container in $containers) {
-        $status = docker inspect -f '{{.State.Status}}' $container 2>$null
-        $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
+        $status = & $Runtime inspect -f '{{.State.Status}}' $container 2>$null
+        $health = & $Runtime inspect -f '{{.State.Health.Status}}' $container 2>$null
 
         if ([string]::IsNullOrEmpty($status)) { $status = 'not found' }
 
@@ -265,11 +348,11 @@ function Wait-ContainerCompletion {
     $count = 0
 
     while ($count -lt $MaxWait) {
-        $status = docker inspect -f '{{.State.Status}}' $ContainerName 2>$null
+        $status = & $Runtime inspect -f '{{.State.Status}}' $ContainerName 2>$null
         if ([string]::IsNullOrEmpty($status)) { $status = 'not_found' }
 
         if ($status -eq 'exited') {
-            $exitCode = docker inspect -f '{{.State.ExitCode}}' $ContainerName 2>$null
+            $exitCode = & $Runtime inspect -f '{{.State.ExitCode}}' $ContainerName 2>$null
             if ([string]::IsNullOrEmpty($exitCode)) { $exitCode = 1 }
             Write-DebugLog "[DEBUG] $ContainerName exited with code: $exitCode"
             return $exitCode
@@ -283,7 +366,7 @@ function Wait-ContainerCompletion {
     }
 
     Write-Host "[ERROR] Timeout waiting for $ContainerName to complete"
-    docker logs $ContainerName 2>$null
+    & $Runtime logs $ContainerName 2>$null
     return 1
 }
 
@@ -343,22 +426,28 @@ function Send-InstallReport {
             Write-DebugLog "[WARN] Failed to get system info, using defaults: $_"
             $SystemInfo = @{
                 Os = "unknown"
+                RuntimeName = "unknown"
+                RuntimeVersion = "unknown"
+                ComposeVersion = "unknown"
                 DockerVersion = "unknown"
                 DockerComposeVersion = "unknown"
             }
         }
         
-        Write-DebugLog "[DEBUG] System info: OS=$($SystemInfo.Os), Docker=$($SystemInfo.DockerVersion), Docker Compose=$($SystemInfo.DockerComposeVersion)"
+        Write-DebugLog "[DEBUG] System info: OS=$($SystemInfo.Os), Runtime=$($SystemInfo.RuntimeName) $($SystemInfo.RuntimeVersion), Compose=$($SystemInfo.ComposeVersion)"
 
         $Payload = @{
             anonymous_id = $Uuid
             event_type   = $EventType
             event_properties = @{
-                start_time = $StartTime
-                event_ver  = "1"
-                script_type = "ps1"
-                os = $SystemInfo.Os
-                docker_version = $SystemInfo.DockerVersion
+                start_time             = $StartTime
+                event_ver              = "1"
+                script_type            = "ps1"
+                os                     = $SystemInfo.Os
+                container_runtime      = $SystemInfo.RuntimeName
+                runtime_version        = $SystemInfo.RuntimeVersion
+                compose_version        = $SystemInfo.ComposeVersion
+                docker_version         = $SystemInfo.DockerVersion
                 docker_compose_version = $SystemInfo.DockerComposeVersion
             }
         }
@@ -401,7 +490,7 @@ function Start-MissingContainers {
     $containers = Get-Containers
 
     foreach ($container in $containers) {
-        $status = docker inspect -f '{{.State.Status}}' $container 2>$null
+        $status = & $Runtime inspect -f '{{.State.Status}}' $container 2>$null
         $resolvedStatus = if ($status) { $status } else { 'not found' }
 
         if ($status -ne 'running') {
@@ -423,7 +512,7 @@ function Start-MissingContainers {
         $dockerArgs += "--build"
     }
 
-    docker @dockerArgs | Where-Object { $_.Trim() -ne '' }
+    & $script:ComposeBinary @dockerArgs | Where-Object { $_.Trim() -ne '' }
 
     Write-Host '[INFO] Waiting for all containers to be running and healthy...'
     $maxRetries = 60
@@ -435,8 +524,8 @@ function Start-MissingContainers {
         Write-DebugLog "[DEBUG] Waiting for $container..."
 
         while ($true) {
-            $status = docker inspect -f '{{.State.Status}}' $container 2>$null
-            $health = docker inspect -f '{{.State.Health.Status}}' $container 2>$null
+            $status = & $Runtime inspect -f '{{.State.Status}}' $container 2>$null
+            $health = & $Runtime inspect -f '{{.State.Health.Status}}' $container 2>$null
 
             if (-not $health) { 
                 $health = 'no health check defined' 
@@ -482,7 +571,7 @@ function Stop-Containers {
 
     $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "down"
-    docker @dockerArgs
+    & $script:ComposeBinary @dockerArgs
     Write-Host '[OK] All containers stopped and cleaned up!'
 }
 
@@ -498,8 +587,8 @@ function Remove-OpikData {
     $dockerArgs = Get-DockerComposeCommand
     $dockerArgs += "down", "-v"
     
-    Write-DebugLog "[DEBUG] Running: docker $($dockerArgs -join ' ')"
-    docker @dockerArgs
+    Write-DebugLog "[DEBUG] Running: $script:ComposeBinary $($dockerArgs -join ' ')"
+    & $script:ComposeBinary @dockerArgs
     Write-Host '[OK] All containers stopped and data volumes removed!'
 }
 
@@ -521,8 +610,8 @@ function New-DemoData {
     
     $dockerArgs += "demo-data-generator"
 
-    Write-DebugLog "[DEBUG] Running: docker $($dockerArgs -join ' ')"
-    docker @dockerArgs
+    Write-DebugLog "[DEBUG] Running: $script:ComposeBinary $($dockerArgs -join ' ')"
+    & $script:ComposeBinary @dockerArgs
 
     if ($LASTEXITCODE -ne 0) {
         Write-Host '[ERROR] Failed to start demo-data-generator'
@@ -541,7 +630,7 @@ function New-DemoData {
 }
 
 function Get-UIUrl {
-    $frontendPort = docker inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
+    $frontendPort = & $Runtime inspect -f '{{ (index (index .NetworkSettings.Ports "5173/tcp") 0).HostPort }}' opik-frontend-1 2>$null
     if (-not $frontendPort) { $frontendPort = 5173 }
     return "http://localhost:$frontendPort"
 }
@@ -732,7 +821,7 @@ if ($options -contains '--backend') {
 if ($options -contains '--local-be-fe') {
     $LOCAL_BE_FE = $true
     $PORT_MAPPING = $true  # Required for local processes to connect to infrastructure
-    $env:OPIK_REVERSE_PROXY_URL = "http://host.docker.internal:8080"
+    $env:OPIK_REVERSE_PROXY_URL = "http://$($env:OPIK_HOST_GATEWAY):8080"
     $options = $options | Where-Object { $_ -ne '--local-be-fe' }
 }
 
