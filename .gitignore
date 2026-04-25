@@ -1,6 +1,9 @@
 # Mac
 .DS_Store
 
+# Git worktrees
+.worktrees/
+
 # Environment variables
 .env.local
 .env
