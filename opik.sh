@@ -299,8 +299,8 @@ check_containers_status() {
   local containers=("${CONTAINERS[@]}")
 
   for container in "${containers[@]}"; do
-    status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
-    health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
+    status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+    health=$($CONTAINER_RUNTIME inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
 
     if [[ "$status" != "running" ]]; then
       echo "❌ $container is not running (status=$status)"
@@ -328,11 +328,11 @@ wait_for_container_completion() {
 
   while [ $count -lt "$max_wait" ]; do
     local status
-    status=$(docker inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null || echo "not_found")
+    status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container_name" 2>/dev/null || echo "not_found")
 
     if [ "$status" = "exited" ]; then
       local exit_code
-      exit_code=$(docker inspect -f '{{.State.ExitCode}}' "$container_name" 2>/dev/null || echo "1")
+      exit_code=$($CONTAINER_RUNTIME inspect -f '{{.State.ExitCode}}' "$container_name" 2>/dev/null || echo "1")
       debugLog "[DEBUG] $container_name exited with code: $exit_code"
       return "$exit_code"
     elif [ "$status" = "not_found" ]; then
@@ -345,7 +345,7 @@ wait_for_container_completion() {
   done
 
   echo "❌ Timeout waiting for $container_name to complete"
-  docker logs "$container_name" 2>/dev/null || true
+  $CONTAINER_RUNTIME logs "$container_name" 2>/dev/null || true
   return 1
 }
 
@@ -366,7 +366,7 @@ start_missing_containers() {
 
   local containers=("${CONTAINERS[@]}")
   for container in "${containers[@]}"; do
-    status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+    status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
 
     if [[ "$status" != "running" ]]; then
       debugLog "🔴 $container is not running (status: ${status:-not found})"
@@ -394,8 +394,8 @@ start_missing_containers() {
     debugLog "⏳ Waiting for $container..."
 
     while true; do
-      status=$(docker inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
-      health=$(docker inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
+      status=$($CONTAINER_RUNTIME inspect -f '{{.State.Status}}' "$container" 2>/dev/null)
+      health=$($CONTAINER_RUNTIME inspect -f '{{.State.Health.Status}}' "$container" 2>/dev/null)
 
       if [[ "$status" != "running" ]]; then
         echo "❌ $container failed to start (status: $status)"
