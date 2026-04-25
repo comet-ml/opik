@@ -18,6 +18,7 @@ FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
 WORKTREE_UTILS_ROOT="$PROJECT_ROOT"
 source "$SCRIPT_DIR/worktree-utils.sh"
 init_worktree_ports
+resolve_container_runtime
 
 # Dynamic PID and log file paths (isolated per worktree)
 BACKEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-backend.pid"
@@ -734,7 +735,7 @@ verify_be_only_services() {
     echo ""
     echo "Logs:"
     echo "  Backend Process:  tail -f $BACKEND_LOG_FILE"
-    echo "  Frontend:         docker logs -f ${RESOURCE_PREFIX}-frontend-1"
+    echo "  Frontend:         ${CONTAINER_RUNTIME} logs -f ${RESOURCE_PREFIX}-frontend-1"
 }
 
 # Function to start services (without building)
