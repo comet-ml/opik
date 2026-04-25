@@ -29,7 +29,7 @@ Choose the approach that best fits your development needs:
 
 ### Required Tools
 
-- **Docker** and **Docker Compose** - For running infrastructure services
+- **Docker** and **Docker Compose** — OR — **Podman** (4.0+) with either `podman compose` (Podman 4.7+) or `podman-compose` (1.0+)
 - **Java 21** and **Maven** - For backend development
 - **Node.js 18+** and **npm** - For frontend development
 - **Python 3.10+** and **pip** - For SDK development
@@ -40,6 +40,11 @@ Choose the approach that best fits your development needs:
 # Check Docker
 docker --version
 docker compose version
+
+# If using Podman instead of Docker
+podman --version          # must be 4.0+
+podman compose version    # if using built-in compose (Podman 4.7+)
+podman-compose --version  # if using standalone (must be 1.0+)
 
 # Check Java and Maven
 java -version
@@ -81,6 +86,15 @@ The `opik.sh` script manages Docker Compose profiles to start different combinat
 
 # Enable debug logging
 ./opik.sh --build --debug
+
+# Use Podman instead of Docker (auto-detected if Docker is absent)
+./opik.sh --runtime podman
+
+# Force a specific runtime when both are installed
+./opik.sh --runtime docker
+
+# Or set via environment variable
+OPIK_CONTAINER_RUNTIME=podman ./opik.sh
 ```
 
 #### Available Profiles
@@ -602,6 +616,12 @@ pkill -f "vite.*opik-frontend"
 Get-Process | Where-Object {$_.Path -like "*opik-backend*"} | Stop-Process -Force
 Get-Process | Where-Object {$_.Path -like "*opik-frontend*"} | Stop-Process -Force
 ```
+
+### `--local-be-fe` mode fails with rootless Podman
+
+The `--local-be-fe` mode uses `host.containers.internal` to let the container reach your local backend. This requires Podman 4.0+ with Netavark networking (the default network driver from Podman 4.0) or pasta networking (the default from Podman 5.0).
+
+If you are on an older Podman with CNI networking, either upgrade Podman or start the container with `--network=slirp4netns:allow_host_loopback=true`.
 
 ### Clean Slate Restart
 
