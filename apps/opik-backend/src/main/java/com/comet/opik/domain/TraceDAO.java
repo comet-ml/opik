@@ -436,7 +436,30 @@ class TraceDAOImpl implements TraceDAO {
     // Format: if span_id exists, use 'author_spanId', otherwise use 'author'.
     // The tuple contains: (value, reason, category_name, source, last_updated_at, span_type, span_id)
     private static final String SELECT_BY_IDS = """
-            WITH target_spans AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    entity_type,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND (
+                    (entity_id IN :ids AND entity_type = 'trace')
+                    OR (entity_type = 'span' AND entity_id IN (
+                        SELECT id FROM spans FINAL
+                        WHERE workspace_id = :workspace_id AND trace_id IN :ids
+                    ))
+                )
+                GROUP BY entity_id, entity_type
+            ), trace_attachment_counts AS (
+                SELECT
+                    multiIf(entity_type = 'trace', entity_id,
+                        (SELECT trace_id FROM spans FINAL
+                         WHERE id = entity_id AND workspace_id = :workspace_id LIMIT 1)) AS trace_id,
+                    SUM(attachment_count) AS total_attachment_count
+                FROM attachment_counts
+                GROUP BY trace_id
+            ), target_spans AS (
                 SELECT id, trace_id, type
                 FROM spans FINAL
                 WHERE workspace_id = :workspace_id
@@ -681,6 +704,7 @@ class TraceDAOImpl implements TraceDAO {
                 fs.feedback_scores_list as feedback_scores_list,
                 sfs.span_feedback_scores_list as span_feedback_scores_list,
                 gr.guardrails as guardrails_validations,
+                coalesce(a.total_attachment_count, 0) as attachment_count,
                 eaag.experiment_id as experiment_id,
                 eaag.experiment_name as experiment_name,
                 eaag.experiment_dataset_id as experiment_dataset_id,
@@ -788,6 +812,7 @@ class TraceDAOImpl implements TraceDAO {
                 )
                 GROUP BY workspace_id, project_id, entity_type, entity_id
             ) AS gr ON t.id = gr.entity_id
+            LEFT JOIN trace_attachment_counts a ON t.id = a.trace_id
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -803,7 +828,26 @@ class TraceDAOImpl implements TraceDAO {
             """;
 
     private static final String SELECT_BY_PROJECT_ID = """
-            WITH <if(trace_id_prefilter)>trace_id_prefilter AS (
+            WITH attachment_counts AS (
+                SELECT
+                    entity_id,
+                    entity_type,
+                    COUNT(*) AS attachment_count
+                FROM attachments
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                <if(uuid_from_time)> AND entity_id >= :uuid_from_time <endif>
+                <if(uuid_to_time)> AND entity_id \\<= :uuid_to_time <endif>
+                GROUP BY entity_id, entity_type
+            ), trace_attachment_counts AS (
+                SELECT
+                    multiIf(entity_type = 'trace', entity_id,
+                        (SELECT trace_id FROM spans FINAL
+                         WHERE id = entity_id AND workspace_id = :workspace_id LIMIT 1)) AS trace_id,
+                    SUM(attachment_count) AS total_attachment_count
+                FROM attachment_counts
+                GROUP BY trace_id
+            ), <if(trace_id_prefilter)>trace_id_prefilter AS (
                 SELECT DISTINCT id
                 FROM traces
                 WHERE workspace_id = :workspace_id
@@ -1325,6 +1369,7 @@ class TraceDAOImpl implements TraceDAO {
                   <if(!exclude_llm_span_count)>, s.llm_span_count AS llm_span_count<endif>
                   <if(!exclude_has_tool_spans)>, s.has_tool_spans AS has_tool_spans<endif>
                   , s.providers AS providers
+                  , coalesce(a.total_attachment_count, 0) as attachment_count
                   <if(!exclude_experiment)>, eaag.experiment_id, eaag.experiment_name, eaag.experiment_dataset_id, eaag.experiment_dataset_item_id<endif>
              FROM traces_final t
              <if(!exclude_feedback_scores)>
@@ -1335,6 +1380,7 @@ class TraceDAOImpl implements TraceDAO {
              LEFT JOIN comments_agg c ON t.id = c.entity_id
              LEFT JOIN guardrails_agg gagg ON gagg.entity_id = t.id
              <if(sort_has_experiment || !exclude_experiment)>LEFT JOIN experiments_agg eaag ON eaag.trace_id = t.id<endif>
+             LEFT JOIN trace_attachment_counts a ON t.id = a.trace_id
              ORDER BY <if(sort_fields)> <sort_fields>, <endif>(workspace_id, project_id, id) DESC, last_updated_at DESC
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -2925,6 +2971,8 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
                         .orElse(null))
+                .attachmentCount(
+                        getValue(exclude, Trace.TraceField.ATTACHMENT_COUNT, row, "attachment_count", Integer.class))
                 .experiment(mapExperiment(exclude, row))
                 .build();
     }

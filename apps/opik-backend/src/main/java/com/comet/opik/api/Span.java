@@ -80,6 +80,8 @@ public record Span(
         String totalEstimatedCostVersion,
         @JsonView({
                 Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Duration in milliseconds as a decimal number to support sub-millisecond precision") Double duration,
+        @JsonView({
+                Span.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Integer attachmentCount,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
@@ -121,6 +123,7 @@ public record Span(
         TOTAL_ESTIMATED_COST("total_estimated_cost"),
         TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
         DURATION("duration"),
+        ATTACHMENT_COUNT("attachment_count"),
         TTFT("ttft"),
         SOURCE("source");
 

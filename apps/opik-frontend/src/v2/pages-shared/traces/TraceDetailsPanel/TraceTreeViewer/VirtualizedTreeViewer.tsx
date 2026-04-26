@@ -9,6 +9,7 @@ import {
   Coins,
   Hash,
   MessageSquareMore,
+  Paperclip,
   PenLine,
   Tag,
 } from "lucide-react";
@@ -477,6 +478,15 @@ const VirtualizedTreeViewer: React.FC<VirtualizedTreeViewerProps> = ({
                     {name}
                   </span>
                 </TooltipWrapper>
+                {Boolean(node.data.attachment_count) && (
+                  <TooltipWrapper
+                    content={`${node.data.attachment_count} attachment${node.data.attachment_count! > 1 ? "s" : ""}`}
+                  >
+                    <div className="ml-1 flex size-4 shrink-0 items-center justify-center">
+                      <Paperclip className="size-3 text-muted-slate" />
+                    </div>
+                  </TooltipWrapper>
+                )}
                 <div className="flex-auto" />
                 {node.data.hasError && (
                   <TooltipWrapper
