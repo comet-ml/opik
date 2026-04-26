@@ -37,14 +37,33 @@ env:
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 
 jobs:
+  select-matrix:
+    name: Select Python version matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      python_versions: ${{ steps.pick.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/select-e2e-matrix
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/select-e2e-matrix
+        id: pick
+        with:
+          all-versions: ${{ vars.PYTHON_VERSIONS }}
+          match-regex: '^apps/opik-guardrails-backend/|^sdks/python/src/opik/guardrails/|^sdks/python/tests/e2e/test_guardrails\.py$|^\.github/workflows/guardrails_e2e_tests\.yml$'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   e2e-tests:
+    needs: select-matrix
     name: Guardrails E2E Tests ${{matrix.python_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+        python_version: ${{ fromJSON(needs.select-matrix.outputs.python_versions) }}
 
     steps:
       - name: Checkout
