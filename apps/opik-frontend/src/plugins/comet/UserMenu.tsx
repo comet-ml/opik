@@ -35,11 +35,12 @@ import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { buildFullBaseUrl, cn, maskAPIKey } from "@/lib/utils";
+import { cn, maskAPIKey } from "@/lib/utils";
 import useAppStore, { useDetectedWorkspaceVersion } from "@/store/AppStore";
 import {
   getNewExperienceOptIn,
   getVersionOverride,
+  navigateToWorkspaceRoot,
   setNewExperienceOptIn,
 } from "@/lib/workspaceVersion";
 import api from "./api";
@@ -294,9 +295,7 @@ const UserMenu = () => {
                 onSelect={(e) => {
                   e.preventDefault();
                   setNewExperienceOptIn(!hasOptedIn);
-                  const base = buildFullBaseUrl();
-                  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
-                  window.location.href = normalizedBase + workspaceName;
+                  navigateToWorkspaceRoot(workspaceName);
                 }}
               >
                 <Sparkles className="mr-2 size-4" />

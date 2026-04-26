@@ -1,7 +1,7 @@
 import React from "react";
 import { cn } from "@/lib/utils";
 import { ExperimentItem } from "@/types/datasets";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 
 type MultiRunTabsProps = {
   experimentItems: ExperimentItem[];
@@ -28,7 +28,7 @@ const MultiRunTabs: React.FC<MultiRunTabsProps> = ({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex w-fit max-w-full shrink-0 items-center overflow-x-auto rounded-md border border-border p-1">
         {experimentItems.map((item, idx) => {
-          const isPassed = item.status === ExperimentItemStatus.PASSED;
+          const isPassed = item.status === RunStatus.PASSED;
           const dotColor = isPassed
             ? "var(--special-button)"
             : "var(--template-icon-performance)";

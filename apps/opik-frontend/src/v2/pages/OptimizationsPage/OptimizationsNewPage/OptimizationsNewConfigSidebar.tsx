@@ -22,7 +22,7 @@ import {
   OPTIMIZER_OPTIONS,
   OPTIMIZATION_METRIC_OPTIONS,
 } from "@/constants/optimizations";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import DatasetSamplePreview from "./DatasetSamplePreview";
 

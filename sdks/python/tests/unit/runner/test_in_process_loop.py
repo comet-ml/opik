@@ -37,6 +37,7 @@ def loop(mock_api, shutdown_event):
         "r-1",
         shutdown_event,
         heartbeat_interval_seconds=100,
+        poll_idle_interval_seconds=0.01,
     )
 
 

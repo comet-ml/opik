@@ -73,6 +73,7 @@ openai:
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
+  - id: "gpt-image-2"
   - id: "o1"
     reasoning: true
   - id: "o1-2024-12-17"
@@ -105,7 +106,6 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
-  - id: "gpt-image-2"
 anthropic:
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-haiku-4-5-20251001"
@@ -244,6 +244,7 @@ openrouter:
   - id: "arcee-ai/coder-large"
   - id: "arcee-ai/maestro-reasoning"
   - id: "arcee-ai/spotlight"
+  - id: "arcee-ai/trinity-large-preview"
   - id: "arcee-ai/trinity-large-preview:free"
   - id: "arcee-ai/trinity-large-thinking"
   - id: "arcee-ai/trinity-mini"
@@ -259,6 +260,7 @@ openrouter:
   - id: "baidu/ernie-4.5-300b-a47b"
   - id: "baidu/ernie-4.5-vl-28b-a3b"
   - id: "baidu/ernie-4.5-vl-424b-a47b"
+  - id: "baidu/qianfan-ocr-fast:free"
   - id: "bytedance-seed/seed-1.6"
   - id: "bytedance-seed/seed-1.6-flash"
   - id: "bytedance-seed/seed-2.0-lite"
@@ -362,6 +364,7 @@ openrouter:
   - id: "inception/mercury"
   - id: "inception/mercury-2"
   - id: "inception/mercury-coder"
+  - id: "inclusionai/ling-2.6-1t:free"
   - id: "inclusionai/ling-2.6-flash:free"
   - id: "inflection/inflection-3-pi"
   - id: "inflection/inflection-3-productivity"
@@ -711,6 +714,7 @@ openrouter:
   - id: "stepfun/step-3.5-flash:free"
   - id: "switchpoint/router"
   - id: "tencent/hunyuan-a13b-instruct"
+  - id: "tencent/hy3-preview:free"
   - id: "thedrummer/anubis-70b-v1.1"
   - id: "thedrummer/cydonia-24b-v4.1"
   - id: "thedrummer/rocinante-12b"
@@ -745,6 +749,8 @@ openrouter:
   - id: "xiaomi/mimo-v2-flash"
   - id: "xiaomi/mimo-v2-omni"
   - id: "xiaomi/mimo-v2-pro"
+  - id: "xiaomi/mimo-v2.5"
+  - id: "xiaomi/mimo-v2.5-pro"
   - id: "z-ai/glm-4-32b"
   - id: "z-ai/glm-4.5"
   - id: "z-ai/glm-4.5-air"

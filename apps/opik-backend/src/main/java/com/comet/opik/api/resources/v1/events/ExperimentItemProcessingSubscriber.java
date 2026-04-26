@@ -6,6 +6,7 @@ import com.comet.opik.api.Visibility;
 import com.comet.opik.api.events.ExperimentItemToProcess;
 import com.comet.opik.domain.ExperimentItemProcessor;
 import com.comet.opik.domain.ExperimentService;
+import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.infrastructure.ExperimentExecutionConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import jakarta.inject.Inject;
@@ -30,6 +31,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
 
     private final ExperimentItemProcessor itemProcessor;
     private final ExperimentService experimentService;
+    private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final RedissonReactiveClient redisClient;
     private final ExperimentExecutionConfig config;
 
@@ -38,10 +40,12 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
             @NonNull @Config("experimentExecution") ExperimentExecutionConfig config,
             @NonNull RedissonReactiveClient redisson,
             @NonNull ExperimentItemProcessor itemProcessor,
-            @NonNull ExperimentService experimentService) {
+            @NonNull ExperimentService experimentService,
+            @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService) {
         super(config, redisson, ExperimentExecutionConfig.PAYLOAD_FIELD, SUBSCRIBER_NAMESPACE, METRICS_BASE_NAME);
         this.itemProcessor = itemProcessor;
         this.experimentService = experimentService;
+        this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.redisClient = redisson;
         this.config = config;
     }
@@ -90,6 +94,7 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 ? Mono.empty()
                 : failureCounter.incrementAndGet()
                         .then(failureCounter.expire(config.getBatchCounterTtl().toJavaDuration()))
+                        .then(decrementAssertionCounter(message))
                         .then();
 
         return trackFailure.then(counter.decrementAndGet())
@@ -104,13 +109,37 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                                         return markExperimentsFailed(message,
                                                 buildReactorContext(message));
                                     }
-                                    log.info("Batch '{}' complete, finishing '{}' experiments",
-                                            message.batchId(), message.allExperimentIds().size());
-                                    return finishExperiments(message);
+                                    return isTestSuiteExperiment(message)
+                                            .flatMap(isTestSuite -> {
+                                                if (isTestSuite) {
+                                                    log.info("Batch '{}' complete, waiting for assertions to finish",
+                                                            message.batchId());
+                                                    return Mono.empty();
+                                                }
+                                                log.info("Batch '{}' complete, finishing '{}' experiments",
+                                                        message.batchId(), message.allExperimentIds().size());
+                                                return finishExperiments(message);
+                                            });
                                 });
                     }
                     log.debug("Batch '{}' has '{}' remaining items", message.batchId(), remaining);
                     return Mono.empty();
+                })
+                .then();
+    }
+
+    private Mono<Boolean> isTestSuiteExperiment(ExperimentItemToProcess message) {
+        return testSuiteAssertionCounterService.exists(message.workspaceId(), message.experimentId());
+    }
+
+    private Mono<Void> decrementAssertionCounter(ExperimentItemToProcess message) {
+        return isTestSuiteExperiment(message)
+                .flatMap(isTestSuite -> {
+                    if (!isTestSuite) {
+                        return Mono.empty();
+                    }
+                    return testSuiteAssertionCounterService.decrementAndFinishIfComplete(
+                            message.workspaceId(), message.experimentId());
                 })
                 .then();
     }
@@ -123,6 +152,8 @@ public class ExperimentItemProcessingSubscriber extends BaseRedisSubscriber<Expe
                 RequestContext.VISIBILITY, Visibility.PRIVATE);
     }
 
+    // TODO: deduplicate with TestSuiteAssertionCounterService.finishExperiment — extract into
+    //  a shared ExperimentFinishListener triggered by an ExperimentProcessed event
     private Mono<Void> finishExperiments(ExperimentItemToProcess message) {
         var reactorContext = buildReactorContext(message);
 

@@ -1,7 +1,7 @@
 import React from "react";
 import IntegrationCard from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationCard";
 import tsLogo from "@/icons/ts-logo.svg";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { useIntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 
 const IntegrationTypeScriptSDK: React.FC = () => {

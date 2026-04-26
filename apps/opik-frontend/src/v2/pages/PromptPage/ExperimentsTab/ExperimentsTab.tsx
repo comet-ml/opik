@@ -53,7 +53,7 @@ import {
 } from "@/shared/ResourceLink/ResourceLink";
 import { Separator } from "@/ui/separator";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useExperimentsTableConfig } from "@/v2/pages-shared/experiments/useExperimentsTableConfig";

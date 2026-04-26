@@ -19,7 +19,7 @@ import {
   ExperimentItem,
   ExperimentRunSummary,
 } from "@/types/datasets";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 import { OnChangeFn } from "@/types/shared";
 import { traceExist, traceVisible } from "@/lib/traces";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -31,7 +31,7 @@ import MultiRunTabs from "./MultiRunTabs";
 type SingleExperimentSectionProps = {
   experimentItems: ExperimentItem[];
   experimentName: string;
-  status: ExperimentItemStatus | undefined;
+  status: RunStatus | undefined;
   openTrace: OnChangeFn<string>;
   sectionIdx: number;
 };

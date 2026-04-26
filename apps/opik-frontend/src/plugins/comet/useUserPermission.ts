@@ -216,7 +216,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const canTagTrace = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.TRACE_TAG),
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.TRACE_SPAN_THREAD_LOG),
     [checkNullablePermission],
   );
 
@@ -230,6 +231,14 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const canUsePlayground = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.PLAYGROUND_USE),
+    [checkNullablePermission],
+  );
+
+  const canUseOptimizationStudio = useMemo(
+    () =>
+      checkNullablePermission(
+        ManagementPermissionsNames.OPTIMIZATION_STUDIO_USE,
+      ),
     [checkNullablePermission],
   );
 
@@ -263,6 +272,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canAnnotateTraceSpanThread,
     canTagTrace,
     canUsePlayground,
+    canUseOptimizationStudio,
     isPending: isEnabled && isPending,
   };
 };

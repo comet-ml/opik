@@ -3,6 +3,7 @@ import pydantic
 
 import opik
 from opik.evaluation.models.litellm import litellm_chat_model
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -22,7 +23,10 @@ MODEL_FOR_TESTS = constants.MODEL_FOR_TESTS
 def test_litellm_chat_model_generate_string__happyflow(fake_backend, monkeypatch):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = model.generate_string("Tell me a short fact about Python programming")
     opik.flush_tracker()
 
@@ -70,7 +74,10 @@ def test_litellm_chat_model_nested_in_track__creates_child_span(
 ):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
 
     @opik.track
     def outer_function(text: str) -> str:
@@ -138,7 +145,10 @@ async def test_litellm_chat_model_agenerate_string__happyflow(
 ):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = await model.agenerate_string(
         "Tell me a short fact about async programming"
     )
@@ -191,7 +201,10 @@ def test_litellm_chat_model_with_response_format__structured_output(
     class SimpleResponse(pydantic.BaseModel):
         answer: str
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = model.generate_string(
         "What is 2+2? Answer in one word.", response_format=SimpleResponse
     )
@@ -241,7 +254,10 @@ def test_litellm_chat_model_with_monitoring_disabled__no_traces_created(
 ):
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
 
@@ -256,7 +272,11 @@ def test_litellm_chat_model_with_track_false__no_traces_created(
     """Test that track=False disables tracing even when monitoring is enabled."""
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS, track=False)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        track=False,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
 
@@ -269,7 +289,11 @@ def test_litellm_chat_model_with_track_true__traces_created(fake_backend, monkey
     """Test that track=True enables tracing when monitoring is enabled."""
     monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "true")
 
-    model = litellm_chat_model.LiteLLMChatModel(model_name=MODEL_FOR_TESTS, track=True)
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        track=True,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
     result = model.generate_string("Tell me a short fact")
     opik.flush_tracker()
 

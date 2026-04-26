@@ -316,6 +316,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/spotlight",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW,
+      label: "arcee-ai/trinity-large-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE,
       label: "arcee-ai/trinity-large-preview:free",
     },
@@ -362,6 +366,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_VL_424B_A47B,
       label: "baidu/ernie-4.5-vl-424b-a47b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
+      label: "baidu/qianfan-ocr-fast:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.BYTEDANCE_SEED_SEED_1_6,
@@ -675,6 +683,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
       label: "inception/mercury-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
+      label: "inclusionai/ling-2.6-1t:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
@@ -1809,6 +1821,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "tencent/hunyuan-a13b-instruct",
     },
     {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
+      label: "tencent/hy3-preview:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.THEDRUMMER_ANUBIS_70B_V1_1,
       label: "thedrummer/anubis-70b-v1.1",
     },
@@ -1923,6 +1939,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_PRO,
       label: "xiaomi/mimo-v2-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
+      label: "xiaomi/mimo-v2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
+      label: "xiaomi/mimo-v2.5-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,

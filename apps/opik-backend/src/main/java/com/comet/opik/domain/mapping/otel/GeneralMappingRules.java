@@ -13,6 +13,9 @@ public final class GeneralMappingRules {
 
     public static final String SOURCE = "General";
 
+    public static final String OPIK_TRACE_ID_ATTR = "opik.trace_id";
+    public static final String OPIK_PARENT_SPAN_ID_ATTR = "opik.parent_span_id";
+
     private static final List<OpenTelemetryMappingRule> RULES = List.of(
             OpenTelemetryMappingRule.builder()
                     .rule("input").isPrefix(true).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.INPUT)
@@ -26,7 +29,16 @@ public final class GeneralMappingRules {
                     .rule("opik.tags").source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.TAGS).build(),
             OpenTelemetryMappingRule.builder()
                     .rule("opik.metadata").isPrefix(true).source(SOURCE)
-                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build());
+                    .outcome(OpenTelemetryMappingRule.Outcome.METADATA).build(),
+            // These attributes are consumed by OpenTelemetryMapper.toOpikSpan() to connect
+            // OTEL spans to existing OPIK traces/spans. They are dropped here to prevent them
+            // from leaking into input/output/metadata as regular span attributes.
+            OpenTelemetryMappingRule.builder()
+                    .rule(OPIK_TRACE_ID_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
+                    .build(),
+            OpenTelemetryMappingRule.builder()
+                    .rule(OPIK_PARENT_SPAN_ID_ATTR).source(SOURCE).outcome(OpenTelemetryMappingRule.Outcome.DROP)
+                    .build());
 
     public static List<OpenTelemetryMappingRule> getRules() {
         return RULES;

@@ -38,9 +38,9 @@ class BatchingPreprocessor(preprocessor.MessagePreprocessor):
         if self._batch_manager is not None:
             self._batch_manager.start()
 
-    def stop(self) -> None:
+    def stop(self, flush: bool = True) -> None:
         if self._batch_manager is not None:
-            self._batch_manager.stop()
+            self._batch_manager.stop(flush=flush)
 
     def flush(self) -> None:
         if self._batch_manager is not None:

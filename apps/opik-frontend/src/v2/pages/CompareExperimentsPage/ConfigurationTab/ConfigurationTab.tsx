@@ -29,7 +29,7 @@ import { Experiment } from "@/types/datasets";
 import { Switch } from "@/ui/switch";
 import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { isAgentConfigurationMetadata } from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDataViewer/AgentConfigurationTab";
 

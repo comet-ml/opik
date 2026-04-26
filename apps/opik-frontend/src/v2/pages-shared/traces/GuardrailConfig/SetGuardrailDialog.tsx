@@ -9,9 +9,11 @@ import GuardrailConfigCode from "./GuardrailConfigCode";
 import { guardrailsMap } from "./guardrailsConfig";
 import { useGuardrailConfigState } from "./useGuardrailConfigState";
 import { GuardrailTypes } from "@/types/guardrails";
+import { buildDocsUrl } from "@/v2/lib/utils";
 
-const GUARDRAIL_DOCS_LINK =
-  "https://www.comet.com/docs/opik/production/guardrails";
+const GUARDRAIL_DOCS_LINK = buildDocsUrl(
+  "/production/gateway-guardrails/guardrails",
+);
 
 type SetGuardrailDialogProps = {
   open: boolean;

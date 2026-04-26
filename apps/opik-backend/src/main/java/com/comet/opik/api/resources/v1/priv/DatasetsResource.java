@@ -37,6 +37,7 @@ import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
@@ -201,7 +202,8 @@ public class DatasetsResource {
         log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
                 savedDataset.id(), workspaceId);
 
-        if (savedDataset.type() == DatasetType.TEST_SUITE) {
+        if (savedDataset.type() == DatasetType.TEST_SUITE
+                && !DemoData.DATASETS.contains(savedDataset.name())) {
             analyticsService.trackEvent("opik_eval_suite_created", Map.of(
                     "eval_suite_id", savedDataset.id().toString(),
                     "eval_suite_name", savedDataset.name(),

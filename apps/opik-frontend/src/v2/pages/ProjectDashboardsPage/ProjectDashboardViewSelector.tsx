@@ -27,6 +27,7 @@ import { generateDashboardTypeFilter } from "@/lib/filters";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { cn } from "@/lib/utils";
 import { formatDate } from "@/lib/date";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const CUSTOM_VIEW_ICON = ChartLine;
 const CUSTOM_VIEW_ICON_COLOR = "text-chart-orange";
@@ -107,6 +108,14 @@ const ProjectDashboardViewSelector: React.FC<
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const { mutate: deleteMutate } = useInsightsViewBatchDeleteMutation();
+
+  const {
+    permissions: {
+      canCreateDashboards,
+      canEditDashboards,
+      canDeleteDashboards,
+    },
+  } = usePermissions();
 
   const processedFilters = useMemo(() => {
     return generateDashboardTypeFilter(DASHBOARD_TYPE.MULTI_PROJECT);
@@ -288,6 +297,7 @@ const ProjectDashboardViewSelector: React.FC<
                     option={option}
                     isSelected={value === option.value}
                     onSelect={handleSelect}
+                    canCreate={canCreateDashboards}
                     onDuplicate={() => {
                       const template = PROJECT_TEMPLATE_LIST.find(
                         (t) => t.id === option.value,
@@ -309,6 +319,9 @@ const ProjectDashboardViewSelector: React.FC<
                       option={option}
                       isSelected={value === option.value}
                       onSelect={handleSelect}
+                      canCreate={canCreateDashboards}
+                      canEdit={canEditDashboards}
+                      canDelete={canDeleteDashboards}
                       onEdit={() => handleEditDashboard(dashboard)}
                       onDuplicate={() => handleDuplicateDashboard(dashboard)}
                       onDelete={() => handleDeleteDashboard(dashboard)}
@@ -318,11 +331,15 @@ const ProjectDashboardViewSelector: React.FC<
               </>
             )}
           </div>
-          <Separator className="my-1" />
-          <ListAction onClick={handleCreateNew}>
-            <Plus className="size-4 shrink-0" />
-            Add new
-          </ListAction>
+          {canCreateDashboards && (
+            <>
+              <Separator className="my-1" />
+              <ListAction onClick={handleCreateNew}>
+                <Plus className="size-4 shrink-0" />
+                Add new
+              </ListAction>
+            </>
+          )}
         </PopoverContent>
       </Popover>
 

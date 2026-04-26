@@ -47,7 +47,7 @@ class TestStructuredOutputComplianceMetric:
         prompt = call_args[1]["input"]
         assert output in prompt
         assert "You are an expert in structured data validation" in prompt
-        assert "OUTPUT:" in prompt
+        assert "<output>" in prompt and "</output>" in prompt
 
         # Check result
         assert isinstance(result, score_result.ScoreResult)
@@ -98,7 +98,7 @@ class TestStructuredOutputComplianceMetric:
 
         # Check the prompt contains examples
         prompt = call_args[1]["input"]
-        assert "EXAMPLES:" in prompt
+        assert "Examples:" in prompt
         assert "Valid Example" in prompt
 
         # Check result

@@ -6,10 +6,9 @@ import {
   UsageData,
 } from "@/types/shared";
 import { CommentItems } from "./comment";
-import { ExperimentItemStatus, ExecutionPolicy } from "./test-suites";
+import { RunStatus, ExecutionPolicy } from "./test-suites";
 
 export type { ExecutionPolicy };
-export type RunStatus = "passed" | "failed";
 export type DatasetListType = "dataset" | "test_suite";
 
 export interface Dataset {
@@ -202,8 +201,9 @@ export interface ExperimentItem {
   comments?: CommentItems;
   created_at: string;
   last_updated_at: string;
-  status?: ExperimentItemStatus;
+  status?: RunStatus;
   assertion_results?: AssertionResult[];
+  execution_policy?: ExecutionPolicy;
 }
 
 export interface AssertionResult {
@@ -220,7 +220,7 @@ export interface AssertionScoreAverage {
 export interface ExperimentRunSummary {
   passed_runs: number;
   total_runs: number;
-  status: ExperimentItemStatus;
+  status: RunStatus;
 }
 
 export interface ExperimentsCompare extends DatasetItem {

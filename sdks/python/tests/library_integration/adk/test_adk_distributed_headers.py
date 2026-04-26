@@ -12,7 +12,6 @@ from ...testlib import (
     ANY_STRING,
     SpanModel,
     TraceModel,
-    assert_dict_has_keys,
     assert_equal,
 )
 
@@ -109,7 +108,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         output=ANY_DICT,
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
-                                        usage=ANY_DICT,
+                                        usage=constants.EXPECTED_USAGE_GOOGLE,
                                         source="sdk",
                                     )
                                 ],
@@ -138,7 +137,7 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
                                         output=ANY_DICT,
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
-                                        usage=ANY_DICT,
+                                        usage=constants.EXPECTED_USAGE_GOOGLE,
                                         source="sdk",
                                     )
                                 ],
@@ -157,16 +156,6 @@ def test_adk__distributed_headers__sequential_agent_with_subagents__happy_flow(
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    translator_span = trace_tree.spans[0].spans[0].spans[0]
-    assert_dict_has_keys(
-        translator_span.spans[0].usage, constants.EXPECTED_USAGE_KEYS_GOOGLE
-    )
-
-    summarizer_span = trace_tree.spans[0].spans[0].spans[1]
-    assert_dict_has_keys(
-        summarizer_span.spans[0].usage, constants.EXPECTED_USAGE_KEYS_GOOGLE
-    )
 
 
 @helpers.pytest_skip_for_adk_older_than_1_3_0
@@ -262,7 +251,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         output=ANY_DICT,
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
-                                        usage=ANY_DICT,
+                                        usage=constants.EXPECTED_USAGE_GOOGLE,
                                         source="sdk",
                                     )
                                 ],
@@ -291,7 +280,7 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
                                         output=ANY_DICT,
                                         provider=opik_adk_helpers.get_adk_provider(),
                                         model=constants.MODEL_NAME,
-                                        usage=ANY_DICT,
+                                        usage=constants.EXPECTED_USAGE_GOOGLE,
                                         source="sdk",
                                     )
                                 ],
@@ -310,13 +299,3 @@ async def test_adk__distributed_headers__sequential_agent_with_subagents__happy_
     )
 
     assert_equal(EXPECTED_TRACE_TREE, trace_tree)
-
-    translator_span = trace_tree.spans[0].spans[0].spans[0]
-    assert_dict_has_keys(
-        translator_span.spans[0].usage, constants.EXPECTED_USAGE_KEYS_GOOGLE
-    )
-
-    summarizer_span = trace_tree.spans[0].spans[0].spans[1]
-    assert_dict_has_keys(
-        summarizer_span.spans[0].usage, constants.EXPECTED_USAGE_KEYS_GOOGLE
-    )

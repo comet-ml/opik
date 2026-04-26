@@ -41,7 +41,7 @@ def evaluate_threads(
             - `usage.total_tokens`, `usage.prompt_tokens`, `usage.completion_tokens`: Numeric usage fields
             - `duration`, `number_of_messages`, `total_estimated_cost`: Numeric fields
 
-            Examples: 'status = "inactive"', 'id = "thread_123"', 'duration > 300'
+            Examples: 'id = "thread_123"', 'duration > 300', 'tags contains "prod"'
             If None, all threads in the project will be evaluated.
         eval_project_name: Optional name for the evaluation project where evaluation traces will be stored.
             If None, the same project_name will be used.

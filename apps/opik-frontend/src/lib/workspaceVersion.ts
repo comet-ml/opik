@@ -1,4 +1,5 @@
 import { WorkspaceVersion } from "@/store/AppStore";
+import { buildFullBaseUrl } from "@/lib/utils";
 
 export const DEFAULT_WORKSPACE_VERSION: WorkspaceVersion = "v2";
 
@@ -83,6 +84,12 @@ export function getWorkspaceNameFromUrl(): string | null {
     return new URLSearchParams(window.location.search).get("workspace");
   }
   return segments[0] || null;
+}
+
+export function navigateToWorkspaceRoot(workspaceName: string): void {
+  const base = buildFullBaseUrl();
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  window.location.href = normalizedBase + workspaceName;
 }
 
 // Always returns a version synchronously: override > per-workspace cache >

@@ -1815,13 +1815,21 @@ class TestConfigureLocal:
         mock_update_session_config.assert_any_call("project_name", "my_project")
 
     @patch(
+        "opik.configurator.configure.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
+    @patch(
         "opik.configurator.configure.opik_rest_helpers.is_instance_active",
         return_value=True,
     )
     @patch("opik.configurator.configure.opik.config.update_session_config")
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     def test_configure_local__no_project_name__uses_default(
-        self, mock_opik_config, mock_update_session_config, mock_is_instance_active
+        self,
+        mock_opik_config,
+        mock_update_session_config,
+        mock_is_instance_active,
+        mock_get_most_recent_project_name,
     ):
         """
         Test that the default project name is used when none is provided and automatic_approvals is True.
@@ -2225,10 +2233,15 @@ class TestConfigure:
         "opik.configurator.configure.opik_rest_helpers.is_instance_active",
         return_value=True,
     )
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.get_most_recent_project_name",
+        return_value=None,
+    )
     @patch("opik.configurator.configure.ask_user_for_approval", return_value=True)
     def test_configure__force_enabled_local__no_approval_questions_asked(
         self,
         mock_ask_user_for_approval,
+        mock_get_most_recent_project_name,
         mock_is_instance_active,
         mock_opik_config,
         mock_update_session_config,

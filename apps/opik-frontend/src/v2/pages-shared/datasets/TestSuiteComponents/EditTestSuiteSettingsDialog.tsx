@@ -64,7 +64,7 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
     mode: "onChange",
   });
 
-  const { fields, append, remove, update } = useFieldArray({
+  const { fields, prepend, remove, update } = useFieldArray({
     control: form.control,
     name: "assertions",
   });
@@ -99,70 +99,76 @@ const SettingsForm: React.FC<SettingsFormProps> = ({
         </DialogHeader>
         <DialogAutoScrollBody>
           <div className="flex flex-col">
-            <div className="mb-4">
-              <AssertionsField
-                variant="global"
-                editableAssertions={fields.map((f) => f.value)}
-                onChangeEditable={(index, value) => update(index, { value })}
-                onRemoveEditable={(index) => remove(index)}
-                onAdd={() => append({ value: "" })}
-                placeholder="e.g. Response should be factually accurate and cite sources"
-              />
-            </div>
+            <AssertionsField
+              variant="global"
+              editableAssertions={fields.map((f) => f.value)}
+              onChangeEditable={(index, value) => update(index, { value })}
+              onRemoveEditable={(index) => remove(index)}
+              onAdd={() => prepend({ value: "" })}
+              placeholder="e.g. Response should be factually accurate and cite sources"
+            />
 
-            <div className="mb-4">
-              <h3 className="comet-body-s-accented">{PASS_CRITERIA_TITLE}</h3>
-              <p className="comet-body-xs text-light-slate">
-                {PASS_CRITERIA_DESCRIPTION}
-              </p>
-            </div>
+            <h3 className="comet-body-s-accented mb-1 mt-6">
+              {PASS_CRITERIA_TITLE}
+            </h3>
+            <p className="comet-body-xs mb-4 text-light-slate">
+              {PASS_CRITERIA_DESCRIPTION}
+            </p>
 
-            <div className="mb-4 flex gap-4">
-              <div className="flex flex-1 flex-col gap-1">
-                <Label
-                  htmlFor="runs-per-item"
-                  className="comet-body-xs-accented"
-                >
-                  Default runs per item
-                </Label>
-                <Input
-                  id="runs-per-item"
-                  dimension="sm"
-                  className={cn({
-                    "border-destructive": runsInput.isInvalid,
-                  })}
-                  type="number"
-                  min={1}
-                  max={MAX_RUNS_PER_ITEM}
-                  value={runsInput.displayValue}
-                  onChange={runsInput.onChange}
-                  onFocus={runsInput.onFocus}
-                  onBlur={runsInput.onBlur}
-                  onKeyDown={runsInput.onKeyDown}
-                />
-              </div>
-              <div className="flex flex-1 flex-col gap-1">
-                <Label
-                  htmlFor="pass-threshold"
-                  className="comet-body-xs-accented"
-                >
-                  Default pass threshold
-                </Label>
-                <Input
-                  id="pass-threshold"
-                  dimension="sm"
-                  className={cn({
-                    "border-destructive": thresholdInput.isInvalid,
-                  })}
-                  type="number"
-                  min={1}
-                  max={runsPerItem}
-                  value={thresholdInput.displayValue}
-                  onChange={thresholdInput.onChange}
-                  onFocus={thresholdInput.onFocus}
-                  onBlur={thresholdInput.onBlur}
-                  onKeyDown={thresholdInput.onKeyDown}
-                />
+            <div className="mb-4 overflow-hidden rounded-md border p-3">
+              <div className="flex gap-4">
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label
+                    htmlFor="runs-per-item"
+                    className="comet-body-xs-accented"
+                  >
+                    Default runs per item
+                  </Label>
+                  <Input
+                    id="runs-per-item"
+                    dimension="sm"
+                    className={cn({
+                      "border-destructive": runsInput.isInvalid,
+                    })}
+                    type="number"
+                    min={1}
+                    max={MAX_RUNS_PER_ITEM}
+                    value={runsInput.displayValue}
+                    onChange={runsInput.onChange}
+                    onFocus={runsInput.onFocus}
+                    onBlur={runsInput.onBlur}
+                    onKeyDown={runsInput.onKeyDown}
+                  />
+                  <span className="comet-body-xs text-light-slate">
+                    Sets how many times each item runs.
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col gap-1">
+                  <Label
+                    htmlFor="pass-threshold"
+                    className="comet-body-xs-accented"
+                  >
+                    Default pass threshold
+                  </Label>
+                  <Input
+                    id="pass-threshold"
+                    dimension="sm"
+                    className={cn({
+                      "border-destructive": thresholdInput.isInvalid,
+                    })}
+                    type="number"
+                    min={1}
+                    max={runsPerItem}
+                    value={thresholdInput.displayValue}
+                    onChange={thresholdInput.onChange}
+                    onFocus={thresholdInput.onFocus}
+                    onBlur={thresholdInput.onBlur}
+                    onKeyDown={thresholdInput.onKeyDown}
+                  />
+                  <span className="comet-body-xs text-light-slate">
+                    Define how many runs must succeed.
+                  </span>
+                </div>
               </div>
             </div>
           </div>

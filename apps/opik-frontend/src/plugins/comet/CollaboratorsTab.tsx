@@ -210,7 +210,7 @@ const CollaboratorsTab = () => {
       ? mappedMembers.filter((member) => {
           return (
             member.userName?.toLowerCase().includes(searchLower) ||
-            member.email.toLowerCase().includes(searchLower) ||
+            member.email?.toLowerCase().includes(searchLower) ||
             member.role?.toLowerCase().includes(searchLower)
           );
         })
