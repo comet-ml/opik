@@ -32,9 +32,18 @@ set -- "${_OPIK_NEW_ARGS[@]}"
 unset _OPIK_NEW_ARGS
 
 # Skip runtime detection for --help: no container runtime needed to print usage.
-if [[ "$*" != *"--help"* ]]; then
+_OPIK_SKIP_RUNTIME_DETECTION=false
+for _arg in "$@"; do
+  if [[ "$_arg" == "--help" ]]; then
+    _OPIK_SKIP_RUNTIME_DETECTION=true
+    break
+  fi
+done
+
+if [[ "$_OPIK_SKIP_RUNTIME_DETECTION" != "true" ]]; then
   resolve_container_runtime
 fi
+unset _OPIK_SKIP_RUNTIME_DETECTION _arg
 
 # Container names are derived from COMPOSE_PROJECT_NAME
 INFRA_CONTAINERS=("${COMPOSE_PROJECT_NAME}-clickhouse-1" "${COMPOSE_PROJECT_NAME}-mysql-1" "${COMPOSE_PROJECT_NAME}-redis-1" "${COMPOSE_PROJECT_NAME}-minio-1" "${COMPOSE_PROJECT_NAME}-zookeeper-1")
