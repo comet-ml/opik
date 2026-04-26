@@ -1,5 +1,6 @@
 package com.comet.opik.api;
 
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.infrastructure.ratelimit.RateEventContainer;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -8,7 +9,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Builder;
-import lombok.NonNull;
 
 import java.util.List;
 
@@ -16,7 +16,8 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResultBatch(
-        @NonNull @NotNull @Size(min = 1, max = 1000) List<@NotNull @Valid AssertionResultBatchItem> assertionResults)
+        @NotNull EntityType entityType,
+        @NotNull @Size(min = 1, max = 1000) @Valid List<AssertionResultBatchItem> assertionResults)
         implements
             RateEventContainer {
 

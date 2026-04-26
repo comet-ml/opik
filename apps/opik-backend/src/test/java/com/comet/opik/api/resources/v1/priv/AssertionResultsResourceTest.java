@@ -1,6 +1,8 @@
 package com.comet.opik.api.resources.v1.priv;
 
+import com.comet.opik.api.AssertionResultBatch;
 import com.comet.opik.api.AssertionResultBatchItem;
+import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -13,12 +15,17 @@ import com.comet.opik.api.resources.utils.RedisContainerUtils;
 import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AssertionResultsResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.domain.EntityType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.HttpHeaders;
+import jakarta.ws.rs.core.MediaType;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -39,6 +46,7 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
+import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -80,17 +88,22 @@ class AssertionResultsResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
+    private ClientSupport client;
+    private String baseURI;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private AssertionResultsResourceClient assertionResultsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
-        var baseURI = TestUtils.getBaseUrl(client);
+        this.client = client;
+        this.baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
+        this.assertionResultsResourceClient = new AssertionResultsResourceClient(client, baseURI);
     }
 
     @AfterAll
@@ -99,8 +112,8 @@ class AssertionResultsResourceTest {
     }
 
     @Test
-    @DisplayName("POST /v1/private/traces/assertion-results stores assertion results and returns 204")
-    void saveBatchOfTraceAssertionResults() {
+    @DisplayName("PUT /v1/private/assertion-results stores trace assertion results and returns 204")
+    void storeTraceAssertionsBatch() {
         var trace = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
                 .projectName(DEFAULT_PROJECT)
@@ -114,7 +127,7 @@ class AssertionResultsResourceTest {
                         .id(traceId)
                         .projectName(DEFAULT_PROJECT)
                         .name("assertion-grounded")
-                        .passed(true)
+                        .passed(AssertionStatus.PASSED)
                         .reason("grounded in context")
                         .source(ScoreSource.SDK)
                         .build(),
@@ -122,17 +135,17 @@ class AssertionResultsResourceTest {
                         .id(traceId)
                         .projectName(DEFAULT_PROJECT)
                         .name("assertion-concise")
-                        .passed(false)
+                        .passed(AssertionStatus.FAILED)
                         .reason(null)
                         .source(ScoreSource.ONLINE_SCORING)
                         .build());
 
-        traceResourceClient.assertionResults(items, API_KEY, TEST_WORKSPACE);
+        assertionResultsResourceClient.store(EntityType.TRACE, items, API_KEY, TEST_WORKSPACE);
     }
 
     @Test
-    @DisplayName("POST /v1/private/spans/assertion-results stores assertion results and returns 204")
-    void saveBatchOfSpanAssertionResults() {
+    @DisplayName("PUT /v1/private/assertion-results stores span assertion results and returns 204")
+    void storeSpanAssertionsBatch() {
         var span = factory.manufacturePojo(Span.class).toBuilder()
                 .id(null)
                 .projectName(DEFAULT_PROJECT)
@@ -147,18 +160,44 @@ class AssertionResultsResourceTest {
                         .id(spanId)
                         .projectName(DEFAULT_PROJECT)
                         .name("assertion-relevance")
-                        .passed(true)
+                        .passed(AssertionStatus.PASSED)
                         .reason("matches spec")
                         .source(ScoreSource.SDK)
                         .build());
 
-        spanResourceClient.assertionResults(items, API_KEY, TEST_WORKSPACE);
+        assertionResultsResourceClient.store(EntityType.SPAN, items, API_KEY, TEST_WORKSPACE);
+    }
+
+    @Test
+    @DisplayName("missing entity_type is rejected with 422")
+    void missingEntityTypeIsRejected() {
+        var item = traceItemWithRandomV7Id();
+        var batch = AssertionResultBatch.builder()
+                .entityType(null)
+                .assertionResults(List.of(item))
+                .build();
+
+        try (var response = assertionResultsResourceClient.callStore(batch, API_KEY, TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Test
+    @DisplayName("entity_type=THREAD is rejected with 400")
+    void threadEntityTypeIsRejected() {
+        var item = traceItemWithRandomV7Id();
+
+        try (var response = assertionResultsResourceClient.callStore(EntityType.THREAD, List.of(item), API_KEY,
+                TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
+        }
     }
 
     @Test
     @DisplayName("empty assertion_results list is rejected with 422")
     void emptyBatchIsRejected() {
-        try (var response = traceResourceClient.callAssertionResults(List.of(), API_KEY, TEST_WORKSPACE)) {
+        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(), API_KEY,
+                TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
         }
     }
@@ -170,12 +209,58 @@ class AssertionResultsResourceTest {
                 .id(UUID.randomUUID())
                 .projectName(DEFAULT_PROJECT)
                 .name("")
-                .passed(true)
+                .passed(AssertionStatus.PASSED)
                 .source(ScoreSource.SDK)
                 .build();
 
-        try (var response = traceResourceClient.callAssertionResults(List.of(item), API_KEY, TEST_WORKSPACE)) {
+        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(item), API_KEY,
+                TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Test
+    @DisplayName("missing passed on item is rejected with 422")
+    void missingPassedIsRejected() {
+        var item = AssertionResultBatchItem.builder()
+                .id(UUID.randomUUID())
+                .projectName(DEFAULT_PROJECT)
+                .name("assertion-x")
+                .passed(null)
+                .source(ScoreSource.SDK)
+                .build();
+
+        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(item), API_KEY,
+                TEST_WORKSPACE)) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+        }
+    }
+
+    @Test
+    @DisplayName("invalid passed enum value is rejected")
+    void invalidPassedEnumIsRejected() {
+        // Send a raw JSON body with an unknown 'passed' value to exercise the enum binding boundary.
+        var bodyJson = """
+                {
+                  "entity_type": "trace",
+                  "assertion_results": [
+                    {
+                      "id": "%s",
+                      "project_name": "%s",
+                      "name": "assertion-x",
+                      "passed": "maybe",
+                      "source": "sdk"
+                    }
+                  ]
+                }
+                """.formatted(UUID.randomUUID(), DEFAULT_PROJECT);
+
+        try (var response = client.target("%s/v1/private/assertion-results".formatted(baseURI))
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                .put(Entity.entity(bodyJson, MediaType.APPLICATION_JSON))) {
+            assertThat(response.getStatus()).isBetween(400, 499);
         }
     }
 
@@ -186,12 +271,61 @@ class AssertionResultsResourceTest {
                 .id(UUID.randomUUID()) // default random UUID is v4, not v7
                 .projectName(DEFAULT_PROJECT)
                 .name("assertion-x")
-                .passed(true)
+                .passed(AssertionStatus.PASSED)
                 .source(ScoreSource.SDK)
                 .build();
 
-        try (var response = traceResourceClient.callAssertionResults(List.of(item), API_KEY, TEST_WORKSPACE)) {
+        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(item), API_KEY,
+                TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isBetween(400, 499);
         }
+    }
+
+    @Test
+    @DisplayName("multi-project batch resolves projects independently and returns 204")
+    void multiProjectBatchResolvesIndependently() {
+        var traceA = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName("assertion-multi-project-a-" + randomUUID())
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        var traceAId = traceResourceClient.createTrace(traceA, API_KEY, TEST_WORKSPACE);
+
+        var traceB = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName("assertion-multi-project-b-" + randomUUID())
+                .feedbackScores(null)
+                .usage(null)
+                .build();
+        var traceBId = traceResourceClient.createTrace(traceB, API_KEY, TEST_WORKSPACE);
+
+        var items = List.of(
+                AssertionResultBatchItem.builder()
+                        .id(traceAId)
+                        .projectName(traceA.projectName())
+                        .name("assertion-cross-project")
+                        .passed(AssertionStatus.PASSED)
+                        .source(ScoreSource.SDK)
+                        .build(),
+                AssertionResultBatchItem.builder()
+                        .id(traceBId)
+                        .projectName(traceB.projectName())
+                        .name("assertion-cross-project")
+                        .passed(AssertionStatus.FAILED)
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        assertionResultsResourceClient.store(EntityType.TRACE, items, API_KEY, TEST_WORKSPACE);
+    }
+
+    private AssertionResultBatchItem traceItemWithRandomV7Id() {
+        return AssertionResultBatchItem.builder()
+                .id(UUID.randomUUID())
+                .projectName(DEFAULT_PROJECT)
+                .name("assertion-x")
+                .passed(AssertionStatus.PASSED)
+                .source(ScoreSource.SDK)
+                .build();
     }
 }

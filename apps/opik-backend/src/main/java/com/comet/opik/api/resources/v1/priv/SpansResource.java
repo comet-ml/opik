@@ -1,7 +1,6 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.codahale.metrics.annotation.Timed;
-import com.comet.opik.api.AssertionResultBatch;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
@@ -20,7 +19,6 @@ import com.comet.opik.api.filter.FiltersFactory;
 import com.comet.opik.api.filter.SpanFilter;
 import com.comet.opik.api.resources.v1.priv.validate.ParamsValidator;
 import com.comet.opik.api.sorting.SpanSortingFactory;
-import com.comet.opik.domain.AssertionResultService;
 import com.comet.opik.domain.CommentDAO;
 import com.comet.opik.domain.CommentService;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -97,7 +95,6 @@ public class SpansResource {
 
     private final @NonNull SpanService spanService;
     private final @NonNull FeedbackScoreService feedbackScoreService;
-    private final @NonNull AssertionResultService assertionResultService;
     private final @NonNull CommentService commentService;
     private final @NonNull FiltersFactory filtersFactory;
     private final @NonNull WorkspaceMetadataService workspaceMetadataService;
@@ -355,30 +352,6 @@ public class SpansResource {
                 .retryWhen(RetryUtils.handleConnectionError())
                 .block();
         log.info("Scored batch for spans, size {} on workspaceId '{}'", batch.scores().size(), workspaceId);
-        return Response.noContent().build();
-    }
-
-    @POST
-    @Path("/assertion-results")
-    @Operation(operationId = "saveBatchOfSpanAssertionResults", summary = "Batch assertion results for spans", description = "Batch assertion results for spans", responses = {
-            @ApiResponse(responseCode = "204", description = "No Content")})
-    @RateLimited
-    public Response saveBatchOfSpanAssertionResults(
-            @RequestBody(content = @Content(schema = @Schema(implementation = AssertionResultBatch.class))) @NotNull @Valid AssertionResultBatch batch) {
-
-        String workspaceId = requestContext.get().getWorkspaceId();
-
-        log.info("Assertion results batch for spans, size '{}' on workspaceId '{}'",
-                batch.assertionResults().size(), workspaceId);
-
-        assertionResultService.saveBatchOfSpans(batch.assertionResults())
-                .contextWrite(ctx -> setRequestContext(ctx, requestContext))
-                .retryWhen(RetryUtils.handleConnectionError())
-                .block();
-
-        log.info("Saved assertion results batch for spans, size '{}' on workspaceId '{}'",
-                batch.assertionResults().size(), workspaceId);
-
         return Response.noContent().build();
     }
 

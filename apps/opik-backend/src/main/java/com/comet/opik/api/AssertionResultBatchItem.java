@@ -8,7 +8,6 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
-import lombok.NonNull;
 
 import java.util.UUID;
 
@@ -18,11 +17,11 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResultBatchItem(
-        @NonNull @NotNull UUID id,
+        @NotNull UUID id,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         UUID projectId,
-        @NonNull @NotBlank String name,
-        @NonNull @NotNull Boolean passed,
+        @NotBlank String name,
+        @NotNull AssertionStatus passed,
         String reason,
-        @NonNull @NotNull ScoreSource source) {
+        @NotNull ScoreSource source) {
 }

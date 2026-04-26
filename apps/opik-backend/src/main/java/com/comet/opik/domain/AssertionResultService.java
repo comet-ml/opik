@@ -4,13 +4,13 @@ import com.comet.opik.api.AssertionResultBatchItem;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Project;
 import com.comet.opik.api.events.AssertionResultsCreated;
-import com.comet.opik.api.events.FeedbackScoresCreated;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.utils.WorkspaceUtils;
 import com.google.common.eventbus.EventBus;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import jakarta.ws.rs.BadRequestException;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,15 +30,15 @@ public interface AssertionResultService {
 
     Mono<Long> insertBatch(@NonNull EntityType entityType, @NonNull List<? extends FeedbackScoreItem> assertionScores);
 
-    Mono<Void> saveBatchOfTraces(List<AssertionResultBatchItem> assertionResults);
-
-    Mono<Void> saveBatchOfSpans(List<AssertionResultBatchItem> assertionResults);
+    Mono<Void> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults);
 }
 
 @Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class AssertionResultServiceImpl implements AssertionResultService {
+
+    private static final Set<EntityType> SUPPORTED_ENTITY_TYPES = Set.of(EntityType.TRACE, EntityType.SPAN);
 
     private final @NonNull AssertionResultDAO assertionResultDAO;
     private final @NonNull ProjectService projectService;
@@ -51,16 +51,12 @@ class AssertionResultServiceImpl implements AssertionResultService {
     }
 
     @Override
-    public Mono<Void> saveBatchOfTraces(@NonNull List<AssertionResultBatchItem> assertionResults) {
-        return saveBatch(EntityType.TRACE, assertionResults);
-    }
-
-    @Override
-    public Mono<Void> saveBatchOfSpans(@NonNull List<AssertionResultBatchItem> assertionResults) {
-        return saveBatch(EntityType.SPAN, assertionResults);
-    }
-
-    private Mono<Void> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults) {
+    public Mono<Void> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults) {
+        if (!SUPPORTED_ENTITY_TYPES.contains(entityType)) {
+            return Mono.error(new BadRequestException(
+                    "Unsupported entity_type '%s' for assertion-results — supported types: %s"
+                            .formatted(entityType, SUPPORTED_ENTITY_TYPES)));
+        }
         if (assertionResults.isEmpty()) {
             return Mono.empty();
         }
@@ -93,13 +89,9 @@ class AssertionResultServiceImpl implements AssertionResultService {
                                 return assertionResultDAO.saveBatch(entityType, projectItems);
                             })
                             .reduce(0L, Long::sum))
-                    .doOnSuccess(__ -> {
-                        if (!entityIds.isEmpty()) {
-                            eventBus.post(new AssertionResultsCreated(entityIds, entityType, workspaceId, userName));
-                            eventBus.post(new FeedbackScoresCreated(entityIds, entityType, workspaceId, userName));
-                        }
-                    })
-                    .then();
+                    .then(Mono.fromRunnable(
+                            () -> eventBus.post(
+                                    new AssertionResultsCreated(entityIds, entityType, workspaceId, userName))));
         });
     }
 }
