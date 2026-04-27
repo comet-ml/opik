@@ -102,7 +102,6 @@ module.exports = {
         "diff-added-text": "var(--diff-added-text)",
         "upload-icon-bg": "hsl(var(--upload-icon-bg))",
         "code-block": "var(--code-block)",
-        "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
         "thread-active": "var(--thread-active)",
         "selection-bar": "hsl(var(--selection-bar))",
@@ -131,6 +130,8 @@ module.exports = {
         "chart-purple": "var(--chart-purple)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
+        "chart-gray-light": "var(--chart-gray-light)",
+        "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
