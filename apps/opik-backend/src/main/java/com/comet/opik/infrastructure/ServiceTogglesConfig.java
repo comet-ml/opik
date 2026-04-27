@@ -82,5 +82,5 @@ public class ServiceTogglesConfig {
     @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
 
     @JsonProperty
-    @Min(5) @Max(100) int defaultPageSize;
+    @Min(10) @Max(1000) int defaultPageSize;
 }

@@ -1,4 +1,6 @@
-export type FeatureToggles = Record<FeatureToggleKeys, boolean>;
+export type FeatureToggles = Record<FeatureToggleKeys, boolean> & {
+  default_page_size?: number;
+};
 
 export enum FeatureToggleKeys {
   PYTHON_EVALUATOR_ENABLED = "python_evaluator_enabled",

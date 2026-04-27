@@ -65,12 +65,11 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   useEffect(() => {
     if (data) {
       setFeatures(data);
-      // Backend publishes default_page_size alongside the boolean toggles on
-      // /v1/private/toggles/. Keep the fallback if the field is missing or
-      // outside a sane range (shouldn't happen - backend validates 1..1000).
-      const raw = (data as unknown as Record<string, unknown>)
-        .default_page_size;
-      if (typeof raw === "number" && Number.isFinite(raw) && raw >= 1) {
+      // Backend (ServiceTogglesConfig) validates 10..1000. Keep the fallback
+      // if the field is missing or out of range so a misconfigured deployment
+      // can't poison the UI.
+      const raw = data.default_page_size;
+      if (typeof raw === "number" && Number.isInteger(raw) && raw >= 10) {
         setDefaultPageSize(raw);
       }
     }

@@ -111,6 +111,7 @@ const withRunningSkeleton = <TValue,>(
 };
 
 const STORAGE_KEY_PREFIX = "experiments";
+const PAGINATION_SIZE_KEY = "experiments-pagination-size";
 const COLUMNS_SORT_KEY = "experiments-columns-sort";
 
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
@@ -168,7 +169,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useTablePageSize();
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",

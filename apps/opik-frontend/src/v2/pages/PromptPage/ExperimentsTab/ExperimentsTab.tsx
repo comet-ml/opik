@@ -69,6 +69,7 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 
 const STORAGE_KEY_PREFIX = "prompt-experiments";
+const PAGINATION_SIZE_KEY = "prompt-experiments-pagination-size";
 const COLUMNS_SORT_KEY = "prompt-experiments-columns-sort";
 
 export const MAX_EXPANDED_DEEPEST_GROUPS = 5;
@@ -125,7 +126,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useTablePageSize();
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",

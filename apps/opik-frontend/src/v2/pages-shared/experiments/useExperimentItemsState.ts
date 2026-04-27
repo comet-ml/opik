@@ -25,7 +25,7 @@ const useExperimentItemsState = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useTablePageSize();
+  const [size, setSize] = useTablePageSize(`${storagePrefix}-pagination-size`);
 
   const [height, setHeight] = useQueryParamAndLocalStorageState<
     string | null | undefined
