@@ -59,4 +59,4 @@ jobs:
       - name: Run tests
         run: |
           cd ./tests/library_integration/metrics_with_llm_judge/
-          python -m pytest  -vv .
+          python -m pytest -vv --durations=20 .

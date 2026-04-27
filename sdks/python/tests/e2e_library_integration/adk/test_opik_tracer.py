@@ -11,7 +11,7 @@ import requests
 from opik import synchronization
 from opik.integrations.adk import helpers as adk_helpers
 from opik.llm_usage.openai_chat_completions_usage import OpenAICompletionsUsage
-from ... import testlib
+from ... import llm_constants, testlib
 
 # needed for OpenAI agents tests
 os.environ["SSL_CERT_FILE"] = certifi.where()
@@ -249,7 +249,7 @@ def test_opik_tracer_with_sample_agent__openai(
     for span in spans:
         if span.type == "llm":
             assert span.provider == "openai"
-            assert span.model.startswith("gpt-4o")
+            assert span.model.startswith(llm_constants.OPENAI_GPT_NANO)
             OpenAICompletionsUsage.from_original_usage_dict(span.usage)
         elif span.type == "tool":
             assert span.name == "get_weather"

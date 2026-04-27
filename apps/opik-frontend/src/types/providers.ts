@@ -91,6 +91,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_5_5 = "gpt-5.5",
+  GPT_5_5_PRO = "gpt-5.5-pro",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -197,6 +199,8 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2 = "deepseek/deepseek-v3.2",
   DEEPSEEK_DEEPSEEK_V3_2_EXP = "deepseek/deepseek-v3.2-exp",
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
+  DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
+  DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
   GOOGLE_GEMINI_2_0_FLASH_001 = "google/gemini-2.0-flash-001",
@@ -415,6 +419,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_4_MINI = "openai/gpt-5.4-mini",
   OPENAI_GPT_5_4_NANO = "openai/gpt-5.4-nano",
   OPENAI_GPT_5_4_PRO = "openai/gpt-5.4-pro",
+  OPENAI_GPT_5_5 = "openai/gpt-5.5",
+  OPENAI_GPT_5_5_PRO = "openai/gpt-5.5-pro",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b",

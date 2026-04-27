@@ -850,16 +850,28 @@ def verify_test_suite_result(
     if experiment_items_count is mock.ANY:
         return
 
-    retrieved_experiment = opik_client.get_experiment_by_name(
-        suite_result.experiment_name, project_name=project_name
-    )
-    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
-    experiment_items = retrieved_experiment.get_items()
+    retrieved_experiment = None
+    experiment_items: List[Any] = []
 
-    assert len(experiment_items) == experiment_items_count, (
-        f"Expected {experiment_items_count} experiment items, "
-        f"got {len(experiment_items)}"
-    )
+    def _experiment_ready() -> bool:
+        nonlocal retrieved_experiment, experiment_items
+        try:
+            retrieved_experiment = opik_client.get_experiment_by_name(
+                suite_result.experiment_name, project_name=project_name
+            )
+        except Exception:
+            return False
+        experiment_items = retrieved_experiment.get_items()
+        return len(experiment_items) == experiment_items_count
+
+    if not synchronization.until(_experiment_ready, max_try_seconds=10):
+        raise AssertionError(
+            f"Experiment '{suite_result.experiment_name}' did not become "
+            f"visible with {experiment_items_count} items in time "
+            f"(got {len(experiment_items)})"
+        )
+
+    testlib.assert_equal(retrieved_experiment.name, suite_result.experiment_name)
 
     all_scores = []
     all_score_names: Set[str] = set()

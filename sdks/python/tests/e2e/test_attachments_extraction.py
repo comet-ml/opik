@@ -6,12 +6,11 @@ embedded in trace and span data when attachment extraction is enabled.
 """
 
 import base64
-import time
 
 import pytest
 
 import opik
-from opik import id_helpers, datetime_helpers
+from opik import id_helpers, datetime_helpers, synchronization
 
 from . import verifiers
 from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
@@ -90,8 +89,12 @@ def test_extraction__trace_without_end_time__does_not_extract_attachments(
 
     opik_client.flush()
 
-    # Wait a bit to ensure processing has completed
-    time.sleep(2)
+    # Wait for the trace to arrive at the backend — once queryable, message
+    # processing is done and attachment-extraction would already have fired.
+    assert synchronization.until(
+        lambda: opik_client.get_trace_content(id=trace_id) is not None,
+        allow_errors=True,
+    ), f"Failed to get trace with id {trace_id}."
 
     # Verify NO attachments were extracted
     attachments_client = opik_client.get_attachment_client()
@@ -278,8 +281,12 @@ def test_extraction__span_without_end_time__does_not_extract_attachments(
 
     opik_client.flush()
 
-    # Wait a bit to ensure processing has completed
-    time.sleep(2)
+    # Wait for the span to arrive at the backend — once queryable, message
+    # processing is done and attachment-extraction would already have fired.
+    assert synchronization.until(
+        lambda: opik_client.get_span_content(id=span_id) is not None,
+        allow_errors=True,
+    ), f"Failed to get span with id {span_id}."
 
     # Verify NO attachments were extracted
     attachments_client = opik_client.get_attachment_client()

@@ -181,14 +181,45 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     def _build_spans_tree(self) -> None:
         """
         Builds a list of span trees based on the data from the processed messages.
-        Children's spans are sorted by creation time
+        Children's spans are sorted by creation time.
+
+        Children references are refreshed from `_span_observations` on every
+        rebuild. When `_save_span` replaces an entry under `merge_duplicates`
+        (a second CreateSpanMessage with the same ID but newer fields),
+        the parent's `.spans` list would otherwise keep the stale reference
+        with an out-of-date `start_time`, and the subsequent sort would put
+        children in the wrong order.
         """
         with self._rlock:
+            visited_parents: set = set()
             for span_id, parent_span_id in self._span_to_parent_span.items():
                 if parent_span_id is None:
                     continue
 
-                parent_span = self._span_observations[parent_span_id]
+                # Parent span may not have arrived yet when messages are
+                # produced by parallel async flows; skip attaching until the
+                # next rebuild instead of crashing. Log so orphans are
+                # observable instead of silently dropped — if the parent
+                # never arrives the child stays out of the tree, and this
+                # warning is the only signal.
+                parent_span = self._span_observations.get(parent_span_id)
+                if parent_span is None:
+                    LOGGER.warning(
+                        "Skipping span %s: parent span %s is not yet observed. "
+                        "Child will remain orphaned until the parent's "
+                        "CreateSpanMessage is processed.",
+                        span_id,
+                        parent_span_id,
+                    )
+                    continue
+
+                # First time we see this parent on this rebuild — drop stale
+                # references so we re-attach against the current observation
+                # snapshot.
+                if parent_span_id not in visited_parents:
+                    parent_span.spans = []
+                    visited_parents.add(parent_span_id)
+
                 if not _observation_already_stored(span_id, parent_span.spans):
                     parent_span.spans.append(self._span_observations[span_id])
                     parent_span.spans.sort(key=lambda x: x.start_time)

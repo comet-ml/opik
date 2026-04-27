@@ -30,6 +30,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
   ],
   [PROVIDER_TYPE.OPEN_AI]: [
     {
+      value: PROVIDER_MODEL_TYPE.GPT_5_5,
+      label: "GPT 5.5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GPT_5_4,
       label: "GPT 5.4",
     },
@@ -511,6 +515,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V3_2_SPECIALE,
       label: "deepseek/deepseek-v3.2-speciale",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH,
+      label: "deepseek/deepseek-v4-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,
+      label: "deepseek/deepseek-v4-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.ELEUTHERAI_LLEMMA_7B,
@@ -1383,6 +1395,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_PRO,
       label: "openai/gpt-5.4-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5,
+      label: "openai/gpt-5.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_5_PRO,
+      label: "openai/gpt-5.5-pro",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO,

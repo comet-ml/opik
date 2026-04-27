@@ -2,10 +2,10 @@ from typing import Any, Dict
 
 import aisuite
 import pytest
-from aisuite.provider import LLMError
 
 import opik
 from opik.integrations.aisuite import track_aisuite
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -36,10 +36,11 @@ EXPECTED_OPENAI_USAGE_LOGGED_FORMAT = {
 
 
 def _assert_metadata_contains_required_keys(metadata: Dict[str, Any]):
+    # max_tokens / max_completion_tokens is call-specific (OpenAI reasoning
+    # models reject max_tokens; Anthropic takes it) so don't assert on it.
     REQUIRED_METADATA_KEYS = [
         "usage",
         "model",
-        "max_tokens",
         "created_from",
         "type",
         "id",
@@ -63,9 +64,10 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="openai:gpt-3.5-turbo",
+        model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         messages=messages,
-        max_tokens=10,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
     )
 
     opik.flush_tracker()
@@ -95,7 +97,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 source="sdk",
             )
@@ -126,7 +128,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
     ]
 
     _ = wrapped_client.chat.completions.create(
-        model="anthropic:claude-sonnet-4-5-20250929",
+        model=llm_constants.AISUITE_ANTHROPIC_CLAUDE_SONNET,
         messages=messages,
         max_tokens=10,
     )
@@ -158,7 +160,7 @@ def test_aisuite__nonopenai_provider__client_chat_completions_create__happyflow(
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING.starting_with("claude-sonnet-4-5"),
+                model=ANY_STRING.starting_with(llm_constants.ANTHROPIC_CLAUDE_SONNET),
                 provider="anthropic",
                 source="sdk",
             )
@@ -181,10 +183,13 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         project_name=PROJECT_NAME,
     )
 
-    with pytest.raises(LLMError):
+    # aisuite 0.1.3 stopped wrapping upstream errors in LLMError for the
+    # OpenAI provider — the raw openai.BadRequestError now bubbles up. We
+    # only care that Opik finishes the span gracefully on any failure.
+    with pytest.raises(Exception):
         _ = wrapped_client.chat.completions.create(
             messages=None,
-            model="openai:gpt-3.5-turbo",
+            model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         )
 
     opik.flush_tracker()
@@ -198,7 +203,7 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
         metadata={
             "created_from": "aisuite",
             "type": "aisuite_chat",
-            "model": "openai:gpt-3.5-turbo",
+            "model": llm_constants.AISUITE_OPENAI_GPT_NANO,
         },
         start_time=ANY_BUT_NONE,
         end_time=ANY_BUT_NONE,
@@ -220,13 +225,13 @@ def test_aisuite_client_chat_completions_create__create_raises_an_error__span_an
                 metadata={
                     "created_from": "aisuite",
                     "type": "aisuite_chat",
-                    "model": "openai:gpt-3.5-turbo",
+                    "model": llm_constants.AISUITE_OPENAI_GPT_NANO,
                 },
                 usage=None,
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 error_info={
                     "exception_type": ANY_STRING,
@@ -264,9 +269,10 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
         )
 
         _ = wrapped_client.chat.completions.create(
-            model="openai:gpt-3.5-turbo",
+            model=llm_constants.AISUITE_OPENAI_GPT_NANO,
             messages=messages,
-            max_tokens=10,
+            max_completion_tokens=10,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         )
 
     f()
@@ -307,7 +313,7 @@ def test_aisuite_client_chat_completions_create__openai_call_made_in_another_tra
                         end_time=ANY_BUT_NONE,
                         project_name=PROJECT_NAME,
                         spans=[],
-                        model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                        model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                         provider="openai",
                         source="sdk",
                     )
@@ -351,9 +357,10 @@ def test_aisuite__openai_provider__client_chat_completions_create__opik_args__ha
     }
 
     _ = wrapped_client.chat.completions.create(
-        model="openai:gpt-3.5-turbo",
+        model=llm_constants.AISUITE_OPENAI_GPT_NANO,
         messages=messages,
-        max_tokens=10,
+        max_completion_tokens=10,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         opik_args=args_dict,
     )
 
@@ -385,7 +392,7 @@ def test_aisuite__openai_provider__client_chat_completions_create__opik_args__ha
                 end_time=ANY_BUT_NONE,
                 project_name=PROJECT_NAME,
                 spans=[],
-                model=ANY_STRING.starting_with("gpt-3.5-turbo"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 provider="openai",
                 source="sdk",
             )

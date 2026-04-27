@@ -751,6 +751,8 @@ def evaluate_experiment(
 
     total_time = time.time() - start_time
 
+    client.flush()
+
     # Compute experiment scores
     computed_experiment_scores = _compute_experiment_scores(
         experiment_scoring_functions=experiment_scoring_functions,

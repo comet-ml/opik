@@ -85,12 +85,16 @@ class InProcessRunnerLoop:
         shutdown_event: threading.Event,
         heartbeat_interval_seconds: float = 5.0,
         backoff_cap_seconds: float = 30.0,
+        initial_backoff_seconds: float = 1.0,
+        poll_idle_interval_seconds: float = _POLL_IDLE_INTERVAL_SECONDS,
     ) -> None:
         self._api = api
         self._runner_id = runner_id
         self._shutdown_event = shutdown_event
         self._heartbeat_interval_seconds = heartbeat_interval_seconds
         self._backoff_cap_seconds = backoff_cap_seconds
+        self._initial_backoff_seconds = initial_backoff_seconds
+        self._poll_idle_interval_seconds = poll_idle_interval_seconds
         self._cancelled_jobs: collections.OrderedDict[str, float] = (
             collections.OrderedDict()
         )
@@ -115,7 +119,7 @@ class InProcessRunnerLoop:
         self._run_job_loop()
 
     def _poll_loop(self) -> None:
-        backoff = 1.0
+        backoff = self._initial_backoff_seconds
         _poll_failures = 0
 
         while not self._shutdown_event.is_set():
@@ -151,11 +155,11 @@ class InProcessRunnerLoop:
                 continue
 
             if job is None:
-                backoff = 1.0
-                self._shutdown_event.wait(_POLL_IDLE_INTERVAL_SECONDS)
+                backoff = self._initial_backoff_seconds
+                self._shutdown_event.wait(self._poll_idle_interval_seconds)
                 continue
 
-            backoff = 1.0
+            backoff = self._initial_backoff_seconds
             if self._loop is not None:
                 self._loop.call_soon_threadsafe(self._job_queue.put_nowait, job)
 
