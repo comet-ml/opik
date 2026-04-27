@@ -106,6 +106,9 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
+  - id: "gpt-5.5"
+    structuredOutput: true
+  - id: "gpt-5.5-pro"
 anthropic:
   - id: "claude-3-7-sonnet-20250219"
   - id: "claude-haiku-4-5-20251001"
@@ -237,6 +240,7 @@ openrouter:
   - id: "anthropic/claude-opus-4.6"
   - id: "anthropic/claude-opus-4.6-fast"
   - id: "anthropic/claude-opus-4.7"
+    structuredOutput: true
   - id: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
   - id: "anthropic/claude-sonnet-4.6"
@@ -312,6 +316,8 @@ openrouter:
   - id: "deepseek/deepseek-v3.2"
   - id: "deepseek/deepseek-v3.2-exp"
   - id: "deepseek/deepseek-v3.2-speciale"
+  - id: "deepseek/deepseek-v4-flash"
+  - id: "deepseek/deepseek-v4-pro"
   - id: "eleutherai/llemma_7b"
   - id: "essentialai/rnj-1-instruct"
   - id: "google/gemini-2.0-flash-001"
@@ -578,6 +584,8 @@ openrouter:
   - id: "openai/gpt-5.4-mini"
   - id: "openai/gpt-5.4-nano"
   - id: "openai/gpt-5.4-pro"
+  - id: "openai/gpt-5.5"
+  - id: "openai/gpt-5.5-pro"
   - id: "openai/gpt-audio"
   - id: "openai/gpt-audio-mini"
   - id: "openai/gpt-oss-120b"
