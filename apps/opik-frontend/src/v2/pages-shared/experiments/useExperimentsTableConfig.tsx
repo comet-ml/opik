@@ -258,9 +258,9 @@ export const useExperimentsTableConfig = <
               getGroupRowLabel: (row: T) => {
                 const datasetId = get(row, `${metaKey}.value`, "") as string;
                 const type = datasetTypeMap?.[datasetId];
-                return type === DATASET_TYPE.TEST_SUITE
-                  ? "Test suite"
-                  : "Dataset";
+                if (type === DATASET_TYPE.TEST_SUITE) return "Test suite";
+                if (type === DATASET_TYPE.DATASET) return "Dataset";
+                return "";
               },
             },
           } as ColumnData<T>;
