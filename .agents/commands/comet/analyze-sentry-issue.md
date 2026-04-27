@@ -34,7 +34,7 @@ Page through `GET https://us.sentry.io/api/0/issues/<issue_id>/events/?full=fals
 - the early sample looks unrepresentative — e.g., one message dominates and the tail is unclear, or top users haven't stabilized;
 - the issue's reported `count` is large *and* the question being asked actually depends on the long tail (e.g., "which rare exception types are hiding in here?").
 
-Capture per event: `eventID`, `message`, `title`, `user.id`, `release`, `tags` (as a `{key: value}` dict).
+Capture per event: `eventID`, `message`, `title`, `user.id` (nullable — treat missing as `<no-user>`), `release` (nullable — treat missing as `<no-release>`), and `tags`. Note: Sentry returns `tags` as an array of `{key, value}` objects; normalize it into a `{key: value}` dict before any tag aggregation in Phase 3.
 
 ### Phase 3 — Aggregate
 
