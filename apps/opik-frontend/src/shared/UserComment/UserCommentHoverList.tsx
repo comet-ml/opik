@@ -20,11 +20,11 @@ const UserCommentHoverList: React.FC<UserCommentHoverListProps> = ({
   children,
 }) => {
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const [isOpen, setIsOpen] = useState(false);
-  const showReply = canWriteComments && isFunction(onReply);
+  const showReply = canAnnotateTraceSpanThread && isFunction(onReply);
   const onRefCreated = useCallback((ref: HTMLDivElement | null) => {
     if (!ref) return;
 

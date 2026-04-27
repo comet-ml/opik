@@ -33,7 +33,7 @@ const CommentAndScoreViewer: React.FC = () => {
   } = useSMEFlow();
 
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -81,7 +81,7 @@ const CommentAndScoreViewer: React.FC = () => {
 
   return (
     <div className="pl-4">
-      {canWriteComments && (
+      {canAnnotateTraceSpanThread && (
         <>
           <div className="flex items-center justify-between gap-1 pb-2">
             <span className="comet-body-s-accented truncate">Comment</span>

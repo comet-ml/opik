@@ -41,6 +41,7 @@ import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
 import { getJSONPaths } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // Left toolbar — sits above the tree panel
 type TraceTreeToolbarProps = {
@@ -254,14 +255,18 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   useHotkeys(
     "a",
     (e) => {
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false },
-    [setActiveSection],
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
   );
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
@@ -291,15 +296,17 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
         buttonVariant="ghost"
         buttonSize="2xs"
       />
-      <DetailsActionSectionToggle
-        activeSection={null}
-        setActiveSection={setActiveSection}
-        layoutSize={ButtonLayoutSize.Large}
-        type={DetailsActionSection.Annotate}
-        variant="ghost"
-        buttonSize="2xs"
-        hotkey="A"
-      />
+      {canAnnotateTraceSpanThread && (
+        <DetailsActionSectionToggle
+          activeSection={null}
+          setActiveSection={setActiveSection}
+          layoutSize={ButtonLayoutSize.Large}
+          type={DetailsActionSection.Annotate}
+          variant="ghost"
+          buttonSize="2xs"
+          hotkey="A"
+        />
+      )}
     </div>
   );
 };

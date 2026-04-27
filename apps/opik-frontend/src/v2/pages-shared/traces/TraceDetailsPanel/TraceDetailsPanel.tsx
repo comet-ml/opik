@@ -46,6 +46,7 @@ import {
   METADATA_AGENT_GRAPH_KEY,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const MAX_SPANS_LOAD_SIZE = 15000;
 const EMPTY_FILTERS: unknown[] = [];
@@ -111,6 +112,10 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       defaultValue: SELECTED_TREE_DATABLOCKS_DEFAULT_VALUE,
     },
   );
+
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
 
   const { data: trace, isPending: isTracePending } = useTraceById(
     {
@@ -234,6 +239,11 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       />
     );
 
+    const isAnnotating =
+      activeSection === DetailsActionSection.Annotate ||
+      activeSection === DetailsActionSection.Annotations ||
+      activeSection === DetailsActionSection.Comments;
+
     return (
       <div className="relative size-full">
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
@@ -321,36 +331,35 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
               </div>
             </div>
           </ResizablePanel>
-          {Boolean(activeSection) && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel
-                id="last-section-viewer"
-                defaultSize={40}
-                minSize={30}
-              >
-                {(activeSection === DetailsActionSection.Annotate ||
-                  activeSection === DetailsActionSection.Annotations ||
-                  activeSection === DetailsActionSection.Comments) && (
-                  <AnnotatePanel
-                    data={dataToView}
-                    traceId={traceId}
-                    projectId={projectId}
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
-                  />
-                )}
-                {activeSection === DetailsActionSection.AIAssistants && (
-                  <TraceAIViewer
-                    traceId={traceId}
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
-                    spans={spansData?.content}
-                  />
-                )}
-              </ResizablePanel>
-            </>
-          )}
+          {Boolean(activeSection) &&
+            (canAnnotateTraceSpanThread || !isAnnotating) && (
+              <>
+                <ResizableHandle />
+                <ResizablePanel
+                  id="last-section-viewer"
+                  defaultSize={40}
+                  minSize={30}
+                >
+                  {isAnnotating && (
+                    <AnnotatePanel
+                      data={dataToView}
+                      traceId={traceId}
+                      projectId={projectId}
+                      activeSection={activeSection}
+                      setActiveSection={setActiveSection}
+                    />
+                  )}
+                  {activeSection === DetailsActionSection.AIAssistants && (
+                    <TraceAIViewer
+                      traceId={traceId}
+                      activeSection={activeSection}
+                      setActiveSection={setActiveSection}
+                      spans={spansData?.content}
+                    />
+                  )}
+                </ResizablePanel>
+              </>
+            )}
         </ResizablePanelGroup>
         {agentGraphData && (
           <Dialog open={isGraphFullscreen} onOpenChange={setIsGraphFullscreen}>
