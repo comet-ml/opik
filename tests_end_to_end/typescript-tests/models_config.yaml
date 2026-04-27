@@ -59,7 +59,7 @@ providers:
         ui_selector: "Claude Opus 4.7"
         enabled: true
         test_playground: true
-        test_online_scoring: true
+        test_online_scoring: false
       - name: "Claude Opus 4.6"
         ui_selector: "Claude Opus 4.6"
         enabled: true
