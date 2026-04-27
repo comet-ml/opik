@@ -2,55 +2,32 @@
 # Model Configuration for End-to-End Playground Tests
 # This file defines models that will be tested in playground tests
 # To add a new model: just add it to the appropriate provider section below
+# `ui_selector` must match the model option label rendered by the playground
+# model picker (see PROVIDER_MODELS in apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts).
 
 providers:
   openai:
     display_name: "OpenAI"
     api_key_env_var: "OPENAI_API_KEY"
     models:
-      - name: "GPT 5.2"
-        ui_selector: "GPT 5.2"
+      - name: "GPT 5.4"
+        ui_selector: "GPT 5.4"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "GPT 5.1"
-        ui_selector: "GPT 5.1"
+      - name: "GPT 5.4 Mini"
+        ui_selector: "GPT 5.4 Mini"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "GPT 5"
-        ui_selector: "GPT 5"
+      - name: "GPT 5.4 Nano"
+        ui_selector: "GPT 5.4 Nano"
         enabled: true
         test_playground: true
         test_online_scoring: true
-      - name: "GPT 5 Mini"
-        ui_selector: "GPT 5 Mini"
-        enabled: true
-        test_playground: true
-        test_online_scoring: true
-      - name: "GPT 5 Nano"
-        ui_selector: "GPT 5 Nano"
-        enabled: true
-        test_playground: true
-        test_online_scoring: true
-      - name: "GPT 4o"
-        ui_selector: "GPT 4o"
-        enabled: false
-        test_playground: false
-        test_online_scoring: false
       - name: "GPT 4o Mini"
         ui_selector: "GPT 4o Mini"
         enabled: true
-        test_playground: false
-        test_online_scoring: false
-      - name: "GPT 4.1"
-        ui_selector: "GPT 4.1"
-        enabled: false
-        test_playground: false
-        test_online_scoring: false
-      - name: "GPT 4.1 Mini"
-        ui_selector: "GPT 4.1 Mini"
-        enabled: false
         test_playground: false
         test_online_scoring: false
 
@@ -58,8 +35,18 @@ providers:
     display_name: "Gemini"
     api_key_env_var: "GEMINI_API_KEY"
     models:
-      - name: "Gemini 3 Pro"
-        ui_selector: "Gemini 3 Pro"
+      - name: "Gemini 3.1 Pro Preview"
+        ui_selector: "Gemini 3.1 Pro Preview"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "Gemini 2.5 Pro"
+        ui_selector: "Gemini 2.5 Pro"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
+      - name: "Gemini 2.5 Flash"
+        ui_selector: "Gemini 2.5 Flash"
         enabled: true
         test_playground: true
         test_online_scoring: true
@@ -68,6 +55,11 @@ providers:
     display_name: "Anthropic"
     api_key_env_var: "ANTHROPIC_API_KEY"
     models:
+      - name: "Claude Opus 4.7"
+        ui_selector: "Claude Opus 4.7"
+        enabled: true
+        test_playground: true
+        test_online_scoring: true
       - name: "Claude Opus 4.6"
         ui_selector: "Claude Opus 4.6"
         enabled: true
