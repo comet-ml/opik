@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Optional, Type, List, Dict, TYPE_CHECKING
+from typing import Any, cast, Dict, List, Optional, Type, TYPE_CHECKING
 import pydantic
 
 from . import opik_monitoring, message_converters
@@ -50,19 +50,42 @@ class LangchainChatModel(base_model.OpikBaseModel):
         Returns:
             str: The generated string output.
         """
+        message = self.generate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
+
+    def generate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        """
+        Generate the assistant turn from a list of chat messages.
+
+        Args:
+            messages: A list of ``{"role": ..., "content": ...}`` dictionaries.
+            response_format: Optional Pydantic model specifying the expected output format.
+            kwargs: Additional arguments forwarded to the langchain chat model's invoke call.
+
+        Returns:
+            ``{"role": "assistant", "content": ...}``.
+        """
         if response_format is not None:
             kwargs["response_format"] = response_format
 
-        request = [
-            {
-                "content": input,
-                "role": "user",
-            },
-        ]
         with base_model.get_provider_response(
-            model_provider=self, messages=request, **kwargs
+            model_provider=self,
+            messages=cast(List[Dict[str, Any]], list(messages)),
+            **kwargs,
         ) as response:
-            return base_model.check_model_output_string(response.content)
+            return {
+                "role": "assistant",
+                "content": base_model.check_model_output_string(response.content),
+            }
 
     def generate_provider_response(
         self,
@@ -106,20 +129,34 @@ class LangchainChatModel(base_model.OpikBaseModel):
         Returns:
             str: The generated string output.
         """
+        message = await self.agenerate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
+
+    async def agenerate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        """
+        Async counterpart of :meth:`generate_chat_completion`.
+        """
         if response_format is not None:
             kwargs["response_format"] = response_format
 
-        request = [
-            {
-                "content": input,
-                "role": "user",
-            },
-        ]
-
         async with base_model.aget_provider_response(
-            model_provider=self, messages=request, **kwargs
+            model_provider=self,
+            messages=cast(List[Dict[str, Any]], list(messages)),
+            **kwargs,
         ) as response:
-            return base_model.check_model_output_string(response.content)
+            return {
+                "role": "assistant",
+                "content": base_model.check_model_output_string(response.content),
+            }
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any

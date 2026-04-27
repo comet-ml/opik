@@ -1,13 +1,16 @@
 import abc
 import logging
 from contextlib import contextmanager, asynccontextmanager
-from typing import Any, List, Dict, Optional, Type
+from typing import Any, List, Dict, Literal, Optional, Type
 import pydantic
 
 from opik import exceptions
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+ConversationDict = Dict[Literal["role", "content"], str]
 
 
 class OpikBaseModel(abc.ABC):
@@ -65,6 +68,35 @@ class OpikBaseModel(abc.ABC):
         """
         pass
 
+    @abc.abstractmethod
+    def generate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Generate the assistant turn from a list of role-tagged chat messages.
+
+        Implementations should forward the messages to the underlying
+        chat-completions API verbatim. Preserving the caller's ``system``/``user``
+        split is what allows providers to cache the stable system prefix across
+        calls — which is the whole point of using this method instead of
+        :meth:`generate_string`.
+
+        Args:
+            messages: A list of ``{"role": ..., "content": ...}`` dictionaries
+                following the OpenAI chat-completions shape.
+            response_format: Optional Pydantic model specifying the expected output
+                format.
+            kwargs: Additional arguments forwarded to the underlying provider call.
+
+        Returns:
+            A ``{"role": "assistant", "content": ...}`` dict so callers can append
+            it back onto the input ``messages`` for follow-up turns.
+        """
+        pass
+
     async def agenerate_string(
         self,
         input: str,
@@ -100,6 +132,17 @@ class OpikBaseModel(abc.ABC):
 
         Returns:
             Any: The response from the model provider, which can be of any type depending on the use case and LLM.
+        """
+        raise NotImplementedError("Async generation not implemented for this provider")
+
+    async def agenerate_chat_completion(
+        self,
+        messages: List[ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> ConversationDict:
+        """
+        Async counterpart of :meth:`generate_chat_completion`.
         """
         raise NotImplementedError("Async generation not implemented for this provider")
 

@@ -2,7 +2,7 @@ import importlib.metadata
 import logging
 import warnings
 from functools import cached_property
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING, Type
+from typing import Any, cast, Dict, List, Optional, Set, TYPE_CHECKING, Type
 import pydantic
 import tenacity
 
@@ -300,26 +300,50 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         Returns:
             str: The generated string output.
         """
+        message = self.generate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
+
+    def generate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        """
+        Generate the assistant turn from a list of chat messages forwarded to the provider verbatim.
+
+        Use this when you want a stable ``system`` prefix across calls so that
+        provider-side prompt caching can take effect (judge metrics, suite
+        evaluators).
+
+        Args:
+            messages: A list of ``{"role": ..., "content": ...}`` dictionaries.
+            response_format: Optional Pydantic model specifying the expected output format.
+            kwargs: Additional arguments forwarded to ``litellm.completion``.
+
+        Returns:
+            ``{"role": "assistant", "content": ...}``.
+        """
         if response_format is not None:
             kwargs["response_format"] = response_format
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 
-        request = [
-            {
-                "content": input,
-                "role": "user",
-            },
-        ]
-
         with base_model.get_provider_response(
             model_provider=self,
-            messages=request,
+            messages=cast(List[Dict[str, Any]], list(messages)),
             **valid_litellm_params,
         ) as response:
             choice = _first_choice(response)
             content = _extract_message_content(choice)
-            return base_model.check_model_output_string(content)
+            return {
+                "role": "assistant",
+                "content": base_model.check_model_output_string(content),
+            }
 
     def generate_provider_response(
         self,
@@ -384,24 +408,38 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         Returns:
             str: The generated string output.
         """
+        message = await self.agenerate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
+
+    async def agenerate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        """
+        Async counterpart of :meth:`generate_chat_completion`.
+        """
         if response_format is not None:
             kwargs["response_format"] = response_format
 
         valid_litellm_params = self._remove_unnecessary_not_supported_params(kwargs)
 
-        request = [
-            {
-                "content": input,
-                "role": "user",
-            },
-        ]
-
         async with base_model.aget_provider_response(
-            model_provider=self, messages=request, **valid_litellm_params
+            model_provider=self,
+            messages=cast(List[Dict[str, Any]], list(messages)),
+            **valid_litellm_params,
         ) as response:
             choice = _first_choice(response)
             content = _extract_message_content(choice)
-            return base_model.check_model_output_string(content)
+            return {
+                "role": "assistant",
+                "content": base_model.check_model_output_string(content),
+            }
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
