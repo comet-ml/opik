@@ -21,7 +21,7 @@ const ProjectSidebarContent: React.FC<ProjectSidebarContentProps> = ({
   return (
     <>
       <ProjectSelector expanded={expanded} />
-      {expanded && <Separator className="my-2" />}
+      <Separator className="my-2" />
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
         <ul className="flex flex-col">
           <SideBarMenuItems expanded={expanded} />
@@ -29,7 +29,7 @@ const ProjectSidebarContent: React.FC<ProjectSidebarContentProps> = ({
       </div>
 
       <div className="shrink-0 pt-2">
-        <Separator className="mb-3" />
+        <Separator className={expanded ? "mb-3" : "mb-1"} />
         <ul className="flex flex-col">
           {workspaceItems.flatMap((group) =>
             group.items.map((item) => (
