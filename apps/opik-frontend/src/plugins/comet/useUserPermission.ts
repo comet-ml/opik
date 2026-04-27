@@ -197,11 +197,6 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
-  const canWriteComments = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.COMMENT_WRITE),
-    [checkNullablePermission],
-  );
-
   const canUpdateOnlineEvaluationRules = useMemo(
     () =>
       checkNullablePermission(
@@ -266,7 +261,6 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
-    canWriteComments,
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
