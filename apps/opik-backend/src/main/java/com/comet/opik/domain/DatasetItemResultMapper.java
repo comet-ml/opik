@@ -225,7 +225,8 @@ public class DatasetItemResultMapper {
             return null;
         }
         return Optional.ofNullable(row.get("dataset_version_id", String.class))
-                .filter(s -> !s.isBlank())
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
                 .map(UUID::fromString)
                 .orElse(null);
     }
