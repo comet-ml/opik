@@ -63,7 +63,7 @@ import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";

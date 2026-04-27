@@ -20,7 +20,7 @@ import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 
 import PlaygroundVariableCell from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundVariableCell";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { useIncrementalDatasetHydration } from "@/v1/pages/PlaygroundPage/useIncrementalDatasetHydration";
 import PlaygroundTagsCell from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputTable/PlaygroundTagsCell";
 

@@ -11713,6 +11713,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     Dataset:
       required:
       - name
@@ -12103,6 +12104,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy"
         assertion_results:
           type: array
           readOnly: true
@@ -12737,6 +12740,7 @@ components:
           minimum: 1
           type: integer
           format: int32
+      readOnly: true
     ExperimentItem_Compare:
       required:
       - dataset_item_id
@@ -12811,6 +12815,8 @@ components:
         description:
           type: string
           readOnly: true
+        execution_policy:
+          $ref: "#/components/schemas/ExecutionPolicy_Compare"
         assertion_results:
           type: array
           readOnly: true
@@ -16169,6 +16175,11 @@ components:
         type:
           minLength: 1
           type: string
+        presence:
+          type: string
+          enum:
+          - required
+          - optional
     LocalRunnerHeartbeatResponse:
       type: object
       properties:

@@ -75,7 +75,7 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";

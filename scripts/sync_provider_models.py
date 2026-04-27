@@ -41,7 +41,7 @@ ANTHROPIC_JAVA = JAVA_BASE / "antropic" / "AnthropicModelName.java"
 GEMINI_JAVA = JAVA_BASE / "gemini" / "GeminiModelName.java"
 VERTEXAI_JAVA = JAVA_BASE / "vertexai" / "VertexAIModelName.java"
 PROVIDERS_TS = Path("apps/opik-frontend/src/types/providers.ts")
-MODELS_DATA_TS = Path("apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts")
+MODELS_DATA_TS = Path("apps/opik-frontend/src/constants/providerModels.ts")
 MODEL_PRICES_JSON = Path("apps/opik-backend/src/main/resources/model_prices_and_context_window.json")
 LLM_MODELS_YAML = Path("apps/opik-backend/src/main/resources/llm-models-default.yaml")
 
@@ -679,7 +679,7 @@ def regenerate_models_data_ts(
     content: str,
     models_by_provider: dict[str, list[ModelEntry]],
 ) -> str:
-    """Regenerate PROVIDER_MODELS entries in useLLMProviderModelsData.ts."""
+    """Regenerate PROVIDER_MODELS entries in src/constants/providerModels.ts."""
     provider_type_map = {
         "openai": "OPEN_AI",
         "anthropic": "ANTHROPIC",
@@ -1203,7 +1203,7 @@ def main():
     models_by_provider = {k: v["entries"] for k, v in all_changes.items()}
     new_providers_ts = regenerate_providers_ts(providers_ts, models_by_provider)
 
-    # Dropdown (useLLMProviderModelsData.ts) gets curated subset — filtered and sorted
+    # Dropdown (src/constants/providerModels.ts) gets curated subset — filtered and sorted
     dropdown_by_provider = {
         provider: filter_for_dropdown(entries, provider, deprecated)
         for provider, entries in models_by_provider.items()

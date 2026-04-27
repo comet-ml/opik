@@ -1,5 +1,5 @@
 import logging
-
+from typing import Optional
 
 from opik.runner.registry import Param, extract_params, get_all, register
 
@@ -104,3 +104,33 @@ class TestExtractParams:
         warning = warnings[0].getMessage()
         assert "first_custom" in warning
         assert "second_custom" in warning
+
+    def test_extract_params__no_default__required(self):
+        def fn(x: str) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].presence == "required"
+
+    def test_extract_params__with_default__optional(self):
+        def fn(x: str = "hi") -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].presence == "optional"
+
+    def test_extract_params__optional_with_none_default__optional(self):
+        def fn(x: Optional[str] = None) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].type == "string"
+        assert params[0].presence == "optional"
+
+    def test_extract_params__optional_no_default__required(self):
+        def fn(x: Optional[str]) -> None:
+            pass
+
+        params = extract_params(fn)
+        assert params[0].type == "string"
+        assert params[0].presence == "required"

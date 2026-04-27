@@ -15,7 +15,7 @@ import { SheetTitle } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import useProjectById from "@/api/projects/useProjectById";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/ui/button";
@@ -90,7 +90,6 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
 
 interface MetricOption extends DropdownOption<EVALUATOR_MODEL> {
   docLink: string;
-  docHash?: string;
 }
 
 const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
@@ -98,36 +97,37 @@ const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
     value: EVALUATOR_MODEL.equals,
     label: "Equals",
     description: "Checks if the output exactly matches the text.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#equals",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#equals"),
   },
   {
     value: EVALUATOR_MODEL.regex_match,
     label: "Regex match",
     description: "Verifies pattern conformity using regex.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#regexmatch",
+    docLink: buildDocsUrl(
+      "/evaluation/metrics/heuristic_metrics",
+      "#regexmatch",
+    ),
   },
   {
     value: EVALUATOR_MODEL.contains,
     label: "Contains",
     description: "Identifies presence of a substring.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#contains",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#contains"),
   },
   {
     value: EVALUATOR_MODEL.isJSON,
     label: "isJson",
     description: "Validates JSON format compliance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#isjson",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#isjson"),
   },
   {
     value: EVALUATOR_MODEL.levenshtein,
     label: "Levenshtein",
     description: "Calculates text similarity via edit distance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#levenshteinratio",
+    docLink: buildDocsUrl(
+      "/evaluation/metrics/heuristic_metrics",
+      "#levenshteinratio",
+    ),
   },
 ];
 
@@ -136,31 +136,31 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
     value: EVALUATOR_MODEL.hallucination,
     label: "Hallucination",
     description: "Detects generated false information.",
-    docLink: "/evaluation/metrics/hallucination",
+    docLink: buildDocsUrl("/evaluation/metrics/hallucination"),
   },
   {
     value: EVALUATOR_MODEL.moderation,
     label: "Moderation",
     description: "Checks adherence to content standards.",
-    docLink: "/evaluation/metrics/moderation",
+    docLink: buildDocsUrl("/evaluation/metrics/moderation"),
   },
   {
     value: EVALUATOR_MODEL.answer_relevance,
     label: "Answer relevance",
     description: "Evaluates how well the answer fits the question.",
-    docLink: "/evaluation/metrics/answer_relevance",
+    docLink: buildDocsUrl("/evaluation/metrics/answer_relevance"),
   },
   {
     value: EVALUATOR_MODEL.context_recall,
     label: "Context recall",
     description: "Measures retrieval of relevant context.",
-    docLink: "/evaluation/metrics/context_recall",
+    docLink: buildDocsUrl("/evaluation/metrics/context_recall"),
   },
   {
     value: EVALUATOR_MODEL.context_precision,
     label: "Context precision",
     description: "Checks accuracy of provided context details.",
-    docLink: "/evaluation/metrics/context_precision",
+    docLink: buildDocsUrl("/evaluation/metrics/context_precision"),
   },
 ];
 
@@ -420,7 +420,6 @@ eval_results = evaluate(
                     isMinimalLink
                     description={m.description || ""}
                     docLink={m.docLink}
-                    docHash={m.docHash}
                     iconSize="size-3"
                   />
                 </div>

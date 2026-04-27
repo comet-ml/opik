@@ -2,8 +2,7 @@ import React from "react";
 import { Book, Plus } from "lucide-react";
 import noDataRulesImageUrl from "/images/no-data-rules.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v1/lib/utils";
 type NoDataWrapperProps = {
   title: string;
   description: string;

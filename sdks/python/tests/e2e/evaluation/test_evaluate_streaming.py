@@ -101,8 +101,6 @@ def test_streaming_starts_evaluation_before_complete_download(
             project_name=project_name,
         )
 
-        opik.flush_tracker()
-
     # Verify evaluation completed successfully
     assert evaluation_result.dataset_id == dataset.id
     assert len(events) == len(DATASET_ITEMS) * 2  # Each item has yield + task

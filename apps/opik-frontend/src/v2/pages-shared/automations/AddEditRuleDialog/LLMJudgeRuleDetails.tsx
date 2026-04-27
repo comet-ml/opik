@@ -32,7 +32,7 @@ import { safelyGetPromptMustacheTags } from "@/lib/prompt";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";

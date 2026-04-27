@@ -702,6 +702,7 @@ public class ExperimentService {
             try {
                 datasetService.getById(experiment.datasetId(), workspaceId)
                         .filter(dataset -> dataset.type() == DatasetType.TEST_SUITE)
+                        .filter(dataset -> !DemoData.DATASETS.contains(dataset.name()))
                         .ifPresent(dataset -> analyticsService.trackEvent("opik_eval_suite_run", Map.of(
                                 "eval_suite_id", dataset.id().toString(),
                                 "experiment_id", experiment.id().toString(),

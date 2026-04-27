@@ -8,7 +8,6 @@ import {
   TooltipTrigger,
 } from "@/ui/tooltip";
 import { useActiveWorkspaceName, useUserApiKey } from "@/store/AppStore";
-import { useAgentOnboarding } from "./AgentOnboardingContext";
 
 type CopyButtonConfig = {
   key: string;
@@ -18,10 +17,15 @@ type CopyButtonConfig = {
   tooltip: string;
 };
 
-const AgentCopyButtons: React.FC = () => {
+type AgentCopyButtonsProps = {
+  agentName?: string;
+};
+
+const AgentCopyButtons: React.FC<AgentCopyButtonsProps> = ({
+  agentName = "",
+}) => {
   const workspaceName = useActiveWorkspaceName();
   const apiKey = useUserApiKey();
-  const { agentName } = useAgentOnboarding();
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
@@ -39,13 +43,17 @@ const AgentCopyButtons: React.FC = () => {
       iconClassName: "text-emerald-600",
       tooltip: "Copy workspace",
     },
-    {
-      key: "project",
-      value: agentName,
-      icon: Clipboard,
-      iconClassName: "text-pink-500",
-      tooltip: "Copy project name",
-    },
+    ...(agentName
+      ? [
+          {
+            key: "project",
+            value: agentName,
+            icon: Clipboard,
+            iconClassName: "text-pink-500",
+            tooltip: "Copy project name",
+          },
+        ]
+      : []),
     ...(apiKey
       ? [
           {

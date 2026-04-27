@@ -5,7 +5,7 @@ import { Alert, AlertTitle } from "@/ui/alert";
 import LLMPromptMessagesVariable from "@/v2/pages-shared/llm/LLMPromptMessagesVariables/LLMPromptMessagesVariable";
 import { Description } from "@/ui/description";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/constants/explainers";
+import { EXPLAINERS_MAP, EXPLAINER_ID } from "@/v2/constants/explainers";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 const DEFAULT_DESCRIPTION =

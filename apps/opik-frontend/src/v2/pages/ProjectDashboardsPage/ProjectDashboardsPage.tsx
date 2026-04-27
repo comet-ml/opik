@@ -27,6 +27,7 @@ import {
 import { Separator } from "@/ui/separator";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const DASHBOARD_QUERY_PARAM_KEY = "dashboardId";
 const DASHBOARD_LOCAL_STORAGE_KEY_PREFIX = "opik-project-dashboard";
@@ -37,6 +38,10 @@ const DEFAULT_TEMPLATE_ID = DEFAULT_TEMPLATE.id;
 const ProjectDashboardsPage: React.FunctionComponent = () => {
   const projectId = useActiveProjectId()!;
   const workspaceName = useActiveWorkspaceName();
+
+  const {
+    permissions: { canEditDashboards },
+  } = usePermissions();
 
   const [dashboardId, setDashboardId] = useQueryParamAndLocalStorageState({
     localStorageKey: `${DASHBOARD_LOCAL_STORAGE_KEY_PREFIX}-${workspaceName}`,
@@ -62,6 +67,7 @@ const ProjectDashboardsPage: React.FunctionComponent = () => {
     dashboardId: dashboardId || null,
     enabled: Boolean(dashboardId),
     scope: DASHBOARD_SCOPE.INSIGHTS,
+    readOnly: !canEditDashboards,
   });
 
   useEffect(() => {

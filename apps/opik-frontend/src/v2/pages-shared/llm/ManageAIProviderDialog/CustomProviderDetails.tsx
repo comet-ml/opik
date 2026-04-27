@@ -5,7 +5,8 @@ import EyeInput from "@/shared/EyeInput/EyeInput";
 import { AIProviderFormType } from "@/v2/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { Input } from "@/ui/input";
 import { Description } from "@/ui/description";
 import { Button } from "@/ui/button";
@@ -117,7 +118,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
                   className="inline px-0"
                 >
                   <a
-                    href={buildDocsUrl("/playground")}
+                    href={buildDocsUrl("/development/playground")}
                     target="_blank"
                     rel="noreferrer"
                   >

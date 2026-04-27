@@ -589,6 +589,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -5423,6 +5424,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
@@ -5437,6 +5439,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
@@ -5447,6 +5450,7 @@ class ExperimentsResourceTest {
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest3 = ExperimentItemsBatch.builder().experimentItems(experimentItems3).build();
@@ -5603,6 +5607,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -5620,6 +5625,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
@@ -5757,6 +5763,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject1.startTime(), traceProject1.endTime()))
                             .build())
@@ -5771,6 +5778,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject2.startTime(), traceProject2.endTime()))
                             .build())
@@ -5853,6 +5861,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -6438,6 +6447,7 @@ class ExperimentsResourceTest {
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
                             .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build());
         }
 

@@ -1,9 +1,11 @@
 import React, { useRef, useEffect, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
+import { getExperimentById } from "@/api/datasets/useExperimentById";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import { COMPARE_EXPERIMENTS_MAX_PAGE_SIZE } from "@/constants/experiments";
 import useAppStore from "@/store/AppStore";
-import { ExperimentsCompare } from "@/types/datasets";
+import { isExperimentTerminal } from "@/lib/experiments";
 import {
   StatusTag,
   getStatusFromExperimentItems,
@@ -14,29 +16,15 @@ type StatusInfo = ReturnType<typeof getStatusFromExperimentItems>;
 const REFETCH_INTERVAL = 5000;
 const MAX_REFETCH_TIME = 300000;
 
-const areAllExperimentItemsScored = (
-  matchingRow: ExperimentsCompare,
-  datasetItemId: string,
-): boolean => {
-  const relatedItems =
-    matchingRow.experiment_items?.filter(
-      (ei) => ei.dataset_item_id === datasetItemId,
-    ) ?? [];
-  return (
-    relatedItems.length > 0 && relatedItems.every((ei) => ei.status != null)
-  );
-};
-
 interface PlaygroundOutputAssertionStatusProps {
   experimentId: string | undefined;
   datasetItemId: string;
   datasetId: string;
-  stale?: boolean;
 }
 
 const PlaygroundOutputAssertionStatus: React.FunctionComponent<
   PlaygroundOutputAssertionStatusProps
-> = ({ experimentId, datasetItemId, datasetId, stale = false }) => {
+> = ({ experimentId, datasetItemId, datasetId }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const pollingStartTimeRef = useRef<number | null>(null);
   const lastStatusRef = useRef<StatusInfo | undefined>(undefined);
@@ -47,6 +35,22 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
       lastStatusRef.current = undefined;
     }
   }, [experimentId]);
+
+  const { data: experimentData } = useQuery({
+    queryKey: ["experiment", { experimentId }],
+    queryFn: (context) =>
+      getExperimentById(context, { experimentId: experimentId! }),
+    enabled: !!experimentId,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (isExperimentTerminal(status)) {
+        return false;
+      }
+      return REFETCH_INTERVAL;
+    },
+  });
+
+  const experimentFinished = isExperimentTerminal(experimentData?.status);
 
   const { data } = useCompareExperimentsList(
     {
@@ -60,25 +64,12 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
     },
     {
       enabled: !!experimentId && !!datasetId,
-      refetchInterval: (query) => {
-        if (!experimentId) return false;
+      refetchInterval: () => {
+        if (!experimentId || experimentFinished) return false;
 
         const elapsed =
           Date.now() - (pollingStartTimeRef.current || Date.now());
         if (elapsed > MAX_REFETCH_TIME) return false;
-
-        const items = query.state.data?.content ?? [];
-        const matchingRow = items.find(
-          (item) =>
-            item.experiment_items?.some(
-              (ei) => ei.dataset_item_id === datasetItemId,
-            ),
-        );
-
-        if (!matchingRow) return REFETCH_INTERVAL;
-
-        if (areAllExperimentItemsScored(matchingRow, datasetItemId))
-          return false;
 
         return REFETCH_INTERVAL;
       },
@@ -94,29 +85,20 @@ const PlaygroundOutputAssertionStatus: React.FunctionComponent<
         ),
     );
 
-    if (
-      !matchingRow ||
-      !areAllExperimentItemsScored(matchingRow, datasetItemId)
-    ) {
-      return lastStatusRef.current;
-    }
+    if (!matchingRow) return lastStatusRef.current;
 
-    const result = getStatusFromExperimentItems(matchingRow);
+    const result = getStatusFromExperimentItems(
+      matchingRow,
+      experimentFinished,
+    );
     lastStatusRef.current = result;
     return result;
-  }, [data?.content, datasetItemId]);
+  }, [data?.content, datasetItemId, experimentFinished]);
 
-  if (!experimentId) {
-    return null;
-  }
+  if (!experimentId) return null;
+  if (!statusInfo?.status && !statusInfo?.evaluating) return null;
 
-  if (!statusInfo?.status) {
-    return <span className="text-muted-slate">{"\u2014"}</span>;
-  }
-
-  return (
-    <StatusTag {...statusInfo} className={stale ? "opacity-50" : undefined} />
-  );
+  return <StatusTag {...statusInfo} />;
 };
 
 export default PlaygroundOutputAssertionStatus;

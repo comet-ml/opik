@@ -45,6 +45,9 @@ def _make_supervisor(
         api=api,
         watch=watch,
         runner_type=runner_type,
+        heartbeat_interval_seconds=0.05,
+        graceful_timeout_seconds=0.1,
+        main_loop_tick_seconds=0.05,
     )
 
 
@@ -94,7 +97,7 @@ class TestStopChild:
         with sup._child_lock:
             sup._child = sup._start_child()
         time.sleep(0.2)
-        sup._stop_child(graceful_timeout=1)
+        sup._stop_child(graceful_timeout=0.1)
         assert sup._child is None
 
     def test_already_dead__no_error(self) -> None:
@@ -246,7 +249,7 @@ class TestShutdown:
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
 
-        time.sleep(1)
+        time.sleep(0.2)
         sup._shutdown_event.set()
         t.join(timeout=10)
 
@@ -258,7 +261,7 @@ class TestShutdown:
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.2)
         sup._shutdown_event.set()
         t.join(timeout=15)
 
@@ -275,7 +278,7 @@ class TestHeartbeat:
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         sup._shutdown_event.set()
         t.join(timeout=5)
 
@@ -292,7 +295,7 @@ class TestHeartbeat:
         t = threading.Thread(target=sup._heartbeat_loop, daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.1)
         sup._shutdown_event.set()
         t.join(timeout=5)
 
@@ -323,7 +326,7 @@ class TestStandaloneMode:
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         assert sup._child is None
 
@@ -339,7 +342,7 @@ class TestStandaloneMode:
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
 
-        time.sleep(1)
+        time.sleep(0.1)
         sup._shutdown_event.set()
         t.join(timeout=10)
 
@@ -357,7 +360,7 @@ class TestBridgeIntegration:
         t = threading.Thread(target=sup.run, daemon=True)
         t.start()
 
-        time.sleep(1)
+        time.sleep(0.1)
 
         bridge_alive = False
         for thread in threading.enumerate():

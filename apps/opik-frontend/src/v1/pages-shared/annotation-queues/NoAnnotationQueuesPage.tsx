@@ -2,7 +2,7 @@ import React from "react";
 import { Book, Plus } from "lucide-react";
 import noDataQueuesImageUrl from "/images/no-data-annotation-queues.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 type NoDataWrapperProps = {

@@ -180,7 +180,7 @@ def get_datasets(
     project_name: Optional[str],
     rest_client: OpikApi,
     max_results: int = 1000,
-    sync_items: bool = True,
+    sync_items: bool = False,
 ) -> List[dataset.Dataset]:
     page_size = 100
     datasets: List[dataset.Dataset] = []
@@ -211,6 +211,11 @@ def get_datasets(
 
             if sync_items:
                 dataset_.__internal_api__sync_hashes__()
+            else:
+                # Backend holds items we haven't seen locally; defer the sync
+                # until the first `insert()` so dedup still works without
+                # paying an N+1 sync right now.
+                dataset_.__internal_api__hashes_synced__ = False
 
             datasets.append(dataset_)
 

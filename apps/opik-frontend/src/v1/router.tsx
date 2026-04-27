@@ -13,6 +13,7 @@ import ExperimentsPageGuard from "@/v1/layout/ExperimentsPageGuard";
 import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
+import OptimizationStudioPageGuard from "@/v1/layout/OptimizationStudioPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
 const CompareExperimentsPage = lazy(
@@ -286,11 +287,17 @@ const optimizationsListRoute = createRoute({
 const optimizationsNewRoute = createRoute({
   path: "/new",
   getParentRoute: () => optimizationsRoute,
-  component: OptimizationsNewPage,
+  component: OptimizationStudioPageGuard,
   staticData: {
     param: "optimizationsNew",
     paramValue: "new",
   },
+});
+
+const optimizationsNewIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsNewRoute,
+  component: OptimizationsNewPage,
 });
 
 const optimizationCompareRedirectRoute = createRoute({
@@ -591,7 +598,7 @@ const routeTree = rootRoute.addChildren([
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
-        optimizationsNewRoute,
+        optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
         optimizationCompareRedirectRoute,
         optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
       ]),
