@@ -159,7 +159,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     private ChatRequest addToolSpecs(ChatRequest request) {
         return request.toBuilder()
-                .parameters(null)
                 .responseFormat(null)
                 .toolSpecifications(TraceSpanToolDefinition.ALL_TOOLS)
                 .build();
