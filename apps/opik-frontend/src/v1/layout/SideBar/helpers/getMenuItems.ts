@@ -22,11 +22,13 @@ const getMenuItems = ({
   canViewDashboards,
   canViewDatasets,
   canUsePlayground,
+  canViewOptimizationRuns,
 }: {
   canViewExperiments: boolean;
   canViewDashboards: boolean;
   canViewDatasets: boolean;
   canUsePlayground: boolean;
+  canViewOptimizationRuns: boolean;
 }): MenuItemGroup[] => {
   return [
     {
@@ -130,21 +132,25 @@ const getMenuItems = ({
           : []),
       ],
     },
-    {
-      id: "optimization",
-      label: "Optimization",
-      items: [
-        {
-          id: "optimizations",
-          path: "/$workspaceName/optimizations",
-          type: MENU_ITEM_TYPE.router,
-          icon: SparklesIcon,
-          label: "Optimization studio",
-          count: "optimizations",
-          showIndicator: "optimizations_running",
-        },
-      ],
-    },
+    ...(canViewOptimizationRuns
+      ? [
+          {
+            id: "optimization",
+            label: "Optimization",
+            items: [
+              {
+                id: "optimizations",
+                path: "/$workspaceName/optimizations",
+                type: MENU_ITEM_TYPE.router,
+                icon: SparklesIcon,
+                label: "Optimization studio",
+                count: "optimizations",
+                showIndicator: "optimizations_running",
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "production",
       label: "Production",
