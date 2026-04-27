@@ -62,7 +62,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                          :project_id<item.index>,
                          :workspace_id,
                          :name<item.index>,
-                         :passed<item.index>,
+                         :status<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
                          :user_name,
@@ -136,7 +136,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("entity_id" + i, item.id())
                     .bind("project_id" + i, item.projectId())
                     .bind("name" + i, item.name())
-                    .bind("passed" + i, item.value().compareTo(BigDecimal.ONE) >= 0
+                    .bind("status" + i, item.value().compareTo(BigDecimal.ONE) >= 0
                             ? AssertionStatus.PASSED.getValue()
                             : AssertionStatus.FAILED.getValue())
                     .bind("source" + i, item.source().getValue())
@@ -153,7 +153,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("entity_id" + i, item.entityId())
                     .bind("project_id" + i, item.projectId())
                     .bind("name" + i, item.name())
-                    .bind("passed" + i, item.status().getValue())
+                    .bind("status" + i, item.status().getValue())
                     .bind("source" + i, item.source().getValue())
                     .bind("reason" + i, getValueOrDefault(item.reason()));
         }
