@@ -37,5 +37,15 @@ export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/
 export { activateRunner } from "@/runner/activate";
 export type { RegistryEntry, Param } from "@/runner/registry";
 
+// OpenTelemetry distributed trace helpers
+export {
+  OpikDistributedTraceAttributes,
+  OPIK_TRACE_ID_HEADER,
+  OPIK_PARENT_SPAN_ID_HEADER,
+  attachToParent,
+  extractOpikDistributedTraceAttributes,
+} from "@/otel";
+export type { HttpHeadersLike, OpenTelemetrySpanLike } from "@/otel";
+
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";

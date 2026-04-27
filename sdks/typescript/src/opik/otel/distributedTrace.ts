@@ -1,0 +1,90 @@
+import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
+
+/**
+ * Header keys carrying Opik distributed trace context across service
+ * boundaries. They are intentionally lowercase to match the canonical form
+ * `Headers#get` returns and the way `node:http` exposes incoming headers.
+ */
+export const OPIK_TRACE_ID_HEADER = "opik_trace_id";
+export const OPIK_PARENT_SPAN_ID_HEADER = "opik_parent_span_id";
+
+/**
+ * Minimal structural type for an OpenTelemetry `Span`. Only the
+ * `setAttributes` method is required for distributed-trace propagation, so we
+ * avoid taking a runtime dependency on `@opentelemetry/api`. Any object that
+ * implements this method — including `import("@opentelemetry/api").Span` — is
+ * accepted.
+ */
+export interface OpenTelemetrySpanLike {
+  setAttributes(attributes: Record<string, string>): unknown;
+}
+
+/**
+ * Headers carrying Opik distributed trace context. Accepts both plain
+ * dictionaries and any iterable of `[name, value]` pairs (e.g. the WHATWG
+ * `Headers` object).
+ */
+export type HttpHeadersLike =
+  | Record<string, string | string[] | undefined>
+  | Iterable<[string, string]>;
+
+function getHeader(
+  headers: HttpHeadersLike,
+  name: string
+): string | undefined {
+  const target = name.toLowerCase();
+  if (typeof (headers as Iterable<[string, string]>)[Symbol.iterator] === "function") {
+    for (const [key, value] of headers as Iterable<[string, string]>) {
+      if (key.toLowerCase() === target) {
+        return value;
+      }
+    }
+    return undefined;
+  }
+  const record = headers as Record<string, string | string[] | undefined>;
+  for (const [key, value] of Object.entries(record)) {
+    if (key.toLowerCase() === target) {
+      return Array.isArray(value) ? value[0] : value;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Extracts Opik distributed trace attributes from HTTP headers.
+ *
+ * Reads `opik_trace_id` and the optional `opik_parent_span_id` headers
+ * (case-insensitive). If `opik_trace_id` is missing the function returns
+ * `null`.
+ */
+export function extractOpikDistributedTraceAttributes(
+  httpHeaders: HttpHeadersLike
+): OpikDistributedTraceAttributes | null {
+  const traceId = getHeader(httpHeaders, OPIK_TRACE_ID_HEADER);
+  if (traceId === undefined) {
+    return null;
+  }
+  const parentSpanId = getHeader(httpHeaders, OPIK_PARENT_SPAN_ID_HEADER);
+  return new OpikDistributedTraceAttributes(traceId, parentSpanId);
+}
+
+/**
+ * Attaches an Opik distributed trace parent to the provided OpenTelemetry
+ * span by extracting trace context from HTTP headers and setting the
+ * corresponding span attributes.
+ *
+ * @returns `true` if headers were found and attributes were set, `false`
+ * otherwise.
+ */
+export function attachToParent(
+  span: OpenTelemetrySpanLike,
+  httpHeaders: HttpHeadersLike
+): boolean {
+  const distributedTraceAttributes =
+    extractOpikDistributedTraceAttributes(httpHeaders);
+  if (distributedTraceAttributes === null) {
+    return false;
+  }
+  span.setAttributes(distributedTraceAttributes.asAttributes());
+  return true;
+}
