@@ -11,7 +11,6 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 ## Inputs
 
 - **Issue (required)**: a Sentry issue URL (e.g. `https://<org>.sentry.io/issues/<id>/?...`) **or** the bare numeric issue ID.
-- **Region host (optional)**: Sentry region hostname. Default `us.sentry.io`. For self-hosted Sentry, pass the host (no scheme).
 
 ## Workflow
 
@@ -20,8 +19,7 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 1. Confirm `SENTRY_ACCESS_TOKEN` is present in `.env.local`. **Never echo the token.** If missing, point the engineer at [.agents/docs/SENTRY_MCP_SETUP.md](../../docs/SENTRY_MCP_SETUP.md) and stop.
 2. If a URL was supplied, extract:
    - numeric issue ID,
-   - organization slug (host prefix before `.sentry.io`),
-   - region host.
+   - organization slug (host prefix before `.sentry.io`).
 3. **Token-handling rules** (apply for the entire workflow):
    - Read the token from `.env.local` directly, not from `.mcp.json`.
    - Never put the token in argv (e.g., `curl -H "Authorization: Bearer $TOKEN"` leaks it via `ps`). Set the header in code via the language's HTTP client (e.g. Python `urllib.request`, Node `fetch`), or use a temporary header file (`curl -H @file`, mode 600) deleted afterward.
@@ -29,7 +27,7 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 
 ### Phase 2 — Fetch all events
 
-Page through `GET https://<region>/api/0/issues/<issue_id>/events/?full=false&limit=100` with `Authorization: Bearer $SENTRY_ACCESS_TOKEN`, following the `Link: rel="next"; results="true"; cursor=...` header.
+Page through `GET https://us.sentry.io/api/0/issues/<issue_id>/events/?full=false&limit=100` with `Authorization: Bearer $SENTRY_ACCESS_TOKEN`, following the `Link: rel="next"; results="true"; cursor=...` header.
 
 **Default cap: ~3 pages (300 events).** Distinct-message and tag distributions converge fast; pulling thousands of events per analysis is rarely necessary and slows the workflow. Bump the cap (and tell the engineer you're doing so) only when:
 
@@ -123,7 +121,6 @@ Final summary should be **short and decision-oriented**, not a data dump:
 
 ## Notes
 
-- Self-hosted Sentry: pass the region host (no scheme).
 - See [.agents/docs/SENTRY_MCP_SETUP.md](../../docs/SENTRY_MCP_SETUP.md) for token setup and scope requirements.
 
 ### Python SDK priors
