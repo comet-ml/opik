@@ -45,14 +45,20 @@ The e2e suite runs under `pytest-xdist` with `--dist=loadfile`: each test file i
   PROJECT_NAME = generate_project_name("e2e", __name__)
   ```
   Reference `PROJECT_NAME` directly in test bodies — do not introduce a `project_name = PROJECT_NAME` indirection. The autouse `configure_e2e_tests_env` fixture reads `PROJECT_NAME` from each test module and patches `OPIK_PROJECT_NAME`, so the constant is the single source of truth. Files that don't reference the project name in Python don't need to declare anything; the fixture falls back to deriving a name from the module.
-- **Alternative projects** — used as parametrize values to exercise the `project_name=` override path — must be **static string literals**, not `generate_project_name(...)` calls:
+- **Alternative projects** — used to exercise the `project_name=` override path — must not embed `generate_project_name(...)` as a `@pytest.mark.parametrize` decorator value. Every worker collects every parametrize id, and xdist's collection-consistency check fails when ids differ across workers; `generate_project_name` returns a different value per process. Parametrize on a boolean and compute the project name inside the test body:
   ```python
-  _PROJECT_OVERRIDE = "e2e-tests-anonymization-override"
+  @pytest.mark.parametrize("override_project_name", [True, False])
+  def test_xxx(opik_client, override_project_name):
+      project_name = (
+          generate_project_name("e2e", "anonymization", "override")
+          if override_project_name else None
+      )
+      ...
   ```
-  `generate_project_name` returns a different value per process (random suffix), so embedding it in a parametrize value breaks xdist's collection-consistency check. A literal is fine here because each CI job has its own backend stack, and `--dist=loadfile` keeps each file on a single worker.
+  Each CI job has its own backend stack, and `--dist=loadfile` keeps each file on a single worker, so different workers computing different names is not a collision risk in practice.
 - **Per-test resources** — datasets, experiments, prompts, temporary projects — already use unique names via the `dataset_name`, `experiment_name`, `prompt_name`, `temporary_project_name` fixtures. Use them; do not invent your own per-test name.
 - **No raw `random_chars()` calls for project names.** Reach for it directly only when you need a non-project resource name and there is no fixture for it.
-- **No string literals for project / dataset / experiment / prompt / suite / annotation-queue / optimization names anywhere under `tests/e2e/**`.**
+- **No bare hardcoded literals for project / dataset / experiment / prompt / suite / annotation-queue / optimization names anywhere under `tests/e2e/**`.** Strings derived from a unique-per-test fixture (e.g. `f"test_optimization_{dataset_name}"`) are fine — `dataset_name` already injects a random suffix.
 - **`configure_e2e_tests_env` is autouse and module-scoped.** Do not narrow it; teardown ordering under xdist will surface narrower scopes as flake.
 - **xdist + classes**: with `--dist=loadfile` test classes are *not* split across workers — every test in a file (including those inside `class Test…`) runs on the same worker. Module-level constants and module-scoped fixtures span both module-level and class-level tests in that file. If you switch a file to `--dist=loadscope`, revisit the scope contract.
 

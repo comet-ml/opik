@@ -33,7 +33,17 @@ def configure_e2e_tests_env(request):
     reference it in Python, so no comparison can fail.
 
     Module-scoped because all tests in a file share one project under
-    ``--dist=loadfile``."""
+    ``--dist=loadfile``.
+
+    On env-var visibility: ``Opik(...)`` reads ``OPIK_PROJECT_NAME``
+    once at construction (caches it as ``self._project_name``); see
+    ``opik.api_objects.opik_client.Opik.__init__``. The patch therefore
+    only takes effect because the ``opik_client`` fixture builds a fresh
+    client per test, and the function-scoped autouse
+    ``shutdown_cached_client_after_test`` resets the global cached
+    client. ``@opik.track`` resolves the client lazily via
+    ``get_client_cached()`` at call time (not at decorator-definition
+    time), so there is no import-time capture to worry about."""
     project_name = getattr(request.module, "PROJECT_NAME", None)
     if project_name is None:
         project_name = generate_project_name("e2e", request.module.__name__)

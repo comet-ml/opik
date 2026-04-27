@@ -14,12 +14,17 @@ parametrize id, and xdist refuses to run when ids differ across
 workers. Use a plain string literal there instead.
 """
 
-import random
-import string
+import secrets
 
 
 def _random_chars(n: int = 6) -> str:
-    return "".join(random.choice(string.ascii_letters) for _ in range(n))
+    # Duplicates tests/conftest.py::random_chars on purpose: importing
+    # from tests/conftest.py here would create a cycle (conftest itself
+    # imports from testlib). `secrets` (vs `random`) keeps per-worker
+    # uniqueness independent of any seeding in the test environment
+    # (e.g. a stray random.seed(...) in a fixture, or a pinned
+    # PYTHONHASHSEED) — load-bearing for the xdist isolation contract.
+    return secrets.token_hex((n + 1) // 2)[:n]
 
 
 def generate_project_name(*prefixes: str) -> str:
