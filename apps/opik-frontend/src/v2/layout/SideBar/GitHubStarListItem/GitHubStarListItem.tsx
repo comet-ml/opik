@@ -41,7 +41,7 @@ const GitHubStarListItem: React.FC<GitHubStarListItemProps> = ({
           {expanded && (
             <>
               <span className="comet-body-xs-accented">Star</span>
-              <span className="rounded bg-[#EBF2F5] px-1 text-[10px] font-medium leading-4 text-[#45575F] dark:bg-secondary dark:text-foreground">
+              <span className="rounded bg-chart-gray-light px-1 text-[10px] font-medium leading-4 text-chart-gray-dark">
                 {starCount}
               </span>
             </>
