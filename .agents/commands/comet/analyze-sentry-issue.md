@@ -6,7 +6,7 @@
 
 Drive an end-to-end triage of a Sentry issue: pull all events directly from Sentry's REST API, aggregate, locate the emitting code, diagnose root cause and observability gaps, and propose concrete fixes (with code locations) the engineer can apply or ticket. This is a **guided runbook**, not just a data dump — at each step the workflow gives the engineer something to decide on, not just numbers.
 
-This bypasses the natural-language Sentry MCP tools (`search_issues`, `search_events`, `search_issue_events`, `analyze_issue_with_seer`), which route through Sentry's own OpenAI account and are frequently rate-limited. The direct REST path uses the same `SENTRY_ACCESS_TOKEN` from `.env.local` that the Sentry MCP uses.
+This is the canonical entry point for Sentry analysis in this repo. It uses the `SENTRY_ACCESS_TOKEN` from `.env.local` and Sentry's REST API directly.
 
 ## Inputs
 
@@ -24,7 +24,7 @@ This bypasses the natural-language Sentry MCP tools (`search_issues`, `search_ev
    - region host.
 3. **Token-handling rules** (apply for the entire workflow):
    - Read the token from `.env.local` directly, not from `.mcp.json`.
-   - Never put the token in argv (e.g., `curl -H "Authorization: Bearer $TOKEN"` leaks it via `ps`). Use Python `urllib.request` with the header set in code, or a temporary header file (`curl -H @file`) deleted afterward.
+   - Never put the token in argv (e.g., `curl -H "Authorization: Bearer $TOKEN"` leaks it via `ps`). Set the header in code via the language's HTTP client (e.g. Python `urllib.request`, Node `fetch`), or use a temporary header file (`curl -H @file`, mode 600) deleted afterward.
    - Never log the token, never paste it into reports.
 
 ### Phase 2 — Fetch all events
@@ -49,30 +49,46 @@ Compute and present:
 
 ### Phase 4 — Locate the emitting code
 
-Sentry's title is often a log string from the SDK, not the actual exception. Find where it comes from:
+Sentry's title is often a log string emitted by the application, not the actual exception. Find where it comes from. The Sentry **project slug** in the issue URL or the issue's "Project" field tells you which subtree to search:
 
-1. Take the most-common message template (with placeholders normalized — replace specific values with `%s`/`{}`) and `grep` the repo for it. Search across `sdks/`, `apps/`, and any other code paths. Use a substring distinctive enough to land on one or two callsites.
-2. Open the file and read 30 lines of context around the match.
+| Sentry project | Codebase | Language |
+|---|---|---|
+| `opik-backend` | `apps/opik-backend/` | Java (Dropwizard, SLF4J) |
+| `opik-frontend` | `apps/opik-frontend/` | TypeScript / React |
+| `opik-python-sdk` | `sdks/python/` | Python |
+| `opik-typescript-sdk` | `sdks/typescript/` | TypeScript |
+| `opik-optimizer` | `sdks/opik_optimizer/` | Python |
+
+Steps:
+
+1. Take the most-common message template (replace specific values like IDs, paths, and exception strings with placeholders) and `grep` it inside the project's subtree. Use a substring distinctive enough to land on one or two callsites.
+2. Open the file and read ~30 lines of context around the match.
 3. Identify:
-   - Whether it's `LOGGER.error / .warning / .exception` (logging integration) or `sentry_sdk.capture_exception(...)` (direct capture).
-   - Whether the call has `exc_info=` (presence/absence is a key observability signal).
-   - What contextual data is in scope at the callsite (exception object, stderr tail, exit code, dataset item, request, etc.) but **not** being attached to the event.
+   - **What kind of call** emits the event:
+     - Python: `logger.error / .warning / .exception(...)` (logging integration) or `sentry_sdk.capture_exception(...)`.
+     - Java: `log.error("msg", e)` (SLF4J) or `Sentry.captureException(e)`.
+     - TypeScript: `console.error(...)`, `logger.error(...)`, `Sentry.captureException(e)`, or `Sentry.captureMessage(...)`.
+   - **Whether the exception object is attached** to the event:
+     - Python: `exc_info=<exc>` argument present?
+     - Java: is the exception passed as the second SLF4J argument? (`log.error("msg", e)` attaches; `log.error("msg " + e)` does not.)
+     - TypeScript: is the exception passed to `captureException`, or just stringified into a message?
+   - **What contextual data is in scope at the callsite** (exception object, stderr tail, exit code, request payload, dataset item, user identifier) but **not** being attached to the event.
 
-If multiple distinct messages share the same `LOGGER.<level>(...)` template, that's the **fingerprint-collision** pattern: Sentry buckets unrelated failure modes together because the template hash is identical.
+If multiple distinct messages share the same log template at the callsite, that's the **fingerprint-collision** pattern: Sentry buckets unrelated failure modes together because the template hash is identical.
 
 ### Phase 5 — Diagnose
 
 Lead the engineer through these decisions, citing concrete events and code locations:
 
-1. **Observability gap?**
-   - Are tracebacks attached? If not and the SDK had the exception object in scope: missing `exc_info=`.
-   - Is structured context (stderr, exit code, request payload) absent? If so: missing `extra=` / `sentry_sdk.set_context(...)`.
-   - Are unrelated exception types fingerprint-colliding under one issue? If so: the log template is too generic — recommend including `type(exc).__name__` *as part of the message template* so each type fingerprints separately, **and** logging via `exc_info` so the actual exception is attached.
+1. **Observability gap?** Three sub-questions, expressed in the language of the project from Phase 4:
+   - **Is the exception attached?** Tracebacks are missing when the exception object is in scope at the log site but not passed to the SDK's exception sink. Python: missing `exc_info=`. Java: passed by string concatenation instead of as the second SLF4J argument. TypeScript: stringified into a message instead of passed to `Sentry.captureException`.
+   - **Is structured context attached?** Things like stderr, exit code, request payload, dataset item, or HTTP method might be in scope at the callsite but absent on the event. Python: `extra=` / `sentry_sdk.set_context(...)`. Java: `Sentry.setExtra(...)` / MDC. TypeScript: `Sentry.setContext(...)` / `Sentry.withScope(...)`.
+   - **Are unrelated exception types fingerprint-colliding?** If yes, the log template is too generic — distinct exception types end up in one Sentry issue. The fix is to include the exception type/class name *as part of the message template* so each type fingerprints separately, **and** to attach the exception object so the traceback shows up.
 
 2. **SDK bug, user error, or infra?**
-   - **SDK bug**: traceback points at SDK code; reproducible from a documented use case.
-   - **User error pattern**: traceback (when present) ends in user code, error is consistent with a common API misuse (missing dataset key, wrong return shape, etc.). Spread across many users / releases / platforms is a strong signal.
-   - **Infrastructure**: connection errors, timeouts, rate-limits, dependency failures (`APIConnectionError`, `httpx` errors). Concentrated in time = upstream incident; spread out = endemic.
+   - **SDK / app bug**: traceback (when present) points at first-party code; reproducible from a documented use case.
+   - **User error pattern**: traceback ends in caller code; error is consistent with a common API misuse (missing dataset key, wrong return shape, malformed request body). Spread across many users / releases / platforms is a strong signal — the failure mode is the SDK's contract being violated, not the SDK breaking.
+   - **Infrastructure**: connection errors, timeouts, rate-limits, downstream dependency failures. Concentrated in a tight time window = upstream incident; spread out evenly = endemic and worth a retry/back-off fix.
 
 3. **Per-customer concentration?** If one named org/server/user dominates, flag it for direct outreach — they're hitting a recoverable wall.
 
@@ -80,22 +96,19 @@ Lead the engineer through these decisions, citing concrete events and code locat
 
 For each finding produced in Phase 5, give the engineer a **specific, actionable** proposal with file paths and line numbers. Two layers in order of priority:
 
-1. **Observability fix (almost always cheap, ship first):**
-   - Patch the identified log calls to include `exc_info=<exc>` and/or `extra={"key": value, ...}`.
-   - If template collision is the issue: change the message template so distinct types fingerprint distinctly (e.g., from `"Task failed: %s"` to `"Task failed: %s: %s"` carrying `type(exc).__name__`).
-   - State the expected outcome: future Sentry events will carry the data the engineer just spent time discovering wasn't there.
+1. **Observability fix (almost always cheap, ship first).** Patch the identified callsites to attach the exception object and/or structured context using the idioms from the project's language (see Phase 5). If template collision is the issue, change the log template so distinct exception types fingerprint distinctly. State the expected outcome explicitly: future Sentry events will carry the data the engineer just spent time discovering wasn't there.
 
-2. **Behavior fix:**
-   - For user-error patterns: pre-flight validation that catches the misuse on the first item with a structured, copy-pasteable error message instead of failing N times across the dataset.
-   - For SDK bugs: outline the change. Do not auto-edit code without explicit approval.
+2. **Behavior fix.**
+   - For user-error patterns (especially in SDK code paths): pre-flight validation that catches the misuse early with a structured, copy-pasteable error message — instead of letting the same broken call iterate across N items and emit N events.
+   - For first-party bugs: outline the change. Do not auto-edit code without explicit approval.
    - For infrastructure: retries / circuit breakers / surfacing the upstream cause.
 
 ### Phase 7 — Verify and ship
 
 Offer (do not auto-execute):
 
-- **Local repro**: a one-liner or short script the engineer can run to trigger the failure and confirm the observability fix attaches the missing data. For SDK changes, an integration test path under `sdks/python/tests/`.
-- **Branch and PR**: if the engineer wants to ship, propose a branch name (`<user>/OPIK-<ticket>-<slug>` per [.claude/rules/git-workflow.md](../../../.claude/rules/git-workflow.md)) and the first-commit message format `[OPIK-####] [SDK] fix: …`.
+- **Local repro**: a one-liner or short script the engineer can run to trigger the failure and confirm the observability fix attaches the missing data. Use the project's existing test infrastructure (e.g. `sdks/python/tests/`, `sdks/typescript/`, `apps/opik-backend/src/test/java/`, `apps/opik-frontend/`).
+- **Branch and PR**: if the engineer wants to ship, propose a branch name (`<user>/OPIK-<ticket>-<slug>` per [.claude/rules/git-workflow.md](../../../.claude/rules/git-workflow.md)) and the first-commit message format `[OPIK-####] [<COMPONENT>] <type>: …` where `<COMPONENT>` matches the project (e.g. `[SDK]`, `[BE]`, `[FE]`).
 - **Jira ticket(s)**: separate observability and behavior fixes if they're meaningfully independent. Reference the Sentry issue ID in the description so it auto-links.
 - **Commit-message hint**: `Fixes <SENTRY-ISSUE-SHORT-ID>` (e.g. `Fixes OPIK-PYTHON-SDK-H35`) auto-resolves the Sentry issue when the commit ships — call this out explicitly so the engineer doesn't have to remember.
 
@@ -111,10 +124,15 @@ Final summary should be **short and decision-oriented**, not a data dump:
 
 ## Notes
 
-- This command exists *because* the NL-backed Sentry MCP tools are unreliable (OpenAI quota gating). When those tools are working, the direct MCP tools (`get_sentry_resource`, `get_issue_tag_values`) are sufficient for individual lookups; this command's value is **the cross-event aggregation plus the guided diagnosis-to-fix path**.
 - Self-hosted Sentry: pass the region host (no scheme).
 - See [.agents/docs/SENTRY_MCP_SETUP.md](../../docs/SENTRY_MCP_SETUP.md) for token setup and scope requirements.
-- **Recurring patterns observed in this codebase** (use these as priors when diagnosing):
-  - `LOGGER.error/.warning(..., exception)` without `exc_info=`: very common SDK pattern; ~56% of `LOGGER.{error,warning,exception}` calls in `sdks/python/src/opik/` lack `exc_info`. Always check this.
-  - Generic templates like `"Evaluation task failed (group=%s): %s: %s"` or `"Task failed for item %s: %s"` group every distinct task error into one Sentry issue. The fingerprint-collision diagnosis applies whenever the issue title says one exception type but the message-distribution shows many.
-  - Process-supervisor logs (e.g. `runner/supervisor.py`) capture child crashes via the parent — they have `stderr_tail` and `exit_code` in scope but log only the message; the engineer should look for `extra=` opportunities, not `exc_info=`.
+
+### Python SDK priors (project: `opik-python-sdk`, `opik-optimizer`)
+
+Use these as starting hypotheses when the issue's project is a Python SDK — they recur often enough to be worth checking first:
+
+- `LOGGER.error/.warning(..., exception)` without `exc_info=`: very common; roughly half of `LOGGER.{error,warning,exception}` calls in `sdks/python/src/opik/` lack `exc_info`. Always check this — fixing it usually unblocks triage on its own.
+- Generic templates like `"Evaluation task failed (group=%s): %s: %s"` or `"Task failed for item %s: %s"` group every distinct task error into one Sentry issue. The fingerprint-collision diagnosis applies whenever the issue title cites one exception type but the message-distribution shows many.
+- Process-supervisor logs (e.g. `runner/supervisor.py`) capture child crashes via the parent — `stderr_tail` and `exit_code` are in scope but only the message gets logged. Look for `extra=` opportunities, not `exc_info=`, on these.
+
+For backend (Java) and frontend / TypeScript SDK projects, no project-specific priors have been collected yet — fall back to the language-agnostic checks in Phases 4 and 5.
