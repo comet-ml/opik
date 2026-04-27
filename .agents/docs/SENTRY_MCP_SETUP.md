@@ -83,7 +83,7 @@ The Sentry MCP exposes three "search" tools — `search_issues`, `search_events`
 **Direct, non-LLM tools that always work:**
 `get_sentry_resource`, `get_issue_tag_values`, `find_organizations`, `find_projects`, `find_releases`, `find_teams`, `whoami`, `update_issue`.
 
-**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly using the same `SENTRY_ACCESS_TOKEN`. See `scripts/analyze_sentry_issue.py` for a working pattern that paginates `/api/0/issues/<id>/events/` and groups by exception message.
+**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly using the same `SENTRY_ACCESS_TOKEN`. The `/analyze-sentry-issue` slash command (defined in [.agents/commands/comet/analyze-sentry-issue.md](.agents/commands/comet/analyze-sentry-issue.md)) drives this — paginates `/api/0/issues/<id>/events/` and aggregates by exception message, tags, and users.
 
 ## Self-Hosted Sentry
 
@@ -101,7 +101,7 @@ If you don't want to manage a personal token, you can run the official remote MC
 }
 ```
 
-Then `make claude` + restart your MCP client. The first Sentry tool call opens a browser for OAuth. Tokens are cached at `~/.mcp-auth/`. Note: this path won't help `scripts/analyze_sentry_issue.py`, which still needs a token in `.env.local`.
+Then `make claude` + restart your MCP client. The first Sentry tool call opens a browser for OAuth. Tokens are cached at `~/.mcp-auth/`. Note: this path won't help the `/analyze-sentry-issue` slash command, which still needs `SENTRY_ACCESS_TOKEN` in `.env.local`.
 
 ## Security Notes
 
