@@ -3,11 +3,13 @@ import google.adk.tools.agent_tool
 from opik.integrations.adk import build_mermaid_graph_definition
 from opik.integrations.adk.graph import mermaid_graph_builder, nodes
 
+from ... import llm_constants
+
 
 def test_build_mermaid__simple_agent():
     agent = google.adk.agents.LlmAgent(
         name="test_agent",
-        model="gemini-2.0-flash",
+        model=llm_constants.GEMINI_FLASH,
         instruction="test instruction",
         description="test description",
     )
@@ -27,13 +29,13 @@ def test_build_mermaid__root_sequential_agent_with_llm_subagents_having_their_ow
         sub_agents=[
             google.adk.agents.LlmAgent(
                 name="LLMAgent1",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="LLMAgent1_SubAgent",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
@@ -41,13 +43,13 @@ def test_build_mermaid__root_sequential_agent_with_llm_subagents_having_their_ow
             ),
             google.adk.agents.LlmAgent(
                 name="LLMAgent2",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="LLMAgent2_SubAgent",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
@@ -80,13 +82,13 @@ def test_build_mermaid__root_parallel_agent_with_llm_subagents_having_their_own_
         sub_agents=[
             google.adk.agents.LlmAgent(
                 name="LLMAgent1",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="LLMAgent1_SubAgent",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
@@ -94,13 +96,13 @@ def test_build_mermaid__root_parallel_agent_with_llm_subagents_having_their_own_
             ),
             google.adk.agents.LlmAgent(
                 name="LLMAgent2",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="LLMAgent2_SubAgent",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
@@ -134,7 +136,7 @@ def test_build_mermaid__root_loop_agent_with_llm_subagent():
         sub_agents=[
             google.adk.agents.LlmAgent(
                 name="LLMAgent1",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
             ),
@@ -158,13 +160,13 @@ style LLMAgent1 {mermaid_graph_builder.CLASS_STYLES[nodes.GraphNodeType.LLM_AGEN
 def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agents():
     agent = google.adk.agents.LlmAgent(
         name="RootLLMAgent",
-        model="gemini-2.0-flash",
+        model=llm_constants.GEMINI_FLASH,
         instruction="test instruction",
         description="test description",
         sub_agents=[
             google.adk.agents.LlmAgent(
                 name="RootLLMAgent_SubAgent",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 sub_agents=[
@@ -173,7 +175,7 @@ def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agen
                         sub_agents=[
                             google.adk.agents.LlmAgent(
                                 name="RootLLMAgent_SubAgent_SequentialSubAgent_LLMSubAgent1",
-                                model="gemini-2.0-flash",
+                                model=llm_constants.GEMINI_FLASH,
                                 instruction="test instruction",
                                 description="test description",
                             ),
@@ -186,13 +188,13 @@ def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agen
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="RootLLMAgent_ParallelSubAgent_LLMSubAgent1",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
                     google.adk.agents.LlmAgent(
                         name="RootLLMAgent_ParallelSubAgent_LLMSubAgent2",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                     ),
@@ -203,13 +205,13 @@ def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agen
                 sub_agents=[
                     google.adk.agents.LlmAgent(
                         name="RootLLMAgent_SequentialSubAgent_LLMSubAgent1",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                         sub_agents=[
                             google.adk.agents.LlmAgent(
                                 name="RootLLMAgent_SequentialSubAgent_LLMSubAgent1_LLMSubAgent1",
-                                model="gemini-2.0-flash",
+                                model=llm_constants.GEMINI_FLASH,
                                 instruction="test instruction",
                                 description="test description",
                             ),
@@ -217,13 +219,13 @@ def test_build_mermaid__complex_agent_tree_with_sequential_parallel_and_llm_agen
                     ),
                     google.adk.agents.LlmAgent(
                         name="RootLLMAgent_SequentialSubAgent_LLMSubAgent2",
-                        model="gemini-2.0-flash",
+                        model=llm_constants.GEMINI_FLASH,
                         instruction="test instruction",
                         description="test description",
                         sub_agents=[
                             google.adk.agents.LlmAgent(
                                 name="RootLLMAgent_SequentialSubAgent_LLMSubAgent2_LLMSubAgent1",
-                                model="gemini-2.0-flash",
+                                model=llm_constants.GEMINI_FLASH,
                                 instruction="test instruction",
                                 description="test description",
                             ),
@@ -276,13 +278,13 @@ def test_build_mermaid__root_llm_agent_with_subagents_and_tools_and_agent_tools(
 
     agent = google.adk.agents.LlmAgent(
         name="LLMAgent1",
-        model="gemini-2.0-flash",
+        model=llm_constants.GEMINI_FLASH,
         instruction="test instruction",
         description="test description",
         sub_agents=[
             google.adk.agents.LlmAgent(
                 name="LLMAgent1_SubAgent",
-                model="gemini-2.0-flash",
+                model=llm_constants.GEMINI_FLASH,
                 instruction="test instruction",
                 description="test description",
                 tools=[some_func_tool],
@@ -292,13 +294,13 @@ def test_build_mermaid__root_llm_agent_with_subagents_and_tools_and_agent_tools(
             google.adk.tools.agent_tool.AgentTool(
                 agent=google.adk.agents.LlmAgent(
                     name="LLMAgent1_AgentTool1",
-                    model="gemini-2.0-flash",
+                    model=llm_constants.GEMINI_FLASH,
                     instruction="test instruction",
                     description="test description",
                     sub_agents=[
                         google.adk.agents.LlmAgent(
                             name="LLMAgent1_AgentTool1_SubAgent",
-                            model="gemini-2.0-flash",
+                            model=llm_constants.GEMINI_FLASH,
                             instruction="test instruction",
                             description="test description",
                         ),

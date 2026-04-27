@@ -1,10 +1,11 @@
 import pytest
-from crewai import Agent, Crew, Process, Task
+from crewai import Agent, Crew, LLM, Process, Task
 
 import opik
-from opik.integrations.crewai import opik_tracker
-from opik.integrations.crewai import track_crewai
+from opik.integrations.crewai import opik_tracker, track_crewai
+
 from . import constants
+from ... import llm_constants
 from ...testlib import (
     ANY,
     ANY_BUT_NONE,
@@ -23,16 +24,31 @@ pytestmark = [
 ]
 
 
+# CrewAI v0 still runs against gpt-4o-mini: its pinned litellm==1.74.9
+# reports `stop` as supported for gpt-5-nano and then CrewAI's ReAct loop
+# injects stop tokens the OpenAI API rejects. gpt-4o-mini dodges that.
+# v1 standardises on gpt-5-nano like the rest of the suite.
+_OPENAI_MODEL = (
+    llm_constants.LITELLM_OPENAI_GPT_NANO
+    if opik_tracker.is_crewai_v1()
+    else llm_constants.LITELLM_OPENAI_GPT_4O_MINI
+)
+# v0 routes Gemini through litellm's vertex_ai provider prefix; v1's genai
+# integration infers it from GOOGLE_GENAI_USE_VERTEXAI.
+_GEMINI_MODEL = (
+    f"gemini/{llm_constants.GEMINI_FLASH}"
+    if opik_tracker.is_crewai_v1()
+    else f"vertex_ai/{llm_constants.GEMINI_FLASH}"
+)
+
+
 @pytest.mark.parametrize(
     "model, opik_provider",
     [
-        ("openai/gpt-4o-mini", "openai"),
-        (
-            f"{'gemini' if opik_tracker.is_crewai_v1() else 'vertex_ai'}/gemini-2.0-flash",
-            "google_vertexai",
-        ),
-        ("bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0", "bedrock"),
-        ("anthropic/claude-sonnet-4-0", "anthropic"),
+        (_OPENAI_MODEL, "openai"),
+        (_GEMINI_MODEL, "google_vertexai"),
+        (f"bedrock/{llm_constants.BEDROCK_CLAUDE_SONNET}", "bedrock"),
+        (f"anthropic/{llm_constants.ANTHROPIC_CLAUDE_SONNET}", "anthropic"),
     ],
 )
 def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__data_is_serialized_correctly(
@@ -40,12 +56,21 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
     model,
     opik_provider,
 ):
+    # reasoning_effort="minimal" only applies on v1 where the OpenAI model
+    # is gpt-5-nano. On v0 (gpt-4o-mini) it's rejected by the OpenAI API.
+    llm_kwargs = (
+        {"reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT}
+        if model == llm_constants.LITELLM_OPENAI_GPT_NANO
+        else {}
+    )
+    agent_llm = LLM(model=model, **llm_kwargs)
+
     researcher = Agent(
         role="Test Researcher",
         goal="Find basic information",
         backstory="You are a test agent for unit testing.",
         verbose=True,
-        llm=model,
+        llm=agent_llm,
     )
 
     writer = Agent(
@@ -53,7 +78,7 @@ def test_crewai__sequential_agent__cyclic_reference_inside_one_of_the_tasks__dat
         goal="Write summaries based on research",
         backstory="You are a test writer for unit testing.",
         verbose=True,
-        llm=model,
+        llm=agent_llm,
     )
 
     research_task = Task(

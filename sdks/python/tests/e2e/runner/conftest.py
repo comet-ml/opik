@@ -18,7 +18,6 @@ import opik.api_objects.opik_client
 from opik.api_objects import rest_helpers
 from opik.cli.pairing import hkdf_sha256
 from opik.rest_api import core as rest_api_core
-from ..conftest import OPIK_E2E_TESTS_PROJECT_NAME
 
 
 ECHO_APP = os.path.join(os.path.dirname(__file__), "echo_app.py")
@@ -35,6 +34,12 @@ class RunnerInfo:
     process: subprocess.Popen
     output_lines: list
     bridge_key: bytes = b""
+
+
+@dataclasses.dataclass
+class TestProject:
+    id: str
+    name: str
 
 
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
@@ -69,14 +74,17 @@ def subprocess_env(opik_client):
 
 
 @pytest.fixture()
-def project_id(api_client):
+def project(api_client, temporary_project_name) -> TestProject:
+    """Per-test project, created on setup. The shared ``temporary_project_name``
+    fixture handles name generation and teardown."""
     try:
-        api_client.projects.create_project(name=OPIK_E2E_TESTS_PROJECT_NAME)
+        api_client.projects.create_project(name=temporary_project_name)
     except rest_api_core.ApiError:
         pass
-    return rest_helpers.resolve_project_id_by_name(
-        api_client, OPIK_E2E_TESTS_PROJECT_NAME
+    project_id = rest_helpers.resolve_project_id_by_name(
+        api_client, temporary_project_name
     )
+    return TestProject(id=project_id, name=temporary_project_name)
 
 
 def _drain_stdout(proc, output_lines):
@@ -104,11 +112,11 @@ def _parse_pairing_url(output_lines, timeout):
             padded = fragment + "=" * ((4 - len(fragment) % 4) % 4)
             raw = base64.urlsafe_b64decode(padded)
             if len(raw) < 65:
-                time.sleep(0.2)
+                time.sleep(0.05)
                 continue
             name_len = raw[64]
             if len(raw) < 65 + name_len:
-                time.sleep(0.2)
+                time.sleep(0.05)
                 continue
             return {
                 "session_id": str(uuid.UUID(bytes=raw[0:16])),
@@ -116,7 +124,7 @@ def _parse_pairing_url(output_lines, timeout):
                 "project_id": str(uuid.UUID(bytes=raw[48:64])),
                 "runner_name": raw[65 : 65 + name_len].decode("utf-8"),
             }
-        time.sleep(0.2)
+        time.sleep(0.05)
     return None
 
 
@@ -180,7 +188,7 @@ def _start_runner(
             break
         if proc.poll() is not None:
             break
-        time.sleep(0.5)
+        time.sleep(0.1)
 
     if not connected:
         proc.terminate()
@@ -221,13 +229,15 @@ def _start_runner(
 
     yield info
 
+    # Runner CLI + echo_app don't need a graceful window in tests; SIGTERM →
+    # short wait → SIGKILL is fine. Drops per-test teardown from ~10s to ~2s.
     proc.terminate()
     try:
-        proc.wait(timeout=10)
+        proc.wait(timeout=2)
     except subprocess.TimeoutExpired:
         proc.kill()
         proc.wait()
-    drain_thread.join(timeout=5)
+    drain_thread.join(timeout=2)
 
     report = request.node.stash.get(_phase_report_key, {})
     if report.get("call") and report["call"].failed:
@@ -237,19 +247,19 @@ def _start_runner(
 
 
 @pytest.fixture()
-def runner_process(api_client, subprocess_env, project_id, opik_client, request):
+def runner_process(api_client, subprocess_env, project, opik_client, request):
     """Endpoint runner — for job/agent E2E tests."""
     yield from _start_runner(
         api_client,
         subprocess_env,
-        project_id,
+        project.id,
         opik_client,
         request,
         cli_args=[
             OPIK_CLI,
             "endpoint",
             "--project",
-            OPIK_E2E_TESTS_PROJECT_NAME,
+            project.name,
             "--",
             sys.executable,
             ECHO_APP,
@@ -258,18 +268,18 @@ def runner_process(api_client, subprocess_env, project_id, opik_client, request)
 
 
 @pytest.fixture()
-def bridge_runner_process(api_client, subprocess_env, project_id, opik_client, request):
+def bridge_runner_process(api_client, subprocess_env, project, opik_client, request):
     """Connect runner — for bridge command E2E tests."""
     yield from _start_runner(
         api_client,
         subprocess_env,
-        project_id,
+        project.id,
         opik_client,
         request,
         cli_args=[
             OPIK_CLI,
             "connect",
             "--project",
-            OPIK_E2E_TESTS_PROJECT_NAME,
+            project.name,
         ],
     )

@@ -47,16 +47,12 @@ def test__find_experiment_items_for_dataset__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -83,7 +79,7 @@ def test__find_experiment_items_for_dataset__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         project_name=project_name,
     )
@@ -99,28 +95,9 @@ def test__find_experiment_items_for_dataset__happy_path(
         project_name=opik_client.project_name,
     )
     assert retrieved_experiment.project_name == project_name
-    assert len(experiment_items_contents) == 3
+    assert len(experiment_items_contents) == 2
 
     EXPECTED_EXPERIMENT_ITEMS_CONTENT = [
-        experiment_item.ExperimentItemContent(
-            id=ANY_BUT_NONE,
-            dataset_item_id=ANY_BUT_NONE,
-            trace_id=ANY_BUT_NONE,
-            dataset_item_data={
-                "expected_model_output": {"output": "Kyiv"},
-                "id": ANY_BUT_NONE,
-                "input": {"question": "What is the capital of Ukraine?"},
-            },
-            evaluation_task_output={"output": "Kyiv"},
-            feedback_scores=[
-                FeedbackScoreDict(
-                    category_name=None,
-                    name="equals_scoring_function",
-                    reason="Correct output value",
-                    value=1.0,
-                )
-            ],
-        ),
         experiment_item.ExperimentItemContent(
             id=ANY_BUT_NONE,
             dataset_item_id=ANY_BUT_NONE,
@@ -145,11 +122,11 @@ def test__find_experiment_items_for_dataset__happy_path(
             dataset_item_id=ANY_BUT_NONE,
             trace_id=ANY_BUT_NONE,
             dataset_item_data={
-                "expected_model_output": {"output": "Berlin"},
+                "expected_model_output": {"output": "Kyiv"},
                 "id": ANY_BUT_NONE,
-                "input": {"question": "What is the capital of Germany?"},
+                "input": {"question": "What is the capital of Ukraine?"},
             },
-            evaluation_task_output={"output": "Berlin"},
+            evaluation_task_output={"output": "Kyiv"},
             feedback_scores=[
                 FeedbackScoreDict(
                     category_name=None,
@@ -181,16 +158,12 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -217,7 +190,7 @@ def test__find_experiment_items_for_dataset__filtered__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "gpt-3.5"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
         project_name=project_name,
     )
@@ -306,16 +279,12 @@ def test__experiment_scores__happy_path(
     dataset.insert(
         [
             {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_model_output": {"output": "Berlin"},
+                "input": {"question": "What is the capital of Ukraine?"},
+                "expected_model_output": {"output": "Kyiv"},
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
                 "expected_model_output": {"output": "Warsaw"},
-            },
-            {
-                "input": {"question": "What is the capital of Ukraine?"},
-                "expected_model_output": {"output": "Kyiv"},
             },
         ]
     )
@@ -344,7 +313,7 @@ def test__experiment_scores__happy_path(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "test-model"},
-        traces_amount=3,
+        traces_amount=2,
         feedback_scores_amount=1,
         project_name=project_name,
     )

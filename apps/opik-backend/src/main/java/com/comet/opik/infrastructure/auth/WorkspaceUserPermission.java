@@ -24,7 +24,6 @@ public enum WorkspaceUserPermission {
     ANNOTATION_QUEUE_ANNOTATE("annotation_queue_annotate"),
     PROJECT_CREATE("project_create"),
     PROJECT_DATA_VIEW("project_data_view"),
-    COMMENT_WRITE("comment_write"),
     TRACE_SPAN_THREAD_ANNOTATE("trace_span_thread_annotate"),
     ONLINE_EVALUATION_RULE_UPDATE("online_evaluation_rule_update"),
     ALERT_UPDATE("alert_update"),

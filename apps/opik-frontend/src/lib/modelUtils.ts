@@ -2,20 +2,27 @@ import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
 import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
+import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 /**
- * Checks if a model is a reasoning model that requires temperature = 1.0
- * Reasoning models include GPT-5 family and O-series (O1, O3, O4-mini)
+ * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
- * @param model - The model type to check
- * @returns true if the model is a reasoning model, false otherwise
+ * Primary source: the backend-fetched registry (via the module-level flag
+ * index populated by useLLMProviderModelsData). A new reasoning model added
+ * to the CDN YAML gets the temp=1 gate automatically.
+ *
+ * Fallback: the hardcoded REASONING_MODELS list (src/constants/llm.ts). Used
+ * only before the first fetch resolves, or for non-React callers that run
+ * before any component has mounted.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
-  return Boolean(
-    model &&
-      (REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
-        model as PROVIDER_MODEL_TYPE,
-      ),
+  if (!model) return false;
+  const fetched = getLatestModelFlags(model);
+  if (fetched !== undefined) {
+    return fetched.reasoning;
+  }
+  return (REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
+    model as PROVIDER_MODEL_TYPE,
   );
 };
 

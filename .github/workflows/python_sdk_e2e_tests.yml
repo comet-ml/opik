@@ -28,16 +28,35 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
-  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+  OPIK_CONSOLE_LOGGING_LEVEL: INFO
 jobs:
+    select-matrix:
+        name: Select Python version matrix
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        outputs:
+            python_versions: ${{ steps.pick.outputs.versions }}
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  sparse-checkout: .github/actions/select-e2e-matrix
+                  sparse-checkout-cone-mode: false
+            - uses: ./.github/actions/select-e2e-matrix
+              id: pick
+              with:
+                  all-versions: ${{ vars.PYTHON_VERSIONS }}
+                  match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
     run-e2e:
+        needs: select-matrix
         name: Python SDK E2E Tests ${{matrix.python_version}}
         runs-on: ubuntu-latest
         timeout-minutes: 30
         strategy:
             fail-fast: false
             matrix:
-                python_version: ${{ fromJSON(vars.PYTHON_VERSIONS) }}
+                python_version: ${{ fromJSON(needs.select-matrix.outputs.python_versions) }}
 
         steps:
         - name: Checkout
@@ -87,7 +106,7 @@ jobs:
         - name: Run tests
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2

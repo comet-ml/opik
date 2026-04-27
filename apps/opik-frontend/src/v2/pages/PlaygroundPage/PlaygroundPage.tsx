@@ -113,6 +113,17 @@ const PlaygroundPage = () => {
     resetPlayground,
   ]);
 
+  const prevDatasetIdRef = useRef(datasetId);
+  useEffect(() => {
+    if (
+      prevDatasetIdRef.current !== null &&
+      prevDatasetIdRef.current !== datasetId
+    ) {
+      clearCreatedExperiments();
+    }
+    prevDatasetIdRef.current = datasetId;
+  }, [datasetId, clearCreatedExperiments]);
+
   const { DialogComponent } = useNavigationBlocker({
     condition: isRunning,
     title: datasetId

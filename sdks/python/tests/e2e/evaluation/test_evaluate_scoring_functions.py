@@ -111,8 +111,6 @@ def test_evaluate__scoring_functions__happy_flow(
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -183,8 +181,6 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
         },
         project_name=project_name,
     )
-
-    opik.flush_tracker()
 
     verifiers.verify_experiment(
         opik_client=opik_client,
@@ -265,8 +261,6 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
         },
         project_name=project_name,
     )
-
-    opik.flush_tracker()
 
     verifiers.verify_experiment(
         opik_client=opik_client,

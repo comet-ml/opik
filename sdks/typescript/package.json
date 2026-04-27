@@ -1,7 +1,7 @@
 {
   "name": "opik",
   "description": "Opik TypeScript and JavaScript SDK",
-  "version": "2.0.14",
+  "version": "2.0.15",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/comet-ml/opik.git",

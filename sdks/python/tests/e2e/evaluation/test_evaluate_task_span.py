@@ -112,8 +112,6 @@ def test_evaluate__with_task_span_metrics__single_metric__happy_flow(
         prompts=[prompt],
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -185,8 +183,6 @@ def test_evaluate__with_task_span_metrics__multiple_task_span_metrics__happyflow
         },
     )
 
-    opik.flush_tracker()
-
     verifiers.verify_experiment(
         opik_client=opik_client,
         id=evaluation_result.experiment_id,
@@ -248,8 +244,6 @@ def test_evaluate__with_task_span_metrics__only_task_span_metrics__no_regular_me
             "model_name": "task-span-only-model",
         },
     )
-
-    opik.flush_tracker()
 
     verifiers.verify_experiment(
         opik_client=opik_client,
@@ -332,8 +326,6 @@ def test_evaluate__with_task_span_metrics__mixed_with_regular_metrics__multiple_
         prompt=prompt,
         trial_count=5,
     )
-
-    opik.flush_tracker()
 
     verifiers.verify_experiment(
         opik_client=opik_client,
@@ -425,8 +417,6 @@ def test_evaluate__with_task_span_metrics__metric_with_multiple_parameters__happ
         scoring_metrics=[multi_param_metric],
         experiment_name=experiment_name,
     )
-
-    opik.flush_tracker()
 
     # Verify the metric received all expected parameters in local test results
     assert len(evaluation_result.test_results) == 1

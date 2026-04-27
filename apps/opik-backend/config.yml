@@ -1309,6 +1309,11 @@ datasetVersioningMigration:
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  # Remote CDN fetch is opt-in. Self-hosted / OSS deployments stay on the
+  # classpath YAML shipped with the release by default, so no outbound
+  # traffic unless the operator explicitly enables it. Comet SaaS sets
+  # LLM_MODEL_REGISTRY_REMOTE_ENABLED=true + LLM_MODEL_REGISTRY_REMOTE_URL
+  # via its own Helm overrides.
   remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
   remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
   refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}
