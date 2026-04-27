@@ -46,8 +46,8 @@ const BackToProjectButton: React.FC<BackToProjectButtonProps> = ({
   const button = expanded ? (
     <Button
       variant="outline"
-      size="xs"
-      className="w-full justify-start gap-1"
+      size="2xs"
+      className="comet-body-xs-accented w-fit max-w-full gap-1 rounded px-1.5"
       onClick={handleClick}
       disabled={!hasActiveProject}
     >
@@ -57,7 +57,8 @@ const BackToProjectButton: React.FC<BackToProjectButtonProps> = ({
   ) : (
     <Button
       variant="outline"
-      size="icon-xs"
+      size="icon-2xs"
+      className="rounded"
       onClick={handleClick}
       disabled={!hasActiveProject}
     >
@@ -73,7 +74,7 @@ const BackToProjectButton: React.FC<BackToProjectButtonProps> = ({
     <TooltipWrapper content={tooltipContent} side="right" delayDuration={0}>
       {/* span wrapper lets the tooltip receive hover events even when the
           button inside is disabled */}
-      <span className={expanded ? "block" : "inline-block"}>{button}</span>
+      <span className="inline-block max-w-full">{button}</span>
     </TooltipWrapper>
   );
 };

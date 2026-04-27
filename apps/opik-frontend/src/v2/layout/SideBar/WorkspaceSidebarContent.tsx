@@ -28,24 +28,36 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
 
   const menuGroups = getWorkspaceSidebarMenuItems({ canViewDashboards });
 
+  const initial = (displayName || workspaceName).charAt(0).toUpperCase();
+
   const workspaceSelector = SidebarWorkspaceSelectorComponent ? (
     <SidebarWorkspaceSelectorComponent expanded={expanded} />
   ) : expanded ? (
-    <div className="comet-body-s-accented truncate rounded-md px-2 py-1 text-foreground">
-      {displayName}
+    <div className="flex items-center gap-2 px-2 py-1">
+      <span className="comet-body-xs-accented flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-slate">
+        {initial}
+      </span>
+      <div className="flex min-w-0 flex-col">
+        <span className="comet-body-xs-accented text-light-slate">
+          Workspace
+        </span>
+        <span className="comet-body-s-accented truncate text-foreground">
+          {displayName}
+        </span>
+      </div>
     </div>
-  ) : null;
+  ) : (
+    <span className="comet-body-xs-accented flex size-7 shrink-0 items-center justify-center self-center rounded-md bg-muted text-[10.5px] leading-none text-muted-slate">
+      {initial}
+    </span>
+  );
 
   return (
     <>
+      {workspaceSelector}
+      <Separator className="my-2" />
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        {expanded && (
-          <div className="comet-body-xs-accented truncate px-2 py-1 text-light-slate">
-            Workspace
-          </div>
-        )}
-        {workspaceSelector}
-        <ul className="mt-2 flex flex-col">
+        <ul className="flex flex-col">
           {menuGroups.flatMap((group) =>
             group.items.map((item) => (
               <SidebarMenuItem key={item.id} item={item} expanded={expanded} />
@@ -56,7 +68,7 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
 
       <div className="shrink-0 pt-2">
         <BackToProjectButton expanded={expanded} />
-        <Separator className="my-4" />
+        <Separator className="my-2" />
         <ul className="flex flex-col">
           <GitHubStarListItem expanded={expanded} />
         </ul>
