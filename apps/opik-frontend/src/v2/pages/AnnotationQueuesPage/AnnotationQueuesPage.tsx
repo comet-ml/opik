@@ -410,7 +410,7 @@ export const AnnotationQueuesPage: React.FC = () => {
             "Get started by creating a queue for human review.\nOrganize traces and threads, label outputs, and gather feedback to improve performance."
           }
           primaryActionLabel={
-            canCreateAnnotationQueues ? "Create your first queue" : ""
+            canCreateAnnotationQueues ? "Create your first queue" : undefined
           }
           onPrimaryAction={
             canCreateAnnotationQueues ? handleNewQueue : undefined

@@ -354,7 +354,9 @@ const AlertsPage: React.FunctionComponent = () => {
           description={
             "Monitor important events in your project and get notified when something needs your attention."
           }
-          primaryActionLabel={canUpdateAlerts ? "Create your first alert" : ""}
+          primaryActionLabel={
+            canUpdateAlerts ? "Create your first alert" : undefined
+          }
           onPrimaryAction={canUpdateAlerts ? handleNewAlertClick : undefined}
           docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
