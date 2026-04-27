@@ -633,6 +633,12 @@ export interface ProviderKeyConfiguration {
   models?: string;
   /** For free model: the display label showing actual provider/model (e.g., "openai/gpt-4o-mini") */
   model_label?: string;
+  /** Custom LLM (OPIK-4551): JSON-encoded Map<string,string> appended to every outbound request URL */
+  url_query_params?: string;
+  /** Custom LLM (OPIK-4551): custom auth header name; sent alongside Authorization: Bearer unless suppressed */
+  auth_header_name?: string;
+  /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
+  suppress_default_auth?: string;
 }
 
 export interface BaseProviderKey {
