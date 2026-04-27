@@ -23,7 +23,6 @@ import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/shared/DataTableCells/IdCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
@@ -85,6 +84,7 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import ItemSourceCell from "@/v2/pages/ExperimentsPage/GeneralDatasetsTab/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { Skeleton } from "@/ui/skeleton";
 
@@ -214,9 +214,9 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: "Item source",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
@@ -422,6 +422,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [data?.aggregationMap],
   );
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -464,6 +469,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     actionsCell: ExperimentRowActionsCell,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const handleRowClick = useCallback(
@@ -526,7 +532,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: "Test suite",
+              label: "Item source",
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],

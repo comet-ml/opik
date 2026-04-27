@@ -18,7 +18,7 @@ import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 export const FILTER_AND_GROUP_COLUMNS: ColumnData<GroupedExperiment>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Test suite",
+    label: "Item source",
     type: COLUMN_TYPE.string,
     disposable: true,
   },

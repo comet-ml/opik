@@ -48,7 +48,11 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import { Experiment, ExperimentsAggregations } from "@/types/datasets";
+import {
+  DATASET_TYPE,
+  Experiment,
+  ExperimentsAggregations,
+} from "@/types/datasets";
 
 export type UseExperimentsTableConfigProps<T> = {
   storageKeyPrefix: string;
@@ -64,6 +68,7 @@ export type UseExperimentsTableConfigProps<T> = {
   actionsCell?: ColumnDefTemplate<CellContext<T, unknown>>;
   sortedColumns: ColumnSort[];
   setSortedColumns: OnChangeFn<ColumnSort[]>;
+  datasetTypeMap?: Record<string, DATASET_TYPE>;
 };
 
 export const useExperimentsTableConfig = <
@@ -83,6 +88,7 @@ export const useExperimentsTableConfig = <
   actionsCell,
   sortedColumns,
   setSortedColumns,
+  datasetTypeMap,
 }: UseExperimentsTableConfigProps<T>) => {
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     `${storageKeyPrefix}-selected-columns-v2`,
@@ -209,7 +215,10 @@ export const useExperimentsTableConfig = <
 
   const columns = useMemo(() => {
     const groupColumns = groups.map((group) => {
-      const label = calculateGroupLabel(group);
+      const label =
+        group.field === COLUMN_DATASET_ID
+          ? "Item source"
+          : calculateGroupLabel(group);
       const id = buildGroupFieldName(group);
       const metaKey = buildGroupFieldNameForMeta(group);
 
@@ -246,6 +255,13 @@ export const useExperimentsTableConfig = <
                 id: "group-experiments",
                 description: `Some experiments reference a dataset that has been deleted`,
               },
+              getGroupRowLabel: (row: T) => {
+                const datasetId = get(row, `${metaKey}.value`, "") as string;
+                const type = datasetTypeMap?.[datasetId];
+                return type === DATASET_TYPE.TEST_SUITE
+                  ? "Test suite"
+                  : "Dataset";
+              },
             },
           } as ColumnData<T>;
           break;
@@ -276,10 +292,13 @@ export const useExperimentsTableConfig = <
           break;
       }
 
-      return generateGroupedRowCellDef<T, unknown>(
-        groupCellDef,
-        checkboxClickHandler,
-      );
+      return {
+        ...generateGroupedRowCellDef<T, unknown>(
+          groupCellDef,
+          checkboxClickHandler,
+        ),
+        enableHiding: true,
+      };
     });
 
     const hasGrouping = groups.length > 0;
@@ -349,6 +368,7 @@ export const useExperimentsTableConfig = <
     scoresColumnsData,
     scoresColumnsOrder,
     actionsCell,
+    datasetTypeMap,
   ]);
 
   const sortConfig = useMemo(

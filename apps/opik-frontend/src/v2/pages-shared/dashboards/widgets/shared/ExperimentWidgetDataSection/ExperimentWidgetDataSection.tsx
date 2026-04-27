@@ -61,7 +61,7 @@ const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
 const EXPERIMENT_GROUP_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Test suite",
+    label: "Item source",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
