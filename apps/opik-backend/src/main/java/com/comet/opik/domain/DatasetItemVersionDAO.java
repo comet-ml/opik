@@ -1043,6 +1043,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.tags AS tags,
                     di.evaluators AS evaluators,
                     di.execution_policy AS execution_policy,
+                    di.dataset_version_id AS dataset_version_id,
                     di.item_created_at AS created_at,
                     di.item_last_updated_at AS last_updated_at,
                     di.item_created_by AS created_by,
@@ -1128,6 +1129,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.tags,
                     di.evaluators,
                     di.execution_policy,
+                    di.dataset_version_id,
                     di.item_created_at,
                     di.item_last_updated_at,
                     di.item_created_by,
@@ -1161,6 +1163,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.tags AS tags,
                     di.evaluators AS evaluators,
                     di.execution_policy AS execution_policy,
+                    di.dataset_version_id AS dataset_version_id,
                     di.item_created_at AS created_at,
                     di.item_last_updated_at AS last_updated_at,
                     di.item_created_by AS created_by,
@@ -1344,6 +1347,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.tags,
                     di.evaluators,
                     di.execution_policy,
+                    di.dataset_version_id,
                     di.item_created_at,
                     di.item_last_updated_at,
                     di.item_created_by,
@@ -2363,7 +2367,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     public Mono<DatasetItemPage> getItemsWithExperimentItems(@NonNull DatasetItemSearchCriteria criteria, int page,
             int size, @NonNull String legacyFallbackVersionId) {
-        log.info(
+        log.debug(
                 "Getting versioned dataset items with experiment items for dataset '{}', legacy fallback version '{}', experiments '{}'",
                 criteria.datasetId(), legacyFallbackVersionId, criteria.experimentIds());
 

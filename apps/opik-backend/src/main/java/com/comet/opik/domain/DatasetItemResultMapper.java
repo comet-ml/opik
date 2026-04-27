@@ -199,6 +199,7 @@ public class DatasetItemResultMapper {
                 .createdAt(nullIfEpoch(row.get("created_at", Instant.class)))
                 .createdBy(row.get("created_by", String.class))
                 .lastUpdatedBy(row.get("last_updated_by", String.class))
+                .datasetVersionId(getDatasetVersionId(row, rowMetadata))
                 .build();
     }
 
@@ -216,6 +217,16 @@ public class DatasetItemResultMapper {
         return Optional.ofNullable(row.get("evaluators", String.class))
                 .filter(s -> !s.isBlank() && !EvaluatorItem.EMPTY_LIST_JSON.equals(s))
                 .map(s -> JsonUtils.readValue(s, EVALUATOR_LIST_TYPE))
+                .orElse(null);
+    }
+
+    static UUID getDatasetVersionId(Row row, RowMetadata rowMetadata) {
+        if (!rowMetadata.contains("dataset_version_id")) {
+            return null;
+        }
+        return Optional.ofNullable(row.get("dataset_version_id", String.class))
+                .filter(s -> !s.isBlank())
+                .map(UUID::fromString)
                 .orElse(null);
     }
 

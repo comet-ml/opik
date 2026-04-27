@@ -50,6 +50,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -1331,42 +1332,62 @@ class DatasetItemServiceImpl implements DatasetItemService {
                 "Fetching items with experiment items for dataset '{}', legacy fallback version '{}'",
                 criteria.datasetId(), legacyFallbackVersionId);
 
-        // Fetch version-level evaluators from the actual version the experiments ran against,
-        // not from the latest version (which may have different evaluators).
-        UUID anyExperimentId = criteria.experimentIds().iterator().next();
-        Mono<List<EvaluatorItem>> versionEvaluatorsMono = experimentDAO.getById(anyExperimentId)
-                .flatMap(experiment -> {
-                    if (experiment.datasetVersionId() == null) {
-                        return Mono.just(List.<EvaluatorItem>of());
-                    }
-                    return Mono.fromCallable(() -> {
-                        DatasetVersion version = versionService.getVersionById(workspaceId,
-                                criteria.datasetId(), experiment.datasetVersionId());
-                        return CollectionUtils.isNotEmpty(version.evaluators())
-                                ? version.evaluators()
-                                : List.<EvaluatorItem>of();
-                    })
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .onErrorResume(NotFoundException.class, e -> {
-                                log.warn("Version '{}' not found for experiment '{}', dataset '{}'",
-                                        experiment.datasetVersionId(), anyExperimentId, criteria.datasetId());
-                                return Mono.just(List.<EvaluatorItem>of());
-                            });
-                })
-                .defaultIfEmpty(List.of());
+        // Build a per-version evaluator map so each item gets its own version's evaluators.
+        Mono<Map<UUID, List<EvaluatorItem>>> evaluatorsByVersionMono = experimentDAO.getByIds(criteria.experimentIds())
+                .collectList()
+                .flatMap(experiments -> {
+                    var versionIds = experiments.stream()
+                            .map(exp -> exp.datasetVersionId())
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
 
-        return versionEvaluatorsMono.flatMap(versionEvaluators -> versionDao
-                .getItemsWithExperimentItems(criteria, page, size, legacyFallbackVersionId)
-                .map(itemPage -> {
-                    if (versionEvaluators.isEmpty()) {
-                        return itemPage;
+                    if (versionIds.isEmpty()) {
+                        return Mono.just(Map.<UUID, List<EvaluatorItem>>of());
                     }
-                    List<DatasetItem> items = itemPage.content().stream()
-                            .map(item -> applyVersionEvaluators(item, versionEvaluators))
-                            .toList();
-                    return itemPage.toBuilder().content(items).build();
+
+                    return Mono.fromCallable(() -> {
+                        var map = new HashMap<UUID, List<EvaluatorItem>>();
+                        for (UUID versionId : versionIds) {
+                            try {
+                                DatasetVersion version = versionService.getVersionById(workspaceId,
+                                        criteria.datasetId(), versionId);
+                                if (CollectionUtils.isNotEmpty(version.evaluators())) {
+                                    map.put(versionId, version.evaluators());
+                                }
+                            } catch (NotFoundException e) {
+                                log.warn("Version '{}' not found for dataset '{}'",
+                                        versionId, criteria.datasetId());
+                            }
+                        }
+                        return Map.copyOf(map);
+                    }).subscribeOn(Schedulers.boundedElastic());
                 })
+                .defaultIfEmpty(Map.of());
+
+        return evaluatorsByVersionMono.flatMap(evaluatorsByVersion -> versionDao
+                .getItemsWithExperimentItems(criteria, page, size, legacyFallbackVersionId)
+                .map(itemPage -> applyVersionEvaluatorsToPage(itemPage, evaluatorsByVersion))
                 .defaultIfEmpty(DatasetItemPage.empty(page, sortingFactory.getSortableFields())));
+    }
+
+    DatasetItemPage applyVersionEvaluatorsToPage(DatasetItemPage itemPage,
+            Map<UUID, List<EvaluatorItem>> evaluatorsByVersion) {
+        if (evaluatorsByVersion.isEmpty()) {
+            return itemPage;
+        }
+        List<DatasetItem> items = itemPage.content().stream()
+                .map(item -> {
+                    if (item.datasetVersionId() == null) {
+                        return item;
+                    }
+                    var versionEvals = evaluatorsByVersion.getOrDefault(
+                            item.datasetVersionId(), List.of());
+                    return versionEvals.isEmpty()
+                            ? item
+                            : applyVersionEvaluators(item, versionEvals);
+                })
+                .toList();
+        return itemPage.toBuilder().content(items).build();
     }
 
     DatasetItem applyVersionEvaluators(DatasetItem item, List<EvaluatorItem> versionEvaluators) {
