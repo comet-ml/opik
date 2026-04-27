@@ -16,7 +16,6 @@ def test_create_and_populate_dataset__happyflow(
 ):
     DESCRIPTION = "E2E test dataset"
 
-    project_name = opik_client.project_name
     dataset = opik_client.create_dataset(
         dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
@@ -66,7 +65,6 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
     opik_client: opik.Opik, dataset_name: str
 ):
     DESCRIPTION = "E2E test dataset"
-    project_name = opik_client.project_name
 
     dataset = opik_client.create_dataset(
         dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
@@ -111,7 +109,6 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         "user_input": {"question": "What is the of capital of France?"},
         "expected_model_output": {"output": "Paris"},
     }
-
 
     # Write the dataset
     dataset = opik_client.create_dataset(

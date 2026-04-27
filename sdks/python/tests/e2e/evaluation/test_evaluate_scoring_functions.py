@@ -241,9 +241,6 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
     # Tests that mix of ordinary scoring functions and task span scoring functions work correctly.
     # Also, it checks that task span scoring functions can access:
     # task span, dataset item content (dataset_item), and task output (task_outputs) parameters.
-    project_name = (
-        "test_project_evaluate_scoring_functions_mixed_with_task_span_scoring_functions"
-    )
     dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(DATASET_ITEMS)
 
