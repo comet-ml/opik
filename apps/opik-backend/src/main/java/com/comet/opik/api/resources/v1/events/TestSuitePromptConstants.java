@@ -20,6 +20,16 @@ final class TestSuitePromptConstants {
             - score: true if the assertion passes, false if it fails
             - reason: A brief explanation of your judgment
             - confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment
+
+            IMPORTANT: The top-level input/output you see only contains the final request and response. \
+            It does NOT contain information about:
+            - Which tools were called during execution
+            - Which LLM model was used
+            - Intermediate steps, sub-calls, or guardrail checks
+            - Internal errors or retries
+            If any assertion references tool usage, model selection, intermediate steps, \
+            or any behavior that is not directly visible in the top-level input/output, \
+            you MUST use the available tools to inspect the actual execution before judging.
             """;
 
     static final String USER_MESSAGE_TEMPLATE = """
