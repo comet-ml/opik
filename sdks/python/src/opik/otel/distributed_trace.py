@@ -1,9 +1,32 @@
+import logging
+import uuid
 from typing import Dict, Optional, TYPE_CHECKING
 
 from opik.otel import types as otel_types
 
 if TYPE_CHECKING:
     from opentelemetry import trace
+
+LOGGER = logging.getLogger(__name__)
+
+OPIK_TRACE_ID_HEADER = "opik_trace_id"
+OPIK_PARENT_SPAN_ID_HEADER = "opik_parent_span_id"
+
+
+def _is_valid_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
+def _get_header(http_headers: Dict[str, str], name: str) -> Optional[str]:
+    target = name.lower()
+    for key, value in http_headers.items():
+        if isinstance(key, str) and key.lower() == target:
+            return value
+    return None
 
 
 def extract_opik_distributed_trace_attributes(
@@ -14,8 +37,12 @@ def extract_opik_distributed_trace_attributes(
 
     This function retrieves distributed tracing attributes from the provided
     HTTP headers using the keys `opik_trace_id` and optionally
-    `opik_parent_span_id`. If `opik_trace_id` is not present in the headers,
-    the function returns None.
+    `opik_parent_span_id` (case-insensitive). Values are trimmed; if
+    `opik_trace_id` is missing, blank, or not a valid UUID the function
+    returns None (and logs a warning when invalid, or when
+    `opik_parent_span_id` was provided without a `opik_trace_id`). A blank
+    or non-UUID `opik_parent_span_id` is dropped with a warning while the
+    valid `opik_trace_id` is still returned.
 
     Args:
         http_headers: A dictionary containing HTTP headers as
@@ -23,14 +50,47 @@ def extract_opik_distributed_trace_attributes(
 
     Returns:
         An object containing the extracted `opik_trace_id` and `opik_parent_span_id` if available.
-        Returns None if `opik_trace_id` is not found.
+        Returns None if `opik_trace_id` is not found or is not a valid UUID.
     """
-    if "opik_trace_id" in http_headers:
-        return otel_types.OpikDistributedTraceAttributes(
-            opik_trace_id=http_headers["opik_trace_id"],
-            opik_parent_span_id=http_headers.get("opik_parent_span_id", None),
+    raw_trace_id = _get_header(http_headers, OPIK_TRACE_ID_HEADER)
+    trace_id = raw_trace_id.strip() if isinstance(raw_trace_id, str) else None
+
+    raw_parent_span_id = _get_header(http_headers, OPIK_PARENT_SPAN_ID_HEADER)
+    parent_span_id = (
+        raw_parent_span_id.strip() if isinstance(raw_parent_span_id, str) else None
+    )
+
+    if not trace_id:
+        if parent_span_id:
+            LOGGER.warning(
+                "Opik distributed trace header '%s' is missing while '%s' "
+                "is provided; skipping distributed trace processing.",
+                OPIK_TRACE_ID_HEADER,
+                OPIK_PARENT_SPAN_ID_HEADER,
+            )
+        return None
+    if not _is_valid_uuid(trace_id):
+        LOGGER.warning(
+            "Opik distributed trace header '%s' is not a valid UUID; "
+            "skipping distributed trace processing.",
+            OPIK_TRACE_ID_HEADER,
         )
-    return None
+        return None
+
+    if not parent_span_id:
+        parent_span_id = None
+    elif not _is_valid_uuid(parent_span_id):
+        LOGGER.warning(
+            "Opik distributed trace header '%s' is not a valid UUID; "
+            "ignoring parent span id.",
+            OPIK_PARENT_SPAN_ID_HEADER,
+        )
+        parent_span_id = None
+
+    return otel_types.OpikDistributedTraceAttributes(
+        opik_trace_id=trace_id,
+        opik_parent_span_id=parent_span_id,
+    )
 
 
 def attach_to_parent(span: "trace.Span", http_headers: Dict[str, str]) -> bool:

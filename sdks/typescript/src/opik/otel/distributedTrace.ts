@@ -1,3 +1,5 @@
+import { validate as isUuid } from "uuid";
+import { logger } from "@/utils/logger";
 import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
 
 /**
@@ -54,17 +56,42 @@ function getHeader(
  * Extracts Opik distributed trace attributes from HTTP headers.
  *
  * Reads `opik_trace_id` and the optional `opik_parent_span_id` headers
- * (case-insensitive). If `opik_trace_id` is missing the function returns
- * `null`.
+ * (case-insensitive). Values are trimmed; if `opik_trace_id` is missing,
+ * empty, whitespace-only, or not a valid UUID the function logs a warning
+ * (when invalid, or when `opik_parent_span_id` was provided without a
+ * `opik_trace_id`) and returns `null`. If `opik_parent_span_id` is present
+ * but not a valid UUID it is dropped with a warning and the trace is still
+ * attached using the valid `opik_trace_id`.
  */
 export function extractOpikDistributedTraceAttributes(
   httpHeaders: HttpHeadersLike
 ): OpikDistributedTraceAttributes | null {
-  const traceId = getHeader(httpHeaders, OPIK_TRACE_ID_HEADER);
-  if (traceId === undefined) {
+  const traceId = getHeader(httpHeaders, OPIK_TRACE_ID_HEADER)?.trim();
+  let parentSpanId =
+    getHeader(httpHeaders, OPIK_PARENT_SPAN_ID_HEADER)?.trim() || undefined;
+
+  if (!traceId) {
+    if (parentSpanId !== undefined) {
+      logger.warn(
+        `Opik distributed trace header '${OPIK_TRACE_ID_HEADER}' is missing while '${OPIK_PARENT_SPAN_ID_HEADER}' is provided; skipping distributed trace processing.`
+      );
+    }
     return null;
   }
-  const parentSpanId = getHeader(httpHeaders, OPIK_PARENT_SPAN_ID_HEADER);
+  if (!isUuid(traceId)) {
+    logger.warn(
+      `Opik distributed trace header '${OPIK_TRACE_ID_HEADER}' is not a valid UUID; skipping distributed trace processing.`
+    );
+    return null;
+  }
+
+  if (parentSpanId !== undefined && !isUuid(parentSpanId)) {
+    logger.warn(
+      `Opik distributed trace header '${OPIK_PARENT_SPAN_ID_HEADER}' is not a valid UUID; ignoring parent span id.`
+    );
+    parentSpanId = undefined;
+  }
+
   return new OpikDistributedTraceAttributes(traceId, parentSpanId);
 }
 
