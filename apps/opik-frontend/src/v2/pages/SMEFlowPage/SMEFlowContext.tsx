@@ -753,10 +753,16 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
   }, [currentItem, currentAnnotationState]);
 
   useEffect(() => {
-    if (!currentView && !isItemsLoading && queueItems.length > 0) {
+    if (!isItemsLoading && queueItems.length > 0) {
       if (unprocessedItems.length === 0) {
-        setCurrentView(WORKFLOW_STATUS.COMPLETED);
-      } else {
+        if (
+          !currentView ||
+          currentView === WORKFLOW_STATUS.INITIAL ||
+          currentView === WORKFLOW_STATUS.ANNOTATING
+        ) {
+          setCurrentView(WORKFLOW_STATUS.COMPLETED);
+        }
+      } else if (!currentView) {
         setCurrentView(WORKFLOW_STATUS.INITIAL);
       }
     }
