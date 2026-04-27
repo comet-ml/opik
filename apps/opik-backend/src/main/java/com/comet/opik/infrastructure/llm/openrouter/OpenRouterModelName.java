@@ -109,6 +109,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     DEEPSEEK_DEEPSEEK_V3_2("deepseek/deepseek-v3.2"),
     DEEPSEEK_DEEPSEEK_V3_2_EXP("deepseek/deepseek-v3.2-exp"),
     DEEPSEEK_DEEPSEEK_V3_2_SPECIALE("deepseek/deepseek-v3.2-speciale"),
+    DEEPSEEK_DEEPSEEK_V4_FLASH("deepseek/deepseek-v4-flash"),
+    DEEPSEEK_DEEPSEEK_V4_PRO("deepseek/deepseek-v4-pro"),
     ELEUTHERAI_LLEMMA_7B("eleutherai/llemma_7b"),
     ESSENTIALAI_RNJ_1_INSTRUCT("essentialai/rnj-1-instruct"),
     GOOGLE_GEMINI_2_0_FLASH_001("google/gemini-2.0-flash-001"),
@@ -327,6 +329,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     OPENAI_GPT_5_4_MINI("openai/gpt-5.4-mini"),
     OPENAI_GPT_5_4_NANO("openai/gpt-5.4-nano"),
     OPENAI_GPT_5_4_PRO("openai/gpt-5.4-pro"),
+    OPENAI_GPT_5_5("openai/gpt-5.5"),
+    OPENAI_GPT_5_5_PRO("openai/gpt-5.5-pro"),
     OPENAI_GPT_AUDIO("openai/gpt-audio"),
     OPENAI_GPT_AUDIO_MINI("openai/gpt-audio-mini"),
     OPENAI_GPT_OSS_120B("openai/gpt-oss-120b"),
@@ -487,6 +491,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
     private static final Set<OpenRouterModelName> STRUCTURED_OUTPUT_SUPPORTED_MODELS = Set.of(
+            ANTHROPIC_CLAUDE_OPUS_4_7,
             COHERE_COMMAND_A,
             COHERE_COMMAND_R7B_12_2024,
             COHERE_COMMAND_R_08_2024,
