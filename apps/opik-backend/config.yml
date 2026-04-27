@@ -1013,8 +1013,6 @@ serviceToggles:
   # Default: 100
   # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
   #              Lower this value to reduce initial render cost for high-volume workspaces.
-  # NOTE: The default literal below (100) must stay in sync with the Helm default in
-  #       deployment/helm_chart/opik/values.yaml (components.backend.env.UI_DEFAULT_PAGE_SIZE).
   defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
 
 # Local Runner configuration

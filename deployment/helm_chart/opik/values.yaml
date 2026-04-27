@@ -179,13 +179,6 @@ component:
       OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS: process.command_args
       OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE: delta
       PYTHON_EVALUATOR_URL: http://opik-python-backend:8000
-      # Default: 100
-      # Deployment-level default rows-per-page for UI tables (experiments v1/v2).
-      # Lower this to reduce initial render cost on trace-heavy workspaces.
-      # NOTE: The default literal below (100) must stay in sync with the
-      #       backend fallback in apps/opik-backend/config.yml
-      #       (serviceToggles.defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}).
-      #       Change both.
       UI_DEFAULT_PAGE_SIZE: "100"
     envFrom:
       - configMapRef:
