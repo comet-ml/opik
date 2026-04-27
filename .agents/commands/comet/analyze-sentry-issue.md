@@ -29,7 +29,12 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 
 ### Phase 2 — Fetch all events
 
-Page through `GET https://<region>/api/0/issues/<issue_id>/events/?full=false&limit=100` with `Authorization: Bearer $SENTRY_ACCESS_TOKEN`. Follow the `Link: rel="next"; results="true"; cursor=...` header until exhausted (use a sane cap, e.g. 12 pages = 1,200 events).
+Page through `GET https://<region>/api/0/issues/<issue_id>/events/?full=false&limit=100` with `Authorization: Bearer $SENTRY_ACCESS_TOKEN`, following the `Link: rel="next"; results="true"; cursor=...` header.
+
+**Default cap: ~3 pages (300 events).** Distinct-message and tag distributions converge fast; pulling thousands of events per analysis is rarely necessary and slows the workflow. Bump the cap (and tell the engineer you're doing so) only when:
+
+- the early sample looks unrepresentative — e.g., one message dominates and the tail is unclear, or top users haven't stabilized;
+- the issue's reported `count` is large *and* the question being asked actually depends on the long tail (e.g., "which rare exception types are hiding in here?").
 
 Capture per event: `eventID`, `message`, `title`, `user.id`, `release`, `tags` (as a `{key: value}` dict).
 
