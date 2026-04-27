@@ -262,6 +262,7 @@ export const useExperimentsTableConfig = <
                 if (type === DATASET_TYPE.DATASET) return "Dataset";
                 return "";
               },
+              hideGroupRowLabelColon: true,
             },
           } as ColumnData<T>;
           break;

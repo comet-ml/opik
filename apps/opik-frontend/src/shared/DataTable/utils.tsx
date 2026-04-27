@@ -412,9 +412,14 @@ export const generateGroupedRowCellDef = <TData, TValue>(
 ) => {
   const columDataFields = mapColumnDataFields(columnData);
   const { label } = columnData;
-  const getGroupRowLabel = (
-    columnData.customMeta as { getGroupRowLabel?: (row: TData) => string }
-  )?.getGroupRowLabel;
+  const customMeta = columnData.customMeta as
+    | {
+        getGroupRowLabel?: (row: TData) => string;
+        hideGroupRowLabelColon?: boolean;
+      }
+    | undefined;
+  const getGroupRowLabel = customMeta?.getGroupRowLabel;
+  const hideGroupRowLabelColon = customMeta?.hideGroupRowLabelColon;
   return {
     ...columDataFields,
     header: () => "",
@@ -467,7 +472,7 @@ export const generateGroupedRowCellDef = <TData, TValue>(
                   <TooltipWrapper content={resolvedLabel}>
                     <span className="max-w-56 truncate">{resolvedLabel}</span>
                   </TooltipWrapper>
-                  :
+                  {!hideGroupRowLabelColon && ":"}
                 </>
               )}
             </Button>
