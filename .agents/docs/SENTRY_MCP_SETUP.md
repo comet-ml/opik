@@ -2,9 +2,96 @@
 
 This guide explains how to enable the **Sentry MCP server** for Claude Code, Cursor, and other MCP-compatible clients so you can query Sentry issues, events, and stack traces from your agent without leaving the IDE.
 
-## Setup (default path — OAuth)
+## Setup
 
-Zero per-developer config. The Sentry entry is already wired into `.agents/mcp.json` and points at the official remote MCP at `https://mcp.sentry.dev/mcp`, proxied through `mcp-remote` for stdio compatibility (same pattern as the Notion MCP):
+The Sentry server is wired into `.agents/mcp.json` and uses a User Auth Token loaded from `.env.local` — same pattern as the GitHub, Jira, and Slack MCPs in this repo.
+
+```json
+"Sentry": {
+  "command": "npx",
+  "args": ["-y", "@sentry/mcp-server@latest"],
+  "envFile": "${workspaceFolder}/.env.local"
+}
+```
+
+### Step 1: Create a Sentry User Auth Token
+
+1. Go to <https://sentry.io/settings/account/api/auth-tokens/>.
+2. Click **Create New Token**, name it something recognizable (e.g., `opik-mcp-local`).
+3. Select these least-privilege scopes:
+   - `org:read`
+   - `project:read`
+   - `team:read`
+   - `event:write` *(required by some MCP calls; does not allow event deletion)*
+4. Add `project:write` and `team:write` **only** if you want write actions (resolve issues, comment, assign). Read-only is recommended.
+5. **Create Token** and copy the value.
+
+### Step 2: Add the token to `.env.local`
+
+If you don't have `.env.local` yet, copy `.env.template`:
+
+```bash
+cp .env.template .env.local
+```
+
+Then set the value:
+
+```bash
+SENTRY_ACCESS_TOKEN=your-user-auth-token-here
+```
+
+`.env.local` is gitignored — do not commit it.
+
+### Step 3: Generate the Claude config
+
+```bash
+make claude
+```
+
+This regenerates `.claude/` and `.mcp.json`. The convert script reads `.env.local` and inlines values into the Sentry block of `.mcp.json` (same as the Jira MCP). Verify:
+
+```bash
+jq '.mcpServers.Sentry.env | has("SENTRY_ACCESS_TOKEN")' .mcp.json
+# → true
+```
+
+If you rotate the token later, update `.env.local` and re-run `make claude`.
+
+### Step 4: Restart your MCP client
+
+Restart Claude Code (or Cursor, etc.) so it loads the new MCP server.
+
+### Step 5: Verify
+
+Ask the agent something like:
+
+> *List recent Sentry issues for opik-python-sdk in the comet-or org.*
+
+You should see it call a Sentry tool and return results.
+
+## Tools Exposed
+
+The official Sentry MCP exposes (non-exhaustive):
+
+- **Read**: `find_organizations`, `find_projects`, `find_releases`, `get_sentry_resource`, `get_issue_tag_values`, `get_replay_details`, `whoami`
+- **Write (only with `*:write` scopes)**: `update_issue` (resolve / assign / ignore)
+
+## Avoid the NL-Backed Search Tools
+
+The Sentry MCP exposes three "search" tools — `search_issues`, `search_events`, `search_issue_events` — and one analysis tool, `analyze_issue_with_seer`. **All of them route through Sentry's own OpenAI account for natural-language → Sentry query translation**, and that account is frequently rate-limited (`You exceeded your current quota`). Treat them as best-effort; do not build workflows around them.
+
+**Direct, non-LLM tools that always work:**
+`get_sentry_resource`, `get_issue_tag_values`, `find_organizations`, `find_projects`, `find_releases`, `find_teams`, `whoami`, `update_issue`.
+
+**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly using the same `SENTRY_ACCESS_TOKEN`. See `scripts/analyze_sentry_issue.py` for a working pattern that paginates `/api/0/issues/<id>/events/` and groups by exception message.
+
+## Self-Hosted Sentry
+
+If you point at a self-hosted Sentry, add `SENTRY_HOST=sentry.example.com` (no scheme) to `.env.local`. For plain-HTTP self-hosted deployments, append `--insecure-http` to the `args` array in `.agents/mcp.json`.
+
+## Alternative: OAuth / Remote Server (no token)
+
+If you don't want to manage a personal token, you can run the official remote MCP via OAuth instead. Replace the Sentry block in `.agents/mcp.json` with:
 
 ```json
 "Sentry": {
@@ -14,95 +101,48 @@ Zero per-developer config. The Sentry entry is already wired into `.agents/mcp.j
 }
 ```
 
-Steps:
-
-1. From the repo root: `make claude` (regenerates `.claude/` and `.mcp.json`).
-2. Restart your MCP client (Claude Code, Cursor, etc.).
-3. The first call to a Sentry tool triggers an OAuth flow — `mcp-remote` opens a browser window. Sign in with your Comet Google account and pick the **comet-or** organization when prompted.
-4. Verify by asking your agent something like *"list recent Sentry issues for opik-python-sdk"*.
-
-OAuth tokens are cached locally by `mcp-remote` under `~/.mcp-auth/`. Nothing is written to the repo or to `.env.local`.
-
-## Tools Exposed
-
-The official Sentry MCP exposes (non-exhaustive):
-
-- **Read**: `find_organizations`, `find_projects`, `find_releases`, `get_sentry_resource`, `get_issue_tag_values`, `get_replay_details`
-- **Write**: `update_issue` (resolve / assign / ignore)
-
-## Avoid the NL-Backed Search Tools
-
-The Sentry MCP exposes three "search" tools — `search_issues`, `search_events`, `search_issue_events` — and one analysis tool, `analyze_issue_with_seer`. **All of them route through Sentry's own OpenAI account for natural-language → Sentry query translation**, and that account is frequently rate-limited (`You exceeded your current quota`). Treat them as best-effort; do not build workflows around them.
-
-**Direct, non-LLM tools that always work:**
-`get_sentry_resource`, `get_issue_tag_values`, `find_organizations`, `find_projects`, `find_releases`, `find_teams`, `whoami`, `update_issue`.
-
-**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly. See `scripts/analyze_sentry_issue.py` for a working pattern that paginates `/api/0/issues/<id>/events/` and groups by exception message. That script reads a token from `.env.local` — the easiest path is to set up the token-based fallback below if you plan to use it regularly.
-
-## Alternative: Stdio + User Auth Token (advanced / scripting)
-
-If you don't want to authenticate via browser on every fresh machine, or you need a token for the REST helper script above, you can run the stdio server with a personal token instead of OAuth.
-
-1. Create a User Auth Token at <https://sentry.io/settings/account/api/auth-tokens/> with these least-privilege scopes:
-   - `org:read`, `project:read`, `team:read`, `event:write`
-   - Add `project:write` and `team:write` only if you need write actions.
-2. Add the token to `.env.local`:
-
-   ```bash
-   SENTRY_ACCESS_TOKEN=your-user-auth-token-here
-   ```
-
-3. Replace the Sentry block in `.agents/mcp.json` with:
-
-   ```json
-   "Sentry": {
-     "command": "npx",
-     "args": ["-y", "@sentry/mcp-server@latest"],
-     "envFile": "${workspaceFolder}/.env.local"
-   }
-   ```
-
-4. Run `make claude` and restart your MCP client.
-
-### Self-hosted Sentry
-
-Add `SENTRY_HOST=sentry.example.com` (no scheme) to `.env.local`. For plain-HTTP self-hosted deployments, append `--insecure-http` to the `args` array.
+Then `make claude` + restart your MCP client. The first Sentry tool call opens a browser for OAuth. Tokens are cached at `~/.mcp-auth/`. Note: this path won't help `scripts/analyze_sentry_issue.py`, which still needs a token in `.env.local`.
 
 ## Security Notes
 
-- `.agents/mcp.json` is committed. Never put a token in it directly — always go through `.env.local` via `envFile`.
-- `.mcp.json` is gitignored (generated by `make claude`), but treat it as if it weren't.
-- The OAuth path inherits whatever Sentry permissions your account already has — the MCP cannot escalate access.
+- `.agents/mcp.json` is committed. **Never put a token in it directly** — always go through `.env.local` via `envFile`.
+- `.mcp.json` is gitignored (generated by `make claude`), but treat it as if it weren't — re-running `make claude` after editing `.env.local` is the only supported way to update it.
+- The token inherits your existing Sentry permissions; the MCP cannot escalate access.
 
 ## Troubleshooting
 
+### `SENTRY_ACCESS_TOKEN` missing from `.mcp.json` after `make claude`
+
+```bash
+jq '.mcpServers.Sentry.env | has("SENTRY_ACCESS_TOKEN")' .mcp.json
+```
+
+If `false`: confirm `.env.local` has the line `SENTRY_ACCESS_TOKEN=...` (no surrounding quotes, no leading whitespace) and re-run `make claude`.
+
 ### "Server not found" after `make claude`
+
+Confirm both files are in sync:
 
 ```bash
 jq '.mcpServers | keys' .agents/mcp.json
-jq '.mcpServers.Sentry' .mcp.json
+jq '.mcpServers | keys' .mcp.json
 ```
 
-If `.mcp.json` is stale, re-run `make claude`.
+Restart Claude Code after `make claude` — it only loads MCP servers at startup.
 
-### OAuth flow won't open a browser (headless / remote machine)
+### 401 / authentication errors
 
-Either run `mcp-remote` once on a machine with a browser and copy `~/.mcp-auth/` over, or fall back to the token-based stdio variant above.
+- Verify the token is current and has the scopes from Step 1.
+- Make sure no whitespace was copied with the value.
+- Re-run `make claude` after editing `.env.local`.
 
-### Token cached for the wrong org
+### Token cached for the wrong org (OAuth alternative only)
 
 ```bash
 rm -rf ~/.mcp-auth
 ```
 
 Then trigger a Sentry tool call again to start a fresh OAuth flow.
-
-### Token-variant: 401 / authentication errors
-
-- Verify the token is current and has the scopes from the alternative section.
-- Make sure no whitespace was copied with the value.
-- Re-run `make claude` after editing `.env.local`.
-- The repo's `convert-mcp.sh` requires a trailing newline at the end of `.env.local` (this is fixed in the repo, but if you copy `.env.local` from elsewhere, double-check).
 
 ## Additional Resources
 
