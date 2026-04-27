@@ -8367,6 +8367,106 @@ class DatasetsResourceTest {
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
         }
 
+        @Test
+        @DisplayName("when comparing two experiments on different dataset versions, then return single row with merged experiment items")
+        void find__twoExperimentsOnDifferentDatasetVersions__thenSingleMergedRow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            var datasetItemV1 = DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItemV1))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentA = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdA = experimentResourceClient.create(experimentA, apiKey, workspaceName);
+
+            var datasetItemV2 = datasetItemV1.toBuilder()
+                    .data(Map.of("query", new TextNode("v2-edited")))
+                    .build();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(List.of(datasetItemV2))
+                            .batchGroupId(UUID.randomUUID())
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentB = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentIdB = experimentResourceClient.create(experimentB, apiKey, workspaceName);
+
+            var traceA = factory.manufacturePojo(Trace.class);
+            var traceB = factory.manufacturePojo(Trace.class);
+            traceResourceClient.batchCreateTraces(List.of(traceA, traceB), apiKey, workspaceName);
+
+            experimentResourceClient.createExperimentItem(Set.of(
+                    ExperimentItem.builder().experimentId(experimentIdA)
+                            .datasetItemId(datasetItemV1.id()).traceId(traceA.id()).build(),
+                    ExperimentItem.builder().experimentId(experimentIdB)
+                            .datasetItemId(datasetItemV1.id()).traceId(traceB.id()).build()),
+                    apiKey, workspaceName);
+
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(
+                    assertionScore(traceA, "check1", BigDecimal.ONE, "ok"))).build(), apiKey, workspaceName);
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(
+                    assertionScore(traceB, "check1", BigDecimal.ZERO, "failed"))).build(), apiKey, workspaceName);
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentIdA, experimentIdB), apiKey, workspaceName);
+
+            assertThat(actualPage.content()).hasSize(1);
+            var actualDatasetItem = actualPage.content().getFirst();
+            assertThat(actualDatasetItem.datasetItemId()).isEqualTo(datasetItemV1.id());
+            assertThat(actualDatasetItem.data()).isEqualTo(datasetItemV2.data());
+            assertThat(actualDatasetItem.experimentItems()).hasSize(2);
+
+            var itemA = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdA))
+                    .findFirst().orElseThrow();
+            var itemB = actualDatasetItem.experimentItems().stream()
+                    .filter(ei -> ei.experimentId().equals(experimentIdB))
+                    .findFirst().orElseThrow();
+
+            assertThat(itemA.assertionResults()).hasSize(1);
+            assertThat(itemA.assertionResults().getFirst().passed()).isTrue();
+            assertThat(itemA.status()).isEqualTo(RunStatus.PASSED);
+
+            assertThat(itemB.assertionResults()).hasSize(1);
+            assertThat(itemB.assertionResults().getFirst().passed()).isFalse();
+            assertThat(itemB.status()).isEqualTo(RunStatus.FAILED);
+
+            assertThat(actualDatasetItem.runSummariesByExperiment()).isNotNull().hasSize(2);
+
+            var summaryA = actualDatasetItem.runSummariesByExperiment().get(experimentIdA.toString());
+            assertThat(summaryA.totalRuns()).isEqualTo(1);
+            assertThat(summaryA.passedRuns()).isEqualTo(1);
+            assertThat(summaryA.status()).isEqualTo(RunStatus.PASSED);
+
+            var summaryB = actualDatasetItem.runSummariesByExperiment().get(experimentIdB.toString());
+            assertThat(summaryB.totalRuns()).isEqualTo(1);
+            assertThat(summaryB.passedRuns()).isEqualTo(0);
+            assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
+        }
+
     }
 
     @DisplayName("Find dataset items with experiment items sorting test")
