@@ -96,9 +96,7 @@ def test_passing_guardrails__happyflow(opik_client, override_project_name):
     )
 
 
-def test_failing_guardrails__happyflow(
-    opik_client: opik.Opik
-):
+def test_failing_guardrails__happyflow(opik_client: opik.Opik):
     # Setup
     ID_STORAGE = {}
 
@@ -139,9 +137,7 @@ def test_failing_guardrails__happyflow(
         guardrails_validations=EXPECTED_TRACE_GUARDRAILS_VALIDATIONS,
     )
 
-    span_id = find_guardrail_span(
-        opik_client, ID_STORAGE["trace-id"], PROJECT_NAME
-    )
+    span_id = find_guardrail_span(opik_client, ID_STORAGE["trace-id"], PROJECT_NAME)
 
     EXPECTED_OUTPUT = {
         "guardrail_result": "failed",

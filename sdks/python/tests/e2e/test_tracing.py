@@ -559,9 +559,7 @@ def test_search_traces__wait_for_at_least__happyflow(opik_client):
         )
 
 
-def test_search_traces__wait_for_at_least__timeout__exception_raised(
-    opik_client
-):
+def test_search_traces__wait_for_at_least__timeout__exception_raised(opik_client):
     # check that synchronized searching for traces is working
     unique_identifier = str(uuid.uuid4())[-6:]
 
@@ -597,9 +595,7 @@ def test_search_traces__wait_for_at_least__timeout__exception_raised(
         )
 
 
-def test_search_spans__happyflow(
-    opik_client: opik.Opik
-):
+def test_search_spans__happyflow(opik_client: opik.Opik):
     # To define a unique search query, we will create a unique identifier that will be part of the trace input
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -644,9 +640,7 @@ def test_search_spans__happyflow(
     assert spans[0].id == matching_span.id, "Expected to find the matching span"
 
 
-def test_search_spans__wait_for_at_least__happy_flow(
-    opik_client: opik.Opik
-):
+def test_search_spans__wait_for_at_least__happy_flow(opik_client: opik.Opik):
     # check that synchronized searching for spans is working
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -705,7 +699,7 @@ def test_search_spans__wait_for_at_least__happy_flow(
 
 
 def test_search_spans__wait_for_at_least__timeout__exception_raised(
-    opik_client: opik.Opik
+    opik_client: opik.Opik,
 ):
     trace_id = helpers.generate_id()
     unique_identifier = str(uuid.uuid4())[-6:]
@@ -836,9 +830,7 @@ def test_copy_traces__happyflow(opik_client):
             )
 
 
-def test_tracked_function__update_current_span_and_trace_called__happyflow(
-    opik_client
-):
+def test_tracked_function__update_current_span_and_trace_called__happyflow(opik_client):
     # Setup
     ID_STORAGE = {}
     THREAD_ID = id_helpers.generate_id()
@@ -893,9 +885,7 @@ def test_tracked_function__update_current_span_and_trace_called__happyflow(
     )
 
 
-def test_opik_trace__attachments(
-    opik_client, attachment_data_file
-):
+def test_opik_trace__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -983,9 +973,7 @@ def test_tracked_function__update_current_trace__with_attachments(
     )
 
 
-def test_opik_client_span__attachments(
-    opik_client, attachment_data_file
-):
+def test_opik_client_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -1100,9 +1088,7 @@ def test_opik_client_span__attachment_with_file_like_data(
     )
 
 
-def test_span_span__attachments(
-    opik_client, attachment_data_file
-):
+def test_span_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -1156,9 +1142,7 @@ def test_span_span__attachments(
     )
 
 
-def test_trace_span__attachments(
-    opik_client, attachment_data_file
-):
+def test_trace_span__attachments(opik_client, attachment_data_file):
     trace_id = helpers.generate_id()
     file_name = os.path.basename(attachment_data_file.name)
     names = [file_name + "_first", file_name + "_second"]
@@ -1408,7 +1392,7 @@ def test_opik_client__update_trace__happy_flow(
 
 
 def test_search_traces__filter_by_feedback_score__is_empty_and_equals(
-    opik_client: opik.Opik
+    opik_client: opik.Opik,
 ):
     # Create a unique metric name to avoid conflicts with other tests
     unique_metric = f"test_metric_{str(uuid.uuid4()).replace('-', '_')[-8:]}"
@@ -1476,7 +1460,7 @@ def test_search_traces__filter_by_feedback_score__is_empty_and_equals(
 
 
 def test_search_spans__filter_by_feedback_score__is_empty_and_equals(
-    opik_client: opik.Opik
+    opik_client: opik.Opik,
 ):
     # Create a unique metric name to avoid conflicts with other tests
     unique_metric = f"test_metric_{str(uuid.uuid4()).replace('-', '_')[-8:]}"

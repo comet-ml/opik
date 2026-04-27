@@ -483,7 +483,6 @@ def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
     """Test that search_prompts() with template_structure filter returns only ChatPrompt instances."""
     unique_id = str(uuid.uuid4())[-6:]
 
-
     # Create text prompts
     text_prompt_1 = opik_client.create_prompt(
         name=f"text-search-{unique_id}-1",

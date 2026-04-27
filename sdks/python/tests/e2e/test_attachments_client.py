@@ -159,7 +159,7 @@ def test_attachments_client__get_attachment_list_for_span__happyflow(
 
 
 def test_attachments_client__invalid_project_name__or_non_existing_entity_id__raises_error(
-    opik_client: opik.Opik
+    opik_client: opik.Opik,
 ):
     attachments_client = opik_client.get_attachment_client()
 
