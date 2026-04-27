@@ -5,6 +5,9 @@ from opik import synchronization
 from opik.evaluation.metrics import score_result
 
 from .. import verifiers
+from ...testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> None:
@@ -20,8 +23,7 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only__happyflow
     opik_client: opik.Opik, dataset_name: str
 ):
     """Test that opik.evaluate works with DatasetVersion and only evaluates items from that version."""
-    project_name = "test_project_evaluate_dataset_version"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     # Insert first batch - creates v1 with 2 items
     dataset.insert(
@@ -61,7 +63,7 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only__happyflow
         task=task,
         scoring_functions=[scoring_function],
         verbose=0,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Should have evaluated only 2 items (from v1), not 4 (from v2/current)
@@ -84,5 +86,5 @@ def test_evaluate__with_dataset_version__evaluates_version_items_only__happyflow
         traces_amount=2,
         feedback_scores_amount=1,
         dataset_version_id=v1_version_info.id,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )

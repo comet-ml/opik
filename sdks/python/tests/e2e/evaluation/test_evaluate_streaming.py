@@ -8,6 +8,10 @@ from opik.evaluation import helpers as helpers_module
 from opik.evaluation.metrics import score_result
 from opik.types import FeedbackScoreDict
 
+from ...testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
+
 
 # Simple dataset items for testing
 DATASET_ITEMS = [
@@ -52,8 +56,7 @@ def test_streaming_starts_evaluation_before_complete_download(
     5. Verifying that the first task starts before the last item is yielded
     """
     # Create dataset with multiple items
-    project_name = "test_evaluate_streaming_project"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(DATASET_ITEMS)
 
     # Track the sequence of events: 'yield' or 'task'
@@ -98,7 +101,7 @@ def test_streaming_starts_evaluation_before_complete_download(
             scoring_functions=[simple_scoring_function],
             experiment_name=experiment_name,
             verbose=1,
-            project_name=project_name,
+            project_name=PROJECT_NAME,
         )
 
     # Verify evaluation completed successfully
@@ -131,7 +134,7 @@ def test_streaming_starts_evaluation_before_complete_download(
     )
     experiment_items = retrieved_experiment.get_items()
     assert len(experiment_items) == len(DATASET_ITEMS)
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME
 
     # Verify scoring output: each item should have a score with name "simple_score" and value 1.0
     for item in experiment_items:

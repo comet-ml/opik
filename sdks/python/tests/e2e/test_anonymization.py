@@ -6,7 +6,9 @@ from opik import opik_context
 from opik.anonymizer import factory, anonymizer
 
 from . import verifiers
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from ..testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 # Email pattern
@@ -22,17 +24,17 @@ CC_RULE = (r"\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b", "[CARD_REDACTED]")
 SSN_RULE = {"regex": r"\b\d{3}-\d{2}-\d{4}\b", "replace": "[SSN_REDACTED]"}
 
 
-@pytest.mark.parametrize(
-    "project_name",
-    [
-        "e2e-tests-anonymization",
-        None,
-    ],
-)
+@pytest.mark.parametrize("override_project_name", [True, False])
 def test_tracked_function__regexp_rules_anonymization__happy_flow(
-    opik_client, project_name
+    opik_client, override_project_name
 ):
     """Test that sensitive fields are masked in input, output and metadata."""
+    project_name = (
+        generate_project_name("e2e", "anonymization", "override")
+        if override_project_name
+        else None
+    )
+
     # create and register anonymizer
     opik.hooks.clear_anonymizers()
     rules_anonymizer = factory.create_anonymizer([EMAIL_RULE, CC_RULE, SSN_RULE])
@@ -88,7 +90,7 @@ def test_tracked_function__regexp_rules_anonymization__happy_flow(
         output={"output": "[EMAIL_REDACTED]"},
         metadata=anonymized_outer_metadata,
         tags=["outer-tag1", "outer-tag2"],
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
     # Verify the top level span
@@ -102,7 +104,7 @@ def test_tracked_function__regexp_rules_anonymization__happy_flow(
         output={"output": "[EMAIL_REDACTED]"},
         metadata=anonymized_outer_metadata,
         tags=["outer-tag1", "outer-tag2"],
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
     anonymized_inner_metadata = {
@@ -121,21 +123,20 @@ def test_tracked_function__regexp_rules_anonymization__happy_flow(
         output={"output": "inner-output"},
         metadata=anonymized_inner_metadata,
         tags=["inner-tag1", "inner-tag2"],
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
 
-@pytest.mark.parametrize(
-    "project_name",
-    [
-        "e2e-tests-anonymization",
-        None,
-    ],
-)
+@pytest.mark.parametrize("override_project_name", [True, False])
 def test_tracked_function__rules_anonymization_remove_sensitive_key__happy_flow(
-    opik_client, project_name
+    opik_client, override_project_name
 ):
     """Test that sensitive keys are removed from metadata and other sensitive fields are masked in input and output."""
+    project_name = (
+        generate_project_name("e2e", "anonymization", "override")
+        if override_project_name
+        else None
+    )
 
     class ApiKeyAnonymizer(anonymizer.Anonymizer):
         def anonymize(self, data, **kwargs):
@@ -192,7 +193,7 @@ def test_tracked_function__rules_anonymization_remove_sensitive_key__happy_flow(
         output={"output": "[EMAIL_REDACTED]"},
         metadata=anonymized_metadata,
         tags=["outer-tag1", "outer-tag2"],
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
     # Verify the top level span
@@ -206,5 +207,5 @@ def test_tracked_function__rules_anonymization_remove_sensitive_key__happy_flow(
         output={"output": "[EMAIL_REDACTED]"},
         metadata=anonymized_metadata,
         tags=["outer-tag1", "outer-tag2"],
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )

@@ -21,7 +21,9 @@ import pytest
 
 import opik
 from .. import verifiers
-from ...testlib import environment, ThreadSafeCounter
+from ...testlib import ThreadSafeCounter, environment, generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 # =============================================================================
@@ -42,11 +44,10 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
     assertion_1 = "The response is factually correct"
     assertion_2 = "The response is concise and clear"
 
-    project_name = "project_test_test_suite__multiple_assertions_per_item"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test multiple assertions per item",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert(
@@ -76,11 +77,11 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
         experiment_items_count=1,
         total_feedback_scores=2,  # 2 assertions on 1 experiment item
         expected_score_names={assertion_1, assertion_2},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     for exp_item in retrieved_experiment.get_items():
         for score in exp_item.feedback_scores:
@@ -102,12 +103,11 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
     suite_assertion = "The response is helpful and informative"
     item_assertion = "The response correctly identifies Paris as the capital"
 
-    project_name = "project_test_test_suite__combined_suite_and_item_level_assertions"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test combined suite and item level assertions",
         global_assertions=[suite_assertion],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert(
@@ -136,7 +136,7 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
         experiment_items_count=1,
         total_feedback_scores=2,  # 1 suite + 1 item assertion
         expected_score_names={suite_assertion, item_assertion},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -156,11 +156,10 @@ def test_test_suite__assertion_fails__item_fails(
     """
     failing_assertion = "The response correctly states that 2 + 2 equals 5"
 
-    project_name = "project_test_test_suite__assertion_fails"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test assertion failure",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert(
@@ -190,12 +189,12 @@ def test_test_suite__assertion_fails__item_fails(
         experiment_items_count=1,
         total_feedback_scores=1,
         expected_score_names={failing_assertion},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Additionally verify the assertion result indicates failure
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     items = retrieved_experiment.get_items()
     assert len(items) > 0, "Expected at least 1 experiment item"
@@ -218,13 +217,12 @@ def test_test_suite__pass_threshold_not_met__item_fails(
     With runs_per_item=2, pass_threshold=2: only the first run returns a
     correct answer, so only 1 run passes (< threshold of 2).
     """
-    project_name = "project_test_test_suite__pass_threshold_not_met"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test pass threshold failure",
         global_assertions=["The response correctly states that 2 + 2 equals 4"],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert([{"data": {"input": {"question": "What is 2 + 2?"}}}])
@@ -250,7 +248,7 @@ def test_test_suite__pass_threshold_not_met__item_fails(
         suite_result=suite_result,
         items_total=1,
         items_passed=0,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     item_result = list(suite_result.item_results.values())[0]
@@ -279,13 +277,12 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
     assertion_2 = "The response mentions France"
     assertion_3 = "The response is factually correct"
 
-    project_name = "project_test_test_suite__multiple_assertions_multiple_runs"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test multiple assertions with multiple runs",
         global_assertions=[assertion_1, assertion_2, assertion_3],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert([{"data": {"input": {"question": "What is the capital of France?"}}}])
@@ -310,7 +307,7 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         experiment_items_count=2,  # 1 item * 2 runs
         total_feedback_scores=6,  # 3 assertions * 2 runs
         expected_score_names={assertion_1, assertion_2, assertion_3},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     item_result = list(suite_result.item_results.values())[0]
@@ -321,9 +318,9 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
 
     # Verify each experiment item has exactly 3 assertion results (one per assertion)
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME
     for exp_item in retrieved_experiment.get_items():
         assert exp_item.assertion_results is not None
         assert len(exp_item.assertion_results) == 3, (
@@ -352,7 +349,6 @@ def test_test_suite__create_get_and_run__end_to_end(
     """
     suite_assertion = "The response correctly identifies Paris as the capital of France"
     item_assertion = "Response is correct"
-    project_name = "project_test_test_suite__create_get_and_run__end_to_end"
 
     # 1. Create suite with assertions + execution_policy
     suite = opik_client.create_test_suite(
@@ -360,7 +356,7 @@ def test_test_suite__create_get_and_run__end_to_end(
         description="Persistence test suite",
         global_assertions=[suite_assertion],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     suite.insert(
@@ -379,7 +375,7 @@ def test_test_suite__create_get_and_run__end_to_end(
 
     # 2. Retrieve from backend (simulates a fresh client loading existing suite)
     retrieved_suite = opik_client.get_test_suite(
-        name=dataset_name, project_name=project_name
+        name=dataset_name, project_name=PROJECT_NAME
     )
 
     # Verify item descriptions survived the round-trip
@@ -415,7 +411,7 @@ def test_test_suite__create_get_and_run__end_to_end(
         experiment_items_count=4,  # 2 items * 2 runs
         total_feedback_scores=6,  # France: 2 runs * 2 assertions + Germany: 2 runs * 1 assertion
         expected_score_names={suite_assertion, item_assertion},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     for item_result in suite_result.item_results.values():
@@ -496,19 +492,18 @@ def test_test_suite__get_global_execution_policy__returns_persisted_policy(
     """
     Test that get_execution_policy() returns the persisted execution policy.
     """
-    project_name = "project_test_test_suite__get_execution_policy"
     opik_client.create_test_suite(
         name=dataset_name,
         description="Test get_execution_policy",
         global_execution_policy={"runs_per_item": 5, "pass_threshold": 3},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Retrieve from BE to verify persistence
     retrieved_suite = opik_client.get_test_suite(
-        name=dataset_name, project_name=project_name
+        name=dataset_name, project_name=PROJECT_NAME
     )
-    assert retrieved_suite.project_name == project_name
+    assert retrieved_suite.project_name == PROJECT_NAME
 
     policy = retrieved_suite.get_global_execution_policy()
     assert policy["runs_per_item"] == 5
