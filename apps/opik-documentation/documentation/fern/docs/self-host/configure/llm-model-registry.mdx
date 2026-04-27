@@ -1,0 +1,146 @@
+# LLM Model Registry Configuration
+
+The list of LLM models that appear in Opik's dropdowns (Playground, LLM-as-Judge, Automation Rules, Optimization Studio) is served by the backend from a YAML registry. The registry is composed from up to three sources, merged in this order:
+
+1. **Classpath defaults** — `llm-models-default.yaml` shipped inside the backend JAR. Always loaded. This is the source every deployment sees out of the box.
+2. **Remote CDN YAML** — **opt-in**. When enabled, the backend fetches a YAML from a URL you configure and refreshes it on a schedule. Self-hosted deployments are not required to use this; it's primarily for operators who want to pick up new models between Opik releases without redeploying.
+3. **Local override YAML** — optional. A YAML file you mount into the backend container; its entries override or extend the defaults and the remote content.
+
+This page describes how to configure these sources for self-hosted deployments.
+
+## Environment variables
+
+All configuration is via env vars on the opik-backend container.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `LLM_MODEL_REGISTRY_DEFAULT_RESOURCE` | `llm-models-default.yaml` | Classpath resource name. Rarely changed. |
+| `LLM_MODEL_REGISTRY_REMOTE_ENABLED` | `false` | Set `true` to enable the optional remote CDN fetch. |
+| `LLM_MODEL_REGISTRY_REMOTE_URL` | empty | URL (http/https) of the remote YAML. Required when `REMOTE_ENABLED=true`. |
+| `LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS` | `300` | How often to re-fetch the remote YAML. |
+| `LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH` | empty | Absolute path to a local override YAML inside the container. |
+
+## YAML schema
+
+```yaml
+openai:
+  - id: "gpt-4o"
+    label: "GPT 4o"
+    structuredOutput: true
+    reasoning: false
+anthropic:
+  - id: "claude-opus-4-7"
+    label: "Claude Opus 4.7"
+    reasoning: false
+vertex-ai:
+  - id: "gemini-2.5-pro"
+    qualifiedName: "vertex_ai/gemini-2.5-pro"
+    label: "Gemini 2.5 Pro"
+    structuredOutput: true
+```
+
+Fields:
+
+- `id` (required) — the model identifier used at inference time.
+- `qualifiedName` (optional) — disambiguates models that exist under multiple providers (e.g. Gemini via Vertex AI vs. the Gemini API directly). Used as the routing key when set.
+- `label` (optional) — the human-readable name shown in dropdowns. Falls back to `id` when omitted.
+- `structuredOutput` (optional, default `false`) — whether the model supports JSON schema / tool-calling structured output mode.
+- `reasoning` (optional, default `false`) — whether the model is a reasoning model (enforces temperature = 1.0 and unlocks reasoning-effort parameters in the UI).
+
+## Merge behavior
+
+Models are keyed by `id` across every provider. `qualifiedName` is used for routing lookups (to disambiguate `gemini-2.5-pro` under the Gemini direct API vs. Vertex AI), but override deduplication always uses `id`. When a merge happens:
+
+- **Add**: an `id` not present in lower layers is appended to that provider's list.
+- **Override**: an `id` that matches a lower layer replaces the full definition. Partial overrides are not supported — supply all fields you want on the final model.
+- **Remove**: not currently supported. Contact support if you need to hide a default model entirely.
+
+## Configuration scenarios
+
+### Default behaviour
+
+Leave the defaults in place. The backend serves the classpath `llm-models-default.yaml` shipped with your Opik release — no outbound traffic, no extra configuration. Upgrade Opik to pick up new models.
+
+### Enable the remote CDN fetch (optional)
+
+If you want new models to reach your running deployment between Opik releases — e.g. if you run long-lived stacks on an extended upgrade cadence and want provider-side additions to land automatically — point the backend at a remote YAML:
+
+```
+LLM_MODEL_REGISTRY_REMOTE_ENABLED=true
+LLM_MODEL_REGISTRY_REMOTE_URL=https://your-cdn.example.com/opik/llm-models-default.yaml
+LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS=3600
+```
+
+Comet SaaS uses `https://cdn.comet.ml/opik/llm-models-default.yaml`, regenerated daily by the Opik sync workflow — you can either mirror that content on your own CDN or point directly at it if your policies allow.
+
+Remote fetch failures are logged but non-fatal: the backend keeps serving the last successful registry (or the classpath defaults if the first fetch fails), so enabling the remote tier never risks losing model routing.
+
+### Add a private fine-tuned model (Docker Compose)
+
+Create `/etc/opik/my-models-override.yaml` on the host:
+
+```yaml
+openai:
+  - id: "ft:gpt-4o-2024-08-06:my-org::abc123"
+    label: "Our Fine-Tuned GPT-4o"
+    structuredOutput: true
+```
+
+Mount it into the backend container and set the path:
+
+```yaml
+# docker-compose.override.yaml
+services:
+  backend:
+    volumes:
+      - /etc/opik/my-models-override.yaml:/opt/opik/models-override.yaml:ro
+    environment:
+      LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: /opt/opik/models-override.yaml
+```
+
+### Add a private fine-tuned model (Kubernetes / Helm)
+
+Create a ConfigMap with your override YAML:
+
+```bash
+kubectl create configmap opik-llm-models-override \
+  --from-file=models-override.yaml=/path/to/models-override.yaml
+```
+
+Mount it in the backend Deployment by extending your Helm values:
+
+```yaml
+# values.yaml overrides
+component:
+  backend:
+    env:
+      LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH: "/etc/opik/models-override.yaml"
+    volumes:
+      - name: llm-models-override
+        configMap:
+          name: opik-llm-models-override
+    volumeMounts:
+      - name: llm-models-override
+        mountPath: /etc/opik/models-override.yaml
+        subPath: models-override.yaml
+        readOnly: true
+```
+
+## Verification
+
+After restart, check that your model appears:
+
+```bash
+curl -s https://your-opik/api/v1/private/llm/models | jq '.openai[] | select(.id | contains("ft:"))'
+```
+
+The same list appears in the UI dropdowns within seconds of a browser refresh.
+
+## Failure modes
+
+| What fails | What happens |
+|---|---|
+| Remote CDN fetch at startup | Logged; registry uses classpath defaults only. |
+| Remote CDN fetch on scheduled refresh | Logged; previous in-memory registry retained. |
+| Override YAML malformed | Logged; registry uses classpath + remote only. |
+| Override YAML path set but file missing | Silently ignored (defaults + remote used). |

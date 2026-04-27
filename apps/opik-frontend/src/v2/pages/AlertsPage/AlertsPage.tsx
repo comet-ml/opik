@@ -287,7 +287,7 @@ const AlertsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Alert>(),
+      ...(canUpdateAlerts ? [generateSelectColumDef<Alert>()] : []),
       ...convertColumnDataToColumn<Alert, Alert>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
@@ -354,8 +354,10 @@ const AlertsPage: React.FunctionComponent = () => {
           description={
             "Monitor important events in your project and get notified when something needs your attention."
           }
-          primaryActionLabel="Create your first alert"
-          onPrimaryAction={handleNewAlertClick}
+          primaryActionLabel={
+            canUpdateAlerts ? "Create your first alert" : undefined
+          }
+          onPrimaryAction={canUpdateAlerts ? handleNewAlertClick : undefined}
           docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
       ) : (
@@ -383,8 +385,12 @@ const AlertsPage: React.FunctionComponent = () => {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <AlertsActionsPanel alerts={selectedRows} />
-                <Separator orientation="vertical" className="mx-2 h-4" />
+                {canUpdateAlerts && (
+                  <>
+                    <AlertsActionsPanel alerts={selectedRows} />
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                  </>
+                )}
                 <ColumnsButton
                   columns={DEFAULT_COLUMNS}
                   selectedColumns={selectedColumns}
@@ -399,10 +405,14 @@ const AlertsPage: React.FunctionComponent = () => {
               data={alerts}
               resizeConfig={resizeConfig}
               sortConfig={sortConfig}
-              selectionConfig={{
-                rowSelection,
-                setRowSelection,
-              }}
+              selectionConfig={
+                canUpdateAlerts
+                  ? {
+                      rowSelection,
+                      setRowSelection,
+                    }
+                  : undefined
+              }
               getRowId={getRowId}
               columnPinning={DEFAULT_COLUMN_PINNING}
               noData={

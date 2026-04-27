@@ -479,7 +479,7 @@ public class SpansResource {
     @Operation(operationId = "addSpanComment", summary = "Add span comment", description = "Add span comment", responses = {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/spans/{spanId}/comments/{commentId}", schema = @Schema(implementation = String.class))})})
-    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response addSpanComment(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment,
             @Context UriInfo uriInfo) {
@@ -525,7 +525,7 @@ public class SpansResource {
     @Operation(operationId = "updateSpanComment", summary = "Update span comment by id", description = "Update span comment by id", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "404", description = "Not found")})
-    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response updateSpanComment(@PathParam("commentId") UUID commentId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Comment.class))) @NotNull @Valid Comment comment) {
 
@@ -547,7 +547,7 @@ public class SpansResource {
     @Operation(operationId = "deleteSpanComments", summary = "Delete span comments", description = "Delete span comments", responses = {
             @ApiResponse(responseCode = "204", description = "No Content"),
     })
-    @RequiredPermissions(WorkspaceUserPermission.COMMENT_WRITE)
+    @RequiredPermissions(WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE)
     public Response deleteSpanComments(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 

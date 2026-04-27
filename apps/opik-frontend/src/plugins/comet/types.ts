@@ -84,7 +84,6 @@ export enum ManagementPermissionsNames {
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
   AI_PROVIDER_UPDATE = "ai_provider_update",
-  COMMENT_WRITE = "comment_write",
   ONLINE_EVALUATION_RULE_UPDATE = "online_evaluation_rule_update",
   ALERT_UPDATE = "alert_update",
   PLAYGROUND_USE = "playground_use",

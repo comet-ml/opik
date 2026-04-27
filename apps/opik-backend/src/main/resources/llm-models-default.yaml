@@ -1,4 +1,62 @@
 openai:
+  - id: "gpt-5.4"
+    label: "GPT 5.4"
+    structuredOutput: true
+  - id: "gpt-5.4-mini"
+    label: "GPT 5.4 Mini"
+  - id: "gpt-5.4-nano"
+    label: "GPT 5.4 Nano"
+  - id: "gpt-5.2"
+    label: "GPT 5.2"
+    structuredOutput: true
+  - id: "gpt-5.1"
+    label: "GPT 5.1"
+    structuredOutput: true
+  - id: "gpt-5"
+    label: "GPT 5"
+    structuredOutput: true
+  - id: "gpt-5-chat"
+    label: "GPT 5 Chat"
+    structuredOutput: true
+  - id: "gpt-5-mini"
+    label: "GPT 5 Mini"
+    structuredOutput: true
+  - id: "gpt-5-nano"
+    label: "GPT 5 Nano"
+    structuredOutput: true
+  - id: "gpt-4.1"
+    label: "GPT 4.1"
+    structuredOutput: true
+  - id: "gpt-4.1-mini"
+    label: "GPT 4.1 Mini"
+    structuredOutput: true
+  - id: "gpt-4.1-nano"
+    label: "GPT 4.1 Nano"
+    structuredOutput: true
+  - id: "gpt-4o"
+    label: "GPT 4o"
+    structuredOutput: true
+  - id: "gpt-4o-mini"
+    label: "GPT 4o Mini"
+    structuredOutput: true
+  - id: "gpt-4"
+    label: "GPT 4"
+  - id: "gpt-4-turbo"
+    label: "GPT 4 Turbo"
+  - id: "o4-mini"
+    label: "GPT o4 Mini"
+    structuredOutput: true
+    reasoning: true
+  - id: "o3"
+    label: "GPT o3"
+    structuredOutput: true
+    reasoning: true
+  - id: "o3-mini"
+    label: "GPT o3 Mini"
+    reasoning: true
+  - id: "o1"
+    label: "GPT o1"
+    reasoning: true
   - id: "chatgpt-4o-latest"
     structuredOutput: true
   - id: "chatgpt-image-latest"
@@ -7,44 +65,24 @@ openai:
   - id: "gpt-3.5-turbo-1106"
   - id: "gpt-3.5-turbo-instruct"
   - id: "gpt-3.5-turbo-instruct-0914"
-  - id: "gpt-4"
   - id: "gpt-4-0125-preview"
   - id: "gpt-4-0314"
   - id: "gpt-4-0613"
   - id: "gpt-4-1106-preview"
-  - id: "gpt-4-turbo"
   - id: "gpt-4-turbo-2024-04-09"
   - id: "gpt-4-turbo-preview"
-  - id: "gpt-4.1"
-    structuredOutput: true
-  - id: "gpt-4.1-mini"
-    structuredOutput: true
-  - id: "gpt-4.1-nano"
-    structuredOutput: true
-  - id: "gpt-4o"
-    structuredOutput: true
   - id: "gpt-4o-2024-05-13"
   - id: "gpt-4o-2024-08-06"
     structuredOutput: true
   - id: "gpt-4o-2024-11-20"
     structuredOutput: true
-  - id: "gpt-4o-mini"
-    structuredOutput: true
   - id: "gpt-4o-mini-2024-07-18"
     structuredOutput: true
   - id: "gpt-4o-transcribe-diarize"
-  - id: "gpt-5"
-    structuredOutput: true
   - id: "gpt-5-chat-latest"
   - id: "gpt-5-codex"
     structuredOutput: true
-  - id: "gpt-5-mini"
-    structuredOutput: true
-  - id: "gpt-5-nano"
-    structuredOutput: true
   - id: "gpt-5-pro"
-    structuredOutput: true
-  - id: "gpt-5.1"
     structuredOutput: true
   - id: "gpt-5.1-chat-latest"
     structuredOutput: true
@@ -53,8 +91,6 @@ openai:
   - id: "gpt-5.1-codex-max"
     structuredOutput: true
   - id: "gpt-5.1-codex-mini"
-    structuredOutput: true
-  - id: "gpt-5.2"
     structuredOutput: true
   - id: "gpt-5.2-chat-latest"
   - id: "gpt-5.2-codex"
@@ -65,10 +101,6 @@ openai:
     structuredOutput: true
   - id: "gpt-5.3-codex"
     structuredOutput: true
-  - id: "gpt-5.4"
-    structuredOutput: true
-  - id: "gpt-5.4-mini"
-  - id: "gpt-5.4-nano"
   - id: "gpt-5.4-pro"
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
@@ -89,18 +121,10 @@ openai:
   - id: "o1-pro"
     structuredOutput: true
     reasoning: true
-  - id: "o3"
-    structuredOutput: true
-    reasoning: true
   - id: "o3-deep-research"
     structuredOutput: true
     reasoning: true
-  - id: "o3-mini"
-    reasoning: true
   - id: "o3-pro"
-    structuredOutput: true
-    reasoning: true
-  - id: "o4-mini"
     structuredOutput: true
     reasoning: true
   - id: "o4-mini-deep-research"
@@ -110,46 +134,78 @@ openai:
     structuredOutput: true
   - id: "gpt-5.5-pro"
 anthropic:
-  - id: "claude-3-7-sonnet-20250219"
-  - id: "claude-haiku-4-5-20251001"
-    structuredOutput: true
-  - id: "claude-opus-4-1-20250805"
-    structuredOutput: true
-  - id: "claude-opus-4-20250514"
-    structuredOutput: true
-  - id: "claude-opus-4-5-20251101"
+  - id: "claude-opus-4-7"
+    label: "Claude Opus 4.7"
     structuredOutput: true
   - id: "claude-opus-4-6"
-    structuredOutput: true
-  - id: "claude-opus-4-7"
-    structuredOutput: true
-  - id: "claude-sonnet-4-20250514"
-    structuredOutput: true
-  - id: "claude-sonnet-4-5"
-  - id: "claude-sonnet-4-5-20250929"
+    label: "Claude Opus 4.6"
     structuredOutput: true
   - id: "claude-sonnet-4-6"
+    label: "Claude Sonnet 4.6"
+    structuredOutput: true
+  - id: "claude-opus-4-5-20251101"
+    label: "Claude Opus 4.5"
+    structuredOutput: true
+  - id: "claude-sonnet-4-5"
+    label: "Claude Sonnet 4.5"
+    structuredOutput: true
+  - id: "claude-haiku-4-5-20251001"
+    label: "Claude Haiku 4.5"
+    structuredOutput: true
+  - id: "claude-opus-4-1-20250805"
+    label: "Claude Opus 4.1"
+    structuredOutput: true
+  - id: "claude-opus-4-20250514"
+    label: "Claude Opus 4"
+    structuredOutput: true
+  - id: "claude-sonnet-4-20250514"
+    label: "Claude Sonnet 4"
+    structuredOutput: true
+  - id: "claude-3-7-sonnet-20250219"
+  - id: "claude-opus-4-6-20260205"
+    structuredOutput: true
+  - id: "claude-opus-4-7-20260416"
+    structuredOutput: true
+  - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
+  - id: "gemini-3.1-pro-preview"
+    label: "Gemini 3.1 Pro Preview"
+    structuredOutput: true
+  - id: "gemini-3.1-flash-tts-preview"
+    label: "Gemini 3.1 Flash Tts Preview"
+  - id: "gemini-3.1-flash-lite-preview"
+    label: "Gemini 3.1 Flash Lite Preview"
+    structuredOutput: true
+  - id: "gemini-3-flash-preview"
+    label: "Gemini 3 Flash Preview"
+    structuredOutput: true
+  - id: "gemini-2.5-pro"
+    label: "Gemini 2.5 Pro"
+    structuredOutput: true
+  - id: "gemini-2.5-flash"
+    label: "Gemini 2.5 Flash"
+    structuredOutput: true
+  - id: "gemini-2.5-flash-lite"
+    label: "Gemini 2.5 Flash Lite"
+    structuredOutput: true
+  - id: "gemini-2.0-flash"
+    label: "Gemini 2.0 Flash"
+    structuredOutput: true
+  - id: "gemini-2.0-flash-lite"
+    label: "Gemini 2.0 Flash Lite"
+    structuredOutput: true
+  - id: "lyria-3-clip-preview"
+    label: "Lyria 3 Clip Preview"
+  - id: "lyria-3-pro-preview"
+    label: "Lyria 3 Pro Preview"
   - id: "aqa"
   - id: "gemini-1.0-pro"
   - id: "gemini-1.5-flash-latest"
     structuredOutput: true
   - id: "gemini-1.5-pro-latest"
     structuredOutput: true
-  - id: "gemini-2.0-flash"
-    structuredOutput: true
-  - id: "gemini-2.0-flash-lite"
-    structuredOutput: true
-  - id: "gemini-2.5-flash"
-    structuredOutput: true
   - id: "gemini-2.5-flash-image"
-    structuredOutput: true
-  - id: "gemini-2.5-flash-lite"
-    structuredOutput: true
-  - id: "gemini-2.5-pro"
-    structuredOutput: true
-  - id: "gemini-3-flash-preview"
     structuredOutput: true
   - id: "gemini-3-pro-image-preview"
     structuredOutput: true
@@ -157,33 +213,42 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
-  - id: "gemini-3.1-flash-lite-preview"
-    structuredOutput: true
-  - id: "gemini-3.1-flash-tts-preview"
-  - id: "gemini-3.1-pro-preview"
-    structuredOutput: true
   - id: "gemini-pro-vision"
-  - id: "lyria-3-clip-preview"
-  - id: "lyria-3-pro-preview"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
 vertex-ai:
+  - id: "gemini-3.1-pro-preview"
+    qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
+    label: "Gemini 3.1 Pro Preview"
+    structuredOutput: true
+  - id: "gemini-3-pro-preview"
+    qualifiedName: "vertex_ai/gemini-3-pro-preview"
+    label: "Gemini 3 Pro Preview"
+    structuredOutput: true
+  - id: "gemini-3-flash-preview"
+    qualifiedName: "vertex_ai/gemini-3-flash-preview"
+    label: "Gemini 3 Flash Preview"
+    structuredOutput: true
+  - id: "gemini-2.5-pro"
+    qualifiedName: "vertex_ai/gemini-2.5-pro"
+    label: "Gemini 2.5 Pro"
+    structuredOutput: true
+  - id: "gemini-2.5-flash"
+    qualifiedName: "vertex_ai/gemini-2.5-flash"
+    label: "Gemini 2.5 Flash"
+    structuredOutput: true
   - id: "gemini-2.0-flash-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-001"
+    label: "Gemini 2.0 Flash 001"
     structuredOutput: true
   - id: "gemini-2.0-flash-lite-001"
     qualifiedName: "vertex_ai/gemini-2.0-flash-lite-001"
-  - id: "gemini-2.5-flash"
-    qualifiedName: "vertex_ai/gemini-2.5-flash"
-    structuredOutput: true
+    label: "Gemini 2.0 Flash Lite 001"
   - id: "gemini-2.5-flash-lite-preview-06-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-lite-preview-06-17"
     structuredOutput: true
   - id: "gemini-2.5-flash-preview-04-17"
     qualifiedName: "vertex_ai/gemini-2.5-flash-preview-04-17"
-    structuredOutput: true
-  - id: "gemini-2.5-pro"
-    qualifiedName: "vertex_ai/gemini-2.5-pro"
     structuredOutput: true
   - id: "gemini-2.5-pro-exp-03-25"
     qualifiedName: "vertex_ai/gemini-2.5-pro-exp-03-25"
@@ -193,15 +258,6 @@ vertex-ai:
     structuredOutput: true
   - id: "gemini-2.5-pro-preview-05-06"
     qualifiedName: "vertex_ai/gemini-2.5-pro-preview-05-06"
-    structuredOutput: true
-  - id: "gemini-3-flash-preview"
-    qualifiedName: "vertex_ai/gemini-3-flash-preview"
-    structuredOutput: true
-  - id: "gemini-3-pro-preview"
-    qualifiedName: "vertex_ai/gemini-3-pro-preview"
-    structuredOutput: true
-  - id: "gemini-3.1-pro-preview"
-    qualifiedName: "vertex_ai/gemini-3.1-pro-preview"
     structuredOutput: true
 openrouter:
   - id: "ai21/jamba-large-1.7"

@@ -3,8 +3,18 @@ import Breadcrumbs from "@/v2/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "../SettingsMenu/SettingsMenu";
+import { Button } from "@/ui/button";
+import OllieOwl from "@/icons/ollie-owl.svg?react";
 
-const TopBar: React.FC = () => {
+type TopBarProps = {
+  showOllieToggle?: boolean;
+  onOpenAssistant?: () => void;
+};
+
+const TopBar: React.FC<TopBarProps> = ({
+  showOllieToggle,
+  onOpenAssistant,
+}) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
   const UpgradeButton = usePluginsStore((state) => state.UpgradeButton);
 
@@ -18,6 +28,16 @@ const TopBar: React.FC = () => {
         <AppDebugInfo />
         {UpgradeButton && <UpgradeButton />}
         {UserMenu ? <UserMenu /> : <SettingsMenu />}
+        {showOllieToggle && (
+          <Button
+            size="icon-sm"
+            variant="outline"
+            className="text-[#F46E41]"
+            onClick={onOpenAssistant}
+          >
+            <OllieOwl />
+          </Button>
+        )}
       </div>
     </nav>
   );
