@@ -5,7 +5,9 @@ CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
 # Resolve via git-common-dir so `make hooks` works from both the main clone and worktrees.
-HOOKS_DEST := $(shell git rev-parse --git-common-dir 2>/dev/null)/hooks
+# Empty when not in a git repo so the recipes can fail loudly instead of acting on /hooks.
+GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
+HOOKS_DEST := $(if $(GIT_COMMON_DIR),$(GIT_COMMON_DIR)/hooks)
 SDK_DIFF_BASE ?= origin/main
 
 define link_agent_config
@@ -137,12 +139,16 @@ clean-agents:
 
 # Install Git hooks from .hooks/ to .git/hooks/
 hooks:
+	@if [ -z "$(HOOKS_DEST)" ]; then \
+		echo "Error: not in a git repository."; \
+		exit 1; \
+	fi
 	@if [ ! -d "$(HOOKS_SRC)" ]; then \
 		echo "Error: $(HOOKS_SRC)/ does not exist."; \
 		exit 1; \
 	fi
 	@if [ ! -d "$(HOOKS_DEST)" ]; then \
-		echo "Error: $(HOOKS_DEST)/ does not exist. Is this a git repository?"; \
+		echo "Error: $(HOOKS_DEST)/ does not exist."; \
 		exit 1; \
 	fi
 	@cp $(HOOKS_SRC)/pre-commit $(HOOKS_DEST)/pre-commit
@@ -151,6 +157,10 @@ hooks:
 
 # Remove Git hooks
 hooks-remove:
+	@if [ -z "$(HOOKS_DEST)" ]; then \
+		echo "Error: not in a git repository."; \
+		exit 1; \
+	fi
 	@if [ -f "$(HOOKS_DEST)/pre-commit" ]; then \
 		rm -f $(HOOKS_DEST)/pre-commit; \
 		echo "Pre-commit hook removed."; \

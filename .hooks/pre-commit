@@ -4,14 +4,6 @@ set -e
 REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cd "$REPO_ROOT" || exit 1
 
-# Warn if the installed hook has drifted from the tracked source. Hooks live in
-# the common git dir so they're shared across worktrees and the main clone.
-installed_hook="$(git rev-parse --git-common-dir 2>/dev/null)/hooks/pre-commit"
-tracked_hook="$REPO_ROOT/.hooks/pre-commit"
-if [ -f "$installed_hook" ] && [ -f "$tracked_hook" ] && ! cmp -s "$installed_hook" "$tracked_hook"; then
-  echo "WARNING: .git/hooks/pre-commit differs from .hooks/pre-commit. Run 'make hooks' to update." >&2
-fi
-
 # Check if dev-runner.sh exists
 if [ ! -f scripts/dev-runner.sh ]; then
   echo "dev-runner.sh not found. Cannot run linting checks."
