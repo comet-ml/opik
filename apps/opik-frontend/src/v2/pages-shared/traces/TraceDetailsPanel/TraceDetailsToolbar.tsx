@@ -255,19 +255,19 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   useHotkeys(
     "a",
     (e) => {
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false },
-    [setActiveSection],
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
   );
-
-  const {
-    permissions: { canAnnotateTraceSpanThread },
-  } = usePermissions();
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
 

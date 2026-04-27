@@ -355,8 +355,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false },
-    [setActiveSection],
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
   );
   useHotkeys(
     "j",
