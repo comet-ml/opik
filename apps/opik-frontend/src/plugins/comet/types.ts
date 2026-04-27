@@ -81,6 +81,7 @@ export enum ManagementPermissionsNames {
   TRACE_SPAN_THREAD_LOG = "trace_span_thread_log",
   PROMPT_CREATE = "prompt_create",
   PROMPT_DELETE = "prompt_delete",
+  OPTIMIZATION_RUN_VIEW = "optimization_run_view",
   OPTIMIZATION_RUN_DELETE = "optimization_run_delete",
   WORKSPACE_SETTINGS_CONFIGURE = "workspace_settings_configure",
   AI_PROVIDER_UPDATE = "ai_provider_update",
