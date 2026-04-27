@@ -10,7 +10,7 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 
 ## Inputs
 
-- **Issue (required)**: a Sentry issue URL (e.g. `https://comet-or.sentry.io/issues/7367090448/?...`) **or** the bare numeric issue ID (e.g. `7367090448`).
+- **Issue (required)**: a Sentry issue URL (e.g. `https://<org>.sentry.io/issues/<id>/?...`) **or** the bare numeric issue ID.
 - **Region host (optional)**: Sentry region hostname. Default `us.sentry.io`. For self-hosted Sentry, pass the host (no scheme).
 
 ## Workflow
@@ -54,15 +54,9 @@ Compute and present:
 
 ### Phase 4 — Locate the emitting code
 
-Sentry's title is often a log string emitted by the application, not the actual exception. Find where it comes from. The Sentry **project slug** in the issue URL or the issue's "Project" field tells you which subtree to search:
+Sentry's title is often a log string emitted by the application, not the actual exception. Find where it comes from.
 
-| Sentry project | Codebase | Language |
-|---|---|---|
-| `opik-backend` | `apps/opik-backend/` | Java (Dropwizard, SLF4J) |
-| `opik-frontend` | `apps/opik-frontend/` | TypeScript / React |
-| `opik-python-sdk` | `sdks/python/` | Python |
-| `opik-typescript-sdk` | `sdks/typescript/` | TypeScript |
-| `opik-optimizer` | `sdks/opik_optimizer/` | Python |
+The Sentry project the issue belongs to (returned by the API as `project.slug`, or visible in the issue's "Project" field) tells you which codebase area emitted the event. Map it to the corresponding subtree by purpose: backend service → `apps/opik-backend/` (Java), frontend app → `apps/opik-frontend/` (TypeScript/React), Python SDKs → `sdks/python/` or `sdks/opik_optimizer/`, TypeScript SDK → `sdks/typescript/`. If the project name doesn't make the mapping obvious, ask the engineer.
 
 Steps:
 
@@ -115,7 +109,7 @@ Offer (do not auto-execute):
 - **Local repro**: a one-liner or short script the engineer can run to trigger the failure and confirm the observability fix attaches the missing data. Use the project's existing test infrastructure (e.g. `sdks/python/tests/`, `sdks/typescript/`, `apps/opik-backend/src/test/java/`, `apps/opik-frontend/`).
 - **Branch and PR**: if the engineer wants to ship, propose a branch name (`<user>/OPIK-<ticket>-<slug>` per [.claude/rules/git-workflow.md](../../../.claude/rules/git-workflow.md)) and the first-commit message format `[OPIK-####] [<COMPONENT>] <type>: …` where `<COMPONENT>` matches the project (e.g. `[SDK]`, `[BE]`, `[FE]`).
 - **Jira ticket(s)**: separate observability and behavior fixes if they're meaningfully independent. Reference the Sentry issue ID in the description so it auto-links.
-- **Commit-message hint**: `Fixes <SENTRY-ISSUE-SHORT-ID>` (e.g. `Fixes OPIK-PYTHON-SDK-H35`) auto-resolves the Sentry issue when the commit ships — call this out explicitly so the engineer doesn't have to remember.
+- **Commit-message hint**: `Fixes <SENTRY-ISSUE-SHORT-ID>` (the short ID is shown on the issue page, format like `<PROJECT>-XYZ`) auto-resolves the Sentry issue when the commit ships — call this out explicitly so the engineer doesn't have to remember.
 
 ### Phase 8 — Report
 
@@ -132,9 +126,9 @@ Final summary should be **short and decision-oriented**, not a data dump:
 - Self-hosted Sentry: pass the region host (no scheme).
 - See [.agents/docs/SENTRY_MCP_SETUP.md](../../docs/SENTRY_MCP_SETUP.md) for token setup and scope requirements.
 
-### Python SDK priors (project: `opik-python-sdk`, `opik-optimizer`)
+### Python SDK priors
 
-Use these as starting hypotheses when the issue's project is a Python SDK — they recur often enough to be worth checking first:
+Use these as starting hypotheses when the issue's emitting code is in the Python SDK subtree (`sdks/python/` or `sdks/opik_optimizer/`) — they recur often enough to be worth checking first:
 
 - `LOGGER.error/.warning(..., exception)` without `exc_info=`: very common; roughly half of `LOGGER.{error,warning,exception}` calls in `sdks/python/src/opik/` lack `exc_info`. Always check this — fixing it usually unblocks triage on its own.
 - Generic templates like `"Evaluation task failed (group=%s): %s: %s"` or `"Task failed for item %s: %s"` group every distinct task error into one Sentry issue. The fingerprint-collision diagnosis applies whenever the issue title cites one exception type but the message-distribution shows many.
