@@ -167,8 +167,13 @@ public class ExperimentAggregateEventListener {
 
     @Subscribe
     public void onAssertionResultsCreated(AssertionResultsCreated event) {
+        log.info("Received assertion results created event on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                event.workspaceId(), event.entityType(), event.entityIds().size());
         triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
-                .subscribe(null, e -> log.error("Error triggering aggregation for assertion results created", e));
+                .subscribe(null,
+                        e -> log.error(
+                                "Error triggering aggregation for assertion results created on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                                event.workspaceId(), event.entityType(), event.entityIds().size(), e));
     }
 
     @Subscribe

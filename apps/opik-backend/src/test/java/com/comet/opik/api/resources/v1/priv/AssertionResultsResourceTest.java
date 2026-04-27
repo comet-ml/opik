@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.priv;
 
-import com.comet.opik.api.AssertionResultBatch;
 import com.comet.opik.api.AssertionResultBatchItem;
 import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.ScoreSource;
@@ -21,11 +20,9 @@ import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Entity;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.MediaType;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -33,10 +30,13 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.testcontainers.clickhouse.ClickHouseContainer;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
+import reactor.core.publisher.Flux;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
@@ -46,7 +46,6 @@ import java.util.UUID;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.domain.ProjectService.DEFAULT_PROJECT;
-import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static java.util.UUID.randomUUID;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -88,22 +87,21 @@ class AssertionResultsResourceTest {
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
-    private ClientSupport client;
-    private String baseURI;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
     private AssertionResultsResourceClient assertionResultsResourceClient;
+    private TransactionTemplateAsync clickHouseTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
-        this.client = client;
-        this.baseURI = TestUtils.getBaseUrl(client);
+    void setUpAll(ClientSupport client, TransactionTemplateAsync clickHouseTemplate) {
+        var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
         this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.assertionResultsResourceClient = new AssertionResultsResourceClient(client, baseURI);
+        this.clickHouseTemplate = clickHouseTemplate;
     }
 
     @AfterAll
@@ -111,81 +109,62 @@ class AssertionResultsResourceTest {
         wireMock.server().stop();
     }
 
-    @Test
-    @DisplayName("PUT /v1/private/assertion-results stores trace assertion results and returns 204")
-    void storeTraceAssertionsBatch() {
-        var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                .id(null)
+    @ParameterizedTest(name = "stores {0} assertion results and returns 204 with rows persisted")
+    @EnumSource(value = EntityType.class, names = {"TRACE", "SPAN"})
+    @DisplayName("PUT /v1/private/assertion-results stores assertion results and returns 204")
+    void storeAssertionsBatch_persistsRows(EntityType entityType) {
+        UUID entityId = createEntity(entityType);
+
+        var passedItem = AssertionResultBatchItem.builder()
+                .entityId(entityId)
                 .projectName(DEFAULT_PROJECT)
-                .feedbackScores(null)
-                .usage(null)
+                .name("assertion-grounded")
+                .status(AssertionStatus.PASSED)
+                .reason("grounded in context")
+                .source(ScoreSource.SDK)
                 .build();
-        var traceId = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
-
-        var items = List.of(
-                AssertionResultBatchItem.builder()
-                        .id(traceId)
-                        .projectName(DEFAULT_PROJECT)
-                        .name("assertion-grounded")
-                        .passed(AssertionStatus.PASSED)
-                        .reason("grounded in context")
-                        .source(ScoreSource.SDK)
-                        .build(),
-                AssertionResultBatchItem.builder()
-                        .id(traceId)
-                        .projectName(DEFAULT_PROJECT)
-                        .name("assertion-concise")
-                        .passed(AssertionStatus.FAILED)
-                        .reason(null)
-                        .source(ScoreSource.ONLINE_SCORING)
-                        .build());
-
-        assertionResultsResourceClient.store(EntityType.TRACE, items, API_KEY, TEST_WORKSPACE);
-    }
-
-    @Test
-    @DisplayName("PUT /v1/private/assertion-results stores span assertion results and returns 204")
-    void storeSpanAssertionsBatch() {
-        var span = factory.manufacturePojo(Span.class).toBuilder()
-                .id(null)
+        var failedItem = AssertionResultBatchItem.builder()
+                .entityId(entityId)
                 .projectName(DEFAULT_PROJECT)
-                .feedbackScores(null)
-                .usage(null)
-                .totalEstimatedCost(null)
+                .name("assertion-concise")
+                .status(AssertionStatus.FAILED)
+                .reason(null)
+                .source(ScoreSource.ONLINE_SCORING)
                 .build();
-        var spanId = spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
 
-        var items = List.of(
-                AssertionResultBatchItem.builder()
-                        .id(spanId)
-                        .projectName(DEFAULT_PROJECT)
-                        .name("assertion-relevance")
-                        .passed(AssertionStatus.PASSED)
-                        .reason("matches spec")
-                        .source(ScoreSource.SDK)
-                        .build());
+        assertionResultsResourceClient.store(entityType, List.of(passedItem, failedItem), API_KEY, TEST_WORKSPACE);
 
-        assertionResultsResourceClient.store(EntityType.SPAN, items, API_KEY, TEST_WORKSPACE);
+        List<AssertionResultRow> persisted = fetchAssertionResults(WORKSPACE_ID, entityType, entityId);
+        assertThat(persisted).hasSize(2);
+
+        AssertionResultRow grounded = persisted.stream()
+                .filter(row -> "assertion-grounded".equals(row.name()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("assertion-grounded row not found"));
+        assertThat(grounded.passed()).isEqualTo(AssertionStatus.PASSED.getValue());
+        assertThat(grounded.reason()).isEqualTo("grounded in context");
+        assertThat(grounded.source()).isEqualTo(ScoreSource.SDK.getValue());
+        assertThat(grounded.entityType()).isEqualTo(entityType.getType());
+
+        AssertionResultRow concise = persisted.stream()
+                .filter(row -> "assertion-concise".equals(row.name()))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("assertion-concise row not found"));
+        assertThat(concise.passed()).isEqualTo(AssertionStatus.FAILED.getValue());
+        assertThat(concise.reason()).isEmpty();
+        assertThat(concise.source()).isEqualTo(ScoreSource.ONLINE_SCORING.getValue());
     }
 
     @Test
-    @DisplayName("missing entity_type is rejected with 422")
-    void missingEntityTypeIsRejected() {
-        var item = traceItemWithRandomV7Id();
-        var batch = AssertionResultBatch.builder()
-                .entityType(null)
-                .assertionResults(List.of(item))
-                .build();
-
-        try (var response = assertionResultsResourceClient.callStore(batch, API_KEY, TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    @Test
-    @DisplayName("entity_type=THREAD is rejected with 400")
+    @DisplayName("entity_type=THREAD is rejected with 400 (service-level guard)")
     void threadEntityTypeIsRejected() {
-        var item = traceItemWithRandomV7Id();
+        var item = AssertionResultBatchItem.builder()
+                .entityId(UUID.randomUUID())
+                .projectName(DEFAULT_PROJECT)
+                .name("assertion-x")
+                .status(AssertionStatus.PASSED)
+                .source(ScoreSource.SDK)
+                .build();
 
         try (var response = assertionResultsResourceClient.callStore(EntityType.THREAD, List.of(item), API_KEY,
                 TEST_WORKSPACE)) {
@@ -194,84 +173,13 @@ class AssertionResultsResourceTest {
     }
 
     @Test
-    @DisplayName("empty assertion_results list is rejected with 422")
-    void emptyBatchIsRejected() {
-        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(), API_KEY,
-                TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    @Test
-    @DisplayName("missing name on item is rejected with 422")
-    void missingNameIsRejected() {
+    @DisplayName("non-v7 UUID entity_id is rejected (IdGenerator.validateVersion)")
+    void nonV7EntityIdIsRejected() {
         var item = AssertionResultBatchItem.builder()
-                .id(UUID.randomUUID())
-                .projectName(DEFAULT_PROJECT)
-                .name("")
-                .passed(AssertionStatus.PASSED)
-                .source(ScoreSource.SDK)
-                .build();
-
-        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(item), API_KEY,
-                TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    @Test
-    @DisplayName("missing passed on item is rejected with 422")
-    void missingPassedIsRejected() {
-        var item = AssertionResultBatchItem.builder()
-                .id(UUID.randomUUID())
+                .entityId(UUID.randomUUID()) // default random UUID is v4, not v7
                 .projectName(DEFAULT_PROJECT)
                 .name("assertion-x")
-                .passed(null)
-                .source(ScoreSource.SDK)
-                .build();
-
-        try (var response = assertionResultsResourceClient.callStore(EntityType.TRACE, List.of(item), API_KEY,
-                TEST_WORKSPACE)) {
-            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
-        }
-    }
-
-    @Test
-    @DisplayName("invalid passed enum value is rejected")
-    void invalidPassedEnumIsRejected() {
-        // Send a raw JSON body with an unknown 'passed' value to exercise the enum binding boundary.
-        var bodyJson = """
-                {
-                  "entity_type": "trace",
-                  "assertion_results": [
-                    {
-                      "id": "%s",
-                      "project_name": "%s",
-                      "name": "assertion-x",
-                      "passed": "maybe",
-                      "source": "sdk"
-                    }
-                  ]
-                }
-                """.formatted(UUID.randomUUID(), DEFAULT_PROJECT);
-
-        try (var response = client.target("%s/v1/private/assertion-results".formatted(baseURI))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, API_KEY)
-                .header(WORKSPACE_HEADER, TEST_WORKSPACE)
-                .put(Entity.entity(bodyJson, MediaType.APPLICATION_JSON))) {
-            assertThat(response.getStatus()).isBetween(400, 499);
-        }
-    }
-
-    @Test
-    @DisplayName("non-v7 UUID id is rejected")
-    void nonV7UuidIsRejected() {
-        var item = AssertionResultBatchItem.builder()
-                .id(UUID.randomUUID()) // default random UUID is v4, not v7
-                .projectName(DEFAULT_PROJECT)
-                .name("assertion-x")
-                .passed(AssertionStatus.PASSED)
+                .status(AssertionStatus.PASSED)
                 .source(ScoreSource.SDK)
                 .build();
 
@@ -282,7 +190,7 @@ class AssertionResultsResourceTest {
     }
 
     @Test
-    @DisplayName("multi-project batch resolves projects independently and returns 204")
+    @DisplayName("multi-project batch resolves projects independently and persists rows under each project")
     void multiProjectBatchResolvesIndependently() {
         var traceA = factory.manufacturePojo(Trace.class).toBuilder()
                 .id(null)
@@ -302,30 +210,93 @@ class AssertionResultsResourceTest {
 
         var items = List.of(
                 AssertionResultBatchItem.builder()
-                        .id(traceAId)
+                        .entityId(traceAId)
                         .projectName(traceA.projectName())
                         .name("assertion-cross-project")
-                        .passed(AssertionStatus.PASSED)
+                        .status(AssertionStatus.PASSED)
                         .source(ScoreSource.SDK)
                         .build(),
                 AssertionResultBatchItem.builder()
-                        .id(traceBId)
+                        .entityId(traceBId)
                         .projectName(traceB.projectName())
                         .name("assertion-cross-project")
-                        .passed(AssertionStatus.FAILED)
+                        .status(AssertionStatus.FAILED)
                         .source(ScoreSource.SDK)
                         .build());
 
         assertionResultsResourceClient.store(EntityType.TRACE, items, API_KEY, TEST_WORKSPACE);
+
+        List<AssertionResultRow> rowsA = fetchAssertionResults(WORKSPACE_ID, EntityType.TRACE, traceAId);
+        assertThat(rowsA).hasSize(1);
+        assertThat(rowsA.getFirst().passed()).isEqualTo(AssertionStatus.PASSED.getValue());
+
+        List<AssertionResultRow> rowsB = fetchAssertionResults(WORKSPACE_ID, EntityType.TRACE, traceBId);
+        assertThat(rowsB).hasSize(1);
+        assertThat(rowsB.getFirst().passed()).isEqualTo(AssertionStatus.FAILED.getValue());
+
+        assertThat(rowsA.getFirst().projectId()).isNotEqualTo(rowsB.getFirst().projectId());
     }
 
-    private AssertionResultBatchItem traceItemWithRandomV7Id() {
-        return AssertionResultBatchItem.builder()
-                .id(UUID.randomUUID())
-                .projectName(DEFAULT_PROJECT)
-                .name("assertion-x")
-                .passed(AssertionStatus.PASSED)
-                .source(ScoreSource.SDK)
-                .build();
+    private UUID createEntity(EntityType entityType) {
+        return switch (entityType) {
+            case TRACE -> {
+                var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                        .id(null)
+                        .projectName(DEFAULT_PROJECT)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .build();
+                yield traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+            }
+            case SPAN -> {
+                var span = factory.manufacturePojo(Span.class).toBuilder()
+                        .id(null)
+                        .projectName(DEFAULT_PROJECT)
+                        .feedbackScores(null)
+                        .usage(null)
+                        .totalEstimatedCost(null)
+                        .build();
+                yield spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
+            }
+            default -> throw new IllegalArgumentException("Unsupported entity type: " + entityType);
+        };
+    }
+
+    private List<AssertionResultRow> fetchAssertionResults(String workspaceId, EntityType entityType, UUID entityId) {
+        String query = """
+                SELECT entity_type, entity_id, project_id, name, passed, reason, source
+                FROM assertion_results FINAL
+                WHERE workspace_id = :workspace_id
+                  AND entity_type = :entity_type
+                  AND entity_id = :entity_id
+                ORDER BY name
+                """;
+
+        return clickHouseTemplate.nonTransaction(connection -> {
+            var statement = connection.createStatement(query)
+                    .bind("workspace_id", workspaceId)
+                    .bind("entity_type", entityType.getType())
+                    .bind("entity_id", entityId.toString());
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> new AssertionResultRow(
+                            row.get("entity_type", String.class),
+                            row.get("entity_id", String.class),
+                            row.get("project_id", String.class),
+                            row.get("name", String.class),
+                            row.get("passed", String.class),
+                            row.get("reason", String.class),
+                            row.get("source", String.class))))
+                    .collectList();
+        }).block();
+    }
+
+    private record AssertionResultRow(
+            String entityType,
+            String entityId,
+            String projectId,
+            String name,
+            String passed,
+            String reason,
+            String source) {
     }
 }

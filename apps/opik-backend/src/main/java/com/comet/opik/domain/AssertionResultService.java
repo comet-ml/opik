@@ -51,26 +51,27 @@ class AssertionResultServiceImpl implements AssertionResultService {
     }
 
     @Override
-    public Mono<Void> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults) {
+    public Mono<Void> saveBatch(@NonNull EntityType entityType,
+            @NonNull List<AssertionResultBatchItem> assertionResults) {
         if (!SUPPORTED_ENTITY_TYPES.contains(entityType)) {
             return Mono.error(new BadRequestException(
                     "Unsupported entity_type '%s' for assertion-results — supported types: %s"
                             .formatted(entityType, SUPPORTED_ENTITY_TYPES)));
         }
         if (assertionResults.isEmpty()) {
-            return Mono.empty();
+            return Mono.error(new BadRequestException("Argument 'assertionResults' must not be empty"));
         }
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
             Set<UUID> entityIds = assertionResults.stream()
-                    .map(AssertionResultBatchItem::id)
+                    .map(AssertionResultBatchItem::entityId)
                     .collect(Collectors.toSet());
 
             Map<String, List<AssertionResultBatchItem>> itemsPerProject = assertionResults.stream()
                     .map(item -> {
-                        IdGenerator.validateVersion(item.id(), entityType.getType());
+                        IdGenerator.validateVersion(item.entityId(), entityType.getType());
 
                         return item.toBuilder()
                                 .projectName(WorkspaceUtils.getProjectName(item.projectName()))

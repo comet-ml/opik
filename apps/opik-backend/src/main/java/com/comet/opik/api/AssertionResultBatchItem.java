@@ -17,11 +17,11 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResultBatchItem(
-        @NotNull UUID id,
+        @NotNull UUID entityId,
         @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If null, the default project is used") String projectName,
         UUID projectId,
         @NotBlank String name,
-        @NotNull AssertionStatus passed,
+        @NotNull AssertionStatus status,
         String reason,
         @NotNull ScoreSource source) {
 }

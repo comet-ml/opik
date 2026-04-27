@@ -103,7 +103,8 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
     }
 
     @Override
-    public Mono<Long> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults) {
+    public Mono<Long> saveBatch(@NonNull EntityType entityType,
+            @NonNull List<AssertionResultBatchItem> assertionResults) {
 
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(assertionResults),
                 "Argument 'assertionResults' must not be empty");
@@ -149,10 +150,10 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
             var item = items.get(i);
 
             statement.bind("entity_type" + i, entityType.getType())
-                    .bind("entity_id" + i, item.id())
+                    .bind("entity_id" + i, item.entityId())
                     .bind("project_id" + i, item.projectId())
                     .bind("name" + i, item.name())
-                    .bind("passed" + i, item.passed().getValue())
+                    .bind("passed" + i, item.status().getValue())
                     .bind("source" + i, item.source().getValue())
                     .bind("reason" + i, getValueOrDefault(item.reason()));
         }

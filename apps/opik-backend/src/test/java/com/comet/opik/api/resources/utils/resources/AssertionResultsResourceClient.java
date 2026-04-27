@@ -6,6 +6,7 @@ import com.comet.opik.domain.EntityType;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
+import lombok.RequiredArgsConstructor;
 import org.apache.http.HttpStatus;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 
@@ -14,17 +15,13 @@ import java.util.List;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static org.assertj.core.api.Assertions.assertThat;
 
+@RequiredArgsConstructor
 public class AssertionResultsResourceClient {
 
     private static final String RESOURCE_PATH = "%s/v1/private/assertion-results";
 
     private final ClientSupport client;
     private final String baseURI;
-
-    public AssertionResultsResourceClient(ClientSupport client, String baseURI) {
-        this.client = client;
-        this.baseURI = baseURI;
-    }
 
     public void store(EntityType entityType, List<AssertionResultBatchItem> assertionResults, String apiKey,
             String workspaceName) {

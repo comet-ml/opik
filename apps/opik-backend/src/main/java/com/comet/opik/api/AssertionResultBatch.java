@@ -17,7 +17,7 @@ import java.util.List;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AssertionResultBatch(
         @NotNull EntityType entityType,
-        @NotNull @Size(min = 1, max = 1000) @Valid List<AssertionResultBatchItem> assertionResults)
+        @NotNull @Size(min = 1, max = 1000) List<@NotNull @Valid AssertionResultBatchItem> assertionResults)
         implements
             RateEventContainer {
 
