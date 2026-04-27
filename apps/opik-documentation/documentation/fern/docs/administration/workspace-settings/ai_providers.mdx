@@ -362,6 +362,8 @@ At request time Opik substitutes `{model}` with the name of whichever model the 
 
 If your URL does not contain `{model}`, the substitution step is skipped and the URL is used verbatim — existing configurations are unaffected.
 
+The model name is interpolated raw (no URL encoding) so it lands as a literal path segment, matching what most gateways expect. Use alphanumeric and hyphen-only model names — values containing `/` (e.g. HuggingFace-style `mistralai/Mistral-7B-Instruct-v0.3`) will split into extra path segments and Opik will emit a warning in the backend logs at request time.
+
 ##### Azure OpenAI via API Management gateway
 
 Many enterprise customers front Azure OpenAI with Azure API Management (APIM). APIM typically requires:

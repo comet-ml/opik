@@ -85,7 +85,7 @@ const CustomProviderDetails: React.FC<CustomProviderDetailsProps> = ({
               <FormMessage />
               <Description>
                 {
-                  "Use `{model}` as a placeholder in the URL if your gateway expects the model name in the path — Opik substitutes the selected model at request time."
+                  "Use `{model}` as a placeholder in the URL if your gateway expects the model name in the path — Opik substitutes the selected model at request time. The model name is interpolated raw, so values containing `/` (e.g. HuggingFace-style names) will become extra path segments."
                 }
               </Description>
             </FormItem>

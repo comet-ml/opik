@@ -81,10 +81,10 @@ public record CustomLlmErrorMessage(JsonNode error) implements LlmProviderError<
         if (mapped != null) {
             return mapped;
         }
-        return switch (code) {
-            case "InvalidAPIVersion" -> 400;
-            default -> DEFAULT_STATUS;
-        };
+        // Azure-specific codes (e.g. InvalidAPIVersion, DeploymentNotFound) are
+        // not in OpenAiCompatStatusCodes — they fall through to 400 as client
+        // errors.
+        return DEFAULT_STATUS;
     }
 
     private static String textOrNull(JsonNode node, String fieldName) {

@@ -400,7 +400,7 @@ class ChatCompletionsResourceTest {
             var body = raw.readEntity(String.class);
 
             // CustomLlmErrorMessage.toErrorMessage() hardcodes 400 regardless of upstream
-            // status (see CustomLlmErrorMessage.java:10). Message text does propagate cleanly.
+            // status. Message text does propagate cleanly.
             assertThat(status).isEqualTo(HttpStatus.SC_BAD_REQUEST);
             assertThat(body).contains("Invalid API key provided");
         }

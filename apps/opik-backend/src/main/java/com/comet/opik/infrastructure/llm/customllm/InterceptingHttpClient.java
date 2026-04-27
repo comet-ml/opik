@@ -110,6 +110,16 @@ class InterceptingHttpClient implements HttpClient {
                 .build();
     }
 
+    /**
+     * Substitutes the {@code {model}} placeholder in {@code url} with the
+     * {@code "model"} string from the request body. The substitution is raw
+     * (no URL encoding) so the deployment name lands as a literal path
+     * segment, matching what the gateway expects. Model names containing
+     * {@code /} (e.g. HuggingFace-style {@code mistralai/Mistral-7B}) will
+     * split into extra path segments — a {@code log.warn} surfaces this so
+     * misconfiguration is visible without breaking gateways that legitimately
+     * use slashed segments.
+     */
     private String applyModelPlaceholder(String url, String body) {
         if (url == null || !url.contains(MODEL_PLACEHOLDER)) {
             return url;
@@ -135,7 +145,13 @@ class InterceptingHttpClient implements HttpClient {
                     MODEL_PLACEHOLDER);
             return url;
         }
-        return url.replace(MODEL_PLACEHOLDER, modelNode.asText());
+        String modelName = modelNode.asText();
+        if (modelName.indexOf('/') >= 0) {
+            log.warn(
+                    "Substituted model '{}' contains '/'; the resulting URL will gain extra path segments — verify the gateway expects this",
+                    modelName);
+        }
+        return url.replace(MODEL_PLACEHOLDER, modelName);
     }
 
     private Map<String, List<String>> applyAuthHeaders(Map<String, List<String>> headers) {
