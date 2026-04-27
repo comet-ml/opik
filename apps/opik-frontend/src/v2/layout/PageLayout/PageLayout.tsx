@@ -17,6 +17,7 @@ import {
   ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   getStoredAssistantSidebarWidth,
   isAssistantSidebarOpen,
+  setAssistantSidebarOpen,
 } from "@/constants/assistantSidebar";
 import DemoProjectBanner from "@/v2/layout/DemoProjectBanner/DemoProjectBanner";
 
@@ -61,14 +62,16 @@ const PageLayout = () => {
 
   const isAssistantOpen =
     assistantSidebarWidth > ASSISTANT_SIDEBAR_COLLAPSED_WIDTH;
-  // On phones when the assistant is open, render it as a fixed overlay so it
-  // doesn't consume flex-row width and collapse main content. The layout var
-  // stays 0px so `.comet-content-inset`'s calc resolves correctly.
-  const isPhoneAssistantOverlay = isPhone && isAssistantOpen;
+  // On phones the assistant renders as a fixed overlay when open and is
+  // fully unmounted when collapsed. The layout var stays 0px so
+  // `.comet-content-inset`'s calc resolves correctly.
   const layoutAssistantWidth =
-    showAssistantSidebar && !isPhoneAssistantOverlay
-      ? `${assistantSidebarWidth}px`
-      : "0px";
+    showAssistantSidebar && !isPhone ? `${assistantSidebarWidth}px` : "0px";
+
+  const handleOpenAssistant = useCallback(() => {
+    setAssistantSidebarOpen(true);
+    setAssistantSidebarWidth(getStoredAssistantSidebarWidth());
+  }, []);
 
   const expanded = isPhone
     ? false
@@ -131,7 +134,12 @@ const PageLayout = () => {
               onToggle={toggleExpanded}
             />
             <main className="comet-content-inset absolute bottom-0 right-0 top-[var(--banner-height)] flex transition-all">
-              <TopBar />
+              <TopBar
+                showOllieToggle={
+                  isPhone && showAssistantSidebar && !isAssistantOpen
+                }
+                onOpenAssistant={handleOpenAssistant}
+              />
               <section className="comet-header-inset absolute inset-x-0 bottom-0 overflow-auto bg-soft-background px-6">
                 <Outlet />
               </section>
@@ -146,17 +154,13 @@ const PageLayout = () => {
           </div>
         </PortalContainerProvider>
 
-        {showAssistantSidebar ? (
+        {showAssistantSidebar && (!isPhone || isAssistantOpen) ? (
           <div
             className={
-              isPhoneAssistantOverlay
-                ? "fixed inset-0 z-40"
-                : "relative z-[1] shrink-0"
+              isPhone ? "fixed inset-0 z-40" : "relative z-[1] shrink-0"
             }
             style={
-              isPhoneAssistantOverlay
-                ? undefined
-                : { width: `${assistantSidebarWidth}px` }
+              isPhone ? undefined : { width: `${assistantSidebarWidth}px` }
             }
           >
             <SilentErrorBoundary>
