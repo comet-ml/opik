@@ -76,8 +76,8 @@ export const PromptDiffPair: React.FC<{
     diffTemplate ?? diffPrompt?.requested_version?.template ?? "";
   const changed = baseText !== diffText;
   const commitsChanged = baseCommit !== diffCommit;
-  const hasBase = !!baseCommit || !!baseTemplate;
-  const hasDiff = !!diffCommit || !!diffTemplate;
+  const hasBase = !!baseCommit || baseTemplate !== undefined;
+  const hasDiff = !!diffCommit || diffTemplate !== undefined;
 
   const renderDiffContent = (text: string, isBase: boolean) => {
     if (isBase ? !hasDiff : !hasBase) {
