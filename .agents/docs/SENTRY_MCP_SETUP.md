@@ -82,6 +82,26 @@ The official Sentry MCP exposes (non-exhaustive):
 - The token inherits your existing Sentry permissions — the MCP cannot see anything you cannot already see in the Sentry UI.
 - For Opik, the relevant org is **comet-ml**. Projects of interest include `opik-backend`, `opik-frontend`, and the SDK projects.
 
+## Avoid the NL-Backed Search Tools
+
+The Sentry MCP exposes three "search" tools — `search_issues`, `search_events`,
+`search_issue_events` — and one analysis tool, `analyze_issue_with_seer`. All of
+them route through Sentry's own OpenAI account for natural-language → Sentry
+query translation, and that account is frequently rate-limited
+(`You exceeded your current quota`). Treat them as best-effort; do not build
+workflows around them.
+
+**Direct, non-LLM tools that always work:**
+`get_sentry_resource`, `get_issue_tag_values`, `find_organizations`,
+`find_projects`, `find_releases`, `find_teams`, `whoami`, `update_issue`.
+
+**When you need to enumerate events inside an issue** (the direct tools can
+fetch a single resource but not paginate events), call Sentry's REST API
+directly using `SENTRY_ACCESS_TOKEN` from `.env.local`. See
+`scripts/analyze_sentry_issue.py` for a working pattern (loads the token from
+`.env.local`, paginates `/api/0/issues/<id>/events/`, never writes the token to
+argv or a file).
+
 ## Self-Hosted Sentry
 
 If you point at a self-hosted Sentry, add `SENTRY_HOST=sentry.example.com` to `.env.local` (no scheme). For plain-HTTP self-hosted deployments, append `--insecure-http` to the `args` array in `.agents/mcp.json`.
