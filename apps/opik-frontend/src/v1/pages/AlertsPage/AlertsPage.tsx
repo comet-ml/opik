@@ -41,7 +41,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { Separator } from "@/ui/separator";
 import AlertsActionsPanel from "@/v1/pages/AlertsPage/AlertsActionsPanel";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { usePermissions } from "@/contexts/PermissionsContext";
 

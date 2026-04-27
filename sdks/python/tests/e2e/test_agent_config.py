@@ -10,13 +10,8 @@ from opik.api_objects.agent_config.context import agent_config_context
 
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
-from opik.rest_api import core as rest_api_core
 from . import verifiers
 from ..testlib import ANY_DICT, ANY_BUT_NONE
-
-
-def _unique_project_name() -> str:
-    return f"e2e-agent-config-{str(uuid.uuid4())[:8]}"
 
 
 @pytest.fixture(autouse=True)
@@ -26,14 +21,10 @@ def clear_caches_after_test():
 
 
 @pytest.fixture
-def project_name(opik_client: opik.Opik):
-    name = _unique_project_name()
-    yield name
-    try:
-        project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
-        opik_client.rest_client.projects.delete_project_by_id(project_id)
-    except rest_api_core.ApiError:
-        pass
+def project_name(temporary_project_name: str) -> str:
+    """Alias to the shared per-test project fixture so test bodies stay
+    readable (``project_name`` matches the SDK kwarg name)."""
+    return temporary_project_name
 
 
 def test_multi_class_publishes_store_only_sent_values__happyflow(

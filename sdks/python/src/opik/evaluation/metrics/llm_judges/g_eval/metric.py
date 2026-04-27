@@ -46,6 +46,10 @@ class GEval(base_metric.BaseMetric):
         project_name: Optional tracking project name.
         temperature: Sampling temperature forwarded to the judge model.
         seed: Optional seed for reproducible generation (if supported by the model).
+        reasoning_effort: Optional reasoning effort level for the model. Applies to
+            providers/models that expose a reasoning_effort parameter (e.g. OpenAI
+            gpt-5 family). Supported values typically include "minimal", "low",
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics.llm_judges.g_eval.metric import GEval
@@ -75,6 +79,7 @@ class GEval(base_metric.BaseMetric):
         project_name: Optional[str] = None,
         temperature: float = 0.0,
         seed: Optional[int] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -84,6 +89,7 @@ class GEval(base_metric.BaseMetric):
         self.task_introduction = task_introduction
         self.evaluation_criteria = evaluation_criteria
         self._seed = seed
+        self._reasoning_effort = reasoning_effort
 
         self._log_probs_supported = False
 
@@ -123,9 +129,11 @@ class GEval(base_metric.BaseMetric):
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
-            model_kwargs = {"temperature": temperature}
+            model_kwargs: Dict[str, Any] = {"temperature": temperature}
             if self._seed is not None:
                 model_kwargs["seed"] = self._seed
+            if self._reasoning_effort is not None:
+                model_kwargs["reasoning_effort"] = self._reasoning_effort
 
             self._model = models_factory.get(
                 model_name=model, track=self.track, **model_kwargs
@@ -319,6 +327,7 @@ class GEvalPreset(GEval):
         project_name: Optional[str] = None,
         temperature: float = 0.0,
         name: Optional[str] = None,
+        reasoning_effort: Optional[str] = None,
     ):
         try:
             definition = GEVAL_PRESETS[preset]
@@ -335,4 +344,5 @@ class GEvalPreset(GEval):
             track=track,
             project_name=project_name,
             temperature=temperature,
+            reasoning_effort=reasoning_effort,
         )

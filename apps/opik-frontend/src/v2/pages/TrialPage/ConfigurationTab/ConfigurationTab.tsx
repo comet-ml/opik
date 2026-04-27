@@ -31,7 +31,7 @@ import {
   OPTIMIZATION_PROMPT_KEY,
   OPTIMIZATION_EXAMPLES_KEY,
 } from "@/constants/experiments";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "compare-trials-config-columns-width";
 

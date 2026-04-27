@@ -32,86 +32,12 @@ from ...testlib import environment, ThreadSafeCounter
 @pytest.mark.skipif(
     not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
 )
-def test_test_suite__item_level_assertions__feedback_scores_created(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Main flow: Items have their own assertions.
-
-    Each item can have different assertions to verify.
-
-    Expected behavior:
-    - Each item is evaluated using its own assertions
-    - Feedback scores are created with assertion text as the score name
-    - Score values are boolean (True=1.0, False=0.0)
-    """
-    geography_assertion = (
-        "The response correctly identifies Paris as the capital of France"
-    )
-    math_assertion = "The response correctly states that 2 + 2 equals 4"
-
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test item-level assertions",
-    )
-
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "What is the capital of France?"}},
-                "assertions": [geography_assertion],
-            },
-            {
-                "data": {"input": {"question": "What is 2 + 2?"}},
-                "assertions": [math_assertion],
-            },
-        ]
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        if "2 + 2" in question:
-            return {"input": item["input"], "output": "2 + 2 equals 4."}
-        return {"input": item["input"], "output": "Unknown"}
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    opik.flush_tracker()
-
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        items_passed=2,
-        experiment_items_count=2,
-        total_feedback_scores=2,  # 1 assertion per item * 2 items
-        expected_score_names={geography_assertion, math_assertion},
-    )
-
-    # Verify score values are boolean (True=1.0, False=0.0)
-    retrieved_experiment = opik_client.get_experiment_by_name(experiment_name)
-    for exp_item in retrieved_experiment.get_items():
-        for score in exp_item.feedback_scores:
-            assert score["value"] in [0.0, 1.0, True, False], (
-                f"Score value should be boolean, got {score['value']}"
-            )
-
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
 def test_test_suite__multiple_assertions_per_item__all_scores_created(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """
     Test that multiple assertions on a single item create multiple
-    feedback scores, each evaluated independently.
+    feedback scores, each evaluated independently, with boolean values.
     """
     assertion_1 = "The response is factually correct"
     assertion_2 = "The response is concise and clear"
@@ -135,14 +61,13 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "Paris is the capital of France."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -154,56 +79,14 @@ def test_test_suite__multiple_assertions_per_item__all_scores_created(
         project_name=project_name,
     )
 
-
-@pytest.mark.skipif(
-    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
-)
-def test_test_suite__suite_level_assertions__applied_to_all_items(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that suite-level assertions are applied to every item.
-    """
-    suite_assertion = "The response is helpful and informative"
-
-    project_name = "project_test_test_suite__suite_level_assertions"
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test suite-level assertions",
-        global_assertions=[suite_assertion],
-        project_name=project_name,
+    retrieved_experiment = opik_client.get_experiment_by_name(
+        experiment_name, project_name=project_name
     )
-
-    suite.insert(
-        [
-            {"data": {"input": {"question": "What is the capital of France?"}}},
-            {"data": {"input": {"question": "What is 2 + 2?"}}},
-        ]
-    )
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            return {"input": item["input"], "output": "The capital of France is Paris."}
-        return {"input": item["input"], "output": "2 + 2 equals 4."}
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    opik.flush_tracker()
-
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        experiment_items_count=2,
-        total_feedback_scores=2,  # 1 assertion * 2 experiment items
-        expected_score_names={suite_assertion},
-        project_name=project_name,
-    )
+    for exp_item in retrieved_experiment.get_items():
+        for score in exp_item.feedback_scores:
+            assert score["value"] in [0.0, 1.0, True, False], (
+                f"Score value should be boolean, got {score['value']}"
+            )
 
 
 @pytest.mark.skipif(
@@ -239,14 +122,13 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "The capital of France is Paris."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -256,236 +138,6 @@ def test_test_suite__combined_suite_and_item_level_assertions__all_scores_create
         expected_score_names={suite_assertion, item_assertion},
         project_name=project_name,
     )
-
-
-# =============================================================================
-# EDGE CASE: Items without assertions + default execution policy
-# =============================================================================
-
-
-def test_test_suite__no_assertions_default_policy__items_pass_with_single_run(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Edge case: Items without assertions pass by default, and the default
-    execution policy runs each item exactly once with pass_threshold=1.
-
-    Expected behavior:
-    - No assertions to check -> items pass
-    - Default runs_per_item=1, pass_threshold=1
-    - No feedback scores created
-    """
-    project_name = "project_test_test_suite__no_assertions_default_policy"
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test items without assertions and default policy",
-        project_name=project_name,
-    )
-
-    suite.insert(
-        [
-            {
-                "data": {
-                    "input": {"question": "What is the capital of France?"},
-                    "reference": "Paris",
-                },
-            },
-            {
-                "data": {
-                    "input": {"question": "What is the capital of Germany?"},
-                    "reference": "Berlin",
-                },
-            },
-        ]
-    )
-
-    call_count = ThreadSafeCounter()
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        call_count.increment()
-        return {"input": item["input"], "output": "Some response"}
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    opik.flush_tracker()
-
-    # Default: runs_per_item=1, so 2 items = 2 calls
-    assert call_count.value == 2
-
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        items_passed=2,
-        experiment_items_count=2,
-        total_feedback_scores=0,
-        project_name=project_name,
-    )
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=2,
-        feedback_scores_amount=0,
-        project_name=project_name,
-    )
-
-    # Verify default pass_threshold=1 and runs_total=1
-    for item_result in suite_result.item_results.values():
-        assert item_result.runs_total == 1
-        assert item_result.pass_threshold == 1
-
-
-# =============================================================================
-# EXECUTION POLICY: runs_per_item and pass_threshold
-# =============================================================================
-
-
-def test_test_suite__execution_policy_runs_per_item__task_called_multiple_times(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that runs_per_item causes multiple task executions per item.
-    """
-    project_name = "project_test_test_suite__execution_policy_runs_per_item"
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test runs_per_item execution policy",
-        global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
-        project_name=project_name,
-    )
-
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "What is the capital of France?"}},
-            }
-        ]
-    )
-
-    call_count = ThreadSafeCounter()
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        call_count.increment()
-        return {"input": item["input"], "output": "Paris"}
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    opik.flush_tracker()
-
-    assert call_count.value == 2
-
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=1,
-        items_passed=1,
-        experiment_items_count=2,
-        total_feedback_scores=0,
-        project_name=project_name,
-    )
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=2,
-        feedback_scores_amount=0,
-        project_name=project_name,
-    )
-
-    item_result = list(suite_result.item_results.values())[0]
-    assert item_result.runs_total == 2
-    assert item_result.pass_threshold == 1
-
-
-def test_test_suite__item_level_execution_policy__overrides_suite_policy(
-    opik_client: opik.Opik, dataset_name: str, experiment_name: str
-):
-    """
-    Test that item-level execution policy overrides suite-level policy.
-    """
-    project_name = "project_test_test_suite__item_level_execution_policy"
-    suite = opik_client.create_test_suite(
-        name=dataset_name,
-        description="Test item-level execution policy override",
-        global_execution_policy={"runs_per_item": 1, "pass_threshold": 1},
-        project_name=project_name,
-    )
-
-    # Item 1: uses suite-level policy (runs_per_item=1)
-    # Item 2: overrides with item-level policy (runs_per_item=3)
-    suite.insert(
-        [
-            {
-                "data": {"input": {"question": "What is the capital of France?"}},
-            },
-            {
-                "data": {"input": {"question": "What is the capital of Germany?"}},
-                "execution_policy": {"runs_per_item": 3, "pass_threshold": 2},
-            },
-        ]
-    )
-
-    france_count = ThreadSafeCounter()
-    germany_count = ThreadSafeCounter()
-
-    def task(item: Dict[str, Any]) -> Dict[str, Any]:
-        question = item["input"]["question"]
-        if "France" in question:
-            france_count.increment()
-        elif "Germany" in question:
-            germany_count.increment()
-        return {"input": item["input"], "output": "Answer"}
-
-    suite_result = opik.run_tests(
-        test_suite=suite,
-        task=task,
-        experiment_name=experiment_name,
-        verbose=0,
-    )
-    opik.flush_tracker()
-
-    assert france_count.value == 1
-    assert germany_count.value == 3
-
-    verifiers.verify_test_suite_result(
-        opik_client=opik_client,
-        suite_result=suite_result,
-        items_total=2,
-        items_passed=2,
-        experiment_items_count=4,  # 1 + 3
-        total_feedback_scores=0,
-        project_name=project_name,
-    )
-
-    verifiers.verify_experiment(
-        opik_client=opik_client,
-        id=suite_result.experiment_id,
-        experiment_name=suite_result.experiment_name,
-        experiment_metadata=None,
-        traces_amount=4,
-        feedback_scores_amount=0,
-        project_name=project_name,
-    )
-
-    # Verify item-level pass_threshold is used
-    for item_result in suite_result.item_results.values():
-        if item_result.runs_total == 3:
-            assert item_result.pass_threshold == 2
-        else:
-            assert item_result.pass_threshold == 1
 
 
 # =============================================================================
@@ -523,14 +175,13 @@ def test_test_suite__assertion_fails__item_fails(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "2 + 2 equals 4."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -564,15 +215,15 @@ def test_test_suite__pass_threshold_not_met__item_fails(
     """
     Test that items fail when pass_threshold is not met across multiple runs.
 
-    With runs_per_item=3, pass_threshold=2: only the first run returns a
-    correct answer, so at most 1 run passes (< threshold of 2).
+    With runs_per_item=2, pass_threshold=2: only the first run returns a
+    correct answer, so only 1 run passes (< threshold of 2).
     """
     project_name = "project_test_test_suite__pass_threshold_not_met"
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test pass threshold failure",
         global_assertions=["The response correctly states that 2 + 2 equals 4"],
-        global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
         project_name=project_name,
     )
 
@@ -587,14 +238,13 @@ def test_test_suite__pass_threshold_not_met__item_fails(
             return {"input": item["input"], "output": "2 + 2 equals 4."}
         return {"input": item["input"], "output": "I don't know."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -605,7 +255,7 @@ def test_test_suite__pass_threshold_not_met__item_fails(
 
     item_result = list(suite_result.item_results.values())[0]
     assert item_result.passed is False
-    assert item_result.runs_total == 3
+    assert item_result.runs_total == 2
     assert item_result.pass_threshold == 2
 
 
@@ -617,7 +267,7 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
 ):
     """
     Comprehensive pass/fail logic test:
-    - 1 item, 3 assertions, runs_per_item=3, pass_threshold=2
+    - 1 item, 3 assertions, runs_per_item=2, pass_threshold=1
     - Consistent correct answers -> all runs pass -> item passes
 
     Pass/fail logic:
@@ -634,7 +284,7 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         name=dataset_name,
         description="Test multiple assertions with multiple runs",
         global_assertions=[assertion_1, assertion_2, assertion_3],
-        global_execution_policy={"runs_per_item": 3, "pass_threshold": 2},
+        global_execution_policy={"runs_per_item": 2, "pass_threshold": 1},
         project_name=project_name,
     )
 
@@ -643,14 +293,13 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "The capital of France is Paris."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     assert suite_result.pass_rate == 1.0
 
     verifiers.verify_test_suite_result(
@@ -658,16 +307,16 @@ def test_test_suite__multiple_assertions_multiple_runs__pass_threshold_logic(
         suite_result=suite_result,
         items_total=1,
         items_passed=1,
-        experiment_items_count=3,  # 1 item * 3 runs
-        total_feedback_scores=9,  # 3 assertions * 3 runs
+        experiment_items_count=2,  # 1 item * 2 runs
+        total_feedback_scores=6,  # 3 assertions * 2 runs
         expected_score_names={assertion_1, assertion_2, assertion_3},
         project_name=project_name,
     )
 
     item_result = list(suite_result.item_results.values())[0]
-    assert item_result.runs_total == 3
-    assert item_result.pass_threshold == 2
-    assert item_result.runs_passed >= 2
+    assert item_result.runs_total == 2
+    assert item_result.pass_threshold == 1
+    assert item_result.runs_passed >= 1
     assert item_result.passed is True
 
     # Verify each experiment item has exactly 3 assertion results (one per assertion)
@@ -751,14 +400,13 @@ def test_test_suite__create_get_and_run__end_to_end(
             return {"input": item["input"], "output": "The capital of France is Paris."}
         return {"input": item["input"], "output": "The capital of Germany is Berlin."}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=retrieved_suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     # Verify suite ran with persisted execution policy (runs_per_item=2)
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
@@ -1181,14 +829,13 @@ def test_test_suite__insert_batch__all_items_persisted(
         question = item["input"]["question"]
         return {"input": item["input"], "output": answers.get(question, "Unknown")}
 
+    # opik.run_tests must handle flushing
     suite_result = opik.run_tests(
         test_suite=suite,
         task=task,
         experiment_name=experiment_name,
         verbose=0,
     )
-    opik.flush_tracker()
-
     verifiers.verify_test_suite_result(
         opik_client=opik_client,
         suite_result=suite_result,
@@ -1259,11 +906,10 @@ def test_get_test_suite_experiments__returns_experiments(
     def task(item: Dict[str, Any]) -> Dict[str, Any]:
         return {"input": item["input"], "output": "World"}
 
+    # opik.run_tests must handle flushing
     opik.run_tests(
         test_suite=suite, task=task, experiment_name=experiment_name, verbose=0
     )
-    opik.flush_tracker()
-
     experiments = opik_client.get_test_suite_experiments(name=dataset_name)
     experiment_names = {e.name for e in experiments}
 

@@ -1,25 +1,38 @@
 import React, { useEffect } from "react";
-import useAppStore, { useActiveWorkspaceName } from "@/store/AppStore";
-import { getWorkspaceNameFromUrl } from "@/lib/workspaceVersion";
-import WorkspaceVersionResolver from "@/shared/WorkspaceVersionResolver/WorkspaceVersionResolver";
+import useAppStore, {
+  useActiveWorkspaceName,
+  useWorkspaceVersion,
+} from "@/store/AppStore";
+import useWorkspaceVersionQuery from "@/api/workspaces/useWorkspaceVersion";
+import {
+  getWorkspaceNameFromUrl,
+  setCachedWorkspaceVersion,
+} from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
+
+const VERSION_RELOAD_PREFIX = "opik-version-reload:";
+const MAX_RELOADS = 2;
 
 /**
  * Pair routes (/pair/v1 and the /opik/pair/v1 OSS alias) render outside
- * WorkspaceGuard — they must work without a logged-in session. That means
- * WorkspaceVersionResolver normally cannot mount on these routes, so a
- * wrong gate guess (e.g. v2 default on a v1 workspace) would render the
- * wrong pair page.
- *
- * This guard seeds activeWorkspaceName from the pair URL's ?workspace=
- * query and mounts WorkspaceVersionResolver so the API-side check +
- * reload-on-mismatch flow runs for pair routes too.
+ * WorkspaceGuard — they must work without a logged-in session. Their URLs
+ * carry critical state in search/hash (?workspace=X#payload), so unlike
+ * workspace shells (which use WorkspaceVersionResolver's optimistic
+ * render), we block rendering here until the workspace version is
+ * verified — so no router can touch the URL on the wrong version. On
+ * mismatch, window.location.reload() preserves the full URL so the
+ * correct App's router can complete pairing.
  */
 const PairRouteVersionGuard: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
   const workspaceFromUrl = getWorkspaceNameFromUrl();
   const active = useActiveWorkspaceName();
+  const gateVersion = useWorkspaceVersion();
+  const { data: apiVersion } = useWorkspaceVersionQuery();
+  const mismatch = Boolean(
+    apiVersion && gateVersion && apiVersion !== gateVersion,
+  );
 
   useEffect(() => {
     if (workspaceFromUrl && workspaceFromUrl !== active) {
@@ -27,11 +40,27 @@ const PairRouteVersionGuard: React.FC<{ children: React.ReactNode }> = ({
     }
   }, [workspaceFromUrl, active]);
 
-  // Resolver keys its query off useActiveWorkspaceName and early-returns
-  // while it is empty. Show a Loader until the store reflects the URL.
-  if (workspaceFromUrl && !active) return <Loader />;
+  useEffect(() => {
+    if (!apiVersion || !workspaceFromUrl) return;
+    setCachedWorkspaceVersion(workspaceFromUrl, apiVersion);
 
-  return <WorkspaceVersionResolver>{children}</WorkspaceVersionResolver>;
+    const reloadKey = VERSION_RELOAD_PREFIX + workspaceFromUrl;
+    if (mismatch) {
+      const reloadCount = Number(sessionStorage.getItem(reloadKey) || "0");
+      if (reloadCount < MAX_RELOADS) {
+        sessionStorage.setItem(reloadKey, String(reloadCount + 1));
+        window.location.reload();
+      } else {
+        useAppStore.getState().setWorkspaceVersion(apiVersion);
+        sessionStorage.removeItem(reloadKey);
+      }
+    } else {
+      sessionStorage.removeItem(reloadKey);
+    }
+  }, [apiVersion, workspaceFromUrl, mismatch]);
+
+  if (!active || !apiVersion || mismatch) return <Loader />;
+  return children;
 };
 
 export default PairRouteVersionGuard;

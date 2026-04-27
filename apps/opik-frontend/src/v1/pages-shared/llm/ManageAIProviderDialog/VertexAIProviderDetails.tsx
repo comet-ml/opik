@@ -8,7 +8,8 @@ import EyeInput from "@/shared/EyeInput/EyeInput";
 import { AIProviderFormType } from "@/v1/pages-shared/llm/ManageAIProviderDialog/schema";
 import get from "lodash/get";
 import { FormControl, FormField, FormItem, FormMessage } from "@/ui/form";
-import { buildDocsUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import { Input } from "@/ui/input";
 
 type VertexAIProviderDetailsProps = {
@@ -78,7 +79,10 @@ const VertexAIProviderDetails: React.FC<VertexAIProviderDetailsProps> = ({
       <span className="comet-body-s mt-1 text-light-slate">
         <Button variant="link" size="sm" asChild className="px-0">
           <a
-            href={buildDocsUrl("/configuration/ai_providers", "#vertex-ai")}
+            href={buildDocsUrl(
+              "/administration/workspace-settings/ai_providers",
+              "#vertex-ai",
+            )}
             target="_blank"
             rel="noreferrer"
           >

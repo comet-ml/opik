@@ -24,7 +24,7 @@ import LevenshteinMetricConfigs from "@/v2/pages-shared/optimizations/MetricSett
 import NumericalSimilarityMetricConfigs from "@/v2/pages-shared/optimizations/MetricSettings/metricConfigs/NumericalSimilarityMetricConfigs";
 import CodeMetricConfigs from "@/v2/pages-shared/optimizations/MetricSettings/metricConfigs/CodeMetricConfigs";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface MetricConfigsProps {
   metricType: METRIC_TYPE;

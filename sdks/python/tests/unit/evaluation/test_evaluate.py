@@ -3837,3 +3837,64 @@ def test_evaluate_optimization_trial__dataset_has_no_project_name__caller_value_
 
     call_kwargs = mock_create_experiment.call_args.kwargs
     assert call_kwargs["project_name"] == "caller-project"
+
+
+# =============================================================================
+# Config / metric defaults — previously covered by e2e tests, moved here
+# because the behaviour is purely SDK-local (what's sent to create_experiment,
+# whether an empty metrics list is accepted). No backend needed.
+# =============================================================================
+
+
+def test_evaluate__experiment_config_not_set__none_metadata_sent(fake_backend):
+    """When experiment_config is omitted the SDK sends experiment_config=None
+    to create_experiment (does not auto-populate empty metadata)."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"question": "hi"}, reference="hi"
+            )
+        ]
+    )
+    _, mock_create_experiment, mock_get_url = create_mock_experiment()
+
+    with patch_evaluation_dependencies(mock_create_experiment, mock_get_url):
+        evaluator_module.evaluate(
+            dataset=mock_dataset,
+            task=lambda item: {"output": "hi"},
+            experiment_name="no-config-experiment",
+            scoring_metrics=[metrics.Equals()],
+            task_threads=1,
+            verbose=0,
+        )
+
+    assert mock_create_experiment.call_args.kwargs["experiment_config"] is None
+
+
+def test_evaluate__no_scoring_metrics__completes_and_writes_no_feedback_scores(
+    fake_backend,
+):
+    """An empty scoring_metrics list is accepted — traces are produced but
+    no feedback scores are attached to them."""
+    mock_dataset = create_mock_dataset(
+        items=[
+            dataset_item.DatasetItem(
+                id="item-1", input={"question": "hi"}, reference="hi"
+            )
+        ]
+    )
+    _, mock_create_experiment, mock_get_url = create_mock_experiment()
+
+    with patch_evaluation_dependencies(mock_create_experiment, mock_get_url):
+        evaluator_module.evaluate(
+            dataset=mock_dataset,
+            task=lambda item: {"output": "hi"},
+            experiment_name="no-metrics-experiment",
+            scoring_metrics=[],
+            task_threads=1,
+            verbose=0,
+        )
+
+    mock_create_experiment.assert_called_once()
+    assert len(fake_backend.trace_trees) == 1
+    assert not fake_backend.trace_trees[0].feedback_scores

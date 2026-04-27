@@ -20,7 +20,7 @@ import DatasetActionsPanel from "@/v1/pages-shared/datasets/DatasetActionsPanel/
 import { createDatasetRowActionsCell } from "@/v1/pages-shared/datasets/DatasetRowActionsCell/DatasetRowActionsCell";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import useAppStore from "@/store/AppStore";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TimeCell from "@/shared/DataTableCells/TimeCell";

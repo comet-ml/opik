@@ -42,6 +42,7 @@ export const DASHBOARDS_REST_ENDPOINT = "/v1/private/dashboards/";
 export const INSIGHTS_VIEWS_REST_ENDPOINT = "/v1/private/insights-views/";
 export const AGENT_CONFIGS_REST_ENDPOINT = "/v1/private/agent-configs/";
 export const LOCAL_RUNNERS_REST_ENDPOINT = "/v1/private/local-runners/";
+export const LLM_MODELS_REST_ENDPOINT = "/v1/private/llm/models";
 
 export const COMPARE_EXPERIMENTS_KEY = "compare-experiments";
 export const SPANS_KEY = "spans";
@@ -66,6 +67,7 @@ export const INSIGHTS_VIEWS_KEY = "insights-views";
 export const INSIGHTS_VIEW_KEY = "insights-view";
 export const AGENT_CONFIGS_KEY = "agent-configs";
 export const AGENT_SANDBOX_KEY = "agent-sandbox";
+export const LLM_MODELS_KEY = "llm-models";
 
 // stats for feedback
 export const STATS_COMET_ENDPOINT = "https://stats.comet.com/notify/event/";

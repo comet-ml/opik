@@ -12,7 +12,7 @@ import useLocalStorageState from "use-local-storage-state";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyTestSuitesLightUrl from "/images/empty-test-suites-light.svg";
 import emptyTestSuitesDarkUrl from "/images/empty-test-suites-dark.svg";
 import DataTable from "@/shared/DataTable/DataTable";
@@ -373,9 +373,13 @@ const DashboardsPage: React.FunctionComponent = () => {
           description={
             "Build a cross-project dashboard to get a real-time view of your agents, metrics,\nand costs. Or explore a project to see detailed insights."
           }
-          primaryActionLabel="Create your first dashboard"
-          onPrimaryAction={handleNewDashboardClick}
-          docsUrl={buildDocsUrl("/production/dashboards")}
+          primaryActionLabel={
+            canCreateDashboards ? "Create your first dashboard" : undefined
+          }
+          onPrimaryAction={
+            canCreateDashboards ? handleNewDashboardClick : undefined
+          }
+          docsUrl={buildDocsUrl("/tracing/dashboards/dashboards")}
         />
       ) : (
         <>

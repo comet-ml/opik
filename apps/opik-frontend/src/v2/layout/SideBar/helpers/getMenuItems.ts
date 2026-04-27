@@ -26,12 +26,14 @@ const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
+  canViewDashboards,
   canUsePlayground,
   showHome,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
+  canViewDashboards: boolean;
   canUsePlayground: boolean;
   showHome: boolean;
 }): MenuItemGroup[] => {
@@ -72,14 +74,18 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
-        {
-          id: "dashboards",
-          path: projectPath("/dashboards"),
-          type: MENU_ITEM_TYPE.router,
-          icon: ChartLine,
-          label: "Dashboards",
-          disabled: !projectPrefix,
-        },
+        ...(canViewDashboards
+          ? [
+              {
+                id: "dashboards",
+                path: projectPath("/dashboards"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ChartLine,
+                label: "Dashboards",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {

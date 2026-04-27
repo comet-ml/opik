@@ -76,8 +76,23 @@ export const PromptDiffPair: React.FC<{
     diffTemplate ?? diffPrompt?.requested_version?.template ?? "";
   const changed = baseText !== diffText;
   const commitsChanged = baseCommit !== diffCommit;
+  const hasBase = !!baseCommit || baseTemplate !== undefined;
+  const hasDiff = !!diffCommit || diffTemplate !== undefined;
 
   const renderDiffContent = (text: string, isBase: boolean) => {
+    if (isBase ? !hasDiff : !hasBase) {
+      return (
+        <div
+          className={cn(
+            "comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border p-2 text-sm",
+            isBase ? SIDE_STYLES.base : SIDE_STYLES.diff,
+          )}
+        >
+          {text || "(empty)"}
+        </div>
+      );
+    }
+
     if (!changed) {
       return (
         <div className="comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-2 text-sm text-muted-foreground">
@@ -96,21 +111,23 @@ export const PromptDiffPair: React.FC<{
   return (
     <>
       <TableCell className="w-1/2 py-3 pr-2 align-top">
-        {baseCommit ? (
+        {hasBase ? (
           <div className="flex flex-col gap-1">
-            <Tag
-              className={cn(
-                "flex w-fit items-center gap-1",
-                commitsChanged &&
-                  "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
-              )}
-              variant="gray"
-              size="sm"
-              title={baseCommit}
-            >
-              <GitCommitVertical className="size-3.5 shrink-0" />
-              {baseCommit.slice(0, 8)}
-            </Tag>
+            {baseCommit && (
+              <Tag
+                className={cn(
+                  "flex w-fit items-center gap-1",
+                  commitsChanged &&
+                    "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
+                )}
+                variant="gray"
+                size="sm"
+                title={baseCommit}
+              >
+                <GitCommitVertical className="size-3.5 shrink-0" />
+                {baseCommit.slice(0, 8)}
+              </Tag>
+            )}
             {renderDiffContent(baseText, true)}
           </div>
         ) : (
@@ -118,21 +135,23 @@ export const PromptDiffPair: React.FC<{
         )}
       </TableCell>
       <TableCell className="w-1/2 py-3 pl-2 align-top">
-        {diffCommit ? (
+        {hasDiff ? (
           <div className="flex flex-col gap-1">
-            <Tag
-              className={cn(
-                "flex w-fit items-center gap-1",
-                commitsChanged &&
-                  "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
-              )}
-              variant="gray"
-              size="sm"
-              title={diffCommit}
-            >
-              <GitCommitVertical className="size-3.5 shrink-0" />
-              {diffCommit.slice(0, 8)}
-            </Tag>
+            {diffCommit && (
+              <Tag
+                className={cn(
+                  "flex w-fit items-center gap-1",
+                  commitsChanged &&
+                    "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
+                )}
+                variant="gray"
+                size="sm"
+                title={diffCommit}
+              >
+                <GitCommitVertical className="size-3.5 shrink-0" />
+                {diffCommit.slice(0, 8)}
+              </Tag>
+            )}
             {renderDiffContent(diffText, false)}
           </div>
         ) : (

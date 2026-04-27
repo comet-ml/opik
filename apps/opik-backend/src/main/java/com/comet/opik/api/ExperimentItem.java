@@ -1,6 +1,5 @@
 package com.comet.opik.api;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,7 +58,8 @@ public record ExperimentItem(
                 ExperimentItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) VisibilityMode traceVisibilityMode,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String description,
-        @JsonIgnore ExecutionPolicy executionPolicy,
+        @JsonView({
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) ExecutionPolicy executionPolicy,
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<AssertionResult> assertionResults,
         @JsonView({

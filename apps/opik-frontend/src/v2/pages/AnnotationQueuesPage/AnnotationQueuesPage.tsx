@@ -38,7 +38,7 @@ import AnnotationQueueRowActionsCell from "@/v2/pages-shared/annotation-queues/A
 import AnnotationQueuesActionsPanel from "@/v2/pages-shared/annotation-queues/AnnotationQueuesActionsPanel";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAnnotationQueuesLightUrl from "/images/empty-annotation-queues-light.svg";
 import emptyAnnotationQueuesDarkUrl from "/images/empty-annotation-queues-dark.svg";
 
@@ -409,9 +409,13 @@ export const AnnotationQueuesPage: React.FC = () => {
           description={
             "Get started by creating a queue for human review.\nOrganize traces and threads, label outputs, and gather feedback to improve performance."
           }
-          primaryActionLabel="Create your first queue"
-          onPrimaryAction={handleNewQueue}
-          docsUrl={buildDocsUrl("/evaluation/annotation_queues")}
+          primaryActionLabel={
+            canCreateAnnotationQueues ? "Create your first queue" : undefined
+          }
+          onPrimaryAction={
+            canCreateAnnotationQueues ? handleNewQueue : undefined
+          }
+          docsUrl={buildDocsUrl("/evaluation/advanced/annotation_queues")}
         />
       ) : (
         <>

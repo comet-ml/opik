@@ -49,8 +49,10 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces },
+    permissions: { canDeleteTraces, canTagTrace },
   } = usePermissions();
+
+  const canManageTags = type === TRACE_DATA_TYPE.spans || canTagTrace;
 
   const showEvaluate =
     type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans;
@@ -100,14 +102,16 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           confirmButtonVariant="destructive"
         />
       )}
-      <AddTagDialog
-        key={`tag-${resetKeyRef.current}`}
-        rows={selectedRows}
-        open={open === 3}
-        setOpen={setOpen}
-        projectId={projectId}
-        type={type}
-      />
+      {canManageTags && (
+        <AddTagDialog
+          key={`tag-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 3}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={type}
+        />
+      )}
       {enableEvaluate && (
         <RunEvaluationDialog
           key={`evaluation-${resetKeyRef.current}`}
@@ -127,20 +131,22 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
         buttonVariant={buttonVariant}
       />
-      <TooltipWrapper content="Manage tags">
-        <Button
-          variant={buttonVariant}
-          size="sm"
-          onClick={() => {
-            setOpen(3);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Tag className="mr-1.5 size-3.5" />
-          <span>Manage tags</span>
-        </Button>
-      </TooltipWrapper>
+      {canManageTags && (
+        <TooltipWrapper content="Manage tags">
+          <Button
+            variant={buttonVariant}
+            size="sm"
+            onClick={() => {
+              setOpen(3);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <Tag className="mr-1.5 size-3.5" />
+            <span>Manage tags</span>
+          </Button>
+        </TooltipWrapper>
+      )}
       {enableEvaluate && (
         <EvaluateButton
           isNoRules={!rules?.length}

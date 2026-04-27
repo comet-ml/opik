@@ -8,7 +8,7 @@ const usePromptModelDisplay = (
   provider: string | null | undefined,
   model: string | null | undefined,
 ) => {
-  const { getProviderModels } = useLLMProviderModelsData();
+  const { providerModels } = useLLMProviderModelsData();
 
   const ProviderIcon = useMemo(() => {
     if (!provider) return null;
@@ -20,9 +20,9 @@ const usePromptModelDisplay = (
 
   const modelLabel = useMemo(() => {
     if (!model || !provider) return model ?? null;
-    const models = getProviderModels()[provider as COMPOSED_PROVIDER_TYPE];
+    const models = providerModels[provider as COMPOSED_PROVIDER_TYPE];
     return models?.find((m) => m.value === model)?.label ?? model;
-  }, [model, provider, getProviderModels]);
+  }, [model, provider, providerModels]);
 
   return { ProviderIcon, modelLabel };
 };

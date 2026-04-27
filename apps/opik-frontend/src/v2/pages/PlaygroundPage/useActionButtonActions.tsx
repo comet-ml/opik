@@ -14,9 +14,10 @@ import {
   DatasetItem,
   DATASET_TYPE,
   EVALUATION_METHOD,
-  EXPERIMENT_STATUS,
   ExperimentsCompare,
 } from "@/types/datasets";
+import { isExperimentTerminal } from "@/lib/experiments";
+import { isItemScored } from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/useTestSuitePromptResults";
 import { LogExperiment } from "@/types/playground";
 import useRunExperimentExecution from "@/api/playground/useRunExperimentExecution";
 import usePlaygroundStore, {
@@ -325,39 +326,55 @@ const useActionButtonActions = ({
             controller,
             promptId: scope?.scopedPromptIds?.[0] ?? "",
           });
-          const data = await getCompareExperimentsList(
-            { signal: controller.signal },
-            {
-              workspaceName,
-              datasetId: curDatasetId,
-              experimentsIds: experimentIds,
-              truncate: true,
-              size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
-              page: 1,
-            },
+
+          const [data, ...experimentResults] = await Promise.all([
+            getCompareExperimentsList(
+              { signal: controller.signal },
+              {
+                workspaceName,
+                datasetId: curDatasetId,
+                experimentsIds: experimentIds,
+                truncate: true,
+                size: COMPARE_EXPERIMENTS_MAX_PAGE_SIZE,
+                page: 1,
+              },
+            ),
+            ...experimentIds.map((id) =>
+              getExperimentById(
+                { signal: controller.signal },
+                { experimentId: id },
+              ),
+            ),
+          ]);
+
+          const experimentsFinished = experimentResults.every((exp) =>
+            isExperimentTerminal(exp?.status),
           );
 
           const rows: ExperimentsCompare[] = data?.content ?? [];
-          const totalItems = (data?.total ?? 0) * experimentIds.length;
 
           let scoredItems = 0;
+          let totalExperimentItems = 0;
 
           for (const row of rows) {
             const experimentItems = row.experiment_items ?? [];
+            const noEvaluators = (row.evaluators?.length ?? 0) === 0;
+
             for (const ei of experimentItems) {
-              if (ei.status != null) {
+              totalExperimentItems++;
+              if (noEvaluators || isItemScored(ei)) {
                 scoredItems++;
               }
             }
           }
 
-          if (!isScoped && totalItems > 0) {
-            setProgress(scoredItems, totalItems);
+          if (!isScoped && totalExperimentItems > 0) {
+            setProgress(scoredItems, totalExperimentItems);
           }
 
-          if (totalItems > 0 && scoredItems >= totalItems) {
+          if (experimentsFinished) {
             if (!isScoped) {
-              setProgress(totalItems, totalItems);
+              setProgress(totalExperimentItems, totalExperimentItems);
               setTimeout(() => resetProgress(), 3000);
             }
             finishPollScope(scope);
@@ -382,7 +399,7 @@ const useActionButtonActions = ({
         }
       };
 
-      setTimeout(poll, ASSERTION_POLL_INTERVAL_MS);
+      poll();
     },
     [
       workspaceName,
@@ -452,13 +469,26 @@ const useActionButtonActions = ({
             setProgress(Math.min(totalTraces, totalItems), totalItems);
           }
 
-          const allDone = results.every(
-            (exp) =>
-              exp?.status === EXPERIMENT_STATUS.COMPLETED ||
-              exp?.status === EXPERIMENT_STATUS.CANCELLED,
+          const allExperimentsFinished = results.every((exp) =>
+            isExperimentTerminal(exp?.status),
           );
 
-          if (allDone) {
+          if (allExperimentsFinished) {
+            // Assertions already done — skip Step 2, finish immediately
+            if (!isScoped) {
+              setProgress(totalItems, totalItems);
+              setTimeout(() => resetProgress(), 3000);
+            }
+            finishPollScope(scope);
+            queryClient.invalidateQueries({ queryKey: ["experiments"] });
+            queryClient.invalidateQueries({
+              queryKey: [COMPARE_EXPERIMENTS_KEY],
+            });
+            return;
+          }
+
+          const allTracesCollected = totalTraces >= totalItems;
+          if (allTracesCollected) {
             if (!isScoped) {
               setProgress(totalItems, totalItems);
               setProgressPhase("evaluating");
@@ -485,6 +515,7 @@ const useActionButtonActions = ({
     [
       setProgress,
       setProgressPhase,
+      resetProgress,
       finishPollScope,
       handlePollTimeout,
       queryClient,

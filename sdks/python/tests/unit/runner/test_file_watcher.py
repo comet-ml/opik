@@ -16,15 +16,15 @@ class TestFileWatcher:
 
     def test_run__py_change__triggers_callback(self, tmp_path: Path) -> None:
         cb = MagicMock()
-        watcher = FileWatcher(tmp_path, cb, debounce_seconds=0.3)
+        watcher = FileWatcher(tmp_path, cb, debounce_seconds=0.1)
         shutdown = threading.Event()
 
         t = threading.Thread(target=watcher.run, args=(shutdown,), daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.15)
         (tmp_path / "test.py").write_text("hello")
-        time.sleep(1.0)
+        time.sleep(0.3)
 
         shutdown.set()
         t.join(timeout=5)
@@ -39,15 +39,15 @@ class TestFileWatcher:
         subdir = tmp_path / "src"
         subdir.mkdir()
 
-        watcher = FileWatcher(subdir, cb, debounce_seconds=0.3)
+        watcher = FileWatcher(subdir, cb, debounce_seconds=0.1)
         shutdown = threading.Event()
 
         t = threading.Thread(target=watcher.run, args=(shutdown,), daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.15)
         (subdir / "notes.txt").write_text("ignored")
-        time.sleep(1.0)
+        time.sleep(0.3)
 
         shutdown.set()
         t.join(timeout=5)
@@ -62,22 +62,22 @@ class TestFileWatcher:
         t = threading.Thread(target=watcher.run, args=(shutdown,), daemon=True)
         t.start()
 
-        time.sleep(0.3)
+        time.sleep(0.1)
         shutdown.set()
         t.join(timeout=5)
         assert not t.is_alive()
 
     def test_run__callback_error__does_not_crash(self, tmp_path: Path) -> None:
         cb = MagicMock(side_effect=RuntimeError("boom"))
-        watcher = FileWatcher(tmp_path, cb, debounce_seconds=0.3)
+        watcher = FileWatcher(tmp_path, cb, debounce_seconds=0.1)
         shutdown = threading.Event()
 
         t = threading.Thread(target=watcher.run, args=(shutdown,), daemon=True)
         t.start()
 
-        time.sleep(0.5)
+        time.sleep(0.15)
         (tmp_path / "test.py").write_text("trigger")
-        time.sleep(1.0)
+        time.sleep(0.3)
 
         shutdown.set()
         t.join(timeout=5)

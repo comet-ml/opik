@@ -10,7 +10,7 @@ import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBod
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import GeneralDatasetsTab from "./GeneralDatasetsTab/GeneralDatasetsTab";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";

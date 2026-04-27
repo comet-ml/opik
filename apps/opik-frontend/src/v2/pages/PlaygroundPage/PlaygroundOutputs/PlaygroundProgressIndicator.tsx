@@ -6,8 +6,8 @@ import {
 } from "@/store/PlaygroundStore";
 
 const PHASE_LABELS: Record<string, string> = {
-  running: "Running",
-  evaluating: "Evaluating assertions",
+  running: "Step 1: Gathering LLM output",
+  evaluating: "Step 2: Evaluating assertions",
 };
 
 const PlaygroundProgressIndicator: React.FC = () => {

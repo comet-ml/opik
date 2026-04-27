@@ -4,6 +4,7 @@ import langchain_core.messages
 import json
 import pydantic
 import opik
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_STRING,
@@ -17,7 +18,8 @@ from ...testlib import (
 def test__langchain_chat_model__happyflow():
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
-            model_name="gpt-4o",
+            model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=False,
     )
@@ -38,7 +40,8 @@ def test__langchain_chat_model__happyflow():
 def test__langchain_chat_model__response_format_is_used():
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
-            model_name="gpt-4o",
+            model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=False,
     )
@@ -59,7 +62,8 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
 ):
     tested = langchain_chat_model.LangchainChatModel(
         chat_model=langchain_openai.ChatOpenAI(
-            model_name="gpt-4o",
+            model_name=llm_constants.OPENAI_GPT_NANO,
+            reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
         ),
         track=True,
     )
@@ -91,7 +95,7 @@ def test__langchain_chat_model__track_enabled__span_and_trace_created_by_OpikTra
                 last_updated_at=ANY_BUT_NONE,
                 spans=[],
                 provider="openai",
-                model=ANY_STRING.starting_with("gpt-4o"),
+                model=ANY_STRING.starting_with(llm_constants.OPENAI_GPT_NANO),
                 source="sdk",
             ),
         ],

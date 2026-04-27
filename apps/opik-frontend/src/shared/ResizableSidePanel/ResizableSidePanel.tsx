@@ -314,7 +314,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
             <div className="relative flex size-full">
               <div
                 className={cn(
-                  "absolute inset-x-0 top-0 flex h-[47px] items-center overflow-hidden pr-5",
+                  "absolute inset-x-0 top-0 flex h-[47px] items-center overflow-hidden pr-4",
                   hideDefaultControls ? "pl-2" : "pl-6",
                 )}
               >

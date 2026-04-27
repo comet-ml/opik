@@ -5,7 +5,7 @@ import UserCommentForm from "@/shared/UserComment/UserCommentForm";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { useSMEFlow } from "@/v1/pages/SMEFlowPage/SMEFlowContext";
 import { SME_ACTION, SME_HOTKEYS } from "@/v1/pages/SMEFlowPage/hotkeys";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -33,7 +33,7 @@ const CommentAndScoreViewer: React.FC = () => {
   } = useSMEFlow();
 
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -81,7 +81,7 @@ const CommentAndScoreViewer: React.FC = () => {
 
   return (
     <div className="pl-4">
-      {canWriteComments && (
+      {canAnnotateTraceSpanThread && (
         <>
           <div className="flex items-center justify-between gap-1 pb-2">
             <span className="comet-body-s-accented truncate">Comment</span>

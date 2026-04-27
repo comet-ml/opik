@@ -35,6 +35,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
+  const [hasAllRequiredParams, setHasAllRequiredParams] = useState(false);
   const [tracePanelSpanId, setTracePanelSpanId] = useState<
     string | null | undefined
   >("");
@@ -170,16 +171,30 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
                   Stop run
                 </Button>
               ) : (
-                <Button
-                  size="2xs"
-                  onClick={handleSubmitForm}
-                  disabled={createJobMutation.isPending || !isReady}
+                <TooltipWrapper
+                  content={
+                    !hasAllRequiredParams
+                      ? "Some required parameters are missing"
+                      : undefined
+                  }
                 >
-                  <Play className="mr-1 size-3.5" />
-                  Run
-                  <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
-                  <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
-                </Button>
+                  <span>
+                    <Button
+                      size="2xs"
+                      onClick={handleSubmitForm}
+                      disabled={
+                        createJobMutation.isPending ||
+                        !isReady ||
+                        !hasAllRequiredParams
+                      }
+                    >
+                      <Play className="mr-1 size-3.5" />
+                      Run
+                      <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+                      <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
+                    </Button>
+                  </span>
+                </TooltipWrapper>
               )}
               <Button variant="ghost" size="2xs" onClick={handleReset}>
                 <RotateCcw className="mr-1 size-3.5" />
@@ -225,6 +240,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
               resetKey={resetKey}
+              onValidityChange={setHasAllRequiredParams}
             />
           </ResizablePanel>
 

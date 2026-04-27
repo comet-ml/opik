@@ -120,7 +120,11 @@ const BaseOptimizationConfigSchema = z.object({
     .refine((messages) => !messages.some(isMessageEmpty), {
       message: "All messages must have content",
     }),
-  modelName: z.nativeEnum(PROVIDER_MODEL_TYPE),
+  // Accept any string, not just the static PROVIDER_MODEL_TYPE enum: models
+  // now come from the backend registry and can include ids that weren't in
+  // the FE enum at release time (see OPIK-5021). The enum itself is going
+  // away in OPIK-5022.
+  modelName: z.string().min(1, "Model is required"),
   modelConfig: z
     .object({
       temperature: z.number().optional(),
@@ -245,7 +249,10 @@ export const convertFormDataToStudioConfig = (
       messages,
     },
     llm_model: {
-      model: formData.modelName,
+      // Registry can return ids that aren't members of PROVIDER_MODEL_TYPE.
+      // Cast intentionally — StudioLlmModel.model is typed against the
+      // deprecated enum (OPIK-5022 removes it).
+      model: formData.modelName as PROVIDER_MODEL_TYPE,
       parameters: formData.modelConfig,
     },
     evaluation: {

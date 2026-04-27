@@ -91,6 +91,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_O3_PRO = "o3-pro",
   GPT_O4_MINI = "o4-mini",
   GPT_O4_MINI_DEEP_RESEARCH = "o4-mini-deep-research",
+  GPT_5_5 = "gpt-5.5",
+  GPT_5_5_PRO = "gpt-5.5-pro",
 
   //  <----- anthropic
   CLAUDE_SONNET_3_7 = "claude-3-7-sonnet-20250219",
@@ -161,6 +163,7 @@ export enum PROVIDER_MODEL_TYPE {
   BAIDU_ERNIE_4_5_300B_A47B = "baidu/ernie-4.5-300b-a47b",
   BAIDU_ERNIE_4_5_VL_28B_A3B = "baidu/ernie-4.5-vl-28b-a3b",
   BAIDU_ERNIE_4_5_VL_424B_A47B = "baidu/ernie-4.5-vl-424b-a47b",
+  BAIDU_QIANFAN_OCR_FAST_FREE = "baidu/qianfan-ocr-fast:free",
   BYTEDANCE_SEED_SEED_1_6 = "bytedance-seed/seed-1.6",
   BYTEDANCE_SEED_SEED_1_6_FLASH = "bytedance-seed/seed-1.6-flash",
   BYTEDANCE_SEED_SEED_2_0_LITE = "bytedance-seed/seed-2.0-lite",
@@ -196,6 +199,8 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2 = "deepseek/deepseek-v3.2",
   DEEPSEEK_DEEPSEEK_V3_2_EXP = "deepseek/deepseek-v3.2-exp",
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
+  DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
+  DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
   GOOGLE_GEMINI_2_0_FLASH_001 = "google/gemini-2.0-flash-001",
@@ -239,6 +244,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
+  INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
@@ -413,6 +419,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_4_MINI = "openai/gpt-5.4-mini",
   OPENAI_GPT_5_4_NANO = "openai/gpt-5.4-nano",
   OPENAI_GPT_5_4_PRO = "openai/gpt-5.4-pro",
+  OPENAI_GPT_5_5 = "openai/gpt-5.5",
+  OPENAI_GPT_5_5_PRO = "openai/gpt-5.5-pro",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b",
@@ -522,6 +530,7 @@ export enum PROVIDER_MODEL_TYPE {
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
+  TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",
   THEDRUMMER_ROCINANTE_12B = "thedrummer/rocinante-12b",
@@ -624,6 +633,12 @@ export interface ProviderKeyConfiguration {
   models?: string;
   /** For free model: the display label showing actual provider/model (e.g., "openai/gpt-4o-mini") */
   model_label?: string;
+  /** Custom LLM (OPIK-4551): JSON-encoded Map<string,string> appended to every outbound request URL */
+  url_query_params?: string;
+  /** Custom LLM (OPIK-4551): custom auth header name; sent alongside Authorization: Bearer unless suppressed */
+  auth_header_name?: string;
+  /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
+  suppress_default_auth?: string;
 }
 
 export interface BaseProviderKey {

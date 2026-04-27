@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { FoldVertical, UnfoldVertical } from "lucide-react";
 import uniq from "lodash/uniq";
@@ -39,8 +39,9 @@ import { TREE_FILTER_COLUMNS } from "@/v2/pages-shared/traces/TraceDetailsPanel/
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { GuardrailResult } from "@/types/guardrails";
-import { cn, getJSONPaths } from "@/lib/utils";
+import { getJSONPaths } from "@/lib/utils";
 import { getSpanTypeFilterConfig } from "@/v2/pages-shared/traces/spanTypeFilter";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 // Left toolbar — sits above the tree panel
 type TraceTreeToolbarProps = {
@@ -69,10 +70,6 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   const { toggleExpandAll, expandedTreeRows, fullExpandedSet } =
     useTreeDetailsStore();
   const isAllExpanded = expandedTreeRows.size === fullExpandedSet.size;
-
-  const [isSearchExpanded, setIsSearchExpanded] = useState(
-    Boolean(search && search.length),
-  );
 
   const hasSearch = Boolean(search && search.length);
   const hasFilter = Boolean(filters.length);
@@ -187,18 +184,12 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
   );
 
   return (
-    <div className="flex h-10 shrink-0 items-center justify-between border-b bg-muted/50 px-4">
-      {!isSearchExpanded && (
+    <div className="flex h-10 shrink-0 items-center border-b bg-muted/50 px-4">
+      <div className="relative flex flex-1 items-center">
         <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
           Spans ({spanCount})
         </span>
-      )}
-      <div
-        className={cn(
-          "flex items-center gap-1 text-foreground",
-          isSearchExpanded && "w-full",
-        )}
-      >
+        <div className="flex-auto" />
         <ExpandableSearchInput
           value={search}
           placeholder="Search by all fields"
@@ -206,8 +197,10 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
           disabled={isSpansLazyLoading}
           buttonVariant="ghost"
           tooltip="Search spans"
-          onExpandedChange={setIsSearchExpanded}
+          overlayExpand
         />
+      </div>
+      <div className="flex items-center gap-1 text-foreground">
         <FiltersButton
           columns={filtersColumnData}
           filters={filters}
@@ -262,14 +255,18 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
 }) => {
+  const {
+    permissions: { canAnnotateTraceSpanThread },
+  } = usePermissions();
+
   useHotkeys(
     "a",
     (e) => {
       e.preventDefault();
       setActiveSection(DetailsActionSection.Annotate);
     },
-    { enableOnFormTags: false },
-    [setActiveSection],
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
   );
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
@@ -299,15 +296,17 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
         buttonVariant="ghost"
         buttonSize="2xs"
       />
-      <DetailsActionSectionToggle
-        activeSection={null}
-        setActiveSection={setActiveSection}
-        layoutSize={ButtonLayoutSize.Large}
-        type={DetailsActionSection.Annotate}
-        variant="ghost"
-        buttonSize="2xs"
-        hotkey="A"
-      />
+      {canAnnotateTraceSpanThread && (
+        <DetailsActionSectionToggle
+          activeSection={null}
+          setActiveSection={setActiveSection}
+          layoutSize={ButtonLayoutSize.Large}
+          type={DetailsActionSection.Annotate}
+          variant="ghost"
+          buttonSize="2xs"
+          hotkey="A"
+        />
+      )}
     </div>
   );
 };

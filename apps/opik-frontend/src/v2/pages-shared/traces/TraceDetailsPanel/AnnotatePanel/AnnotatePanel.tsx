@@ -1,7 +1,6 @@
 import React, { useCallback, useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { isObjectSpan } from "@/lib/traces";
-import { usePermissions } from "@/contexts/PermissionsContext";
 import FeedbackScoreTag from "@/shared/FeedbackScoreTag/FeedbackScoreTag";
 import {
   DetailsActionSectionLayout,
@@ -38,10 +37,6 @@ const AnnotatePanel: React.FC<AnnotatePanelProps> = ({
   activeSection,
   setActiveSection,
 }) => {
-  const {
-    permissions: { canAnnotateTraceSpanThread },
-  } = usePermissions();
-
   const spanId = isSpan(data) ? data.id : undefined;
   const isTrace = !spanId;
   const hasFeedbackScores = Boolean(data.feedback_scores?.length);
@@ -147,21 +142,19 @@ const AnnotatePanel: React.FC<AnnotatePanelProps> = ({
             </div>
           </>
         )}
-        {canAnnotateTraceSpanThread && (
-          <FeedbackScoresEditor
-            key={`${traceId}-${spanId}`}
-            feedbackScores={filteredFeedbackScores}
-            onUpdateFeedbackScore={onUpdateFeedbackScore}
-            onDeleteFeedbackScore={onDeleteFeedbackScore}
-            className="mt-4 px-4"
-            header={<FeedbackScoresEditor.Header title="Human review" />}
-            footer={
-              <FeedbackScoresEditor.Footer
-                entityCopy={isTrace ? "traces" : "spans"}
-              />
-            }
-          />
-        )}
+        <FeedbackScoresEditor
+          key={`${traceId}-${spanId}`}
+          feedbackScores={filteredFeedbackScores}
+          onUpdateFeedbackScore={onUpdateFeedbackScore}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          className="mt-4 px-4"
+          header={<FeedbackScoresEditor.Header title="Human review" />}
+          footer={
+            <FeedbackScoresEditor.Footer
+              entityCopy={isTrace ? "traces" : "spans"}
+            />
+          }
+        />
 
         <Separator className="m-4 w-auto" />
 

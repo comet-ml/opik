@@ -160,7 +160,13 @@ This workflow will:
 
 - **Title**: Format as `[{TICKET-NUMBER}] [{COMPONENT}] {TYPE}: {TASK-SUMMARY}` extracted from branch description and change analysis
   - Examples: `[OPIK-2180] [DOCS] docs: add cursor git workflow rule`, `[OPIK-1234] [BE] feat(api): add trace request validation endpoint`
-- **Description**: Read the PR template from `.github/pull_request_template.md` at runtime and use it as the source of truth. Unless specifically requested, **never** include customer names in the description of the PR as they should not be public.
+- **Description**: Read the PR template from `.github/pull_request_template.md` at runtime and use it as the source of truth. The PR description is public on GitHub — **never** include any of the following unless the user explicitly requests it:
+  - Customer or client names
+  - Internal / private domains and hostnames (anything not publicly routable)
+  - Internal URLs (monitoring dashboards, log explorers, staging / preview deployments, internal wikis, chat threads, issue trackers other than the Jira `OPIK-####` key)
+  - IPs, storage bucket names, credentials, or any secret
+
+  When summarizing changes, describe behavior in generic terms ("a customer reported…", "in a production deployment…") rather than naming the source. Redact screenshots or log excerpts before including them. For anything that needs private context, reference the Jira ticket instead of embedding it here.
   ```bash
   # Read the actual PR template — do NOT hardcode it
   cat .github/pull_request_template.md

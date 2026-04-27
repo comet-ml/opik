@@ -10,7 +10,7 @@ import { deserializeValue } from "@/typeHelpers";
 import { flushAll } from "@/utils/flushAll";
 import { logger } from "@/utils/logger";
 import { generateId } from "@/utils/generateId";
-import { getAll } from "./registry";
+import { getAll, ParamPresence } from "./registry";
 import { runWithJobContext } from "./context";
 import { getAndClearJobLogs } from "./prefixedOutput";
 
@@ -225,7 +225,13 @@ export class InProcessRunnerLoop {
     const blueprintName = job.blueprintName;
 
     const entry = getAll().get(agentName)!;
-    const args = entry.params.map((p) => castInputValue(inputs[p.name], p.type));
+    const args = entry.params.map((p) => {
+      const value = inputs[p.name];
+      if (p.presence === ParamPresence.Optional && value === undefined && !(p.name in inputs)) {
+        return undefined;
+      }
+      return castInputValue(value, p.type);
+    });
 
     const run = () =>
       runWithJobContext({ traceId, jobId }, () => {
