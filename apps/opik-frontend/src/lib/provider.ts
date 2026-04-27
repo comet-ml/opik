@@ -9,7 +9,10 @@ import {
   LEGACY_CUSTOM_PROVIDER_NAME,
   PROVIDERS,
 } from "@/constants/providers";
-import { PROVIDER_MODELS } from "@/hooks/useLLMProviderModelsData";
+import {
+  getLatestProviderModelsSnapshot,
+  KNOWN_PROVIDER_TYPES,
+} from "@/lib/modelRegistryStore";
 
 export const getProviderDisplayName = (providerKey: ProviderObject) => {
   const { provider, provider_name } = providerKey;
@@ -91,8 +94,16 @@ export const convertCustomProviderModel = (
 export const getProviderFromModel = (
   model: PROVIDER_MODEL_TYPE,
 ): PROVIDER_TYPE => {
-  for (const [providerType, models] of Object.entries(PROVIDER_MODELS)) {
-    if (models.some((m) => m.value === model)) {
+  const snapshot = getLatestProviderModelsSnapshot();
+  for (const [providerType, models] of Object.entries(snapshot)) {
+    // Only trust keys that match a known PROVIDER_TYPE. A YAML-backed
+    // provider key we don't understand (e.g. future provider added CDN-side
+    // before the FE ships matching metadata) shouldn't be returned as if it
+    // were a valid enum — callers read PROVIDERS[providerType] downstream.
+    if (
+      KNOWN_PROVIDER_TYPES.has(providerType) &&
+      models.some((m) => m.value === model)
+    ) {
       return providerType as PROVIDER_TYPE;
     }
   }
