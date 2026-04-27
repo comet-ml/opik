@@ -402,13 +402,13 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("Add span comment returns 403 when COMMENT_WRITE permission is denied")
+        @DisplayName("Add span comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
         void addSpanCommentReturnsForbiddenWhenPermissionDenied() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
 
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.COMMENT_WRITE.getValue());
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
 
             try (var response = spanResourceClient.callAddSpanComment(
                     UUID.randomUUID(), podamFactory.manufacturePojo(Comment.class), apiKey, workspaceName)) {

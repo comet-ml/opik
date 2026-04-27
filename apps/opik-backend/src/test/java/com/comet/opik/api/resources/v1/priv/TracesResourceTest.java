@@ -415,13 +415,13 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("Add trace comment returns 403 when COMMENT_WRITE permission is denied")
+        @DisplayName("Add trace comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
         void addTraceCommentReturnsForbiddenWhenPermissionDenied() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
 
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.COMMENT_WRITE.getValue());
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
 
             try (var response = traceResourceClient.callAddTraceComment(
                     UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
