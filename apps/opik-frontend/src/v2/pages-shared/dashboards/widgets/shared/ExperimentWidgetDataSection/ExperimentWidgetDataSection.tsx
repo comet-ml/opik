@@ -41,7 +41,7 @@ const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   },
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: "Item source",
     type: COLUMN_TYPE.string,
     disposable: true,
   },

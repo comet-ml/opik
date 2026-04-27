@@ -14,7 +14,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import PassRateCell from "@/shared/DataTableCells/PassRateCell";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ItemSourceCell from "@/v2/pages/ExperimentsPage/GeneralDatasetsTab/ItemSourceCell";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -57,7 +57,7 @@ export const PREDEFINED_COLUMNS: ColumnData<Experiment>[] = [
     id: COLUMN_DATASET_ID,
     label: "Item source",
     type: COLUMN_TYPE.string,
-    cell: ResourceCell as never,
+    cell: ItemSourceCell as never,
     customMeta: {
       nameKey: "dataset_name",
       idKey: "dataset_id",

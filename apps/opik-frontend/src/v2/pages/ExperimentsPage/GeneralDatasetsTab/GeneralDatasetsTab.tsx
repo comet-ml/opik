@@ -569,8 +569,14 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   undefined,
                 );
 
+                const groupField = groups[index]?.field;
+                const groupLabel =
+                  groupField === COLUMN_DATASET_ID
+                    ? "Item source"
+                    : calculateGroupLabel(groups[index]);
+
                 return {
-                  label: calculateGroupLabel(groups[index]),
+                  label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
                       ? "Deleted test suite"

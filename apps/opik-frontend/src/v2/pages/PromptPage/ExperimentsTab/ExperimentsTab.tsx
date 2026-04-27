@@ -20,7 +20,7 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import ResourceCell from "@/shared/DataTableCells/ResourceCell";
+import ItemSourceCell from "@/v2/pages/ExperimentsPage/GeneralDatasetsTab/ItemSourceCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
@@ -207,9 +207,9 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Test suite",
+        label: "Item source",
         type: COLUMN_TYPE.string,
-        cell: ResourceCell as never,
+        cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
@@ -401,6 +401,11 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     return data?.aggregationMap ?? {};
   }, [data?.aggregationMap]);
 
+  const datasetTypeMap = useMemo(
+    () => data?.datasetTypeMap ?? {},
+    [data?.datasetTypeMap],
+  );
+
   useExperimentsAutoExpandingLogic({
     groups,
     flattenGroups,
@@ -435,6 +440,7 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
     rowSelection,
     sortedColumns,
     setSortedColumns,
+    datasetTypeMap,
   });
 
   const total = data?.total ?? 0;
