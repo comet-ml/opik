@@ -53,21 +53,33 @@ const AgentRunnerEmptyState: React.FC = () => {
                 Mark your agent as an entrypoint
               </h4>
               <p className="comet-body-xs text-muted-slate">
-                Add <code className="font-code">@opik.track(entrypoint=True)</code> to
-                your agent&apos;s main function so Opik can detect and register it.
-                You can also run <code className="font-code">/instrument</code> in the
-                Ollie sidebar to auto-instrument your agent.
+                Add{" "}
+                <code className="font-code">@opik.track(entrypoint=True)</code>{" "}
+                to your agent&apos;s main function so Opik can detect and
+                register it. You can also run{" "}
+                <code className="font-code">/instrument</code> in the Ollie
+                sidebar to auto-instrument your agent.
               </p>
               <Tabs defaultValue="python">
                 <TabsList variant="underline">
-                  <TabsTrigger value="python" variant="underline">Python</TabsTrigger>
-                  <TabsTrigger value="typescript" variant="underline">TypeScript</TabsTrigger>
+                  <TabsTrigger value="python" variant="underline">
+                    Python
+                  </TabsTrigger>
+                  <TabsTrigger value="typescript" variant="underline">
+                    TypeScript
+                  </TabsTrigger>
                 </TabsList>
                 <TabsContent value="python">
-                  <CodeSnippet title="Python" code={ENTRYPOINT_SNIPPET_PYTHON} />
+                  <CodeSnippet
+                    title="Python"
+                    code={ENTRYPOINT_SNIPPET_PYTHON}
+                  />
                 </TabsContent>
                 <TabsContent value="typescript">
-                  <CodeSnippet title="TypeScript" code={ENTRYPOINT_SNIPPET_TYPESCRIPT} />
+                  <CodeSnippet
+                    title="TypeScript"
+                    code={ENTRYPOINT_SNIPPET_TYPESCRIPT}
+                  />
                 </TabsContent>
               </Tabs>
             </div>
@@ -98,7 +110,10 @@ const AgentRunnerEmptyState: React.FC = () => {
               <p className="comet-body-xs text-muted-slate">
                 Trouble connecting?{" "}
                 <a
-                  href={buildDocsUrl("/development/agent-playground", "#troubleshooting")}
+                  href={buildDocsUrl(
+                    "/development/agent-playground",
+                    "#troubleshooting",
+                  )}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 underline hover:text-foreground"
