@@ -94,3 +94,116 @@ The `distributed_headers()` context manager accepts two parameters:
 </Note>
 
 For more details and additional examples, see the [distributed_headers context manager API reference](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/distributed_headers.html).
+
+## Distributed Traces with a Remote Service Using OpenTelemetry
+
+When the downstream service is instrumented with the standard OpenTelemetry SDK (rather than the Opik SDK), Opik provides helpers to bridge the two systems so the OTel span produced by the remote service still appears under the correct Opik trace and parent span.
+
+The bridge works through two HTTP headers carried from the client to the remote service:
+
+- `opik_trace_id` — the Opik trace the OTel span should be attached to.
+- `opik_parent_span_id` — the Opik span to use as the parent (optional).
+
+On the receiving side, the helper translates these headers into two OpenTelemetry span attributes (`opik.trace_id`, `opik.parent_span_id`) recognized by the Opik OTLP ingest endpoint. Both values must be valid UUIDs; blank or malformed values are dropped with a warning so a misconfigured caller never silently corrupts the parent linkage.
+
+### Client: emitting distributed-trace headers
+
+<Tabs>
+<Tab title="Python" value="python">
+
+```python title="client.py"
+import requests
+from opik import opik_context, track
+
+@track()
+def my_client_function(prompt: str) -> str:
+    headers = {
+        # Adds 'opik_trace_id' and 'opik_parent_span_id'
+        **opik_context.get_distributed_trace_headers(),
+    }
+    response = requests.post(
+        "http://.../generate_response",
+        headers=headers,
+        json={"prompt": prompt},
+    )
+    return response.json()
+```
+
+</Tab>
+<Tab title="TypeScript" value="typescript">
+
+```ts title="client.ts"
+import { getDistributedTraceHeaders, track } from "opik";
+
+const myClientFunction = track(
+  { name: "client" },
+  async (prompt: string) => {
+    const response = await fetch("http://.../generate_response", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Adds 'opik_trace_id' and 'opik_parent_span_id'.
+        // Returns null outside of a track() context.
+        ...(getDistributedTraceHeaders() ?? {}),
+      },
+      body: JSON.stringify({ prompt }),
+    });
+    return response.json();
+  }
+);
+```
+
+</Tab>
+</Tabs>
+
+### Remote service: attaching the headers to an OpenTelemetry span
+
+The remote service creates a span with the OpenTelemetry SDK as usual and then calls the Opik bridging helper with the incoming HTTP headers. The helper sets the `opik.trace_id` / `opik.parent_span_id` attributes on the span; once the span is exported to the Opik OTLP endpoint it is linked to the original Opik trace and parent span.
+
+<Tabs>
+<Tab title="Python" value="python">
+
+```python title="server.py"
+from fastapi import FastAPI, Request
+from opentelemetry import trace
+from opik.otel import distributed_trace
+
+app = FastAPI()
+tracer = trace.get_tracer("my-service")
+
+
+@app.post("/generate_response")
+def generate_response(request: Request) -> str:
+    with tracer.start_as_current_span("server-span") as span:
+        # Reads opik_trace_id / opik_parent_span_id from the request headers
+        # and sets the corresponding OTel span attributes.
+        distributed_trace.attach_to_parent(span, dict(request.headers))
+        # ... handle the request, set additional span attributes ...
+        return "ok"
+```
+
+</Tab>
+<Tab title="TypeScript" value="typescript">
+
+```ts title="server.ts"
+import http from "node:http";
+import { trace } from "@opentelemetry/api";
+import { attachToParent } from "opik";
+
+const tracer = trace.getTracer("my-service");
+
+const server = http.createServer((req, res) => {
+  const span = tracer.startSpan("server-span");
+  // Reads opik_trace_id / opik_parent_span_id from req.headers
+  // and sets the corresponding OTel span attributes.
+  attachToParent(span, req.headers);
+  // ... handle the request, set additional span attributes ...
+  span.end();
+  res.end("ok");
+});
+```
+
+</Tab>
+</Tabs>
+
+The remote service must be configured with an OTLP exporter pointing at the Opik backend (`/v1/private/otel/v1/traces`). See the [OpenTelemetry Python SDK](/integrations/opentelemetry-python-sdk) integration guide for a full exporter configuration example; the same endpoint is used by the OpenTelemetry JS/Node SDK.

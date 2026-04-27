@@ -134,3 +134,9 @@ if __name__ == "__main__":
 
 Using `thread_id` as a span attribute allows you to group related spans into a single conversational thread.
 Created threads can be used to evaluate multi-turn conversations as described in the [Multi-turn conversations](/evaluation/evaluate_threads) guide.
+
+## Linking OpenTelemetry spans to an existing Opik trace
+
+If a service instrumented with OpenTelemetry is invoked by another service that is already producing an Opik trace (via the Opik SDK or `@track`), you can link the OpenTelemetry spans to the existing Opik trace and parent span by propagating two HTTP headers (`opik_trace_id`, `opik_parent_span_id`) and calling the Opik bridging helper on the receiving side. The helper sets the `opik.trace_id` / `opik.parent_span_id` attributes on the OpenTelemetry span so the Opik OTLP ingest endpoint attaches the span to the right parent.
+
+For the full client/server pattern with Python and TypeScript examples, see [Distributed Traces with a Remote Service Using OpenTelemetry](/tracing/advanced/log_distributed_traces#distributed-traces-with-a-remote-service-using-opentelemetry).
