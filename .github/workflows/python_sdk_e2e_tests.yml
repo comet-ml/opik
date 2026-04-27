@@ -104,9 +104,18 @@ jobs:
             pip list
 
         - name: Run tests
+          # -n 4 + --dist=loadfile distributes whole test files across four
+          # worker processes (one file per worker). Past ~4 the gains
+          # flatten — we become tail-bound on the slowest single file and
+          # the docker-compose backend on the same runner starts to thrash.
+          # E2E isolation hinges on --dist=loadfile: the per-module project
+          # name (generate_project_name("e2e", __name__)) is only collision-
+          # free if a single file is not split across workers.
+          # -p no:benchmark silences pytest-benchmark's auto-disable warning
+          # under xdist.
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv -n 4 --dist=loadfile -p no:benchmark --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2

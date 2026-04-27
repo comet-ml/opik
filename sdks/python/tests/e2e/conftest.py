@@ -1,4 +1,3 @@
-from typing import Final
 import os
 import tempfile
 import numpy as np
@@ -10,8 +9,8 @@ from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_confi
 from opik.rest_api import core as rest_api_core
 from .. import testlib
 from ..conftest import random_chars
+from ..testlib import generate_project_name
 
-OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
 ATTACHMENT_FILE_SIZE = 2 * 1024 * 1024
 
 
@@ -23,14 +22,37 @@ def _fast_llm_judge_reasoning_effort(monkeypatch):
     monkeypatch.setattr(llm_judge_config, "DEFAULT_REASONING_EFFORT", "minimal")
 
 
-@pytest.fixture()
-def configure_e2e_tests_env():
-    with testlib.patch_environ({"OPIK_PROJECT_NAME": OPIK_E2E_TESTS_PROJECT_NAME}):
+@pytest.fixture(autouse=True, scope="module")
+def configure_e2e_tests_env(request):
+    """Patch OPIK_PROJECT_NAME for the duration of the test module.
+
+    Reads the test module's ``PROJECT_NAME`` constant (the single source
+    of truth) so the env var the SDK writes to and the constant the tests
+    verify against can never drift. Files that don't declare
+    ``PROJECT_NAME`` get a fresh per-module project name — they never
+    reference it in Python, so no comparison can fail.
+
+    Module-scoped because all tests in a file share one project under
+    ``--dist=loadfile``.
+
+    On env-var visibility: ``Opik(...)`` reads ``OPIK_PROJECT_NAME``
+    once at construction (caches it as ``self._project_name``); see
+    ``opik.api_objects.opik_client.Opik.__init__``. The patch therefore
+    only takes effect because the ``opik_client`` fixture builds a fresh
+    client per test, and the function-scoped autouse
+    ``shutdown_cached_client_after_test`` resets the global cached
+    client. ``@opik.track`` resolves the client lazily via
+    ``get_client_cached()`` at call time (not at decorator-definition
+    time), so there is no import-time capture to worry about."""
+    project_name = getattr(request.module, "PROJECT_NAME", None)
+    if project_name is None:
+        project_name = generate_project_name("e2e", request.module.__name__)
+    with testlib.patch_environ({"OPIK_PROJECT_NAME": project_name}):
         yield
 
 
 @pytest.fixture()
-def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
+def opik_client(shutdown_cached_client_after_test):
     opik_client_ = opik.api_objects.opik_client.Opik(batching=True)
 
     yield opik_client_
@@ -52,6 +74,15 @@ def dataset_name(opik_client: opik.Opik):
 def experiment_name(opik_client: opik.Opik):
     name = f"e2e-tests-experiment-{random_chars()}"
     yield name
+
+
+@pytest.fixture
+def prompt_name():
+    """Unique prompt / chat-prompt name for tests that create prompts.
+
+    Function-scoped because most tests create one prompt and assert on its
+    versions; sharing across tests would entangle version histories."""
+    yield f"e2e-tests-prompt-{random_chars()}"
 
 
 @pytest.fixture

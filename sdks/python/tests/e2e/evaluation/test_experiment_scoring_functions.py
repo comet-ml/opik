@@ -8,14 +8,16 @@ from opik.evaluation import metrics
 from opik.evaluation import test_result
 from opik.evaluation.metrics import score_result
 from .. import verifiers
+from ...testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Test that experiment scoring functions can compute and log standard deviation of metric scores."""
-    project_name = "test_project_experiment_scoring_functions_standard_deviation"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset.insert(
         [
@@ -65,7 +67,7 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
             "model_name": "test-model",
         },
         experiment_scoring_functions=[compute_std_deviation],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify experiment scores are in the result
@@ -104,7 +106,7 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         experiment_metadata={"model_name": "test-model"},
         traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify experiment scores are logged to backend by retrieving the experiment

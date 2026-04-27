@@ -5,13 +5,16 @@ from opik import id_helpers
 from opik.evaluation import metrics
 from opik.evaluation import evaluator as evaluator_module
 
+from ...testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
+
 
 def test_evaluate__with_filter_string__filters_dataset_items(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Test that evaluate correctly filters dataset items using filter_string."""
-    project_name = "test_project_evaluate_filter_string"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset_items = [
         {
@@ -58,26 +61,25 @@ def test_evaluate__with_filter_string__filters_dataset_items(
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         dataset_filter_string='data.category = "geography"',
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 2, (
         f"Expected 2 experiment items (filtered by geography category), but got {len(experiment_items_contents)}. "
         f"Experiment items: {experiment_items_contents}"
     )
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME
 
 
 def test_evaluate_optimization_trial__with_filter_string__filters_dataset_items(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Test that evaluate_optimization_trial correctly filters dataset items using filter_string."""
-    project_name = "test_project_evaluate_optimization_trial_filter_string"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset_items = [
         {
@@ -125,15 +127,15 @@ def test_evaluate_optimization_trial__with_filter_string__filters_dataset_items(
             "reference": lambda x: x["expected_model_output"]["output"],
         },
         dataset_filter_string='data.category = "math"',
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     retrieved_experiment = opik_client.get_experiment_by_name(
-        experiment_name, project_name=project_name
+        experiment_name, project_name=PROJECT_NAME
     )
     experiment_items_contents = retrieved_experiment.get_items()
     assert len(experiment_items_contents) == 1, (
         f"Expected 1 experiment item (filtered by math category), but got {len(experiment_items_contents)}. "
         f"Experiment items: {experiment_items_contents}"
     )
-    assert retrieved_experiment.project_name == project_name
+    assert retrieved_experiment.project_name == PROJECT_NAME

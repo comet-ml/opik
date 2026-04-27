@@ -6,7 +6,9 @@ from opik import exceptions
 from unittest import mock
 import pytest
 
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from ..testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def find_guardrail_span(opik_client, trace_id, project_name):
@@ -23,14 +25,14 @@ def find_guardrail_span(opik_client, trace_id, project_name):
     return span.id
 
 
-@pytest.mark.parametrize(
-    "project_name",
-    [
-        "e2e-tests-manual-project-name",
-        None,
-    ],
-)
-def test_passing_guardrails__happyflow(opik_client, project_name):
+@pytest.mark.parametrize("override_project_name", [True, False])
+def test_passing_guardrails__happyflow(opik_client, override_project_name):
+    project_name = (
+        generate_project_name("e2e", "guardrails", "override")
+        if override_project_name
+        else None
+    )
+
     # Setup
     ID_STORAGE = {}
 
@@ -71,7 +73,7 @@ def test_passing_guardrails__happyflow(opik_client, project_name):
         opik_client=opik_client,
         trace_id=ID_STORAGE["trace-id"],
         guardrails_validations=EXPECTED_TRACE_GUARDRAILS_VALIDATIONS,
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
     span_id = find_guardrail_span(opik_client, ID_STORAGE["trace-id"], project_name)
@@ -90,7 +92,7 @@ def test_passing_guardrails__happyflow(opik_client, project_name):
         name="Guardrail",
         input={"generation": generation},
         output=EXPECTED_OUTPUT,
-        project_name=project_name or OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=project_name or PROJECT_NAME,
     )
 
 
@@ -135,9 +137,7 @@ def test_failing_guardrails__happyflow(opik_client: opik.Opik):
         guardrails_validations=EXPECTED_TRACE_GUARDRAILS_VALIDATIONS,
     )
 
-    span_id = find_guardrail_span(
-        opik_client, ID_STORAGE["trace-id"], OPIK_E2E_TESTS_PROJECT_NAME
-    )
+    span_id = find_guardrail_span(opik_client, ID_STORAGE["trace-id"], PROJECT_NAME)
 
     EXPECTED_OUTPUT = {
         "guardrail_result": "failed",

@@ -4,6 +4,9 @@ from opik import opik_context
 from opik.types import BatchFeedbackScoreDict, FeedbackScoreDict
 import pytest
 from . import verifiers
+from ..testlib import generate_project_name
+
+_PROJECT_MANUAL = generate_project_name("manually-specified-project")
 
 
 def test_feedbacks_are_logged_via_trace_and_span__happyflow(opik_client: opik.Opik):
@@ -222,7 +225,7 @@ def test_feedback_scores_added_via_update_current_span_and_trace__project_specif
             ]
         )
 
-    @opik.track(project_name="manually-specified-project")
+    @opik.track(project_name=_PROJECT_MANUAL)
     def f_outer():
         ID_STORAGE["f_outer-trace-id"] = opik_context.get_current_trace_data().id
         ID_STORAGE["f_outer-span-id"] = opik_context.get_current_span_data().id
