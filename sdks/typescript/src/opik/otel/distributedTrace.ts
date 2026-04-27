@@ -1,14 +1,10 @@
 import { validate as isUuid } from "uuid";
+import {
+  OPIK_PARENT_SPAN_ID_HEADER,
+  OPIK_TRACE_ID_HEADER,
+} from "@/context";
 import { logger } from "@/utils/logger";
 import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
-
-/**
- * Header keys carrying Opik distributed trace context across service
- * boundaries. They are intentionally lowercase to match the canonical form
- * `Headers#get` returns and the way `node:http` exposes incoming headers.
- */
-export const OPIK_TRACE_ID_HEADER = "opik_trace_id";
-export const OPIK_PARENT_SPAN_ID_HEADER = "opik_parent_span_id";
 
 /**
  * Minimal structural type for an OpenTelemetry `Span`. Only the

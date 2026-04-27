@@ -37,11 +37,17 @@ export { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/
 export { activateRunner } from "@/runner/activate";
 export type { RegistryEntry, Param } from "@/runner/registry";
 
+// Distributed trace context helpers
+export {
+  OPIK_TRACE_ID_HEADER,
+  OPIK_PARENT_SPAN_ID_HEADER,
+  getDistributedTraceHeaders,
+} from "@/context";
+export type { DistributedTraceHeaders } from "@/context";
+
 // OpenTelemetry distributed trace helpers
 export {
   OpikDistributedTraceAttributes,
-  OPIK_TRACE_ID_HEADER,
-  OPIK_PARENT_SPAN_ID_HEADER,
   attachToParent,
   extractOpikDistributedTraceAttributes,
 } from "@/otel";
