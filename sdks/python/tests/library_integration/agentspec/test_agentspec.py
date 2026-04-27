@@ -15,6 +15,7 @@ from pyagentspec.tracing.events import (
 from pyagentspec.tracing.messages.message import Message
 from pyagentspec.tracing.spans import LlmGenerationSpan, ToolExecutionSpan
 from pyagentspec.tracing.trace import Trace, get_trace
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -43,7 +44,7 @@ def test_opik_span_processor_tool_and_llm_spans_are_forwarded_to_opik(
 ):
     project_name = "agentspec-integration-test"
     tool = ClientTool(name="lookup_weather")
-    llm_config = OpenAiConfig(name="demo-model", model_id="gpt-4o-mini")
+    llm_config = OpenAiConfig(name="demo-model", model_id=llm_constants.OPENAI_GPT_NANO)
     span_processor = OpikSpanProcessor(
         project_name=project_name,
         mask_sensitive_information=False,
@@ -254,7 +255,7 @@ def test_opik_span_processor_llm_response_is_preserved_when_span_ends_with_error
     flush_tracker,
 ):
     project_name = "agentspec-llm-error-test"
-    llm_config = OpenAiConfig(name="demo-model", model_id="gpt-4o-mini")
+    llm_config = OpenAiConfig(name="demo-model", model_id=llm_constants.OPENAI_GPT_NANO)
     span_processor = OpikSpanProcessor(
         project_name=project_name,
         mask_sensitive_information=False,

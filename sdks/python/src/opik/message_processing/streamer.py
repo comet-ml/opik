@@ -81,24 +81,60 @@ class Streamer:
                 )
             self._idle = True
 
-    def close(self, timeout: Optional[int]) -> bool:
+    def close(self, timeout: Optional[int] = None, *, flush: bool = True) -> bool:
         """
-        Stops data processing threads
+        Stops data processing threads.
+
+        Args:
+            timeout: Budget for draining the pipeline. Only meaningful when
+                ``flush`` is True; ignored otherwise.
+            flush: If True (default), wait for queued messages and file uploads
+                to reach the backend before closing — the historical
+                production-safe behaviour. Set False for fire-and-forget
+                teardowns where pending data can be dropped (e.g. per-test
+                cleanup in e2e tests where assertions already polled the
+                backend during the test body).
         """
         with self._lock:
-            synchronization.wait_for_done(
-                check_function=lambda: self._idle,
-                timeout=timeout,
-                sleep_time=0.1,
-            )
+            if self._drain:
+                # Already closed — make the call idempotent so atexit can fire
+                # safely after an explicit close (common in test teardown).
+                return self._message_queue.empty()
+            if flush:
+                synchronization.wait_for_done(
+                    check_function=lambda: self._idle,
+                    timeout=timeout,
+                    sleep_time=0.1,
+                )
             self._drain = True
 
-        self._batch_preprocessor.stop()  # stopping causes adding remaining batch messages to the queue
-        self._fallback_replay_manager.close()  # stopping can causes replaying of failed messages if connection is restored
-        self._fallback_replay_manager.join(timeout)
+        self._batch_preprocessor.stop(flush=flush)
+        self._fallback_replay_manager.close()
 
-        self.flush(timeout)
-        self._close_queue_consumers()
+        if flush:
+            # Wait for the replay thread, consumer queue, and file uploads to
+            # actually drain before releasing the caller. Consumers must keep
+            # running while the queue drains, so close them at the very end.
+            self._fallback_replay_manager.join(timeout)
+            self.flush(timeout)
+            self._close_queue_consumers()
+        else:
+            # Fire-and-forget: drop pending messages so the stop-signalled
+            # consumers see an empty queue and exit on their own. No joins —
+            # daemon threads can finish any in-flight HTTP request in the
+            # background without blocking teardown.
+            pending = self._message_queue.size()
+            if pending > 0:
+                LOGGER.warning(
+                    "Streamer.close(flush=False) discarding %d queued message(s) "
+                    "without flushing. Data that had not yet reached the backend "
+                    "will be lost. Use flush=True (the default) if you need "
+                    "durability — flush=False is intended for short-lived "
+                    "tests/teardowns, not production shutdown.",
+                    pending,
+                )
+            self._message_queue.clear()
+            self._close_queue_consumers()
 
         return self._message_queue.empty()
 

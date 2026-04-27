@@ -61,8 +61,6 @@ def test_evaluate__with_filter_string__filters_dataset_items(
         project_name=project_name,
     )
 
-    opik.flush_tracker()
-
     retrieved_experiment = opik_client.get_experiment_by_name(
         experiment_name, project_name=project_name
     )
@@ -129,8 +127,6 @@ def test_evaluate_optimization_trial__with_filter_string__filters_dataset_items(
         dataset_filter_string='data.category = "math"',
         project_name=project_name,
     )
-
-    opik.flush_tracker()
 
     retrieved_experiment = opik_client.get_experiment_by_name(
         experiment_name, project_name=project_name

@@ -1051,7 +1051,7 @@ class Opik:
     def get_datasets(
         self,
         max_results: int = 100,
-        sync_items: bool = True,
+        sync_items: bool = False,
         project_name: Optional[str] = None,
     ) -> List[dataset.Dataset]:
         """
@@ -1060,7 +1060,11 @@ class Opik:
         Args:
             project_name: The name of the project to which the datasets belong. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
             max_results: The maximum number of datasets to return.
-            sync_items: Whether to sync the hashes of the dataset items. This is used to deduplicate items when fetching the dataset but it can be an expensive operation.
+            sync_items: If True, eagerly preload item hashes for every returned
+                dataset — one REST roundtrip per dataset. Defaults to False: the
+                hashes are loaded lazily on the first ``dataset.insert(...)``
+                call, so callers that only inspect metadata pay nothing and
+                callers that insert still get content-hash dedup correctly.
 
         Returns:
             List[dataset.Dataset]: A list of dataset objects that match the filter string.
@@ -1630,18 +1634,28 @@ class Opik:
             project_name=experiment_public.project_name,
         )
 
-    def end(self, timeout: Optional[int] = None) -> None:
+    def end(self, timeout: Optional[int] = None, *, flush: bool = True) -> None:
         """
         End the Opik session and submit all pending messages.
 
         Args:
-            timeout (Optional[int]): The timeout for closing the streamer. Once the timeout is reached, the streamer will be closed regardless of whether all messages have been sent. If no timeout is set, the default value from the Opik configuration will be used.
+            timeout (Optional[int]): The timeout for closing the streamer. Once
+                the timeout is reached, the streamer will be closed regardless
+                of whether all messages have been sent. If no timeout is set,
+                the default value from the Opik configuration will be used.
+                Ignored when ``flush`` is False.
+            flush (bool): If True (default), wait for queued messages and file
+                uploads to reach the backend before closing — the safe choice
+                for production and atexit shutdown. If False, return as soon
+                as the stop signals have been sent, dropping anything still in
+                flight — useful in per-test teardown where assertions have
+                already polled the backend during the test body.
 
         Returns:
             None
         """
         timeout = timeout if timeout is not None else self._flush_timeout
-        self._streamer.close(timeout)
+        self._streamer.close(timeout, flush=flush)
 
     def flush(self, timeout: Optional[int] = None) -> bool:
         """

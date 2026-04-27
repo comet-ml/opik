@@ -28,14 +28,33 @@ env:
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
+  select-matrix:
+    name: Select Node version matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      node_versions: ${{ steps.pick.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/select-e2e-matrix
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/select-e2e-matrix
+        id: pick
+        with:
+          all-versions: ${{ vars.NODE_VERSIONS }}
+          match-regex: '^sdks/typescript/|^\.github/workflows/typescript_sdk_compatibility_v1_e2e_tests\.yml$'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   run-compatibility-v1-e2e:
+    needs: select-matrix
     name: TypeScript SDK Compatibility V1.x E2E Tests Node ${{matrix.node_version}}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        node_version: ${{ fromJSON(vars.NODE_VERSIONS) }}
+        node_version: ${{ fromJSON(needs.select-matrix.outputs.node_versions) }}
 
     steps:
       - name: Checkout

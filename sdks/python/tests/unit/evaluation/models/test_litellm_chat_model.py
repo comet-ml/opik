@@ -423,10 +423,15 @@ def test_litellm_chat_model_track_parameter_controls_monitoring(
 
         return decorator
 
-    litellm_integration_stub = types.ModuleType("opik.integrations.litellm")
-    litellm_integration_stub.track_completion = mock_track_completion
-    monkeypatch.setitem(
-        sys.modules, "opik.integrations.litellm", litellm_integration_stub
+    # Patch the function on the actual module. Replacing the `sys.modules`
+    # entry isn't enough because `import opik.integrations.litellm as X`
+    # resolves via the `opik.integrations` package attribute, which still
+    # points at the real module once it has been imported earlier in the
+    # suite (e.g. by any LLM-judge metric default-model instantiation).
+    import opik.integrations.litellm as _real_litellm_integration
+
+    monkeypatch.setattr(
+        _real_litellm_integration, "track_completion", mock_track_completion
     )
 
     # Create model with specified track value

@@ -6,11 +6,21 @@ import pytest
 
 import opik
 import opik.api_objects.opik_client
+from opik.evaluation.suite_evaluators.llm_judge import config as llm_judge_config
+from opik.rest_api import core as rest_api_core
 from .. import testlib
 from ..conftest import random_chars
 
 OPIK_E2E_TESTS_PROJECT_NAME: Final[str] = "e2e-tests"
 ATTACHMENT_FILE_SIZE = 2 * 1024 * 1024
+
+
+@pytest.fixture(autouse=True)
+def _fast_llm_judge_reasoning_effort(monkeypatch):
+    """Force LLMJudge's default reasoning_effort to "minimal" for the e2e
+    suite so LLM-bound assertion runs (test_test_suite, etc.) don't burn
+    time on reasoning tokens. Production default stays "low"."""
+    monkeypatch.setattr(llm_judge_config, "DEFAULT_REASONING_EFFORT", "minimal")
 
 
 @pytest.fixture()
@@ -25,7 +35,11 @@ def opik_client(configure_e2e_tests_env, shutdown_cached_client_after_test):
 
     yield opik_client_
 
-    opik_client_.end()
+    # Tests explicitly poll the backend for anything they care about during
+    # the call phase, so teardown doesn't need to wait for the upload/flush
+    # pipeline to drain. Skip `flush=True` to avoid the 5-s polling budget
+    # in `file_upload_manager.flush`.
+    opik_client_.end(flush=False)
 
 
 @pytest.fixture
@@ -42,10 +56,17 @@ def experiment_name(opik_client: opik.Opik):
 
 @pytest.fixture
 def temporary_project_name(opik_client: opik.Opik):
+    """A unique project name for the test; the project is deleted on teardown.
+
+    Tolerant of projects that were never created (e.g. test bailed before
+    creating one) or already deleted — cleanup is best-effort."""
     name = f"e2e-tests-temporary-project-{random_chars()}"
     yield name
-    project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
-    opik_client.rest_client.projects.delete_project_by_id(project_id)
+    try:
+        project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
+        opik_client.rest_client.projects.delete_project_by_id(project_id)
+    except rest_api_core.ApiError:
+        pass
 
 
 @pytest.fixture

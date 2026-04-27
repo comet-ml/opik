@@ -48,6 +48,10 @@ class UserFrustrationMetric(ConversationThreadMetric):
             maximal number of historical turns to include in each window when assessing
             the frustration of the current turn in the conversation. Default is 10.
         temperature: The temperature to use for the model. Defaults to 1e-8.
+        reasoning_effort: Optional reasoning effort level for the model. Applies to
+            providers/models that expose a reasoning_effort parameter (e.g. OpenAI
+            gpt-5 family). Supported values typically include "minimal", "low",
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics import UserFrustrationMetric
@@ -75,6 +79,7 @@ class UserFrustrationMetric(ConversationThreadMetric):
         project_name: Optional[str] = None,
         window_size: int = 10,
         temperature: float = 1e-8,
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -84,16 +89,24 @@ class UserFrustrationMetric(ConversationThreadMetric):
         self._include_reason = include_reason
         self._window_size = window_size
 
-        self._init_model(model, temperature=temperature)
+        self._init_model(
+            model, temperature=temperature, reasoning_effort=reasoning_effort
+        )
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: float,
+        reasoning_effort: Optional[str],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
+            model_kwargs: Dict[str, Any] = {"temperature": temperature}
+            if reasoning_effort is not None:
+                model_kwargs["reasoning_effort"] = reasoning_effort
             self._model = models_factory.get(
-                model_name=model, track=self.track, temperature=temperature
+                model_name=model, track=self.track, **model_kwargs
             )
 
     def score(

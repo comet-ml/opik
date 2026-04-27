@@ -79,6 +79,8 @@ public interface DatasetItemService {
 
     Mono<DatasetItem> get(UUID id);
 
+    Mono<DatasetItem> get(UUID id, UUID datasetVersionId);
+
     Mono<Void> patch(UUID id, DatasetItem item);
 
     Mono<Void> batchUpdate(DatasetItemBatchUpdate batchUpdate);
@@ -350,27 +352,26 @@ class DatasetItemServiceImpl implements DatasetItemService {
     @WithSpan
     public Mono<DatasetItem> get(@NonNull UUID id) {
         if (featureFlags.isDatasetVersioningEnabled()) {
-            // When versioning is enabled, only query the versioned table
-            return versionDao.getItemById(id)
-                    .flatMap(item -> Mono.deferContextual(ctx -> {
-                        String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
-                        Visibility visibility = ctx.get(RequestContext.VISIBILITY);
-                        // Verify dataset visibility
-                        datasetService.findById(item.datasetId(), workspaceId, visibility);
-
-                        return Mono.just(item);
-                    }))
-                    .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
+            return authorizeItem(versionDao.getItemById(id));
         }
+        return authorizeItem(dao.get(id));
+    }
 
-        // Legacy mode: only query the draft table
-        return dao.get(id)
+    @Override
+    @WithSpan
+    public Mono<DatasetItem> get(@NonNull UUID id, UUID datasetVersionId) {
+        if (featureFlags.isDatasetVersioningEnabled()) {
+            return authorizeItem(versionDao.getItemById(id, datasetVersionId));
+        }
+        return authorizeItem(dao.get(id));
+    }
+
+    private Mono<DatasetItem> authorizeItem(Mono<DatasetItem> itemMono) {
+        return itemMono
                 .flatMap(item -> Mono.deferContextual(ctx -> {
                     String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
                     Visibility visibility = ctx.get(RequestContext.VISIBILITY);
-                    // Verify dataset visibility
                     datasetService.findById(item.datasetId(), workspaceId, visibility);
-
                     return Mono.just(item);
                 }))
                 .switchIfEmpty(Mono.defer(() -> Mono.error(failWithNotFound("Dataset item not found"))));
