@@ -84,7 +84,7 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import ItemSourceCell from "@/v2/pages/ExperimentsPage/GeneralDatasetsTab/ItemSourceCell";
+import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { Skeleton } from "@/ui/skeleton";
 
@@ -579,7 +579,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                   label: groupLabel,
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted test suite"
+                      ? "Deleted dataset"
                       : label || value || "Undefined",
                 };
               }),

@@ -20,7 +20,7 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import ItemSourceCell from "@/v2/pages/ExperimentsPage/GeneralDatasetsTab/ItemSourceCell";
+import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
