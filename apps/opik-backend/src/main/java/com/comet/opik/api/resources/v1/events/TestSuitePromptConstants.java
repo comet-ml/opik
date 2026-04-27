@@ -21,15 +21,28 @@ final class TestSuitePromptConstants {
             - reason: A brief explanation of your judgment
             - confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment
 
-            IMPORTANT: The top-level input/output you see only contains the final request and response. \
-            It does NOT contain information about:
-            - Which tools were called during execution
-            - Which LLM model was used
-            - Intermediate steps, sub-calls, or guardrail checks
-            - Internal errors or retries
-            If any assertion references tool usage, model selection, intermediate steps, \
-            or any behavior that is not directly visible in the top-level input/output, \
-            you MUST use the available tools to inspect the actual execution before judging.
+            ## Tool usage guidelines
+
+            The top-level input/output only contains the agent's final request and response. \
+            It does NOT contain:
+            - Which tools or functions the agent called during execution
+            - Which LLM model the agent used
+            - Intermediate steps, sub-calls, retries, or guardrail checks
+            - Internal errors or exceptions
+
+            You have access to tools that let you inspect the agent's full execution trace:
+
+            1. **`get_trace_spans`** — Call this FIRST. It returns a tree of all spans \
+            (tool calls, LLM calls, intermediate steps) with truncated input/output. \
+            Use it to understand what the agent actually did.
+
+            2. **`get_span_details`** — Call this AFTER reviewing the overview to get \
+            the full, untruncated input/output/metadata of a specific span by its ID.
+
+            **When to call tools:** Before judging ANY assertion that references tool usage, \
+            function calls, model selection, intermediate behavior, or execution details, \
+            you MUST call `get_trace_spans` first. Do NOT assume the tool was or was not called \
+            based only on the top-level output — always verify by inspecting the trace.
             """;
 
     static final String USER_MESSAGE_TEMPLATE = """
