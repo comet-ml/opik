@@ -522,7 +522,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             )
             , experiment_items_final AS (
@@ -597,7 +597,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ), item_agg_count AS (
                 SELECT
@@ -625,7 +625,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(search)>
                 INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = eia.experiment_id
                 LEFT JOIN dataset_items_agg_resolved di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                    AND di.dataset_version_id = eas.resolved_dataset_version_id
                 WHERE multiSearchAnyCaseInsensitive(toString(COALESCE(di.data, map())), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(eia.input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(eia.output), :searchTerms)
                 <endif>
                 <endif>
@@ -636,7 +635,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT ei.dataset_item_id AS di_id
                 FROM experiment_items_final AS ei
                 LEFT JOIN dataset_items_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = ei.resolved_dataset_version_id
                 <if(search)>
                 LEFT JOIN (
                     SELECT
@@ -802,7 +800,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id  = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ),
             feedback_scores_deduped AS (
@@ -1007,7 +1005,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id  = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             )
             <if(push_top_limit)>
@@ -1015,9 +1013,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT eia_t.dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
                 <if(push_top_needs_div)>
-                INNER JOIN experiment_aggregated_scope_ids eas_t ON eas_t.id = eia_t.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di_t ON (di_t.id = eia_t.dataset_item_id OR di_t.row_id = eia_t.dataset_item_id)
-                    AND di_t.dataset_version_id = eas_t.resolved_dataset_version_id
                 <endif>
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
@@ -1115,7 +1111,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) ei
                 INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = ei.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = eas.resolved_dataset_version_id
                 GROUP BY
                     ei.dataset_item_id,
                     :datasetId,
@@ -1197,7 +1192,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     )) AS experiment_items_array
                 FROM experiment_items_final AS ei
                 LEFT JOIN dataset_items_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = ei.resolved_dataset_version_id
                 LEFT JOIN (
                     SELECT
                         ei2.id AS item_id,
