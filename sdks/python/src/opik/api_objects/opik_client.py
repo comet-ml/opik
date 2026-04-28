@@ -920,11 +920,19 @@ class Opik:
         """
         resolved_project_name = self._resolve_project_name(project_name)
 
-        valid_items = [
-            item
-            for item in assertion_results
-            if item.get("id") and item.get("name") and item.get("status")
-        ]
+        valid_items = []
+        for item in assertion_results:
+            if not (item.get("id") and item.get("name")):
+                continue
+            if item.get("status") not in ("passed", "failed"):
+                LOGGER.error(
+                    "Skipping assertion result with invalid status %r — "
+                    "must be 'passed' or 'failed': %s",
+                    item.get("status"),
+                    item,
+                )
+                continue
+            valid_items.append(item)
 
         if len(valid_items) == 0:
             LOGGER.error(

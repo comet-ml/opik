@@ -386,7 +386,10 @@ class AssertionResultMessage(BaseMessage):
 class AddAssertionResultsBatchMessage(BaseMessage):
     batch: List[AssertionResultMessage]
     entity_type: Literal["TRACE", "SPAN", "THREAD"] = "TRACE"
-    supports_batching: bool = True
+    # Producers (Opik.log_assertion_results) already split via
+    # sequence_splitter; bypass BatchManager so the streamer doesn't try to
+    # re-batch (no batcher mapping is registered for this message type).
+    supports_batching: bool = False
 
     message_type = "AddAssertionResultsBatchMessage"
 
