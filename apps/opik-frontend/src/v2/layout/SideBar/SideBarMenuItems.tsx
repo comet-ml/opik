@@ -7,6 +7,7 @@ import SidebarMenuItem, {
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import getMenuItems from "@/v2/layout/SideBar/helpers/getMenuItems";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { cn } from "@/lib/utils";
 
 interface SideBarMenuItemsProps {
   expanded: boolean;
@@ -55,7 +56,12 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
                 {index > 0 && <Separator className="mx-1 w-auto" />}
               </div>
             ))}
-          <ul className="flex flex-col text-foreground">
+          <ul
+            className={cn(
+              "flex flex-col text-foreground",
+              !expanded && "gap-1",
+            )}
+          >
             {renderItems(menuGroup.items)}
           </ul>
         </li>
