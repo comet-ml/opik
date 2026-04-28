@@ -210,7 +210,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
-  const canTagTrace = useMemo(
+  const canLogTraceSpanThread = useMemo(
     () =>
       checkNullablePermission(ManagementPermissionsNames.TRACE_SPAN_THREAD_LOG),
     [checkNullablePermission],
@@ -271,7 +271,7 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
-    canTagTrace,
+    canLogTraceSpanThread,
     canUsePlayground,
     canUseOptimizationStudio,
     canViewOptimizationRuns,
