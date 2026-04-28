@@ -1,8 +1,15 @@
 import abc
 import logging
+import sys
 from contextlib import contextmanager, asynccontextmanager
 from typing import Any, List, Dict, Literal, Optional, Type
 import pydantic
+from typing_extensions import TypedDict
+
+if sys.version_info < (3, 11):
+    from typing_extensions import Required
+else:
+    from typing import Required
 
 from opik import exceptions
 
@@ -10,7 +17,37 @@ from opik import exceptions
 LOGGER = logging.getLogger(__name__)
 
 
-ConversationDict = Dict[Literal["role", "content"], str]
+Role = Literal["system", "user", "assistant", "tool"]
+
+
+class ToolCallFunction(TypedDict):
+    name: str
+    arguments: str
+
+
+class ToolCall(TypedDict):
+    id: str
+    type: Literal["function"]
+    function: ToolCallFunction
+
+
+class ConversationDict(TypedDict, total=False):
+    """OpenAI-shape chat message used to ferry turns between callers and LLM wrappers.
+
+    ``role`` is always set. The remaining fields are conditionally required:
+
+    - ``content`` is set on system/user/tool messages and on assistant messages
+      that produce text. It may be absent on assistant messages that only emit
+      ``tool_calls``.
+    - ``tool_calls`` appears on assistant messages that invoke tools.
+    - ``tool_call_id`` (and optional ``name``) appear on tool-result messages.
+    """
+
+    role: Required[Role]
+    content: Optional[str]
+    tool_calls: List[ToolCall]
+    tool_call_id: str
+    name: str
 
 
 class OpikBaseModel(abc.ABC):

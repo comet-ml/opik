@@ -86,11 +86,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            content = response_parser.extract_text_content(response)
-            return {
-                "role": "assistant",
-                "content": base_model.check_model_output_string(content),
-            }
+            return response_parser.parse_assistant_message(response)
 
     def generate_provider_response(
         self,
@@ -145,11 +141,7 @@ class AnthropicChatModel(base_model.OpikBaseModel):
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            content = response_parser.extract_text_content(response)
-            return {
-                "role": "assistant",
-                "content": base_model.check_model_output_string(content),
-            }
+            return response_parser.parse_assistant_message(response)
 
     async def agenerate_provider_response(
         self,

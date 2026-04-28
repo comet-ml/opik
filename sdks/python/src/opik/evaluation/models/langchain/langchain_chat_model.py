@@ -2,7 +2,7 @@ import logging
 from typing import Any, cast, Dict, List, Optional, Type, TYPE_CHECKING
 import pydantic
 
-from . import opik_monitoring, message_converters
+from . import opik_monitoring, message_converters, response_parser
 from ...models import base_model
 
 if TYPE_CHECKING:
@@ -82,10 +82,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            return {
-                "role": "assistant",
-                "content": base_model.check_model_output_string(response.content),
-            }
+            return response_parser.parse_assistant_message(response)
 
     def generate_provider_response(
         self,
@@ -153,10 +150,7 @@ class LangchainChatModel(base_model.OpikBaseModel):
             messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            return {
-                "role": "assistant",
-                "content": base_model.check_model_output_string(response.content),
-            }
+            return response_parser.parse_assistant_message(response)
 
     async def agenerate_provider_response(
         self, messages: List[Dict[str, Any]], **kwargs: Any
