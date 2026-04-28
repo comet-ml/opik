@@ -60,7 +60,9 @@ def _clear_model_cache():
 
 class TestResponseParser:
     def test_parses_text_response(self):
-        message = response_parser.parse_assistant_message(_make_text_response("hello world"))
+        message = response_parser.parse_assistant_message(
+            _make_text_response("hello world")
+        )
         assert message == {"role": "assistant", "content": "hello world"}
 
     def test_concatenates_multiple_text_blocks(self):

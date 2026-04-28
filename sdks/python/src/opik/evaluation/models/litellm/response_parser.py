@@ -150,7 +150,15 @@ def _as_mapping(value: Any) -> Dict[str, Any]:
             pass
     return {
         key: getattr(value, key)
-        for key in ("content", "tool_calls", "name", "arguments", "id", "type", "function")
+        for key in (
+            "content",
+            "tool_calls",
+            "name",
+            "arguments",
+            "id",
+            "type",
+            "function",
+        )
         if hasattr(value, key)
     }
 
