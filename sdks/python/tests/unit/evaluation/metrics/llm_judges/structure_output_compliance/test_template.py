@@ -13,8 +13,10 @@ def _system_user(messages):
 class TestStructuredOutputComplianceTemplate:
     """Test suite for StructuredOutputCompliance template functions."""
 
-    def test_basic(self):
-        """Test basic message generation without schema or examples."""
+    def test_build_messages__no_schema_no_examples__placeholder_note_in_user_content(
+        self,
+    ):
+        """Without schema/examples, the user prompt embeds the no-schema placeholder."""
         output = '{"name": "John", "age": 30}'
 
         messages = template.build_messages(output=output)
@@ -28,7 +30,7 @@ class TestStructuredOutputComplianceTemplate:
         assert "(No schema provided — assume valid JSON.)" in user_content
         assert "Examples:" not in system_content
 
-    def test_with_schema(self):
+    def test_build_messages__schema_provided__schema_appears_in_user_content(self):
         output = '{"name": "John", "age": 30}'
         schema = "User(name: str, age: int)"
 
@@ -39,7 +41,9 @@ class TestStructuredOutputComplianceTemplate:
         assert schema in user_content
         assert "(No schema provided — assume valid JSON.)" not in user_content
 
-    def test_with_few_shot_examples(self):
+    def test_build_messages__few_shot_examples_provided__examples_appear_in_system_content(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
             FewShotExampleStructuredOutputCompliance(
@@ -78,7 +82,9 @@ class TestStructuredOutputComplianceTemplate:
         assert "<title>Valid JSON</title>" in system_content
         assert "<verdict>" in system_content and "</verdict>" in system_content
 
-    def test_with_schema_and_examples(self):
+    def test_build_messages__schema_and_examples_provided__both_appear_in_messages(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
         schema = "User(name: str, age: int)"
         few_shot_examples = [
@@ -101,7 +107,9 @@ class TestStructuredOutputComplianceTemplate:
         assert "Examples:" in system_content
         assert "Valid Example" in system_content
 
-    def test_empty_examples_list(self):
+    def test_build_messages__empty_examples_list__no_examples_section_in_system_content(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
 
         messages = template.build_messages(output=output, few_shot_examples=[])
@@ -110,7 +118,7 @@ class TestStructuredOutputComplianceTemplate:
         assert output in user_content
         assert "Examples:" not in system_content
 
-    def test_example_without_schema(self):
+    def test_build_messages__example_without_schema__schema_rendered_as_none(self):
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
             FewShotExampleStructuredOutputCompliance(
@@ -130,7 +138,7 @@ class TestStructuredOutputComplianceTemplate:
         assert "Valid JSON" in system_content
         assert "true" in system_content
 
-    def test_template_structure(self):
+    def test_build_messages__happyflow(self):
         output = '{"test": "data"}'
 
         messages = template.build_messages(output=output)

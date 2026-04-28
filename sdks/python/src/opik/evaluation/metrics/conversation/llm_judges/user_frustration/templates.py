@@ -51,7 +51,7 @@ _EVALUATE_CONVERSATION_SYSTEM = """Based on the given list of message exchanges 
     },
     {
         "role": "assistant",
-        "content": "content": "Apologies for the oversight. I always aim to provide the most helpful answer based on the initial question."
+        "content": "Apologies for the oversight. I always aim to provide the most helpful answer based on the initial question."
     },
     {
         "role": "user",

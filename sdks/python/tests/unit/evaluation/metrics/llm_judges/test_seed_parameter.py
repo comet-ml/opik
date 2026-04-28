@@ -78,6 +78,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_context_precision_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that ContextPrecision passes seed parameter to model generation."""
@@ -110,6 +113,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_context_recall_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that ContextRecall passes seed parameter to model generation."""
@@ -142,6 +148,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_g_eval_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that GEval passes seed parameter to model generation."""
@@ -176,6 +185,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_hallucination_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that Hallucination passes seed parameter to model generation."""
@@ -207,6 +219,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_moderation_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that Moderation passes seed parameter to model generation."""
@@ -234,6 +249,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_trajectory_accuracy_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that TrajectoryAccuracy passes seed parameter to model generation."""
@@ -273,6 +291,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_usefulness_seed_parameter_passing(self, test_seed: int) -> None:
         """Test that Usefulness passes seed parameter to model generation."""
@@ -303,6 +324,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_structured_output_compliance_seed_parameter_passing(
         self, test_seed: int
@@ -332,6 +356,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") == test_seed
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_seed_parameter_none_behavior(self) -> None:
         """Test that metrics work correctly when seed is None."""
@@ -363,6 +390,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") is None
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_seed_parameter_default_behavior(self) -> None:
         """Test that metrics work correctly when seed is not provided (default None)."""
@@ -394,6 +424,9 @@ class TestSeedParameter:
                 assert factory_call_kwargs.get("seed") is None
 
                 assert isinstance(result, score_result.ScoreResult)
+                assert result.value == 0.8
+                assert result.reason == "Test reason"
+                assert result.name == "test"
 
     def test_all_metrics_accept_seed_parameter(self, test_seed: int) -> None:
         """Test that all LLM judge metrics accept seed parameter in constructor."""

@@ -100,8 +100,11 @@ def _extract_tool_calls(message: Dict[str, Any]) -> List[base_model.ToolCall]:
         if name == _RESPONSE_FORMAT_TOOL_NAME:
             continue
         call_id = _get_str(raw_tool_call, "id")
-        if call_id is None or name is None or arguments is None:
+        if call_id is None or name is None:
             continue
+        # Zero-arg tool calls legitimately omit ``arguments``; normalize to
+        # an empty JSON object so downstream consumers can always ``json.loads``.
+        normalised_arguments = arguments if arguments is not None else "{}"
         parsed.append(
             cast(
                 base_model.ToolCall,
@@ -110,7 +113,7 @@ def _extract_tool_calls(message: Dict[str, Any]) -> List[base_model.ToolCall]:
                     "type": "function",
                     "function": {
                         "name": name,
-                        "arguments": arguments,
+                        "arguments": normalised_arguments,
                     },
                 },
             )

@@ -3,7 +3,6 @@ from unittest.mock import Mock, patch
 
 from opik import exceptions
 from opik.evaluation.metrics.llm_judges.trajectory_accuracy import TrajectoryAccuracy
-from opik.evaluation.metrics.llm_judges.trajectory_accuracy import templates
 from opik.evaluation.metrics import score_result
 from opik.evaluation.models import base_model
 
@@ -86,9 +85,11 @@ class TestTrajectoryAccuracy:
                 final_result="Test result",
             )
 
-    def test_build_messages_valid_trajectory(self):
-        """Test trajectory formatting using public templates API."""
-        messages = templates.build_messages(
+    def test_score_passes_multistep_trajectory_to_model(
+        self, trajectory_metric, mock_model
+    ):
+        """Multi-step trajectories appear verbatim in the user prompt sent to the model."""
+        trajectory_metric.score(
             goal="Test goal",
             trajectory=[
                 {
@@ -105,6 +106,7 @@ class TestTrajectoryAccuracy:
             final_result="Test result",
         )
 
+        messages = mock_model.generate_chat_completion.call_args[1]["messages"]
         user_content = messages[1]["content"]
         assert "Step 1:" in user_content
         assert "Step 2:" in user_content
@@ -114,11 +116,15 @@ class TestTrajectoryAccuracy:
         assert "Test goal" in user_content
         assert "Test result" in user_content
 
-    def test_build_messages_empty_trajectory(self):
-        """Test formatting empty trajectory using public templates API."""
-        messages = templates.build_messages(
+    def test_score_passes_empty_trajectory_to_model(
+        self, trajectory_metric, mock_model
+    ):
+        """Empty trajectories surface a placeholder note in the user prompt."""
+        trajectory_metric.score(
             goal="Test goal", trajectory=[], final_result="Test result"
         )
+
+        messages = mock_model.generate_chat_completion.call_args[1]["messages"]
         assert "No trajectory steps provided" in messages[1]["content"]
 
     @patch("opik.evaluation.models.models_factory.get")
