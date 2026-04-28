@@ -79,6 +79,7 @@ import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableState
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
@@ -474,6 +475,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({ projectId, entityType: "threads" }),
       },
     }),
     [projectId],

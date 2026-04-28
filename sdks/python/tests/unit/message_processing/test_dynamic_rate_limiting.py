@@ -3,7 +3,7 @@ from unittest import mock
 
 import pytest
 
-from opik import exceptions
+from opik import exceptions, synchronization
 from opik.message_processing import streamer_constructors, messages, queue_consumer
 
 MAX_QUEUE_SIZE = 10
@@ -32,7 +32,6 @@ def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(
 ):
     streamer, mock_message_processor = streamer_with_mock_message_processor
 
-    # to allow a few skipped loop iterations
     retry_after = queue_consumer.SLEEP_BETWEEN_LOOP_ITERATIONS * 3
     mock_message_processor.process.side_effect = (
         exceptions.OpikCloudRequestsRateLimited(
@@ -46,15 +45,29 @@ def test_dynamic_rate_limiting__rate_limited__check_queue_messages_are_put_back(
     for i in range(messages_number):
         streamer.put(messages.BaseMessage())
 
-    # sleep for a while to allow queue_consumer to execute a few loop iterations
-    time.sleep(retry_after)
-    # check that messages were put back into the message queue for retry
+    # Don't pin the assertion to a fixed sleep matching `retry_after` — that
+    # races with the consumer waking from its rate-limit wait at the same
+    # instant. Poll the actual signals instead: the rate-limited message has
+    # been pushed back (queue_size is at the original count) and the consumer
+    # has set a future `next_message_time` (so it's parked in the wait branch
+    # and won't pop another message).
+    synchronization.until(
+        lambda: (
+            streamer.queue_size() == messages_number
+            and streamer._queue_consumers[0].next_message_time > now
+        ),
+        max_try_seconds=1.0,
+    )
     assert streamer.queue_size() == messages_number
     assert streamer._queue_consumers[0].next_message_time > now
 
-    # check that all queue messages are processed when no exception is raised
+    # Same idea for the drain: poll for queue_size == 0 instead of a fixed
+    # sleep tied to retry_after.
     mock_message_processor.process = lambda message: None
-    time.sleep(retry_after * 2)
+    synchronization.until(
+        lambda: streamer.queue_size() == 0,
+        max_try_seconds=retry_after * 4,
+    )
     assert streamer.queue_size() == 0
 
 
