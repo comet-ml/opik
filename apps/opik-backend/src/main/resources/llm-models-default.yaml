@@ -1,4 +1,7 @@
 openai:
+  - id: "gpt-5.5"
+    label: "GPT 5.5"
+    structuredOutput: true
   - id: "gpt-5.4"
     label: "GPT 5.4"
     structuredOutput: true
@@ -14,9 +17,6 @@ openai:
     structuredOutput: true
   - id: "gpt-5"
     label: "GPT 5"
-    structuredOutput: true
-  - id: "gpt-5-chat"
-    label: "GPT 5 Chat"
     structuredOutput: true
   - id: "gpt-5-mini"
     label: "GPT 5 Mini"
@@ -102,12 +102,11 @@ openai:
   - id: "gpt-5.3-codex"
     structuredOutput: true
   - id: "gpt-5.4-pro"
+  - id: "gpt-5.5-pro"
   - id: "gpt-image-1"
   - id: "gpt-image-1-mini"
   - id: "gpt-image-1.5"
   - id: "gpt-image-2"
-  - id: "o1"
-    reasoning: true
   - id: "o1-2024-12-17"
     reasoning: true
   - id: "o1-mini"
@@ -130,9 +129,6 @@ openai:
   - id: "o4-mini-deep-research"
     structuredOutput: true
     reasoning: true
-  - id: "gpt-5.5"
-    structuredOutput: true
-  - id: "gpt-5.5-pro"
 anthropic:
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
@@ -148,7 +144,6 @@ anthropic:
     structuredOutput: true
   - id: "claude-sonnet-4-5"
     label: "Claude Sonnet 4.5"
-    structuredOutput: true
   - id: "claude-haiku-4-5-20251001"
     label: "Claude Haiku 4.5"
     structuredOutput: true
@@ -162,10 +157,6 @@ anthropic:
     label: "Claude Sonnet 4"
     structuredOutput: true
   - id: "claude-3-7-sonnet-20250219"
-  - id: "claude-opus-4-6-20260205"
-    structuredOutput: true
-  - id: "claude-opus-4-7-20260416"
-    structuredOutput: true
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -173,7 +164,7 @@ gemini:
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
   - id: "gemini-3.1-flash-tts-preview"
-    label: "Gemini 3.1 Flash Tts Preview"
+    label: "Gemini 3.1 Flash TTS Preview"
   - id: "gemini-3.1-flash-lite-preview"
     label: "Gemini 3.1 Flash Lite Preview"
     structuredOutput: true
@@ -187,13 +178,13 @@ gemini:
     label: "Gemini 2.5 Flash"
     structuredOutput: true
   - id: "gemini-2.5-flash-lite"
-    label: "Gemini 2.5 Flash Lite"
+    label: "Gemini 2.5 Flash-Lite"
     structuredOutput: true
   - id: "gemini-2.0-flash"
     label: "Gemini 2.0 Flash"
     structuredOutput: true
   - id: "gemini-2.0-flash-lite"
-    label: "Gemini 2.0 Flash Lite"
+    label: "Gemini 2.0 Flash-Lite"
     structuredOutput: true
   - id: "lyria-3-clip-preview"
     label: "Lyria 3 Clip Preview"
@@ -756,6 +747,11 @@ openrouter:
   - id: "qwen/qwen3.5-9b"
   - id: "qwen/qwen3.5-flash-02-23"
   - id: "qwen/qwen3.5-plus-02-15"
+  - id: "qwen/qwen3.5-plus-20260420"
+  - id: "qwen/qwen3.6-27b"
+  - id: "qwen/qwen3.6-35b-a3b"
+  - id: "qwen/qwen3.6-flash"
+  - id: "qwen/qwen3.6-max-preview"
   - id: "qwen/qwen3.6-plus"
   - id: "qwen/qwen3.6-plus-preview:free"
   - id: "qwen/qwen3.6-plus:free"
@@ -829,4 +825,11 @@ openrouter:
   - id: "z-ai/glm-5-turbo"
   - id: "z-ai/glm-5.1"
   - id: "z-ai/glm-5v-turbo"
+  - id: "~anthropic/claude-haiku-latest"
   - id: "~anthropic/claude-opus-latest"
+  - id: "~anthropic/claude-sonnet-latest"
+  - id: "~google/gemini-flash-latest"
+  - id: "~google/gemini-pro-latest"
+  - id: "~moonshotai/kimi-latest"
+  - id: "~openai/gpt-latest"
+  - id: "~openai/gpt-mini-latest"
