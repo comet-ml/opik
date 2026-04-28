@@ -133,6 +133,7 @@ anthropic:
   - id: "claude-opus-4-7"
     label: "Claude Opus 4.7"
     structuredOutput: true
+    supportsSamplingParams: false
   - id: "claude-opus-4-6"
     label: "Claude Opus 4.6"
     structuredOutput: true
