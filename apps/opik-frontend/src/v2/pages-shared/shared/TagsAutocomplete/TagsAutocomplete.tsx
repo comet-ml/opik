@@ -129,7 +129,7 @@ const TagsAutocomplete: React.FC<TagsAutocompleteProps> = ({
       items={items}
       hasError={hasError}
       isLoading={queryEnabled && isPending}
-      placeholder="Select tag"
+      placeholder="Select a recent tag"
     />
   );
 };
