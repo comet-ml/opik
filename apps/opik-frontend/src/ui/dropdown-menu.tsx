@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/lib/portal-container";
 
 const dropdownMenuItemVariants = cva(
-  "comet-body-s relative flex cursor-pointer select-none items-center outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray data-[selected]:bg-primary-100 data-[selected]:text-primary data-[selected]:focus:bg-secondary data-[selected]:focus:text-primary",
+  "comet-body-s relative flex cursor-pointer select-none items-center outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[selected]:bg-primary-100 data-[disabled]:text-muted-gray data-[selected]:text-primary data-[selected]:focus:bg-secondary data-[selected]:focus:text-primary",
   {
     variants: {
       variant: {
