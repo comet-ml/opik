@@ -16,8 +16,9 @@ public class AnthropicModule extends AbstractModule {
     @Provides
     @Singleton
     public AnthropicClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
-        return new AnthropicClientGenerator(config);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
+            @NonNull LlmModelRegistryService registryService) {
+        return new AnthropicClientGenerator(config, registryService);
     }
 
     @Provides
