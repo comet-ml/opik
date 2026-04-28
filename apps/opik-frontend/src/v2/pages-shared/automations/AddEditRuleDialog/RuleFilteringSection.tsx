@@ -30,6 +30,7 @@ import { createFilter } from "@/lib/filters";
 import FiltersContent from "@/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import TagsAutocomplete from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
@@ -342,10 +343,31 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             placeholder: "Select score",
           },
         },
+        tags: {
+          keyComponent: TagsAutocomplete as React.FC<unknown> & {
+            placeholder: string;
+            value: string;
+            onValueChange: (value: string) => void;
+          },
+          keyComponentProps: {
+            projectId,
+            entityType: isThreadScope
+              ? "threads"
+              : isSpanScope
+                ? "spans"
+                : "traces",
+          },
+        },
         ...(isSpanScope ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [projectId, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
+    [
+      projectId,
+      isSpanScope,
+      isThreadScope,
+      isGuardrailsEnabled,
+      ruleDictionaryOperators,
+    ],
   );
 
   const handleAddFilter = useCallback(() => {
