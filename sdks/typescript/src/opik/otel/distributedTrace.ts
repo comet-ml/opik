@@ -2,8 +2,9 @@ import {
   OPIK_PARENT_SPAN_ID_HEADER,
   OPIK_TRACE_ID_HEADER,
 } from "@/context";
-import { isValidUuidV7 } from "@/utils/generateId";
+import { generateId, isValidUuidV7 } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
+import { OPIK_SPAN_ID } from "./attributes";
 import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
 
 /**
@@ -108,6 +109,11 @@ export function attachToParent(
   if (distributedTraceAttributes === null) {
     return false;
   }
-  span.setAttributes(distributedTraceAttributes.asAttributes());
+  const attributes = distributedTraceAttributes.asAttributes();
+  // Mint a stable opik.span_id for this boundary span so descendants picked up by
+  // OpikSpanProcessor can chain through it (their opik.parent_span_id will reference
+  // this value, and the backend uses opik.span_id verbatim — see OpenTelemetryMapper).
+  attributes[OPIK_SPAN_ID] = generateId();
+  span.setAttributes(attributes);
   return true;
 }

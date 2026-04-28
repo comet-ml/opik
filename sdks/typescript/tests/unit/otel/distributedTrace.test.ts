@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { v4 as uuidv4 } from "uuid";
 import {
+  OPIK_SPAN_ID,
   OpikDistributedTraceAttributes,
   attachToParent,
   extractOpikDistributedTraceAttributes,
 } from "@/otel";
 import type { OpenTelemetrySpanLike } from "@/otel";
+import { isValidUuidV7 } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
 
 const TRACE_ID = "0193b3a5-1234-7abc-9def-0123456789ab";
@@ -294,10 +296,11 @@ describe("attachToParent", () => {
 
     expect(result).toBe(true);
     expect(span.setAttributes).toHaveBeenCalledTimes(1);
-    expect(span.setAttributes).toHaveBeenCalledWith({
-      "opik.trace_id": TRACE_ID,
-      "opik.parent_span_id": PARENT_SPAN_ID,
-    });
+    const attrs = span.setAttributes.mock.calls[0]?.[0] as Record<string, string>;
+    expect(attrs["opik.trace_id"]).toBe(TRACE_ID);
+    expect(attrs["opik.parent_span_id"]).toBe(PARENT_SPAN_ID);
+    // boundary span gets a freshly minted UUIDv7 to chain descendants through
+    expect(isValidUuidV7(attrs[OPIK_SPAN_ID])).toBe(true);
   });
 
   it("sets only trace_id and returns true when only trace_id header is present", () => {
@@ -308,9 +311,10 @@ describe("attachToParent", () => {
 
     expect(result).toBe(true);
     expect(span.setAttributes).toHaveBeenCalledTimes(1);
-    expect(span.setAttributes).toHaveBeenCalledWith({
-      "opik.trace_id": TRACE_ID,
-    });
+    const attrs = span.setAttributes.mock.calls[0]?.[0] as Record<string, string>;
+    expect(attrs["opik.trace_id"]).toBe(TRACE_ID);
+    expect(attrs["opik.parent_span_id"]).toBeUndefined();
+    expect(isValidUuidV7(attrs[OPIK_SPAN_ID])).toBe(true);
   });
 
   it("returns false, warns, and does not set attributes when trace_id is missing but parent_span_id is provided", () => {
@@ -372,9 +376,10 @@ describe("attachToParent", () => {
 
     expect(result).toBe(true);
     expect(span.setAttributes).toHaveBeenCalledTimes(1);
-    expect(span.setAttributes).toHaveBeenCalledWith({
-      "opik.trace_id": TRACE_ID,
-    });
+    const attrs = span.setAttributes.mock.calls[0]?.[0] as Record<string, string>;
+    expect(attrs["opik.trace_id"]).toBe(TRACE_ID);
+    expect(attrs["opik.parent_span_id"]).toBeUndefined();
+    expect(isValidUuidV7(attrs[OPIK_SPAN_ID])).toBe(true);
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 });

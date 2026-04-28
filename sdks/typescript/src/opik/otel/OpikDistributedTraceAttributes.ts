@@ -1,3 +1,5 @@
+import { OPIK_PARENT_SPAN_ID, OPIK_TRACE_ID } from "./attributes";
+
 /**
  * Represents distributed trace attributes for the OPIK tracing system.
  *
@@ -26,10 +28,10 @@ export class OpikDistributedTraceAttributes {
    */
   asAttributes(): Record<string, string> {
     const result: Record<string, string> = {
-      "opik.trace_id": this.opikTraceId,
+      [OPIK_TRACE_ID]: this.opikTraceId,
     };
     if (this.opikParentSpanId !== undefined) {
-      result["opik.parent_span_id"] = this.opikParentSpanId;
+      result[OPIK_PARENT_SPAN_ID] = this.opikParentSpanId;
     }
     return result;
   }

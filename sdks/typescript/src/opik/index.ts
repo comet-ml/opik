@@ -48,6 +48,10 @@ export type { DistributedTraceHeaders } from "@/context";
 // OpenTelemetry distributed trace helpers
 export {
   OpikDistributedTraceAttributes,
+  OpikSpanProcessor,
+  OPIK_PARENT_SPAN_ID,
+  OPIK_SPAN_ID,
+  OPIK_TRACE_ID,
   attachToParent,
   extractOpikDistributedTraceAttributes,
 } from "@/otel";
