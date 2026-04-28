@@ -10,10 +10,11 @@ import ResourceLink, {
 } from "@/shared/ResourceLink/ResourceLink";
 import { EVALUATION_METHOD } from "@/types/datasets";
 
+export const ITEM_SOURCE_LABEL = "Item source";
+
 type CustomMeta = {
   nameKey?: string;
   idKey?: string;
-  resource: RESOURCE_TYPE;
   getIsDeleted?: (cellData: unknown) => boolean;
 };
 
@@ -21,7 +22,6 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
   const { custom } = context.column.columnDef.meta ?? {};
   const cellData = context.row.original;
   const {
-    resource,
     nameKey = "name",
     idKey = "id",
     getIsDeleted,
@@ -36,8 +36,11 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     ? getIsDeleted(cellData)
     : undefined;
 
-  const Icon =
-    evaluationMethod === EVALUATION_METHOD.TEST_SUITE ? ListChecks : Database;
+  const isTestSuite = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
+  const Icon = isTestSuite ? ListChecks : Database;
+  const resource = isTestSuite
+    ? RESOURCE_TYPE.testSuite
+    : RESOURCE_TYPE.dataset;
 
   return (
     <CellWrapper

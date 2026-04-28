@@ -48,8 +48,10 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
   DATASET_TYPE,
+  EVALUATION_METHOD,
   Experiment,
   ExperimentsAggregations,
 } from "@/types/datasets";
@@ -217,7 +219,7 @@ export const useExperimentsTableConfig = <
     const groupColumns = groups.map((group) => {
       const label =
         group.field === COLUMN_DATASET_ID
-          ? "Item source"
+          ? ITEM_SOURCE_LABEL
           : calculateGroupLabel(group);
       const id = buildGroupFieldName(group);
       const metaKey = buildGroupFieldNameForMeta(group);
@@ -248,6 +250,19 @@ export const useExperimentsTableConfig = <
               nameKey: `${metaKey}.label`,
               idKey: `${metaKey}.value`,
               resource: RESOURCE_TYPE.dataset,
+              getResource: (row: unknown) => {
+                const evaluationMethod = get(
+                  row,
+                  "evaluation_method",
+                  undefined,
+                ) as EVALUATION_METHOD | undefined;
+                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
+                  return RESOURCE_TYPE.testSuite;
+                const datasetId = get(row, `${metaKey}.value`, "") as string;
+                if (datasetTypeMap?.[datasetId] === DATASET_TYPE.TEST_SUITE)
+                  return RESOURCE_TYPE.testSuite;
+                return RESOURCE_TYPE.dataset;
+              },
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
@@ -256,6 +271,16 @@ export const useExperimentsTableConfig = <
                 description: `Some experiments reference a dataset that has been deleted`,
               },
               getGroupRowLabel: (row: T) => {
+                const evaluationMethod = get(
+                  row,
+                  "evaluation_method",
+                  undefined,
+                ) as EVALUATION_METHOD | undefined;
+                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
+                  return "Test suite";
+                if (evaluationMethod === EVALUATION_METHOD.DATASET)
+                  return "Dataset";
+
                 const datasetId = get(row, `${metaKey}.value`, "") as string;
                 const type = datasetTypeMap?.[datasetId];
                 if (type === DATASET_TYPE.TEST_SUITE) return "Test suite";

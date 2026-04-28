@@ -84,7 +84,9 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
 import { Skeleton } from "@/ui/skeleton";
 
@@ -214,13 +216,12 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Item source",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
         cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
       },
       {
@@ -532,7 +533,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
           id: datasetId,
           name: [
             {
-              label: "Item source",
+              label: ITEM_SOURCE_LABEL,
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -572,7 +573,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
                 const groupField = groups[index]?.field;
                 const groupLabel =
                   groupField === COLUMN_DATASET_ID
-                    ? "Item source"
+                    ? ITEM_SOURCE_LABEL
                     : calculateGroupLabel(groups[index]);
 
                 return {

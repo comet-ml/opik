@@ -20,7 +20,9 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
-import ItemSourceCell from "@/v2/pages-shared/experiments/ItemSourceCell";
+import ItemSourceCell, {
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
@@ -207,13 +209,12 @@ const ExperimentsTab: React.FC<ExperimentsTabProps> = ({ promptId }) => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Item source",
+        label: ITEM_SOURCE_LABEL,
         type: COLUMN_TYPE.string,
         cell: ItemSourceCell as never,
         customMeta: {
           nameKey: "dataset_name",
           idKey: "dataset_id",
-          resource: RESOURCE_TYPE.dataset,
         },
       },
       {
