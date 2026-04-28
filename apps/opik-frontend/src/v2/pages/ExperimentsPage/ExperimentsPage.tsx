@@ -11,6 +11,7 @@ import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodySt
 import GeneralDatasetsTab from "./GeneralDatasetsTab/GeneralDatasetsTab";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import emptyExperimentsLightUrl from "/images/empty-experiments-light.svg";
 import emptyExperimentsDarkUrl from "/images/empty-experiments-dark.svg";
@@ -22,6 +23,10 @@ const ExperimentsPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
   );
+
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
 
   const { data: existenceData, isPending: isExistencePending } =
     useExperimentsList(
@@ -52,14 +57,16 @@ const ExperimentsPage: React.FC = () => {
           <h1 className="comet-body-accented truncate break-words">
             Experiments
           </h1>
-          <Button
-            variant="default"
-            size="xs"
-            onClick={handleNewExperimentClick}
-          >
-            <Plus className="mr-1 size-4" />
-            Create experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="default"
+              size="xs"
+              onClick={handleNewExperimentClick}
+            >
+              <Plus className="mr-1 size-4" />
+              Create experiment
+            </Button>
+          )}
         </PageBodyStickyContainer>
         {isEmpty ? (
           <PageEmptyState

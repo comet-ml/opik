@@ -3,6 +3,8 @@ package com.comet.opik.infrastructure;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
@@ -78,4 +80,7 @@ public class ServiceTogglesConfig {
     }
 
     @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
+
+    @JsonProperty
+    @Min(5) @Max(100) int defaultPageSize;
 }

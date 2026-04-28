@@ -26,6 +26,7 @@ export interface Permissions {
   canTagTrace: boolean;
   canUsePlayground: boolean;
   canUseOptimizationStudio: boolean;
+  canViewOptimizationRuns: boolean;
 }
 
 export interface PermissionsContextValue {
@@ -62,6 +63,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canTagTrace: true,
     canUsePlayground: true,
     canUseOptimizationStudio: true,
+    canViewOptimizationRuns: true,
   },
   isPending: false,
 };

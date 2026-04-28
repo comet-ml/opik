@@ -30,6 +30,7 @@ import { createFilter } from "@/lib/filters";
 import FiltersContent from "@/shared/FiltersContent/FiltersContent";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { EvaluationRuleFormType } from "./schema";
@@ -342,10 +343,24 @@ const RuleFilteringSection: React.FC<RuleFilteringSectionProps> = ({
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({
+          projectId,
+          entityType: isThreadScope
+            ? "threads"
+            : isSpanScope
+              ? "spans"
+              : "traces",
+        }),
         ...(isSpanScope ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [projectId, isSpanScope, isGuardrailsEnabled, ruleDictionaryOperators],
+    [
+      projectId,
+      isSpanScope,
+      isThreadScope,
+      isGuardrailsEnabled,
+      ruleDictionaryOperators,
+    ],
   );
 
   const handleAddFilter = useCallback(() => {

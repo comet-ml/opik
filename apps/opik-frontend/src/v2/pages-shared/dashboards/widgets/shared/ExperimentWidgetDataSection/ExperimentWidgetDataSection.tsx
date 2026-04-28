@@ -24,6 +24,7 @@ import GroupsAccordionSection, {
 } from "@/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import ExperimentFilterSelectBox from "./ExperimentFilterSelectBox";
 import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 
@@ -153,6 +154,10 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
             excludeRoot: true,
           },
         },
+        ...getTagsFilterConfig({
+          projectId: projectId ?? "",
+          entityType: "experiments",
+        }),
       },
     }),
     [projectId],

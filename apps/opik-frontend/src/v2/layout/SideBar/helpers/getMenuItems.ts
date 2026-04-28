@@ -28,6 +28,7 @@ const getMenuItems = ({
   canViewDatasets,
   canViewDashboards,
   canUsePlayground,
+  canViewOptimizationRuns,
   showHome,
 }: {
   projectId: string | null;
@@ -35,6 +36,7 @@ const getMenuItems = ({
   canViewDatasets: boolean;
   canViewDashboards: boolean;
   canUsePlayground: boolean;
+  canViewOptimizationRuns: boolean;
   showHome: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
@@ -120,14 +122,18 @@ const getMenuItems = ({
           label: "Agent configuration",
           disabled: !projectPrefix,
         },
-        {
-          id: "optimizations",
-          path: projectPath("/optimizations"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Sparkles,
-          label: "Optimization runs",
-          disabled: !projectPrefix,
-        },
+        ...(canViewOptimizationRuns
+          ? [
+              {
+                id: "optimizations",
+                path: projectPath("/optimizations"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Sparkles,
+                label: "Optimization runs",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {

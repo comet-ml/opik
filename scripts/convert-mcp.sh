@@ -49,7 +49,7 @@ parse_env_file() {
 
     # Use jq to properly escape values for JSON safety
     local pairs=()
-    while IFS= read -r line; do
+    while IFS= read -r line || [[ -n "$line" ]]; do
         # Skip empty lines and comments
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
         # Must contain =

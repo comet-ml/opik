@@ -1,0 +1,59 @@
+- selector:
+    instrument_name: http.server.request.duration
+    instrument_type: HISTOGRAM
+  view:
+    attribute_keys:
+      - http.request.method
+      - url.scheme
+      - error.type
+      - http.response.status_code
+      - http.route
+      - network.protocol.name
+      - network.protocol.version
+      - server.address
+      - server.port
+      - http.request.header.comet-workspace
+      - http.request.header.x-opik-debug-sdk-version
+- selector:
+    instrument_name: http.server.request.body.size
+    instrument_type: HISTOGRAM
+  view:
+    attribute_keys:
+      - http.request.method
+      - url.scheme
+      - error.type
+      - http.response.status_code
+      - http.route
+      - network.protocol.name
+      - network.protocol.version
+      - server.address
+      - server.port
+      - http.request.header.comet-workspace
+      - http.request.header.x-opik-debug-sdk-version
+- selector:
+    instrument_name: http.server.response.body.size
+    instrument_type: HISTOGRAM
+  view:
+    attribute_keys:
+      - http.request.method
+      - url.scheme
+      - error.type
+      - http.response.status_code
+      - http.route
+      - network.protocol.name
+      - network.protocol.version
+      - server.address
+      - server.port
+      - http.request.header.comet-workspace
+      - http.request.header.x-opik-debug-sdk-version
+- selector:
+    instrument_name: http.server.active_requests
+    instrument_type: UP_DOWN_COUNTER
+  view:
+    attribute_keys:
+      - http.request.method
+      - url.scheme
+      - server.address
+      - server.port
+      - http.request.header.comet-workspace
+      - http.request.header.x-opik-debug-sdk-version
