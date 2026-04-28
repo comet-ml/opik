@@ -49,6 +49,9 @@ from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 from .assertion_result import AssertionResult
+from .assertion_result_batch_item import AssertionResultBatchItem
+from .assertion_result_batch_item_source import AssertionResultBatchItemSource
+from .assertion_result_batch_item_status import AssertionResultBatchItemStatus
 from .assertion_result_compare import AssertionResultCompare
 from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
@@ -716,6 +719,9 @@ __all__ = [
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
     "AssertionResult",
+    "AssertionResultBatchItem",
+    "AssertionResultBatchItemSource",
+    "AssertionResultBatchItemStatus",
     "AssertionResultCompare",
     "AssertionScoreAverage",
     "AssertionScoreAveragePublic",
