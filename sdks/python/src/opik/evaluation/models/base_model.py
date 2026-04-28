@@ -68,7 +68,7 @@ class OpikBaseModel(abc.ABC):
         """
         pass
 
-    @abc.abstractmethod
+    # Don't mark it as abstractmethod to avoid breaking existing user implementations
     def generate_chat_completion(
         self,
         messages: List[ConversationDict],
@@ -95,7 +95,9 @@ class OpikBaseModel(abc.ABC):
             A ``{"role": "assistant", "content": ...}`` dict so callers can append
             it back onto the input ``messages`` for follow-up turns.
         """
-        pass
+        raise NotImplementedError(
+            "Chat completion generation not implemented for this provider"
+        )
 
     async def agenerate_string(
         self,
