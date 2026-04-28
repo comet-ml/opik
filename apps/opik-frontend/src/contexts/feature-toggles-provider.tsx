@@ -65,15 +65,15 @@ export function FeatureTogglesProvider({ children }: FeatureTogglesProps) {
   useEffect(() => {
     if (data) {
       setFeatures(data);
-      // Mirrors ServiceTogglesConfig bounds (10..1000). Out-of-range or
+      // Mirrors ServiceTogglesConfig bounds (5..100). Out-of-range or
       // malformed values fall through to the fallback so a misconfigured
       // deployment can't poison the UI.
       const raw = data.default_page_size;
       if (
         typeof raw === "number" &&
         Number.isInteger(raw) &&
-        raw >= 10 &&
-        raw <= 1000
+        raw >= 5 &&
+        raw <= 100
       ) {
         setDefaultPageSize(raw);
       }
