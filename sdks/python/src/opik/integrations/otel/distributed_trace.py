@@ -63,7 +63,7 @@ def extract_opik_distributed_trace_attributes(
         return None
     if not id_helpers.is_valid_uuid_v7(trace_id):
         LOGGER.warning(
-            "Opik distributed trace header '%s' is not a valid UUID; "
+            "Opik distributed trace header '%s' is not a valid UUIDv7; "
             "skipping distributed trace processing.",
             OPIK_TRACE_ID_HEADER,
         )
@@ -73,7 +73,7 @@ def extract_opik_distributed_trace_attributes(
         parent_span_id = None
     elif not id_helpers.is_valid_uuid_v7(parent_span_id):
         LOGGER.warning(
-            "Opik distributed trace header '%s' is not a valid UUID; "
+            "Opik distributed trace header '%s' is not a valid UUIDv7; "
             "ignoring parent span id.",
             OPIK_PARENT_SPAN_ID_HEADER,
         )

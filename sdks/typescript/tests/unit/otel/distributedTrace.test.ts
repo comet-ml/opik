@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { v4 as uuidv4 } from "uuid";
 import {
   OpikDistributedTraceAttributes,
   attachToParent,
@@ -9,6 +10,7 @@ import { logger } from "@/utils/logger";
 
 const TRACE_ID = "0193b3a5-1234-7abc-9def-0123456789ab";
 const PARENT_SPAN_ID = "0193b3a5-5678-7abc-9def-0123456789cd";
+const UUID_V4 = uuidv4();
 
 describe("OpikDistributedTraceAttributes", () => {
   it("returns both attributes when trace_id and parent_span_id are provided", () => {
@@ -214,6 +216,28 @@ describe("extractOpikDistributedTraceAttributes", () => {
     expect(extractOpikDistributedTraceAttributes(headers)).toBeNull();
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0]?.[0]).toContain("opik_trace_id");
+  });
+
+  it("returns null and warns when trace_id is a valid UUID but not v7", () => {
+    const headers = { opik_trace_id: UUID_V4 };
+
+    expect(extractOpikDistributedTraceAttributes(headers)).toBeNull();
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("opik_trace_id");
+  });
+
+  it("drops parent_span_id with a warning when it is a non-v7 UUID", () => {
+    const headers = {
+      opik_trace_id: TRACE_ID,
+      opik_parent_span_id: UUID_V4,
+    };
+
+    const result = extractOpikDistributedTraceAttributes(headers);
+
+    expect(result).not.toBeNull();
+    expect(result!.asAttributes()).toEqual({ "opik.trace_id": TRACE_ID });
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("opik_parent_span_id");
   });
 
   it("drops parent_span_id with a warning when it is not a valid UUID but trace_id is", () => {

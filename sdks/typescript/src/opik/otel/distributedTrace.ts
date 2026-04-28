@@ -1,8 +1,8 @@
-import { validate as isUuid } from "uuid";
 import {
   OPIK_PARENT_SPAN_ID_HEADER,
   OPIK_TRACE_ID_HEADER,
 } from "@/context";
+import { isValidUuidV7 } from "@/utils/generateId";
 import { logger } from "@/utils/logger";
 import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
 
@@ -74,16 +74,16 @@ export function extractOpikDistributedTraceAttributes(
     }
     return null;
   }
-  if (!isUuid(traceId)) {
+  if (!isValidUuidV7(traceId)) {
     logger.warn(
-      `Opik distributed trace header '${OPIK_TRACE_ID_HEADER}' is not a valid UUID; skipping distributed trace processing.`
+      `Opik distributed trace header '${OPIK_TRACE_ID_HEADER}' is not a valid UUIDv7; skipping distributed trace processing.`
     );
     return null;
   }
 
-  if (parentSpanId !== undefined && !isUuid(parentSpanId)) {
+  if (parentSpanId !== undefined && !isValidUuidV7(parentSpanId)) {
     logger.warn(
-      `Opik distributed trace header '${OPIK_PARENT_SPAN_ID_HEADER}' is not a valid UUID; ignoring parent span id.`
+      `Opik distributed trace header '${OPIK_PARENT_SPAN_ID_HEADER}' is not a valid UUIDv7; ignoring parent span id.`,
     );
     parentSpanId = undefined;
   }
