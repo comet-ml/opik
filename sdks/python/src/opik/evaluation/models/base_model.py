@@ -37,14 +37,16 @@ class ConversationDict(TypedDict, total=False):
     ``role`` is always set. The remaining fields are conditionally required:
 
     - ``content`` is set on system/user/tool messages and on assistant messages
-      that produce text. It may be absent on assistant messages that only emit
-      ``tool_calls``.
+      that produce text. It is *omitted* (key absent — never ``None``) on
+      assistant messages that only emit ``tool_calls``, so callers that always
+      expect text — every existing judge — can index ``message["content"]``
+      and get ``str``.
     - ``tool_calls`` appears on assistant messages that invoke tools.
     - ``tool_call_id`` (and optional ``name``) appear on tool-result messages.
     """
 
     role: Required[Role]
-    content: Optional[str]
+    content: str
     tool_calls: List[ToolCall]
     tool_call_id: str
     name: str
