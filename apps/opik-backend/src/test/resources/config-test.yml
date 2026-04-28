@@ -573,6 +573,10 @@ serviceToggles:
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: "disabled"
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  defaultPageSize: 100
 
 # Local Runner configuration
 localRunner:

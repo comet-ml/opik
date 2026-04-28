@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.events.AssertionResultsCreated;
 import com.comet.opik.api.events.CommentsCreated;
 import com.comet.opik.api.events.CommentsDeleted;
 import com.comet.opik.api.events.CommentsUpdated;
@@ -162,6 +163,17 @@ public class ExperimentAggregateEventListener {
     public void onFeedbackScoresCreated(FeedbackScoresCreated event) {
         triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
                 .subscribe(null, e -> log.error("Error triggering aggregation for feedback scores created", e));
+    }
+
+    @Subscribe
+    public void onAssertionResultsCreated(AssertionResultsCreated event) {
+        log.info("Received assertion results created event on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                event.workspaceId(), event.entityType(), event.entityIds().size());
+        triggerByEntityIds(event.entityIds(), event.entityType(), event.workspaceId(), event.userName())
+                .subscribe(null,
+                        e -> log.error(
+                                "Error triggering aggregation for assertion results created on workspaceId '{}', entityType '{}', entityIds size '{}'",
+                                event.workspaceId(), event.entityType(), event.entityIds().size(), e));
     }
 
     @Subscribe
