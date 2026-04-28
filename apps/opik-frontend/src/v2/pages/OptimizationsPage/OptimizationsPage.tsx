@@ -335,7 +335,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
         </h1>
       </div>
       {isEmpty ? (
-        canUseOptimizationStudio ? (
+        isOptimizationStudioEnabled && canUseOptimizationStudio ? (
           <OptimizationsEmptyState
             onOptimizeClick={handleNewOptimizationClick}
           />
