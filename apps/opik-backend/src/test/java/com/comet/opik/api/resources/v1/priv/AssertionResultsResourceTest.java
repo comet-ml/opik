@@ -8,7 +8,6 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.EvaluationMethod;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ScoreSource;
-import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
@@ -22,7 +21,6 @@ import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AssertionResultsResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
-import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -94,7 +92,6 @@ class AssertionResultsResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private TraceResourceClient traceResourceClient;
-    private SpanResourceClient spanResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private AssertionResultsResourceClient assertionResultsResourceClient;
@@ -106,7 +103,6 @@ class AssertionResultsResourceTest {
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
         this.traceResourceClient = new TraceResourceClient(client, baseURI);
-        this.spanResourceClient = new SpanResourceClient(client, baseURI);
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.experimentResourceClient = new ExperimentResourceClient(client, baseURI, factory);
         this.assertionResultsResourceClient = new AssertionResultsResourceClient(client, baseURI);
@@ -115,36 +111,6 @@ class AssertionResultsResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-    }
-
-    @ParameterizedTest(name = "PUT /v1/private/assertion-results returns 204 for entity_type={0}")
-    @EnumSource(value = EntityType.class, names = {"TRACE", "SPAN"})
-    @DisplayName("PUT /v1/private/assertion-results accepts the request and returns 204")
-    void storeAssertionsBatch_returns204(EntityType entityType) {
-        UUID entityId = createEntity(entityType);
-
-        var items = List.of(
-                AssertionResultBatchItem.builder()
-                        .entityId(entityId)
-                        .projectName(DEFAULT_PROJECT)
-                        .name("assertion-grounded")
-                        .status(AssertionStatus.PASSED)
-                        .reason("grounded in context")
-                        .source(ScoreSource.SDK)
-                        .build(),
-                AssertionResultBatchItem.builder()
-                        .entityId(entityId)
-                        .projectName(DEFAULT_PROJECT)
-                        .name("assertion-concise")
-                        .status(AssertionStatus.FAILED)
-                        .reason(null)
-                        .source(ScoreSource.ONLINE_SCORING)
-                        .build());
-
-        // Persistence is verified through the experiment-items read API in a dedicated TRACE-only test below.
-        // Span-level assertion reads are not surfaced by any current public API (every reader filters
-        // entity_type='trace'), so the SPAN write path is exercised only as a status-code smoke test.
-        assertionResultsResourceClient.store(entityType, items, API_KEY, TEST_WORKSPACE);
     }
 
     @Test
@@ -262,9 +228,10 @@ class AssertionResultsResourceTest {
                         .build());
     }
 
-    @Test
-    @DisplayName("entity_type=THREAD is rejected with 400 (service-level guard)")
-    void threadEntityTypeIsRejected() {
+    @ParameterizedTest(name = "entity_type={0} is rejected with 400 (only TRACE/SPAN are supported)")
+    @EnumSource(value = EntityType.class, mode = EnumSource.Mode.EXCLUDE, names = {"TRACE", "SPAN"})
+    @DisplayName("Unsupported entity_type is rejected with 400 by the service-level guard")
+    void unsupportedEntityTypeIsRejected(EntityType entityType) {
         var item = AssertionResultBatchItem.builder()
                 .entityId(UUID.randomUUID())
                 .projectName(DEFAULT_PROJECT)
@@ -273,7 +240,7 @@ class AssertionResultsResourceTest {
                 .source(ScoreSource.SDK)
                 .build();
 
-        try (var response = assertionResultsResourceClient.callStore(EntityType.THREAD, List.of(item), API_KEY,
+        try (var response = assertionResultsResourceClient.callStore(entityType, List.of(item), API_KEY,
                 TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
@@ -294,31 +261,6 @@ class AssertionResultsResourceTest {
                 TEST_WORKSPACE)) {
             assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_BAD_REQUEST);
         }
-    }
-
-    private UUID createEntity(EntityType entityType) {
-        return switch (entityType) {
-            case TRACE -> {
-                var trace = factory.manufacturePojo(Trace.class).toBuilder()
-                        .id(null)
-                        .projectName(DEFAULT_PROJECT)
-                        .feedbackScores(null)
-                        .usage(null)
-                        .build();
-                yield traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
-            }
-            case SPAN -> {
-                var span = factory.manufacturePojo(Span.class).toBuilder()
-                        .id(null)
-                        .projectName(DEFAULT_PROJECT)
-                        .feedbackScores(null)
-                        .usage(null)
-                        .totalEstimatedCost(null)
-                        .build();
-                yield spanResourceClient.createSpan(span, API_KEY, TEST_WORKSPACE);
-            }
-            default -> throw new IllegalArgumentException("Unsupported entity type: " + entityType);
-        };
     }
 
     /**

@@ -62,6 +62,9 @@ class AssertionResultServiceImpl implements AssertionResultService {
             return Mono.error(new BadRequestException("Argument 'assertionResults' must not be empty"));
         }
 
+        // Validate up front so a bad id fails fast and independently of project-name normalisation.
+        assertionResults.forEach(item -> IdGenerator.validateVersion(item.entityId(), entityType.getType()));
+
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
             String userName = ctx.get(RequestContext.USER_NAME);
@@ -70,13 +73,9 @@ class AssertionResultServiceImpl implements AssertionResultService {
                     .collect(Collectors.toSet());
 
             Map<String, List<AssertionResultBatchItem>> itemsPerProject = assertionResults.stream()
-                    .map(item -> {
-                        IdGenerator.validateVersion(item.entityId(), entityType.getType());
-
-                        return item.toBuilder()
-                                .projectName(WorkspaceUtils.getProjectName(item.projectName()))
-                                .build();
-                    })
+                    .map(item -> item.toBuilder()
+                            .projectName(WorkspaceUtils.getProjectName(item.projectName()))
+                            .build())
                     .collect(groupingBy(AssertionResultBatchItem::projectName));
 
             return projectService.retrieveByNamesOrCreate(itemsPerProject.keySet())
