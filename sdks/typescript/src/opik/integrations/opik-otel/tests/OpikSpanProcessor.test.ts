@@ -16,8 +16,8 @@ import {
   OPIK_PARENT_SPAN_ID,
   OPIK_SPAN_ID,
   OPIK_TRACE_ID,
-} from "@/otel";
-import { isValidUuidV7 } from "@/utils/generateId";
+} from "../src/index";
+import { isValidUuidV7 } from "../src/internal";
 
 const TRACE_ID = "0193b3a5-1234-7abc-9def-0123456789ab";
 const PARENT_SPAN_ID = "0193b3a5-5678-7abc-9def-0123456789cd";

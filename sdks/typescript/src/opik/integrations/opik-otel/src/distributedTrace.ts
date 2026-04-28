@@ -1,10 +1,10 @@
+import { generateId, logger } from "opik";
+import { OPIK_SPAN_ID } from "./attributes";
 import {
   OPIK_PARENT_SPAN_ID_HEADER,
   OPIK_TRACE_ID_HEADER,
-} from "@/context";
-import { generateId, isValidUuidV7 } from "@/utils/generateId";
-import { logger } from "@/utils/logger";
-import { OPIK_SPAN_ID } from "./attributes";
+  isValidUuidV7,
+} from "./internal";
 import { OpikDistributedTraceAttributes } from "./OpikDistributedTraceAttributes";
 
 /**
@@ -32,7 +32,10 @@ function getHeader(
   name: string
 ): string | undefined {
   const target = name.toLowerCase();
-  if (typeof (headers as Iterable<[string, string]>)[Symbol.iterator] === "function") {
+  if (
+    typeof (headers as Iterable<[string, string]>)[Symbol.iterator] ===
+    "function"
+  ) {
     for (const [key, value] of headers as Iterable<[string, string]>) {
       if (key.toLowerCase() === target) {
         return value;
@@ -84,7 +87,7 @@ export function extractOpikDistributedTraceAttributes(
 
   if (parentSpanId !== undefined && !isValidUuidV7(parentSpanId)) {
     logger.warn(
-      `Opik distributed trace header '${OPIK_PARENT_SPAN_ID_HEADER}' is not a valid UUIDv7; ignoring parent span id.`,
+      `Opik distributed trace header '${OPIK_PARENT_SPAN_ID_HEADER}' is not a valid UUIDv7; ignoring parent span id.`
     );
     parentSpanId = undefined;
   }

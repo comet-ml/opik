@@ -162,6 +162,8 @@ The remote service creates a span with the OpenTelemetry SDK as usual and then c
 
 To make sure descendant OpenTelemetry spans (children created inside the boundary span via `start_as_current_span` / `tracer.startSpan`) also land under the original Opik trace and parent, register the `OpikSpanProcessor` on the same `TracerProvider` as your OTLP exporter. Without it, only the boundary span is linked and its descendants are orphaned in a synthetic Opik trace.
 
+In Python, `OpikSpanProcessor` ships with the main `opik` package under `opik.integrations.otel`. In TypeScript it lives in a separate `opik-otel` package — install it alongside `opik` (`npm install opik-otel @opentelemetry/api @opentelemetry/sdk-trace-base`).
+
 <Tabs>
 <Tab title="Python" value="python">
 
@@ -211,7 +213,7 @@ import {
   BatchSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
-import { attachToParent, OpikSpanProcessor } from "opik";
+import { attachToParent, OpikSpanProcessor } from "opik-otel";
 
 // Configure the tracer provider with the OTLP exporter that ships spans to Opik
 const provider = new BasicTracerProvider();

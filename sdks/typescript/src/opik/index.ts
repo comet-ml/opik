@@ -45,17 +45,6 @@ export {
 } from "@/context";
 export type { DistributedTraceHeaders } from "@/context";
 
-// OpenTelemetry distributed trace helpers
-export {
-  OpikDistributedTraceAttributes,
-  OpikSpanProcessor,
-  OPIK_PARENT_SPAN_ID,
-  OPIK_SPAN_ID,
-  OPIK_TRACE_ID,
-  attachToParent,
-  extractOpikDistributedTraceAttributes,
-} from "@/otel";
-export type { HttpHeadersLike, OpenTelemetrySpanLike } from "@/otel";
 
 // Re-export Zod to ensure consumers use the same version as the SDK
 export { z } from "zod";

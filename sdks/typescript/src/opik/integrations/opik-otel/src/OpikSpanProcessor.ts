@@ -1,8 +1,7 @@
 import { Context, propagation, trace, Span } from "@opentelemetry/api";
 import { ReadableSpan, SpanProcessor } from "@opentelemetry/sdk-trace-base";
+import { generateId, logger } from "opik";
 
-import { generateId } from "@/utils/generateId";
-import { logger } from "@/utils/logger";
 import {
   OPIK_PARENT_SPAN_ID,
   OPIK_SPAN_ID,
@@ -20,7 +19,9 @@ interface InheritedContext {
  * cross-process boundaries, OTel baggage — already carries Opik IDs. Returns
  * `undefined` when the new span has no Opik ancestor and should be left alone.
  */
-function resolveInherited(parentContext: Context): InheritedContext | undefined {
+function resolveInherited(
+  parentContext: Context
+): InheritedContext | undefined {
   // 1) In-process: pull from the parent OTel span's attributes. The parent must
   // carry both opik.trace_id and opik.span_id — this pair is set together by
   // attachToParent on the boundary and by this processor on every inherited
@@ -82,7 +83,7 @@ function resolveInherited(parentContext: Context): InheritedContext | undefined 
  * @example
  * ```ts
  * import { BasicTracerProvider } from "@opentelemetry/sdk-trace-base";
- * import { OpikSpanProcessor } from "opik";
+ * import { OpikSpanProcessor } from "opik-otel";
  *
  * const provider = new BasicTracerProvider();
  * provider.addSpanProcessor(new OpikSpanProcessor());
