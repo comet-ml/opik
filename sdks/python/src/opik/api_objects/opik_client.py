@@ -589,6 +589,7 @@ class Opik:
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
         source: TraceSource = "sdk",
+        **ignored_kwargs: Any,
     ) -> span_module.Span:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
