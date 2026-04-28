@@ -221,6 +221,7 @@ const OptimizationPage: React.FC = () => {
           <div className="flex shrink-0 items-center justify-end pb-4">
             <OptimizationTrialsControls
               onRefresh={handleRefresh}
+              isFetching={isExperimentsFetching}
               rowHeight={height}
               onRowHeightChange={setHeight}
               columnsDef={columnsDef}
