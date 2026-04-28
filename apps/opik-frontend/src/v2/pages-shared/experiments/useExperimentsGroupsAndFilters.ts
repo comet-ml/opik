@@ -12,6 +12,7 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import TagsAutocomplete from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
@@ -80,6 +81,14 @@ export const useExperimentsGroupsAndFilters = ({
             ...(promptId && { promptId }),
             sorting: sortedColumns,
             filters,
+          },
+        },
+        tags: {
+          keyComponent: TagsAutocomplete,
+          keyComponentProps: {
+            projectId: projectId ?? "",
+            entityType: "experiments",
+            ...(promptId && { promptId }),
           },
         },
       },
