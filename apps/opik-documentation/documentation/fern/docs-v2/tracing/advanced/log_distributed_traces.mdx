@@ -166,7 +166,7 @@ The remote service creates a span with the OpenTelemetry SDK as usual and then c
 ```python title="server.py"
 from fastapi import FastAPI, Request
 from opentelemetry import trace
-from opik.otel import distributed_trace
+from opik.integrations.otel import distributed_trace
 
 app = FastAPI()
 tracer = trace.get_tracer("my-service")

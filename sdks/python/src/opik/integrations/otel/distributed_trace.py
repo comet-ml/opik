@@ -1,7 +1,7 @@
 import logging
-import uuid
 from typing import Dict, Optional, TYPE_CHECKING
 
+from opik import id_helpers
 from opik.integrations.otel import types as otel_types
 
 if TYPE_CHECKING:
@@ -11,14 +11,6 @@ LOGGER = logging.getLogger(__name__)
 
 OPIK_TRACE_ID_HEADER = "opik_trace_id"
 OPIK_PARENT_SPAN_ID_HEADER = "opik_parent_span_id"
-
-
-def _is_valid_uuid(value: str) -> bool:
-    try:
-        uuid.UUID(value)
-        return True
-    except (ValueError, AttributeError, TypeError):
-        return False
 
 
 def _get_header(http_headers: Dict[str, str], name: str) -> Optional[str]:
@@ -69,7 +61,7 @@ def extract_opik_distributed_trace_attributes(
                 OPIK_PARENT_SPAN_ID_HEADER,
             )
         return None
-    if not _is_valid_uuid(trace_id):
+    if not id_helpers.is_valid_uuid_v7(trace_id):
         LOGGER.warning(
             "Opik distributed trace header '%s' is not a valid UUID; "
             "skipping distributed trace processing.",
@@ -79,7 +71,7 @@ def extract_opik_distributed_trace_attributes(
 
     if not parent_span_id:
         parent_span_id = None
-    elif not _is_valid_uuid(parent_span_id):
+    elif not id_helpers.is_valid_uuid_v7(parent_span_id):
         LOGGER.warning(
             "Opik distributed trace header '%s' is not a valid UUID; "
             "ignoring parent span id.",

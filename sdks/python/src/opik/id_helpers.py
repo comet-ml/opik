@@ -30,6 +30,14 @@ def generate_random_alphanumeric_string(length: int) -> str:
     return "".join(random.choice(characters) for _ in range(length))
 
 
+def is_valid_uuid_v7(value: str) -> bool:
+    """Return True if `value` parses as a UUID and is version 7."""
+    try:
+        return uuid.UUID(value).version == 7
+    except (ValueError, AttributeError, TypeError):
+        return False
+
+
 def uuid4_to_uuid7(user_datetime: datetime, user_uuid: str) -> uuid.UUID:
     """Convert a UUID v4 into a UUID v7 following RFC draft specification."""
     # Get Unix timestamp in milliseconds
