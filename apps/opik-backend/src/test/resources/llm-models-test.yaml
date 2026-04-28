@@ -9,6 +9,14 @@ openai:
 
 anthropic:
   - id: "claude-sonnet-4-6"
+  - id: "claude-opus-4-7"
+    label: "Claude Opus 4.7"
+    structuredOutput: true
+    supportsSamplingParams: false
+  - id: "claude-opus-4-6"
+    label: "Claude Opus 4.6"
+    structuredOutput: true
+    supportsSamplingParams: true
 
 vertex-ai:
   - id: "gemini-2.0-flash-001"
