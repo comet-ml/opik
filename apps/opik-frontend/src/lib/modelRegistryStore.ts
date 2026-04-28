@@ -37,6 +37,7 @@ import {
 export type ModelFlags = {
   reasoning: boolean;
   structuredOutput: boolean;
+  supportsSamplingParams: boolean;
 };
 
 const buildInitialFlags = (): Map<string, ModelFlags> => {
@@ -53,6 +54,9 @@ const buildInitialFlags = (): Map<string, ModelFlags> => {
         // so this only governs the first render for models known at
         // release time.
         structuredOutput: false,
+        // Default to true: most models accept sampling params. The hook
+        // overwrites on mount with the BE-sourced flag.
+        supportsSamplingParams: true,
       });
     }
   }
