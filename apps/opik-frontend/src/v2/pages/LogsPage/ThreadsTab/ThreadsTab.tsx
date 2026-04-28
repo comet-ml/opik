@@ -40,6 +40,7 @@ import {
   injectColumnCallback,
   migrateSelectedColumns,
 } from "@/lib/table";
+import { cn } from "@/lib/utils";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
@@ -382,6 +383,8 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
 
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  const [refreshSpin, setRefreshSpin] = useState(false);
 
   // Enable table data loading after initial render to allow users to change the date filter
   React.useEffect(() => {
@@ -766,10 +769,20 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
                   size="sm"
                   className="shrink-0"
                   onClick={() => {
+                    setRefreshSpin(true);
                     refetch();
                   }}
+                  disabled={refreshSpin || isFetching}
                 >
-                  <RotateCw className="mr-1.5 size-3.5" />
+                  <RotateCw
+                    className={cn(
+                      "mr-1.5 size-3.5",
+                      (refreshSpin || isFetching) && "animate-spin",
+                    )}
+                    onAnimationIteration={() => {
+                      if (!isFetching) setRefreshSpin(false);
+                    }}
+                  />
                   Refresh
                 </Button>
               </TooltipWrapper>

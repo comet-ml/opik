@@ -52,7 +52,7 @@ import {
 } from "@/lib/metadata";
 import { BaseTraceData, Span, Trace, LOGS_SOURCE } from "@/types/traces";
 import { convertColumnDataToColumn, migrateSelectedColumns } from "@/lib/table";
-import { getJSONPaths } from "@/lib/utils";
+import { cn, getJSONPaths } from "@/lib/utils";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
@@ -533,6 +533,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const [isTableDataEnabled, setIsTableDataEnabled] = useState(false);
+
+  const [refreshSpin, setRefreshSpin] = useState(false);
 
   // Declare selectedColumns early so it can be used in excludeFields computation
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -1357,11 +1359,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                   size="sm"
                   className="shrink-0"
                   onClick={() => {
+                    setRefreshSpin(true);
                     refetch();
                     refetchStatistic();
                   }}
+                  disabled={refreshSpin || isFetching}
                 >
-                  <RotateCw className="mr-1.5 size-3.5" />
+                  <RotateCw
+                    className={cn(
+                      "mr-1.5 size-3.5",
+                      (refreshSpin || isFetching) && "animate-spin",
+                    )}
+                    onAnimationIteration={() => {
+                      if (!isFetching) setRefreshSpin(false);
+                    }}
+                  />
                   Refresh
                 </Button>
               </TooltipWrapper>
