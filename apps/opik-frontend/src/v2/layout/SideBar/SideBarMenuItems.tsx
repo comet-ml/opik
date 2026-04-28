@@ -51,7 +51,9 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
                 {menuGroup.label}
               </div>
             ) : (
-              <div className="py-1">{index > 0 && <Separator />}</div>
+              <div className="py-1">
+                {index > 0 && <Separator className="mx-1 w-auto" />}
+              </div>
             ))}
           <ul className="flex flex-col text-foreground">
             {renderItems(menuGroup.items)}

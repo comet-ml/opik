@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
+import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useWorkspaceSelectorData from "@/plugins/comet/useWorkspaceSelectorData";
 import WorkspaceMenuContent from "@/plugins/comet/WorkspaceMenuContent";
 
@@ -101,8 +102,8 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
 
   return (
     <DropdownMenu open={isDropdownOpen} onOpenChange={handleOpenChange}>
-      <DropdownMenuTrigger asChild>
-        {expanded ? (
+      {expanded ? (
+        <DropdownMenuTrigger asChild>
           <button
             className={cn(
               "flex w-full items-center gap-1.5 rounded-md px-1 py-0.5",
@@ -113,7 +114,7 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
           >
             {expandedThumb}
             <div className="flex min-w-0 flex-1 flex-col items-stretch">
-              <span className="flex items-end gap-0.5 text-light-slate">
+              <span className="flex items-center gap-0.5 text-light-slate">
                 <span className="comet-body-xs-accented">Workspace</span>
                 {isDropdownOpen ? (
                   <ChevronUp className="size-3.5" />
@@ -126,23 +127,27 @@ const SidebarWorkspaceSelector: React.FC<SidebarWorkspaceSelectorProps> = ({
               </span>
             </div>
           </button>
-        ) : (
-          <button
-            className="relative flex w-fit items-center justify-center self-center"
-            aria-label="Open workspace selector"
-          >
-            {collapsedThumb}
-            <Button
-              variant="outline"
-              size="icon-4xs"
-              asChild
-              className="pointer-events-none absolute -bottom-1 -right-1 text-foreground-secondary shadow-sm"
+        </DropdownMenuTrigger>
+      ) : (
+        <TooltipWrapper content="Switch workspace" side="right">
+          <DropdownMenuTrigger asChild>
+            <button
+              className="relative flex w-fit items-center justify-center self-center"
+              aria-label="Open workspace selector"
             >
-              <span>{isDropdownOpen ? <ChevronUp /> : <ChevronDown />}</span>
-            </Button>
-          </button>
-        )}
-      </DropdownMenuTrigger>
+              {collapsedThumb}
+              <Button
+                variant="outline"
+                size="icon-4xs"
+                asChild
+                className="pointer-events-none absolute -bottom-1 -right-1 text-foreground-secondary shadow-sm"
+              >
+                <span>{isDropdownOpen ? <ChevronUp /> : <ChevronDown />}</span>
+              </Button>
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipWrapper>
+      )}
 
       <DropdownMenuContent
         className="w-[280px] p-1"

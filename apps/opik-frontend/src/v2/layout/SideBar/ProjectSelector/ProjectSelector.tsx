@@ -16,9 +16,11 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
+import { ListAction } from "@/ui/list-action";
 import { SearchInput } from "@/shared/SearchInput/SearchInput";
 import { setActiveProject } from "@/hooks/useActiveProjectInitializer";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
@@ -105,7 +107,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const renderProjectLabel = () => (
     <PopoverTrigger asChild>
       <button
-        className="flex items-end gap-0.5 text-light-slate"
+        className="flex items-center gap-0.5 text-light-slate"
         aria-label="Open project selector"
       >
         <span className="comet-body-xs-accented">Project</span>
@@ -128,7 +130,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
       >
         <ProjectIcon index={activeIconIndex} size="lg" />
         <div className="flex min-w-0 flex-1 flex-col items-stretch">
-          <div className="flex items-end gap-0.5">
+          <div className="flex items-center gap-0.5">
             <span className="comet-body-xs-accented text-light-slate">
               Project
             </span>
@@ -226,16 +228,18 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
   const renderCollapsedTrigger = () => (
     <div className="relative w-fit self-center">
       {renderCollapsedIcon()}
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon-4xs"
-          aria-label="Open project selector"
-          className="absolute -bottom-1 -right-1 text-foreground-secondary shadow-sm"
-        >
-          {open ? <ChevronUp /> : <ChevronDown />}
-        </Button>
-      </PopoverTrigger>
+      <TooltipWrapper content="Switch project" side="right">
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            size="icon-4xs"
+            aria-label="Open project selector"
+            className="absolute -bottom-1 -right-1 text-foreground-secondary shadow-sm"
+          >
+            {open ? <ChevronUp /> : <ChevronDown />}
+          </Button>
+        </PopoverTrigger>
+      </TooltipWrapper>
     </div>
   );
 
@@ -252,12 +256,9 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             maxHeight: "var(--radix-popover-content-available-height)",
           }}
         >
-          <div className="flex h-8 items-center px-3">
-            <span className="comet-body-s-accented text-foreground">
-              Projects
-            </span>
-          </div>
-          <div className="px-1">
+          <DropdownMenuLabel size="sm">Projects</DropdownMenuLabel>
+          <DropdownMenuSeparator className="my-1" />
+          <div className="px-0.5" onKeyDown={(e) => e.stopPropagation()}>
             <SearchInput
               searchText={search}
               setSearchText={setSearch}
@@ -265,6 +266,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
               size="sm"
             />
           </div>
+          <DropdownMenuSeparator className="my-1" />
           <div className="min-h-0 flex-1 overflow-auto">
             {projectsData?.content?.map((project) => (
               <ProjectItem
@@ -289,16 +291,20 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = ({
             ))}
           </div>
           {canCreateProjects && (
-            <button
-              className="flex h-8 w-full items-center gap-2 rounded-md px-3 hover:bg-primary-foreground"
-              onClick={() => {
-                setOpen(false);
-                setOpenCreateDialog(true);
-              }}
-            >
-              <Plus className="size-3.5 shrink-0 text-light-slate" />
-              <span className="comet-body-s text-foreground">New project</span>
-            </button>
+            <>
+              <DropdownMenuSeparator className="my-1" />
+              <ListAction
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  setOpen(false);
+                  setOpenCreateDialog(true);
+                }}
+              >
+                <Plus className="size-3.5 shrink-0 text-light-slate" />
+                <span>New project</span>
+              </ListAction>
+            </>
           )}
         </PopoverContent>
       </Popover>
@@ -366,10 +372,11 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
         to="/$workspaceName/projects/$projectId/home"
         params={{ workspaceName, projectId: project.id }}
         className={cn(
-          "group relative flex h-8 items-center gap-2 rounded-md px-3 hover:bg-primary-foreground",
+          "comet-body-s group relative flex h-8 cursor-pointer items-center gap-2 rounded-md px-3 outline-none transition-colors hover:bg-primary-foreground hover:text-foreground",
           hasActions && "hover:pr-9",
           hasActions && isSelected && "pr-9",
-          isSelected && "bg-primary-100 text-primary hover:bg-primary-100",
+          isSelected &&
+            "bg-primary-100 text-primary hover:bg-secondary hover:text-primary",
         )}
         onClick={(e) => {
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -395,22 +402,17 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
                 variant="minimal"
                 size="icon-2xs"
                 className={cn(
-                  "absolute right-3 top-1/2 -translate-y-1/2 rounded pl-2",
+                  "absolute right-3 top-1/2 -translate-y-1/2 rounded pl-2 text-light-slate hover:text-foreground",
                   isSelected ? "visible" : "invisible group-hover:visible",
                 )}
               >
-                <MoreHorizontal
-                  className={cn(
-                    "size-3.5",
-                    isSelected ? "text-primary" : "text-light-slate",
-                  )}
-                />
+                <MoreHorizontal className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-40">
               {canCreateProjects && (
                 <DropdownMenuItem
-                  className="h-8 px-3 py-1.5"
+                  size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpenDialog(2);
@@ -425,7 +427,7 @@ const ProjectItem: React.FC<ProjectItemProps> = ({
               {canDelete && (
                 <DropdownMenuItem
                   variant="destructive"
-                  className="h-8 px-3 py-1.5"
+                  size="sm"
                   onClick={(e) => {
                     e.stopPropagation();
                     setOpenDialog(1);

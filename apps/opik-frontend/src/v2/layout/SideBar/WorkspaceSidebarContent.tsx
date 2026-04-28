@@ -1,7 +1,7 @@
 import React from "react";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { Separator } from "@/ui/separator";
-import { calculateWorkspaceName } from "@/lib/utils";
+import { calculateWorkspaceName, cn } from "@/lib/utils";
 import usePluginsStore from "@/store/PluginsStore";
 import SidebarMenuItem from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
 import GitHubStarListItem from "@/v2/layout/SideBar/GitHubStarListItem/GitHubStarListItem";
@@ -55,9 +55,9 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
   return (
     <>
       {workspaceSelector}
-      <Separator className="my-2" />
+      <Separator className={cn("my-2", !expanded && "mx-1 w-auto")} />
       <div className="flex min-h-0 flex-1 flex-col overflow-auto">
-        <ul className="flex flex-col">
+        <ul className={cn("flex flex-col", !expanded && "gap-1")}>
           {menuGroups.flatMap((group) =>
             group.items.map((item) => (
               <SidebarMenuItem key={item.id} item={item} expanded={expanded} />
@@ -68,8 +68,8 @@ const WorkspaceSidebarContent: React.FC<WorkspaceSidebarContentProps> = ({
 
       <div className="shrink-0 pt-2">
         <BackToProjectButton expanded={expanded} />
-        <Separator className="my-2" />
-        <ul className="flex flex-col">
+        <Separator className={cn("my-2", !expanded && "mx-1 w-auto")} />
+        <ul className={cn("flex flex-col", !expanded && "gap-1")}>
           <GitHubStarListItem expanded={expanded} />
         </ul>
       </div>

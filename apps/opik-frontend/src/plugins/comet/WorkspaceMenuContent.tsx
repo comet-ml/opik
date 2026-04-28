@@ -4,12 +4,14 @@ import { Settings2 } from "lucide-react";
 import { Button } from "@/ui/button";
 import {
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuPortal,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
 } from "@/ui/dropdown-menu";
+import { ListAction } from "@/ui/list-action";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { calculateWorkspaceName, cn } from "@/lib/utils";
@@ -61,7 +63,11 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
         open={isOrgSubmenuOpen}
         onOpenChange={setIsOrgSubmenuOpen}
       >
-        <DropdownMenuSubTrigger className="comet-body-s-accented h-8 cursor-pointer px-3 text-foreground data-[state=open]:bg-primary-foreground [&>svg]:size-3.5 [&>svg]:text-light-slate">
+        <DropdownMenuSubTrigger
+          variant="menu"
+          size="sm"
+          className="cursor-pointer"
+        >
           <TooltipWrapper content={currentOrganization.name}>
             <span className="min-w-0 flex-1 truncate text-left">
               {currentOrganization.name}
@@ -70,11 +76,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
         </DropdownMenuSubTrigger>
         <DropdownMenuPortal>
           <DropdownMenuSubContent className="w-[280px] p-1" sideOffset={8}>
-            <div className="flex h-8 items-center px-3">
-              <span className="comet-body-s-accented text-foreground">
-                Organizations
-              </span>
-            </div>
+            <DropdownMenuLabel size="sm">Organizations</DropdownMenuLabel>
             <DropdownMenuSeparator className="my-1" />
             <div className="max-h-[60vh] overflow-auto">
               {sortedOrganizations.length > 0 ? (
@@ -83,16 +85,14 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
                   return (
                     <DropdownMenuItem
                       key={org.id}
+                      size="sm"
+                      selected={isActive}
                       onSelect={(e) => {
                         e.preventDefault();
                         handleChangeOrganization(org);
                         setIsOrgSubmenuOpen(false);
                       }}
-                      className={cn(
-                        "group h-8 cursor-pointer px-3 pr-1.5",
-                        isActive &&
-                          "bg-primary-100 text-primary focus:bg-secondary focus:text-primary",
-                      )}
+                      className="group pr-1.5"
                     >
                       <TooltipWrapper content={org.name}>
                         <span className="comet-body-s min-w-0 flex-1 truncate text-left">
@@ -182,17 +182,14 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
           return (
             <DropdownMenuItem
               key={workspace.workspaceName}
+              size="sm"
+              selected={isSelected}
               onSelect={(e) => {
                 e.preventDefault();
                 handleChangeWorkspace(workspace);
                 setIsDropdownOpen(false);
                 setSearch("");
               }}
-              className={cn(
-                "h-8 cursor-pointer px-3",
-                isSelected &&
-                  "bg-primary-100 text-primary focus:bg-secondary focus:text-primary",
-              )}
             >
               <TooltipWrapper content={wsDisplayName}>
                 <span className="comet-body-s min-w-0 flex-1 truncate text-left">
@@ -213,13 +210,12 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
     <DropdownMenuSeparator className="my-1" />
 
-    <a
-      href={buildUrl("account-settings/workspaces", workspaceName)}
-      className="comet-body-s flex h-8 w-full items-center gap-2 rounded-md px-3 text-foreground hover:bg-primary-foreground"
-    >
-      <Settings2 className="size-3.5 text-light-slate" />
-      <span>Manage workspaces</span>
-    </a>
+    <ListAction variant="default" size="sm" asChild>
+      <a href={buildUrl("account-settings/workspaces", workspaceName)}>
+        <Settings2 className="size-3.5 text-light-slate" />
+        <span>Manage workspaces</span>
+      </a>
+    </ListAction>
   </>
 );
 
