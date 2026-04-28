@@ -70,6 +70,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/optimizations/{id}", schema = @Schema(implementation = String.class))})})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response upsert(
             @RequestBody(content = @Content(schema = @Schema(implementation = Optimization.class))) @JsonView(Optimization.View.Write.class) @NotNull @Valid Optimization optimization,
             @Context UriInfo uriInfo) {
@@ -92,6 +93,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
     @JsonView(Optimization.View.Public.class)
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW)
     public Response find(
             @QueryParam("page") @Min(1) @DefaultValue("1") int page,
             @QueryParam("size") @Min(1) @DefaultValue("10") int size,
@@ -131,6 +133,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "200", description = "Optimization resource", content = @Content(schema = @Schema(implementation = Optimization.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     @JsonView(Optimization.View.Public.class)
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW)
     public Response get(@PathParam("id") UUID id) {
         log.info("Getting optimization by id '{}'", id);
         var optimization = optimizationService.getById(id)
@@ -145,6 +148,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/optimizations/{id}", schema = @Schema(implementation = String.class))})})
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = Optimization.class))) @JsonView(Optimization.View.Write.class) @NotNull @Valid Optimization optimization,
             @Context UriInfo uriInfo) {
@@ -193,6 +197,7 @@ public class OptimizationsResource {
     @Path("/{id}")
     @Operation(operationId = "updateOptimizationsById", summary = "Update optimization by id", description = "Update optimization by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response updateOptimizationsById(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = OptimizationUpdate.class))) @NotNull OptimizationUpdate request) {
         log.info("Update optimization with id '{}', with request '{}'", id, request);
@@ -212,6 +217,7 @@ public class OptimizationsResource {
     @Path("/studio/{id}/cancel")
     @Operation(operationId = "cancelStudioOptimizations", summary = "Cancel Studio optimizations", description = "Cancel Studio optimizations by id", responses = {
             @ApiResponse(responseCode = "501", description = "Not Implemented")})
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE)
     public Response cancelStudioOptimization(@PathParam("id") UUID id) {
         log.info("Cancel Studio optimization endpoint called for id '{}' - not yet implemented", id);
         return Response.status(Response.Status.NOT_IMPLEMENTED).build();
@@ -223,6 +229,7 @@ public class OptimizationsResource {
             @ApiResponse(responseCode = "200", description = "Logs response", content = @Content(schema = @Schema(implementation = OptimizationStudioLog.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW)
     public Response studioGetLogs(@PathParam("id") UUID id) {
         log.info("Getting logs for Studio optimization id: '{}'", id);
 

@@ -4,6 +4,8 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.utils.ChunkedOutputHandlers;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionRequest;
 import dev.langchain4j.model.openai.internal.chat.ChatCompletionResponse;
@@ -57,6 +59,7 @@ public class ChatCompletionsResource {
                             ErrorMessage.class}))),
                     @Content(mediaType = "application/json", schema = @Schema(implementation = ChatCompletionResponse.class))}),
     })
+    @RequiredPermissions(WorkspaceUserPermission.PLAYGROUND_USE)
     public Response create(
             @RequestBody(content = @Content(schema = @Schema(implementation = ChatCompletionRequest.class))) @NotNull @Valid ChatCompletionRequest request) {
         var workspaceId = requestContextProvider.get().getWorkspaceId();

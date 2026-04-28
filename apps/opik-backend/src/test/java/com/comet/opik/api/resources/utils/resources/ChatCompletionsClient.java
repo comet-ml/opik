@@ -124,6 +124,15 @@ public class ChatCompletionsClient {
         }
     }
 
+    public Response callCreate(String apiKey, String workspaceName, ChatCompletionRequest request) {
+        return clientSupport.target(getCreateUrl())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
+    }
+
     private String getCreateUrl() {
         return RESOURCE_PATH.formatted(baseURI);
     }
