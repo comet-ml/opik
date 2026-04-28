@@ -32,7 +32,7 @@ export const SearchInput = ({
   return (
     <div className={cn("relative w-full", className)}>
       <div className="absolute left-2.5 top-1/2 -translate-y-1/2">
-        <Search className="size-3.5 text-muted-slate" />
+        <Search className="size-3.5 text-light-slate" />
       </div>
       <DebounceInput
         className={cn("px-8", size === "sm" && "h-8")}
