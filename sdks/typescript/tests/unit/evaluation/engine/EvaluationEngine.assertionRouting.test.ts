@@ -70,10 +70,13 @@ class MockHeuristic extends BaseMetric {
 describe("EvaluationEngine routes scores to the right batch queue", () => {
   let opikClient: OpikClient;
   let testDataset: Dataset;
-  let storeAssertionsBatchSpy: ReturnType<typeof vi.spyOn>;
-  let scoreBatchOfTracesSpy: ReturnType<typeof vi.spyOn>;
 
   const mockTask: EvaluationTask = async () => ({ output: "generated output" });
+
+  const getStoreAssertionsBatchSpy = () =>
+    vi.mocked(opikClient.api.assertionResults.storeAssertionsBatch);
+  const getScoreBatchOfTracesSpy = () =>
+    vi.mocked(opikClient.api.traces.scoreBatchOfTraces);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,12 +98,13 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
     vi.spyOn(opikClient.api.spans, "createSpans").mockImplementation(
       mockAPIFunction
     );
-    scoreBatchOfTracesSpy = vi
-      .spyOn(opikClient.api.traces, "scoreBatchOfTraces")
-      .mockImplementation(mockAPIFunction);
-    storeAssertionsBatchSpy = vi
-      .spyOn(opikClient.api.assertionResults, "storeAssertionsBatch")
-      .mockImplementation(mockAPIFunction);
+    vi.spyOn(opikClient.api.traces, "scoreBatchOfTraces").mockImplementation(
+      mockAPIFunction
+    );
+    vi.spyOn(
+      opikClient.api.assertionResults,
+      "storeAssertionsBatch"
+    ).mockImplementation(mockAPIFunction);
     vi.spyOn(
       opikClient.api.datasets,
       "getDatasetByIdentifier"
@@ -183,20 +187,9 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
 
     await opikClient.flush({ silent: true });
 
-    expect(storeAssertionsBatchSpy).toHaveBeenCalledTimes(1);
-    const [batchPayload] = storeAssertionsBatchSpy.mock.calls[0] as [
-      {
-        entityType: string;
-        assertionResults: Array<{
-          entityId: string;
-          name: string;
-          status: string;
-          reason?: string;
-          source: string;
-          projectName?: string;
-        }>;
-      },
-    ];
+    const storeAssertionsBatch = getStoreAssertionsBatchSpy();
+    expect(storeAssertionsBatch).toHaveBeenCalledTimes(1);
+    const batchPayload = storeAssertionsBatch.mock.calls[0][0];
 
     expect(batchPayload.entityType).toBe("TRACE");
     expect(batchPayload.assertionResults).toHaveLength(2);
@@ -216,7 +209,7 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
     });
     expect(batchPayload.assertionResults[0].entityId).toBeTruthy();
 
-    expect(scoreBatchOfTracesSpy).not.toHaveBeenCalled();
+    expect(getScoreBatchOfTracesSpy()).not.toHaveBeenCalled();
   });
 
   test("evaluate (non-suite): regular metric scores still go to feedback-scores, not assertion-results", async () => {
@@ -230,13 +223,12 @@ describe("EvaluationEngine routes scores to the right batch queue", () => {
 
     await opikClient.flush({ silent: true });
 
-    expect(scoreBatchOfTracesSpy).toHaveBeenCalled();
-    const [{ scores }] = scoreBatchOfTracesSpy.mock.calls[0] as [
-      { scores: Array<{ name: string; value: number }> },
-    ];
+    const scoreBatchOfTraces = getScoreBatchOfTracesSpy();
+    expect(scoreBatchOfTraces).toHaveBeenCalled();
+    const { scores } = scoreBatchOfTraces.mock.calls[0][0];
     expect(scores).toHaveLength(1);
     expect(scores[0]).toMatchObject({ name: "contains_word", value: 0.75 });
 
-    expect(storeAssertionsBatchSpy).not.toHaveBeenCalled();
+    expect(getStoreAssertionsBatchSpy()).not.toHaveBeenCalled();
   });
 });
