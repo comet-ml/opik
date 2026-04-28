@@ -21,7 +21,11 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
       new Map([
         [
           PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-          { reasoning: false, structuredOutput: true, supportsSamplingParams: true },
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: true,
+          },
         ],
       ]),
     );
@@ -39,7 +43,11 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
       new Map([
         [
           PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-          { reasoning: false, structuredOutput: true, supportsSamplingParams: false },
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: false,
+          },
         ],
       ]),
     );

@@ -17,8 +17,9 @@ describe("supportsSamplingParams", () => {
   });
 
   it("returns true when no flag is registered for the model", () => {
-    expect(supportsSamplingParams("never-seen-model" as PROVIDER_MODEL_TYPE))
-      .toBe(true);
+    expect(
+      supportsSamplingParams("never-seen-model" as PROVIDER_MODEL_TYPE),
+    ).toBe(true);
   });
 
   it("returns false when the BE flag is false", () => {
@@ -26,12 +27,17 @@ describe("supportsSamplingParams", () => {
       new Map([
         [
           PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-          { reasoning: false, structuredOutput: true, supportsSamplingParams: false },
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: false,
+          },
         ],
       ]),
     );
-    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7))
-      .toBe(false);
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7)).toBe(
+      false,
+    );
   });
 
   it("returns true when the BE flag is true", () => {
@@ -39,11 +45,16 @@ describe("supportsSamplingParams", () => {
       new Map([
         [
           PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-          { reasoning: false, structuredOutput: true, supportsSamplingParams: true },
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: true,
+          },
         ],
       ]),
     );
-    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6))
-      .toBe(true);
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6)).toBe(
+      true,
+    );
   });
 });
