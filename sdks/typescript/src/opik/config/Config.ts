@@ -11,6 +11,7 @@ export interface OpikConfig {
   apiUrl?: string;
   projectName: string;
   workspaceName: string;
+  environment: string;
   requestOptions?: RequestOptions;
   batchDelayMs?: number;
   holdUntilFlush?: boolean;
@@ -27,6 +28,7 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
   workspaceName: "default",
+  environment: "",
   batchDelayMs: 300,
   holdUntilFlush: false,
 };
@@ -43,6 +45,7 @@ function loadFromEnv(): Partial<OpikConfig> {
     apiUrl: process.env.OPIK_URL_OVERRIDE,
     projectName: process.env.OPIK_PROJECT_NAME,
     workspaceName: process.env.OPIK_WORKSPACE,
+    environment: process.env.OPIK_ENVIRONMENT,
     batchDelayMs: process.env.OPIK_BATCH_DELAY_MS
       ? Number(process.env.OPIK_BATCH_DELAY_MS)
       : undefined,
@@ -84,6 +87,7 @@ function loadFromConfigFile(): Partial<OpikConfig> {
       apiUrl: config.opik.url_override,
       projectName: config.opik.project_name,
       workspaceName: config.opik.workspace,
+      environment: config.opik.environment,
     });
   } catch (error) {
     logger.error(`Error loading config file ${expandedConfigFilePath}: ${error}`);

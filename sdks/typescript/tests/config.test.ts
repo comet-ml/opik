@@ -61,6 +61,40 @@ describe("Opik client config", () => {
     expect(opik.config.projectName).toBe("test");
   });
 
+  it("should load environment from OPIK_ENVIRONMENT env var", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+    process.env.OPIK_ENVIRONMENT = "production";
+
+    const opik = new Opik();
+
+    expect(opik.config.environment).toBe("production");
+  });
+
+  it("should load environment from config file", async () => {
+    process.env.OPIK_CONFIG_PATH = path.resolve(
+      __dirname,
+      "./examples/valid-opik-config-with-environment.ini"
+    );
+    process.env.OPIK_API_KEY = undefined;
+
+    const opik = new Opik();
+
+    expect(opik.config.environment).toBe("staging");
+  });
+
+  it("should default environment to empty string when not set", async () => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+    delete process.env.OPIK_ENVIRONMENT;
+
+    const opik = new Opik();
+
+    expect(opik.config.environment).toBe("");
+  });
+
   it("should being able to override config values from the environment variables + explicit config", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,

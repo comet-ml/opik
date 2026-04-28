@@ -691,6 +691,7 @@ export async function getOrAskForProjectData(options?: {
   projectApiKey: string;
   workspaceName: string;
   projectName: string;
+  environment?: string;
   deploymentType: DeploymentType;
 }> {
   const cloudUrl = getCloudUrl();
@@ -720,12 +721,21 @@ export async function getOrAskForProjectData(options?: {
       useLocal: true,
     });
 
+    const localEnvironment = await abortIfCancelled(
+      clack.text({
+        message: 'Enter your environment name (optional, e.g. production, staging)',
+        placeholder: 'Press Enter to skip',
+      }),
+      'nodejs' as Integration,
+    );
+
     return {
       wizardHash,
       host: DEFAULT_LOCAL_URL,
       projectApiKey: '',
       workspaceName: 'default',
       projectName: projectName || suggestedProject,
+      environment: localEnvironment || undefined,
       deploymentType: DeploymentType.LOCAL,
     };
   }
@@ -870,6 +880,14 @@ export async function getOrAskForProjectData(options?: {
     'nodejs' as Integration,
   );
 
+  const environmentInput = await abortIfCancelled(
+    clack.text({
+      message: 'Enter your environment name (optional, e.g. production, staging)',
+      placeholder: 'Press Enter to skip',
+    }),
+    'nodejs' as Integration,
+  );
+
   const wizardHash = 'terminal-input-' + Date.now(); // Simple hash for tracking
 
   analytics.setDistinctId(wizardHash);
@@ -885,6 +903,7 @@ export async function getOrAskForProjectData(options?: {
     projectApiKey,
     workspaceName,
     projectName: projectName || suggestedProject,
+    environment: environmentInput || undefined,
     deploymentType,
   };
 

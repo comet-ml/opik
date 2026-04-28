@@ -73,7 +73,7 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   }
 
   debug('Getting project data');
-  const { projectApiKey, host, workspaceName, projectName, deploymentType } =
+  const { projectApiKey, host, workspaceName, projectName, environment, deploymentType } =
     await getOrAskForProjectData({ useLocal: options.useLocal });
   debug(
     `Project data obtained: deploymentType=${deploymentType}, workspace=${workspaceName}, project=${projectName}`,
@@ -147,6 +147,10 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
     environmentVariables[OPIK_ENV_VARS.WORKSPACE] = workspaceName;
   }
 
+  if (environment) {
+    environmentVariables[OPIK_ENV_VARS.ENVIRONMENT] = environment;
+  }
+
   const { relativeEnvFilePath, addedEnvVariables, addedGitignore } =
     await addOrUpdateEnvironmentVariablesStep({
       variables: environmentVariables,
@@ -158,6 +162,7 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   await saveToOpikConfigStep({
     projectName,
     urlOverride: buildOpikApiUrl(host),
+    ...(environment ? { environment } : {}),
     ...(isLocalDeployment
       ? {}
       : { apiKey: projectApiKey, workspace: workspaceName }),

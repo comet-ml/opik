@@ -15,6 +15,9 @@ export const OPIK_ENV_VARS = {
 
   /** Project name (defaults to "Default Project" if not set) */
   PROJECT_NAME: 'OPIK_PROJECT_NAME',
+
+  /** Environment name (e.g. production, staging, development) */
+  ENVIRONMENT: 'OPIK_ENVIRONMENT',
 } as const;
 
 /**
@@ -48,4 +51,6 @@ export const OPIK_ENV_VAR_DESCRIPTIONS = {
   [OPIK_ENV_VARS.WORKSPACE]: 'Your Opik workspace name',
   [OPIK_ENV_VARS.PROJECT_NAME]:
     'Project name for organizing traces (defaults to "Default Project")',
+  [OPIK_ENV_VARS.ENVIRONMENT]:
+    'Environment name for organizing traces (e.g. production, staging, development)',
 } as const;

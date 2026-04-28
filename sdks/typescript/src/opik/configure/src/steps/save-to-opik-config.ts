@@ -38,6 +38,7 @@ export interface SaveToOpikConfigOptions {
   urlOverride: string;
   apiKey?: string;
   workspace?: string;
+  environment?: string;
 }
 
 /**
@@ -47,7 +48,7 @@ export interface SaveToOpikConfigOptions {
 export async function saveToOpikConfigStep(
   options: SaveToOpikConfigOptions,
 ): Promise<void> {
-  const { projectName, urlOverride, apiKey, workspace } = options;
+  const { projectName, urlOverride, apiKey, workspace, environment } = options;
   const configFilePath = resolveConfigFilePath();
 
   try {
@@ -64,6 +65,7 @@ export async function saveToOpikConfigStep(
       project_name: projectName,
       ...(apiKey ? { api_key: apiKey } : {}),
       ...(workspace ? { workspace } : {}),
+      ...(environment ? { environment } : {}),
     };
 
     await fs.promises.writeFile(configFilePath, ini.stringify(parsed), {

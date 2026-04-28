@@ -76,6 +76,28 @@ describe('saveToOpikConfigStep', () => {
     expect(written.opik.workspace).toBe('my-workspace');
   });
 
+  it('writes environment when provided', async () => {
+    await saveToOpikConfigStep({
+      projectName: 'proj',
+      urlOverride: 'http://localhost/api',
+      environment: 'production',
+    });
+
+    expect(fs.promises.writeFile).toHaveBeenCalledOnce();
+    const written = getWrittenParsed();
+    expect(written.opik.environment).toBe('production');
+  });
+
+  it('omits environment key when not provided', async () => {
+    await saveToOpikConfigStep({
+      projectName: 'proj',
+      urlOverride: 'http://localhost/api',
+    });
+
+    const written = getWrittenParsed();
+    expect(written.opik.environment).toBeUndefined();
+  });
+
   it('merges with an existing config file', async () => {
     const existingContent = ini.stringify({
       opik: { api_key: 'old-key', project_name: 'old-project' },
