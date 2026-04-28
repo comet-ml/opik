@@ -33,9 +33,9 @@ Setting up SAML SSO involves two main steps:
 
 Opik does not pre-generate Service Provider URLs for you to copy out — you choose them yourself and enter the same values into both Opik and your identity provider (IdP). The values only need to match between the two systems.
 
-1. In Opik, navigate to **Admin Dashboard** > **SSO Configuration**.
-2. Toggle **SSO** on. The SP and IdP form fields appear only once SSO is enabled.
-3. Set both the **SP Entity ID** and the **SP ACS URL** to the same URL, in the format `<your-app-base-url>/sso/saml/acs/<organization-id>`. Your app base URL is the origin you use to access the admin dashboard (for example, `https://www.comet.com` for Opik MT-SaaS). Your organization ID is visible in the admin dashboard URL. The last path segment is used internally as the routing key for SAML responses to your organization.
+1. In Opik, navigate to **Admin Dashboard** > **Organization** > **Authentication**.
+2. Toggle **Enable SSO Authentication** on. The SP and IdP form fields appear only once SSO is enabled.
+3. Set both the **SP Entity ID** and the **SP ACS URL** to the same URL, in the format `https://<your-app-base-url>/sso/saml/acs/<organization-id>`. Your app base URL is the origin you use to access the admin dashboard (for example, `https://www.comet.com`). Your organization ID is visible in the admin dashboard URL. The last path segment is used internally as the routing key for SAML responses to your organization.
 
 <Tip>
 Use the same value for both **SP Entity ID** and **SP ACS URL**, and enter that same value into your IdP in Step 2.
@@ -78,7 +78,7 @@ Attribute names may need to be configured as custom attributes or claims in your
 
 Once your IdP is configured, enter the settings in Opik:
 
-1. Navigate to **Admin Dashboard** > **SSO Configuration**.
+1. Navigate to **Admin Dashboard** > **Organization** > **Authentication**.
 2. Select **SAML** as the SSO protocol.
 3. Enter the following settings:
 
@@ -87,8 +87,8 @@ Once your IdP is configured, enter the settings in Opik:
 | Field | Description | Example |
 | --- | --- | --- |
 | **Domain** | Email domain for SSO users | `company.com` |
-| **SP Entity ID** | Your Service Provider Entity ID | `<your-app-base-url>/sso/saml/acs/<organization-id>` |
-| **SP ACS URL** | Assertion Consumer Service URL | `<your-app-base-url>/sso/saml/acs/<organization-id>` |
+| **SP Entity ID** | Your Service Provider Entity ID | `https://<your-app-base-url>/sso/saml/acs/<organization-id>` |
+| **SP ACS URL** | Assertion Consumer Service URL | `https://<your-app-base-url>/sso/saml/acs/<organization-id>` |
 | **IdP Entity ID** | Your IdP's Entity ID | `https://idp.company.com/...` |
 | **IdP SSO URL** | URL where users authenticate | `https://idp.company.com/sso/saml` |
 | **IdP X.509 Certificate** | Public certificate for signature verification | `-----BEGIN CERTIFICATE-----...` |
@@ -108,7 +108,7 @@ Once your IdP is configured, enter the settings in Opik:
 
 The Service Provider Entity ID uniquely identifies Opik to your IdP. This value should be:
 
-- A URL of the form `<your-app-base-url>/sso/saml/acs/<organization-id>`, set to the same value as the SP ACS URL.
+- A URL of the form `https://<your-app-base-url>/sso/saml/acs/<organization-id>`, set to the same value as the SP ACS URL.
 - Entered identically in both Opik's SSO configuration form and your IdP's SAML application configuration.
 - Consistent between Opik and your IdP (case-sensitive).
 
