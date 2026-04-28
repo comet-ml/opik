@@ -92,6 +92,16 @@ const AgentNameStep: React.FC = () => {
             <p className="comet-body-xs mr-auto text-destructive">{error}</p>
           )}
           <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              goToStep(AGENT_ONBOARDING_STEPS.SELECT_INTENT, { agentName: trimmedName })
+            }
+          >
+            Back
+          </Button>
+          <Button
             type="submit"
             size="sm"
             disabled={!isValid || isPending || !!error}
