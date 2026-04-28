@@ -96,7 +96,7 @@ const AgentNameStep: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={() =>
-              goToStep(AGENT_ONBOARDING_STEPS.SELECT_INTENT, { agentName: "" })
+              goToStep(AGENT_ONBOARDING_STEPS.SELECT_INTENT, { agentName: trimmedName })
             }
           >
             Back
