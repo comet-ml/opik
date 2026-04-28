@@ -7,7 +7,6 @@ import useThreadList from "@/api/traces/useThreadsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Autocomplete from "@/shared/Autocomplete/Autocomplete";
 import { COLUMN_TYPE } from "@/types/shared";
-import { FilterRowConfig } from "@/types/filters";
 import { extractTagsFromItems, filterTagsByQuery } from "./helpers";
 
 export type TagsAutocompleteEntityType =
@@ -129,28 +128,3 @@ const TagsAutocomplete: React.FC<TagsAutocompleteProps> = ({
 };
 
 export default TagsAutocomplete;
-
-type GetTagsFilterConfigArgs = {
-  projectId: string;
-  entityType: TagsAutocompleteEntityType;
-  promptId?: string;
-};
-
-export const getTagsFilterConfig = ({
-  projectId,
-  entityType,
-  promptId,
-}: GetTagsFilterConfigArgs): Record<string, FilterRowConfig> => ({
-  tags: {
-    keyComponent: TagsAutocomplete as React.FC<unknown> & {
-      placeholder: string;
-      value: string;
-      onValueChange: (value: string) => void;
-    },
-    keyComponentProps: {
-      projectId,
-      entityType,
-      ...(promptId && { promptId }),
-    },
-  },
-});
