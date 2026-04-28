@@ -2,6 +2,7 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.exception.AuthenticationException;
@@ -31,11 +32,13 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETIO
 class LlmProviderAnthropic implements LlmProviderService {
 
     private final @NonNull AnthropicClient anthropicClient;
+    private final @NonNull LlmModelRegistryService registryService;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
+        var effectiveRequest = stripSamplingParamsIfUnsupported(request);
         var response = anthropicClient
-                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
+                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(effectiveRequest));
 
         return LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
     }
@@ -49,17 +52,34 @@ class LlmProviderAnthropic implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
 
-        // Create a simple summary of the request for logging
+        var effectiveRequest = stripSamplingParamsIfUnsupported(request);
+
         String requestSummary = String.format("model=%s, messages=%d",
-                request.model(),
-                request.messages() != null ? request.messages().size() : 0);
+                effectiveRequest.model(),
+                effectiveRequest.messages() != null ? effectiveRequest.messages().size() : 0);
 
-        // Create dependencies following IoC principle
-        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model());
-        var logger = new StreamingResponseLogger(requestSummary, request.model());
+        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, effectiveRequest.model());
+        var logger = new StreamingResponseLogger(requestSummary, effectiveRequest.model());
 
-        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
+        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(effectiveRequest),
                 new LoggingChunkedResponseHandler(delegate, logger));
+    }
+
+    private ChatCompletionRequest stripSamplingParamsIfUnsupported(@NonNull ChatCompletionRequest request) {
+        if (request.model() == null) {
+            return request;
+        }
+        var lookup = registryService.findModel(request.model());
+        if (lookup.isEmpty() || lookup.get().model().supportsSamplingParamsOrDefault()) {
+            return request;
+        }
+        return ChatCompletionRequest.builder()
+                .model(request.model())
+                .messages(request.messages())
+                .stream(request.stream())
+                .stop(request.stop())
+                .maxCompletionTokens(request.maxCompletionTokens())
+                .build();
     }
 
     @Override

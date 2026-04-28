@@ -121,7 +121,7 @@ class LlmProviderFactoryTest {
         VertexAIModule vertexAIModule = new VertexAIModule();
 
         AnthropicClientGenerator anthropicClientGenerator = anthropicModule.clientGenerator(llmProviderClientConfig);
-        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator);
+        anthropicModule.llmServiceProvider(llmProviderFactory, anthropicClientGenerator, registryService);
 
         GeminiClientGenerator geminiClientGenerator = geminiModule.clientGenerator(llmProviderClientConfig);
         geminiModule.llmServiceProvider(llmProviderFactory, geminiClientGenerator);
