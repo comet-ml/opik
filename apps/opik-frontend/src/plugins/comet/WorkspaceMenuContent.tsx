@@ -90,7 +90,8 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
                       }}
                       className={cn(
                         "group h-8 cursor-pointer px-3 pr-1.5",
-                        isActive && "bg-primary-100 text-primary",
+                        isActive &&
+                          "bg-primary-100 text-primary focus:bg-secondary focus:text-primary",
                       )}
                     >
                       <TooltipWrapper content={org.name}>
@@ -160,7 +161,7 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
     <DropdownMenuSeparator className="my-1" />
 
-    <div className="px-1" onKeyDown={(e) => e.stopPropagation()}>
+    <div className="px-0.5" onKeyDown={(e) => e.stopPropagation()}>
       <SearchInput
         searchText={search}
         setSearchText={setSearch}
@@ -189,7 +190,8 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
               }}
               className={cn(
                 "h-8 cursor-pointer px-3",
-                isSelected && "bg-primary-100 text-primary",
+                isSelected &&
+                  "bg-primary-100 text-primary focus:bg-secondary focus:text-primary",
               )}
             >
               <TooltipWrapper content={wsDisplayName}>
@@ -211,17 +213,13 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
 
     <DropdownMenuSeparator className="my-1" />
 
-    <Button
-      variant="ghost"
-      size="sm"
-      className="comet-body-s h-8 w-full justify-start gap-2 px-3 font-normal text-foreground"
-      asChild
+    <a
+      href={buildUrl("account-settings/workspaces", workspaceName)}
+      className="comet-body-s flex h-8 w-full items-center gap-2 rounded-md px-3 text-foreground hover:bg-primary-foreground"
     >
-      <a href={buildUrl("account-settings/workspaces", workspaceName)}>
-        <Settings2 className="size-3.5 text-light-slate" />
-        <span>Manage workspaces</span>
-      </a>
-    </Button>
+      <Settings2 className="size-3.5 text-light-slate" />
+      <span>Manage workspaces</span>
+    </a>
   </>
 );
 
