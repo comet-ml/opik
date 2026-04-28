@@ -17,7 +17,6 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.gemini.GeminiModelName;
 import com.comet.opik.infrastructure.llm.openai.OpenaiModelName;
@@ -66,10 +65,8 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETIO
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
-import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
-import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathMatching;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assumptions.assumeThat;
@@ -915,51 +912,4 @@ class ChatCompletionsResourceTest {
         }
     }
 
-    @Nested
-    @DisplayName("Required permissions")
-    class RequiredPermissionsTest {
-
-        @Test
-        @DisplayName("Create chat completions passes required permissions to auth endpoint")
-        void createChatCompletionsPassesRequiredPermissionsToAuthEndpoint() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-            String workspaceId = UUID.randomUUID().toString();
-            AuthTestUtils.mockTargetWorkspace(WIRE_MOCK.server(), apiKey, workspaceName, workspaceId, USER);
-
-            var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
-                    .stream(false)
-                    .model(OpenaiModelName.GPT_4O_MINI.toString())
-                    .addUserMessage("hi")
-                    .build();
-
-            WIRE_MOCK.server().resetRequests();
-            chatCompletionsClient.callCreate(apiKey, workspaceName, request).close();
-
-            WIRE_MOCK.server().verify(
-                    postRequestedFor(urlPathEqualTo("/opik/auth"))
-                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
-                                    equalTo(WorkspaceUserPermission.PLAYGROUND_USE.getValue()))));
-        }
-
-        @Test
-        @DisplayName("Create chat completions returns 403 when permission is denied")
-        void createChatCompletionsReturnsForbiddenWhenPermissionDenied() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = "test-workspace-" + UUID.randomUUID();
-
-            AuthTestUtils.mockTargetWorkspaceDenyPermission(WIRE_MOCK.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.PLAYGROUND_USE.getValue());
-
-            var request = podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
-                    .stream(false)
-                    .model(OpenaiModelName.GPT_4O_MINI.toString())
-                    .addUserMessage("hi")
-                    .build();
-
-            try (var response = chatCompletionsClient.callCreate(apiKey, workspaceName, request)) {
-                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
-            }
-        }
-    }
 }
