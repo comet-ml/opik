@@ -45,7 +45,7 @@ import {
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import TagsAutocomplete from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -417,13 +417,10 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
             placeholder: "Select score",
           },
         },
-        tags: {
-          keyComponent: TagsAutocomplete,
-          keyComponentProps: {
-            projectId: annotationQueue.project_id ?? "",
-            entityType: "traces",
-          },
-        },
+        ...getTagsFilterConfig({
+          projectId: annotationQueue.project_id ?? "",
+          entityType: "traces",
+        }),
       },
     }),
     [annotationQueue.feedback_definition_names, annotationQueue.project_id],

@@ -1,5 +1,4 @@
 import React, { useMemo } from "react";
-import uniq from "lodash/uniq";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -8,6 +7,8 @@ import useThreadList from "@/api/traces/useThreadsList";
 import useExperimentsList from "@/api/datasets/useExperimentsList";
 import Autocomplete from "@/shared/Autocomplete/Autocomplete";
 import { COLUMN_TYPE } from "@/types/shared";
+import { FilterRowConfig } from "@/types/filters";
+import { extractTagsFromItems, filterTagsByQuery } from "./helpers";
 
 export type TagsAutocompleteEntityType =
   | "traces"
@@ -105,22 +106,15 @@ const TagsAutocomplete: React.FC<TagsAutocompleteProps> = ({
         ? experimentsPending
         : tracesPending;
 
-  const allTags = useMemo(() => {
-    const set = new Set<string>();
-    for (const item of activeData?.content ?? []) {
-      for (const tag of item.tags ?? []) {
-        const trimmed = tag.trim();
-        if (trimmed) set.add(trimmed);
-      }
-    }
-    return uniq([...set]).sort();
-  }, [activeData]);
+  const allTags = useMemo(
+    () => extractTagsFromItems(activeData?.content),
+    [activeData],
+  );
 
-  const items = useMemo(() => {
-    if (!value) return allTags;
-    const needle = value.toLowerCase();
-    return allTags.filter((tag) => tag.toLowerCase().includes(needle));
-  }, [allTags, value]);
+  const items = useMemo(
+    () => filterTagsByQuery(allTags, value),
+    [allTags, value],
+  );
 
   return (
     <Autocomplete
@@ -135,3 +129,28 @@ const TagsAutocomplete: React.FC<TagsAutocompleteProps> = ({
 };
 
 export default TagsAutocomplete;
+
+type GetTagsFilterConfigArgs = {
+  projectId: string;
+  entityType: TagsAutocompleteEntityType;
+  promptId?: string;
+};
+
+export const getTagsFilterConfig = ({
+  projectId,
+  entityType,
+  promptId,
+}: GetTagsFilterConfigArgs): Record<string, FilterRowConfig> => ({
+  tags: {
+    keyComponent: TagsAutocomplete as React.FC<unknown> & {
+      placeholder: string;
+      value: string;
+      onValueChange: (value: string) => void;
+    },
+    keyComponentProps: {
+      projectId,
+      entityType,
+      ...(promptId && { promptId }),
+    },
+  },
+});

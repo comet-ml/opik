@@ -24,7 +24,7 @@ import GroupsAccordionSection, {
 } from "@/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
-import TagsAutocomplete from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/shared/TagsAutocomplete/TagsAutocomplete";
 import ExperimentFilterSelectBox from "./ExperimentFilterSelectBox";
 import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 
@@ -154,17 +154,10 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
             excludeRoot: true,
           },
         },
-        tags: {
-          keyComponent: TagsAutocomplete as React.FunctionComponent<unknown> & {
-            placeholder: string;
-            value: string;
-            onValueChange: (value: string) => void;
-          },
-          keyComponentProps: {
-            projectId: projectId ?? "",
-            entityType: "experiments",
-          },
-        },
+        ...getTagsFilterConfig({
+          projectId: projectId ?? "",
+          entityType: "experiments",
+        }),
       },
     }),
     [projectId],

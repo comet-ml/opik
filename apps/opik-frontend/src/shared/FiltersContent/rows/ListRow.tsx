@@ -8,6 +8,7 @@ import {
   OPERATORS_MAP,
 } from "@/constants/filters";
 import { COLUMN_TYPE } from "@/types/shared";
+import { toString } from "@/lib/utils";
 
 type ListRowProps = {
   filter: Filter;
@@ -40,7 +41,7 @@ export const ListRow: React.FunctionComponent<ListRowProps> = ({
           <KeyComponent
             className="w-full min-w-40"
             placeholder="value"
-            value={filter.value}
+            value={toString(filter.value)}
             onValueChange={(value) =>
               onChange({ ...filter, value: value as string })
             }
