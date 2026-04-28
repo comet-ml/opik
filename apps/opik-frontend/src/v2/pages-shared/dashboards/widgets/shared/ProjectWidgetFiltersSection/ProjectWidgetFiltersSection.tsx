@@ -14,6 +14,7 @@ import FiltersAccordionSection from "@/shared/FiltersAccordionSection/FiltersAcc
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import {
   COLUMN_CUSTOM_ID,
@@ -139,10 +140,19 @@ const ProjectWidgetFiltersSection = <T extends FieldValues>({
             type: dataType,
           },
         },
+        ...getTagsFilterConfig({
+          projectId,
+          entityType:
+            filterType === "thread"
+              ? "threads"
+              : filterType === "span"
+                ? "spans"
+                : "traces",
+        }),
         ...(isSpanMetric ? getSpanTypeFilterConfig(isGuardrailsEnabled) : {}),
       },
     }),
-    [projectId, dataType, isGuardrailsEnabled, isSpanMetric],
+    [projectId, dataType, filterType, isGuardrailsEnabled, isSpanMetric],
   );
 
   useEffect(() => {

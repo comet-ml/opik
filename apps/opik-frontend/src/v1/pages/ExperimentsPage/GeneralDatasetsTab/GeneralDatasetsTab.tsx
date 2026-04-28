@@ -83,6 +83,7 @@ import GroupsButton from "@/shared/GroupsButton/GroupsButton";
 import useTablePageSize from "@/hooks/useTablePageSize";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
+import { usePermissions } from "@/contexts/PermissionsContext";
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -128,6 +129,10 @@ const GeneralDatasetsTab: React.FC = () => {
   const navigate = useNavigate();
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
+
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
 
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
@@ -708,14 +713,16 @@ const GeneralDatasetsTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewExperimentClick}
+            >
+              <Info className="mr-1.5 size-3.5" />
+              Create new experiment
+            </Button>
+          )}
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -738,7 +745,7 @@ const GeneralDatasetsTab: React.FC = () => {
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateExperiments && (
               <Button variant="link" onClick={handleNewExperimentClick}>
                 Create new experiment
               </Button>
