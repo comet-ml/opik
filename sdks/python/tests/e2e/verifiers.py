@@ -67,10 +67,20 @@ def _retry_until_assertions_pass(check: Callable[[], None]) -> None:
     does NOT mask real bugs: ``synchronization.until`` is bounded by
     ``max_try_seconds``, and on timeout we re-run ``check()`` so the actual
     exception (with its traceback) reaches pytest.
+
+    ``pytest_deepassert.equal`` (used by ``assert_equal``) raises
+    ``pytest.fail.Exception`` (a.k.a. ``_pytest.outcomes.Failed``), which
+    inherits from ``BaseException``, NOT from ``Exception`` — so
+    ``synchronization.until``'s ``except Exception`` would not catch it and
+    the retry would degenerate to a single attempt. Convert it to a return
+    value here so the polling actually works for value-comparable fields.
     """
 
     def _attempt() -> bool:
-        check()
+        try:
+            check()
+        except pytest.fail.Exception:
+            return False
         return True
 
     if synchronization.until(_attempt, allow_errors=True):
