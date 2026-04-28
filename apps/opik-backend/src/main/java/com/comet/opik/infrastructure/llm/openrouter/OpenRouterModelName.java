@@ -420,6 +420,11 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_5_9B("qwen/qwen3.5-9b"),
     QWEN_QWEN3_5_FLASH_02_23("qwen/qwen3.5-flash-02-23"),
     QWEN_QWEN3_5_PLUS_02_15("qwen/qwen3.5-plus-02-15"),
+    QWEN_QWEN3_5_PLUS_20260420("qwen/qwen3.5-plus-20260420"),
+    QWEN_QWEN3_6_27B("qwen/qwen3.6-27b"),
+    QWEN_QWEN3_6_35B_A3B("qwen/qwen3.6-35b-a3b"),
+    QWEN_QWEN3_6_FLASH("qwen/qwen3.6-flash"),
+    QWEN_QWEN3_6_MAX_PREVIEW("qwen/qwen3.6-max-preview"),
     QWEN_QWEN3_6_PLUS("qwen/qwen3.6-plus"),
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
     QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
@@ -486,7 +491,14 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
     Z_AI_GLM_5_1("z-ai/glm-5.1"),
     Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo"),
-    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest");
+    ANTHROPIC_CLAUDE_HAIKU_LATEST("~anthropic/claude-haiku-latest"),
+    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest"),
+    ANTHROPIC_CLAUDE_SONNET_LATEST("~anthropic/claude-sonnet-latest"),
+    GOOGLE_GEMINI_FLASH_LATEST("~google/gemini-flash-latest"),
+    GOOGLE_GEMINI_PRO_LATEST("~google/gemini-pro-latest"),
+    MOONSHOTAI_KIMI_LATEST("~moonshotai/kimi-latest"),
+    OPENAI_GPT_LATEST("~openai/gpt-latest"),
+    OPENAI_GPT_MINI_LATEST("~openai/gpt-mini-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 
