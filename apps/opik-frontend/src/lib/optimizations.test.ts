@@ -1,13 +1,24 @@
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vitest";
 import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
+  getOptimizationDefaultConfigByProvider,
 } from "./optimizations";
 import {
   Experiment,
   EXPERIMENT_TYPE,
   EVALUATION_METHOD,
 } from "@/types/datasets";
+import {
+  resetModelRegistryStoreForTesting,
+  setLatestModelFlags,
+} from "@/lib/modelRegistryStore";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  LLMAnthropicConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
   id: "exp-1",
@@ -361,5 +372,55 @@ describe("convertOptimizationVariableFormat", () => {
       const expected = "Line 1 {{var1}}\n\tLine 2 {{var2}}\r\nLine 3";
       expect(convertOptimizationVariableFormat(input)).toBe(expected);
     });
+  });
+});
+
+describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
+  afterEach(() => {
+    resetModelRegistryStoreForTesting();
+  });
+
+  it("seeds temperature when the model accepts sampling params", () => {
+    setLatestModelFlags(
+      new Map([
+        [
+          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: true,
+          },
+        ],
+      ]),
+    );
+
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    ) as LLMAnthropicConfigsType;
+
+    expect(config.temperature).toBe(0);
+  });
+
+  it("omits temperature when the model rejects sampling params", () => {
+    setLatestModelFlags(
+      new Map([
+        [
+          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: false,
+          },
+        ],
+      ]),
+    );
+
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+    ) as LLMAnthropicConfigsType;
+
+    expect(config.temperature).toBeUndefined();
   });
 });
