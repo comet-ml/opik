@@ -7,6 +7,7 @@ import {
   OPIK_SPAN_ID,
   OPIK_TRACE_ID,
 } from "./attributes";
+import { isValidUuidV7 } from "./internal";
 
 interface InheritedContext {
   traceId: string;
@@ -18,6 +19,11 @@ interface InheritedContext {
  * trace_id (and optionally a parent_span_id) when the parent OTel span — or, for
  * cross-process boundaries, OTel baggage — already carries Opik IDs. Returns
  * `undefined` when the new span has no Opik ancestor and should be left alone.
+ *
+ * Validation mirrors the Python `_resolve_inherited`: every inherited ID is
+ * required to be a valid UUIDv7. Present-but-invalid values are dropped with a
+ * `logger.warn` so a misconfigured upstream is visible at runtime; absent
+ * values are silent (the common case for spans outside an Opik subtree).
  */
 function resolveInherited(
   parentContext: Context
@@ -25,20 +31,27 @@ function resolveInherited(
   // 1) In-process: pull from the parent OTel span's attributes. The parent must
   // carry both opik.trace_id and opik.span_id — this pair is set together by
   // attachToParent on the boundary and by this processor on every inherited
-  // descendant, so a parent that has trace_id but not span_id means a misconfigured
-  // upstream, and we don't try to guess.
+  // descendant, so a parent that has trace_id but not span_id means a
+  // misconfigured upstream, and we don't try to guess.
   const parentSpan = trace.getSpan(parentContext);
   if (parentSpan && "attributes" in parentSpan) {
     const attrs = (parentSpan as unknown as ReadableSpan).attributes ?? {};
     const parentTraceId = attrs[OPIK_TRACE_ID];
     const parentSpanId = attrs[OPIK_SPAN_ID];
-    if (
-      typeof parentTraceId === "string" &&
-      parentTraceId !== "" &&
-      typeof parentSpanId === "string" &&
-      parentSpanId !== ""
-    ) {
-      return { traceId: parentTraceId, parentSpanId };
+
+    // Both absent → parent isn't part of an Opik subtree; fall through to baggage.
+    if (parentTraceId !== undefined || parentSpanId !== undefined) {
+      if (!isValidUuidV7(parentTraceId)) {
+        logger.warn(
+          `Parent span attribute '${OPIK_TRACE_ID}' is missing or not a valid UUIDv7: ${JSON.stringify(parentTraceId)}; ignoring inherited Opik context.`
+        );
+      } else if (!isValidUuidV7(parentSpanId)) {
+        logger.warn(
+          `Parent span attribute '${OPIK_SPAN_ID}' is missing or not a valid UUIDv7: ${JSON.stringify(parentSpanId)}; ignoring inherited Opik context.`
+        );
+      } else {
+        return { traceId: parentTraceId, parentSpanId };
+      }
     }
   }
 
@@ -47,18 +60,32 @@ function resolveInherited(
   // service that already had Opik IDs.
   const baggage = propagation.getBaggage(parentContext);
   const baggageTraceId = baggage?.getEntry(OPIK_TRACE_ID)?.value;
-  if (typeof baggageTraceId === "string" && baggageTraceId !== "") {
-    const baggageParentSpanId = baggage?.getEntry(OPIK_SPAN_ID)?.value;
-    return {
-      traceId: baggageTraceId,
-      parentSpanId:
-        typeof baggageParentSpanId === "string" && baggageParentSpanId !== ""
-          ? baggageParentSpanId
-          : undefined,
-    };
+  if (baggageTraceId === undefined) {
+    // No Opik context in baggage — the common case for spans outside an
+    // attached subtree. Leave the span untouched.
+    return undefined;
+  }
+  if (!isValidUuidV7(baggageTraceId)) {
+    logger.warn(
+      `Baggage value for '${OPIK_TRACE_ID}' is not a valid UUIDv7: ${JSON.stringify(baggageTraceId)}; ignoring.`
+    );
+    return undefined;
   }
 
-  return undefined;
+  const baggageParentSpanId = baggage?.getEntry(OPIK_SPAN_ID)?.value;
+  let parentSpanId: string | undefined;
+  if (baggageParentSpanId === undefined) {
+    parentSpanId = undefined;
+  } else if (!isValidUuidV7(baggageParentSpanId)) {
+    logger.warn(
+      `Baggage value for '${OPIK_SPAN_ID}' is not a valid UUIDv7: ${JSON.stringify(baggageParentSpanId)}; attaching to '${OPIK_TRACE_ID}' without a parent span id.`
+    );
+    parentSpanId = undefined;
+  } else {
+    parentSpanId = baggageParentSpanId;
+  }
+
+  return { traceId: baggageTraceId, parentSpanId };
 }
 
 /**

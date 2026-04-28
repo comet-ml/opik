@@ -10,10 +10,11 @@ export const OPIK_TRACE_ID_HEADER = "opik_trace_id";
 export const OPIK_PARENT_SPAN_ID_HEADER = "opik_parent_span_id";
 
 /**
- * Returns `true` only when `value` parses as a valid UUID and its version is 7.
- * Mirrors `opik`'s own `isValidUuidV7` helper.
+ * Returns `true` only when `value` is a string that parses as a UUID and whose
+ * version is 7. The type predicate narrows `value` to `string` in callers'
+ * truthy branches, mirroring `opik`'s own `isValidUuidV7` helper.
  */
-export const isValidUuidV7 = (value: unknown): boolean => {
+export const isValidUuidV7 = (value: unknown): value is string => {
   if (typeof value !== "string" || !validate(value)) {
     return false;
   }
