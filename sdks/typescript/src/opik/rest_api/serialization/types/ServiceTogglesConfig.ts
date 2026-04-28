@@ -32,6 +32,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     collaboratorsTabEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
+    defaultPageSize: core.serialization.number().optional(),
     v2WorkspaceAllowlist: core.serialization.string().optional(),
 });
 
@@ -61,6 +62,7 @@ export declare namespace ServiceTogglesConfig {
         collaboratorsTabEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;
+        defaultPageSize?: number | null;
         v2WorkspaceAllowlist?: string | null;
     }
 }
