@@ -207,7 +207,7 @@ def generate_response(request: Request) -> str:
 
 ```ts title="server.ts"
 import http from "node:http";
-import { trace } from "@opentelemetry/api";
+import { context, trace } from "@opentelemetry/api";
 import {
   BasicTracerProvider,
   BatchSpanProcessor,
@@ -215,29 +215,35 @@ import {
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
 import { attachToParent, OpikSpanProcessor } from "opik-otel";
 
-// Configure the tracer provider with the OTLP exporter that ships spans to Opik
-const provider = new BasicTracerProvider();
-provider.addSpanProcessor(new BatchSpanProcessor(new OTLPTraceExporter()));
-
-// Register OpikSpanProcessor so descendants of the boundary span inherit
-// opik.trace_id / opik.parent_span_id automatically.
-provider.addSpanProcessor(new OpikSpanProcessor());
+// Configure the tracer provider with the OTLP exporter that ships spans to Opik.
+// OpikSpanProcessor must be registered before the exporter so the opik.* attributes
+// it sets at span start are visible at export time.
+const provider = new BasicTracerProvider({
+  spanProcessors: [
+    new OpikSpanProcessor(),
+    new BatchSpanProcessor(new OTLPTraceExporter()),
+  ],
+});
 provider.register();
 
 const tracer = trace.getTracer("my-service");
 
 const server = http.createServer((req, res) => {
-  const span = tracer.startSpan("server-span");
+  const boundary = tracer.startSpan("server-span");
   // Reads opik_trace_id / opik_parent_span_id from req.headers
   // and sets the corresponding OTel span attributes on the boundary span.
-  attachToParent(span, req.headers);
+  attachToParent(boundary, req.headers);
 
-  // Any descendants are picked up automatically by OpikSpanProcessor.
-  const child = tracer.startSpan("child-span");
+  // Set the boundary as the active parent so child spans inherit its OTel
+  // context — this is what lets OpikSpanProcessor see the boundary's
+  // opik.trace_id / opik.span_id when the child starts. Plain
+  // `tracer.startSpan("child")` would otherwise create an orphan root span.
+  const parentCtx = trace.setSpan(context.active(), boundary);
+  const child = tracer.startSpan("child-span", {}, parentCtx);
   // ... handle the request, set additional span attributes ...
   child.end();
 
-  span.end();
+  boundary.end();
   res.end("ok");
 });
 ```
