@@ -15,6 +15,7 @@ from opik.rest_api.types import (
     feedback_score_batch_item_thread,
     guardrail,
     experiment_item,
+    assertion_result_batch_item,
 )
 
 from . import message_processors
@@ -56,6 +57,7 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             messages.CreateSpansBatchMessage: self._process_create_spans_batch_message,  # type: ignore
             messages.CreateTraceBatchMessage: self._process_create_traces_batch_message,  # type: ignore
             messages.GuardrailBatchMessage: self._process_guardrail_batch_message,  # type: ignore
+            messages.AddAssertionResultsBatchMessage: self._process_add_assertion_results_batch_message,  # type: ignore
             messages.CreateExperimentItemsBatchMessage: self._process_create_experiment_items_batch_message,  # type: ignore
             messages.CreateAttachmentMessage: self._process_create_attachment,  # type: ignore
             messages.AttachmentSupportingMessage: self._noop_handler,  # type: ignore
@@ -360,6 +362,30 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
             batch.append(guardrail_batch_item_message)
 
         self._rest_client.guardrails.create_guardrails(guardrails=batch)
+
+    def _process_add_assertion_results_batch_message(
+        self,
+        message: messages.AddAssertionResultsBatchMessage,
+    ) -> None:
+        items = [
+            assertion_result_batch_item.AssertionResultBatchItem(
+                entity_id=item.entity_id,
+                project_name=item.project_name,
+                name=item.name,
+                status=item.status,
+                reason=item.reason,
+                source=item.source,
+            )
+            for item in message.batch
+        ]
+
+        LOGGER.debug("Add assertion results request of size: %d", len(items))
+
+        self._rest_client.assertion_results.store_assertions_batch(
+            entity_type=message.entity_type,
+            assertion_results=items,
+        )
+        LOGGER.debug("Sent batch of assertion results of size %d", len(items))
 
     def _process_create_experiment_items_batch_message(
         self,
