@@ -56,7 +56,7 @@ def _create_otel_tracer(config: opik_config.OpikConfig):
     return provider.get_tracer("e2e-otel-test-tracer"), provider
 
 
-@pytest.skip(reason="before backend is ready for this test")
+@pytest.mark.skip(reason="enable after backend is ready for this test in the next PR")
 def test_otel_distributed_trace_roundtrip__happyflow(opik_client: opik.Opik):
     """
     Full E2E roundtrip through the Opik backend:
