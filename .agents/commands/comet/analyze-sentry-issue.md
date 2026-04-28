@@ -29,6 +29,8 @@ This is the canonical entry point for Sentry analysis in this repo. It uses the 
 
 Page through `GET https://us.sentry.io/api/0/issues/<issue_id>/events/?full=false&limit=100` with `Authorization: Bearer $SENTRY_ACCESS_TOKEN`, following the `Link: rel="next"; results="true"; cursor=...` header.
 
+> ⚠️ The host is hardcoded to the US region (`us.sentry.io`) because that's where Comet's Sentry org lives. If you're on the EU region (`de.sentry.io`) or a self-hosted Sentry, swap in `$SENTRY_HOST` from `.env.local` — otherwise the call will silently hit the wrong API and either fail auth or return empty results.
+
 **Default cap: ~3 pages (300 events).** Distinct-message and tag distributions converge fast; pulling thousands of events per analysis is rarely necessary and slows the workflow. Bump the cap (and tell the engineer you're doing so) only when:
 
 - the early sample looks unrepresentative — e.g., one message dominates and the tail is unclear, or top users haven't stabilized;

@@ -73,7 +73,7 @@ You should see it call a Sentry tool and return results.
 
 The official Sentry MCP exposes (non-exhaustive):
 
-- **Read**: `find_organizations`, `find_projects`, `find_releases`, `get_sentry_resource`, `get_issue_tag_values`, `get_replay_details`, `whoami`
+- **Read**: `find_organizations`, `find_projects`, `find_releases`, `find_teams`, `get_sentry_resource`, `get_issue_tag_values`, `get_replay_details`, `whoami`
 - **Write (only with `*:write` scopes)**: `update_issue` (resolve / assign / ignore)
 
 ## Avoid the NL-Backed Search Tools
@@ -83,7 +83,7 @@ The Sentry MCP exposes three "search" tools — `search_issues`, `search_events`
 **Direct, non-LLM tools that always work:**
 `get_sentry_resource`, `get_issue_tag_values`, `find_organizations`, `find_projects`, `find_releases`, `find_teams`, `whoami`, `update_issue`.
 
-**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly using the same `SENTRY_ACCESS_TOKEN`. The `/analyze-sentry-issue` slash command (defined in [.agents/commands/comet/analyze-sentry-issue.md](.agents/commands/comet/analyze-sentry-issue.md)) drives this — paginates `/api/0/issues/<id>/events/` and aggregates by exception message, tags, and users.
+**When you need to enumerate events inside an issue** (the direct tools fetch a single resource but cannot paginate events), call Sentry's REST API directly using the same `SENTRY_ACCESS_TOKEN`. The `/analyze-sentry-issue` slash command (defined in [../commands/comet/analyze-sentry-issue.md](../commands/comet/analyze-sentry-issue.md)) drives this — paginates `/api/0/issues/<id>/events/` and aggregates by exception message, tags, and users.
 
 ## Self-Hosted Sentry
 
