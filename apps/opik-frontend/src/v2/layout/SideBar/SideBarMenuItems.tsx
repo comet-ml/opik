@@ -44,15 +44,15 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
   return (
     <>
       {menuItems.map((menuGroup, index) => (
-        <li key={menuGroup.id} className="pb-3">
+        <li key={menuGroup.id} className={expanded ? "pb-3" : "pb-1"}>
           {menuGroup.label &&
             (expanded ? (
-              <div className="comet-body-xs truncate px-2 py-1 text-light-slate">
+              <div className="comet-body-xs-accented truncate px-2 py-1 text-light-slate">
                 {menuGroup.label}
               </div>
             ) : (
-              <div className="pb-[17px] pt-1.5">
-                {index > 0 && <Separator />}
+              <div className="py-1">
+                {index > 0 && <Separator className="mx-1 w-auto" />}
               </div>
             ))}
           <ul className="flex flex-col text-foreground">

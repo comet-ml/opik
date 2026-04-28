@@ -112,7 +112,7 @@ const PageLayout = () => {
       style={
         {
           "--banner-height": `${bannerHeight}px`,
-          "--sidebar-width": expanded ? "240px" : "54px",
+          "--sidebar-width": expanded ? "240px" : "48px",
           "--assistant-sidebar-width": layoutAssistantWidth,
         } as React.CSSProperties
       }
