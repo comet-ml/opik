@@ -49,7 +49,7 @@ def _assistant_message(content: str) -> dict:
 def _all_relevant_responses_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
     if response_format == schema.EvaluateConversationCoherenceResponse:
-        return _assistant_message(json.dumps({"verdict": "yes"}))
+        return _assistant_message(json.dumps({"verdict": "yes", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
         return _assistant_message(
             json.dumps(
@@ -125,7 +125,7 @@ def _mixed_relevance_side_effect(*args, **kwargs):
                 )
             )
         # For the 1st call (relevant response)
-        return _assistant_message(json.dumps({"verdict": "yes"}))
+        return _assistant_message(json.dumps({"verdict": "yes", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
         return _assistant_message(
             json.dumps(
@@ -198,7 +198,7 @@ def test_score_with_no_reason(mock_model):
     )
 
     mock_model.generate_chat_completion.return_value = _assistant_message(
-        json.dumps({"verdict": "yes"})
+        json.dumps({"verdict": "yes", "reason": None})
     )
 
     result = metric.score(conversation=conversation)
@@ -221,7 +221,7 @@ async def test_score_with_no_reason__async(mock_model):
     )
 
     mock_model.agenerate_chat_completion.return_value = _assistant_message(
-        json.dumps({"verdict": "yes"})
+        json.dumps({"verdict": "yes", "reason": None})
     )
 
     result = await metric.ascore(conversation=conversation)

@@ -57,7 +57,7 @@ def _assistant_message(content: str) -> dict:
 def _no_frustration_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
     if response_format == schema.EvaluateUserFrustrationResponse:
-        return _assistant_message(json.dumps({"verdict": "no"}))
+        return _assistant_message(json.dumps({"verdict": "no", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
         return _assistant_message(
             json.dumps(
@@ -127,7 +127,7 @@ def _mixed_frustration_side_effect(*args, **kwargs):
                 )
             )
         # For other calls (no frustration)
-        return _assistant_message(json.dumps({"verdict": "no"}))
+        return _assistant_message(json.dumps({"verdict": "no", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
         return _assistant_message(
             json.dumps(
@@ -197,7 +197,7 @@ def test_score_with_no_reason(mock_model):
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
 
     mock_model.generate_chat_completion.return_value = _assistant_message(
-        json.dumps({"verdict": "no"})
+        json.dumps({"verdict": "no", "reason": None})
     )
 
     result = metric.score(conversation=conversation)
@@ -219,7 +219,7 @@ async def test_score_with_no_reason__async(mock_model):
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
 
     mock_model.agenerate_chat_completion.return_value = _assistant_message(
-        json.dumps({"verdict": "no"})
+        json.dumps({"verdict": "no", "reason": None})
     )
 
     result = await metric.ascore(conversation=conversation)
