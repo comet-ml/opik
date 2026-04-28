@@ -73,6 +73,8 @@ class LlmProviderAnthropic implements LlmProviderService {
         if (lookup.isEmpty() || lookup.get().model().supportsSamplingParamsOrDefault()) {
             return request;
         }
+        // Mirrors every field LlmProviderAnthropicMapper.toCreateMessageRequest reads, minus
+        // temperature/topP. Keep in sync if the mapper grows new mappings.
         return ChatCompletionRequest.builder()
                 .model(request.model())
                 .messages(request.messages())
