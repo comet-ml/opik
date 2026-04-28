@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-from opik.otel import distributed_trace
-from opik.otel import types as otel_types
+from opik.integrations.otel import distributed_trace
+from opik.integrations.otel import types as otel_types
 
 
 TRACE_ID = "0193b3a5-1234-7abc-9def-0123456789ab"

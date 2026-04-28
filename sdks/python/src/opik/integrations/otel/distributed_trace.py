@@ -2,7 +2,7 @@ import logging
 import uuid
 from typing import Dict, Optional, TYPE_CHECKING
 
-from opik.otel import types as otel_types
+from opik.integrations.otel import types as otel_types
 
 if TYPE_CHECKING:
     from opentelemetry import trace

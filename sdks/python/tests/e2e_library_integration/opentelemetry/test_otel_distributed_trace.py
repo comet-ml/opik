@@ -12,7 +12,7 @@ import urllib.parse
 
 import opik
 from opik import opik_context, config as opik_config, synchronization
-from opik.otel import distributed_trace
+from opik.integrations.otel import distributed_trace
 
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
