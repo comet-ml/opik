@@ -66,11 +66,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     private ChatCompletionRequest stripSamplingParamsIfUnsupported(@NonNull ChatCompletionRequest request) {
-        if (request.model() == null) {
-            return request;
-        }
-        var lookup = registryService.findModel(request.model());
-        if (lookup.isEmpty() || lookup.get().model().supportsSamplingParamsOrDefault()) {
+        if (registryService.supportsSamplingParams(request.model())) {
             return request;
         }
         return ChatCompletionRequest.builder()

@@ -345,6 +345,20 @@ class LlmModelRegistryServiceTest {
         assertThat(opus46.supportsSamplingParamsOrDefault()).isTrue();
     }
 
+    @Test
+    void supportsSamplingParamsHelperReflectsRegistryFlag() {
+        var config = new LlmModelRegistryConfig();
+        config.setDefaultResource("llm-models-test.yaml");
+
+        var service = new LlmModelRegistryService(config);
+
+        assertThat(service.supportsSamplingParams("claude-opus-4-7")).isFalse();
+        assertThat(service.supportsSamplingParams("claude-opus-4-6")).isTrue();
+        assertThat(service.supportsSamplingParams("claude-sonnet-4-6")).isTrue();
+        assertThat(service.supportsSamplingParams("model-not-in-registry")).isTrue();
+        assertThat(service.supportsSamplingParams(null)).isTrue();
+    }
+
     private static Client mockHttpClient(int statusCode, String responseBody) {
         var client = mock(Client.class);
         var webTarget = mock(WebTarget.class);

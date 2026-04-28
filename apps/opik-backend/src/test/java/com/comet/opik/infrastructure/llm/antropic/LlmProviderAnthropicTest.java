@@ -1,7 +1,5 @@
 package com.comet.opik.infrastructure.llm.antropic;
 
-import com.comet.opik.api.LlmModelDefinition;
-import com.comet.opik.api.LlmProvider;
 import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicContent;
 import dev.langchain4j.model.anthropic.internal.api.AnthropicCreateMessageRequest;
@@ -13,7 +11,6 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -52,13 +49,7 @@ class LlmProviderAnthropicTest {
     void stripsSamplingParamsWhenRegistryFlagIsFalse() {
         var anthropicClient = mock(AnthropicClient.class);
         var registry = mock(LlmModelRegistryService.class);
-        when(registry.findModel("claude-opus-4-7")).thenReturn(Optional.of(
-                new LlmModelRegistryService.ModelLookupResult(
-                        LlmProvider.ANTHROPIC,
-                        LlmModelDefinition.builder()
-                                .id("claude-opus-4-7")
-                                .supportsSamplingParams(false)
-                                .build())));
+        when(registry.supportsSamplingParams("claude-opus-4-7")).thenReturn(false);
         when(anthropicClient.createMessage(any())).thenReturn(stubResponse());
 
         var provider = new LlmProviderAnthropic(anthropicClient, registry);
@@ -75,13 +66,7 @@ class LlmProviderAnthropicTest {
     void leavesSamplingParamsWhenRegistryFlagIsTrue() {
         var anthropicClient = mock(AnthropicClient.class);
         var registry = mock(LlmModelRegistryService.class);
-        when(registry.findModel("claude-opus-4-6")).thenReturn(Optional.of(
-                new LlmModelRegistryService.ModelLookupResult(
-                        LlmProvider.ANTHROPIC,
-                        LlmModelDefinition.builder()
-                                .id("claude-opus-4-6")
-                                .supportsSamplingParams(true)
-                                .build())));
+        when(registry.supportsSamplingParams("claude-opus-4-6")).thenReturn(true);
         when(anthropicClient.createMessage(any())).thenReturn(stubResponse());
 
         var provider = new LlmProviderAnthropic(anthropicClient, registry);
@@ -96,7 +81,7 @@ class LlmProviderAnthropicTest {
     void leavesSamplingParamsWhenModelNotInRegistry() {
         var anthropicClient = mock(AnthropicClient.class);
         var registry = mock(LlmModelRegistryService.class);
-        when(registry.findModel("custom-claude")).thenReturn(Optional.empty());
+        when(registry.supportsSamplingParams("custom-claude")).thenReturn(true);
         when(anthropicClient.createMessage(any())).thenReturn(stubResponse());
 
         var provider = new LlmProviderAnthropic(anthropicClient, registry);
