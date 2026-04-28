@@ -294,6 +294,12 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
     """
 
+    environment: Optional[str] = None
+    """
+    The name of the environment (e.g. "production", "staging", "development").
+    Stored in the configuration for future use.
+    """
+
     @property
     def config_file_fullpath(self) -> pathlib.Path:
         config_file_path = os.getenv("OPIK_CONFIG_PATH", CONFIG_FILE_PATH_DEFAULT)
@@ -362,6 +368,9 @@ class OpikConfig(pydantic_settings.BaseSettings):
 
         if self.api_key is not None:
             config_file_content["opik"]["api_key"] = self.api_key
+
+        if self.environment is not None:
+            config_file_content["opik"]["environment"] = self.environment
 
         try:
             with open(

@@ -1409,3 +1409,13 @@ def test_opik_client__log_assertion_results__nothing_valid__does_not_emit():
     )
 
     mock_streamer.put.assert_not_called()
+
+
+def test_opik_client__init__environment_forwarded_to_config():
+    client = opik_client.Opik(environment="production")
+    assert client.config.environment == "production"
+
+
+def test_opik_client__init__environment_defaults_to_none():
+    client = opik_client.Opik()
+    assert client.config.environment is None

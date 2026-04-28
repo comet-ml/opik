@@ -95,6 +95,8 @@ class SpanData(ObservationData):
             start_parameters["metadata"] = self.metadata
         if self.tags is not None:
             start_parameters["tags"] = self.tags
+        if self.environment is not None:
+            start_parameters["environment"] = self.environment
 
         return start_parameters
 
@@ -116,6 +118,7 @@ class SpanData(ObservationData):
             "usage": self.usage,
             "feedback_scores": self.feedback_scores,
             "project_name": self.project_name,
+            "environment": self.environment,
             "model": self.model,
             "provider": self.provider,
             "error_info": self.error_info,

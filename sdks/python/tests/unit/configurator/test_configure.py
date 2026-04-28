@@ -25,6 +25,7 @@ _OPIK_ENV_VARS = [
     "OPIK_WORKSPACE",
     "OPIK_URL_OVERRIDE",
     "OPIK_PROJECT_NAME",
+    "OPIK_ENVIRONMENT",
     "OPIK_CONFIG_PATH",
 ]
 
@@ -185,6 +186,7 @@ class TestUpdateConfig:
             url_override="http://example.com/opik/api/",
             workspace=workspace,
             project_name=project_name,
+            environment=None,
         )
         mock_config_instance.save_to_file.assert_called_once()
 
@@ -195,6 +197,7 @@ class TestUpdateConfig:
         )
         mock_update_session_config.assert_any_call("workspace", workspace)
         mock_update_session_config.assert_any_call("project_name", project_name)
+        mock_update_session_config.assert_any_call("environment", None)
 
     @patch("opik.configurator.configure.opik.config.OpikConfig")
     @patch("opik.configurator.configure.opik.config.update_session_config")
@@ -244,6 +247,7 @@ class TestUpdateConfig:
             url_override="http://example.com/opik/api/",
             workspace=workspace,
             project_name=project_name,
+            environment=None,
         )
 
         mock_config_instance.save_to_file.assert_called_once()
@@ -1393,6 +1397,7 @@ class TestConfigureCloud:
             workspace="valid_workspace",
             force=False,
             project_name="valid_project_name",
+            environment="production",
         )
         configurator.configure()
 
@@ -1401,14 +1406,20 @@ class TestConfigureCloud:
         assert configurator.base_url == OPIK_BASE_URL_CLOUD
         assert configurator.workspace == "valid_workspace"
         assert configurator.project_name == "valid_project_name"
+        assert configurator.environment == "production"
 
         # check that environment variables were set
         assert os.environ["OPIK_API_KEY"] == "valid_api_key"
         assert os.environ["OPIK_WORKSPACE"] == "valid_workspace"
         assert os.environ["OPIK_PROJECT_NAME"] == "valid_project_name"
+        assert os.environ["OPIK_ENVIRONMENT"] == "production"
 
 
 class TestConfigureLocal:
+    @patch(
+        "opik.configurator.configure.OpikConfigurator._set_environment",
+        return_value=False,
+    )
     @patch(
         "opik.configurator.configure.OpikConfigurator._set_project_name",
         return_value=True,
@@ -1427,6 +1438,7 @@ class TestConfigureLocal:
         mock_ask_for_url,
         mock_is_interactive,
         mock_set_project_name,
+        mock_set_environment,
     ):
         """
         Test that the function asks for a URL if no local instance is active and no URL is provided.
@@ -1479,6 +1491,10 @@ class TestConfigureLocal:
         mock_update_config.assert_not_called()
 
     @patch(
+        "opik.configurator.configure.OpikConfigurator._set_environment",
+        return_value=False,
+    )
+    @patch(
         "opik.configurator.configure.OpikConfigurator._set_project_name",
         return_value=True,
     )
@@ -1494,6 +1510,7 @@ class TestConfigureLocal:
         mock_is_instance_active,
         mock_ask_for_url,
         mock_set_project_name,
+        mock_set_environment,
     ):
         """
         Test that the function configures the provided URL if it is active.
@@ -1514,6 +1531,10 @@ class TestConfigureLocal:
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch(
+        "opik.configurator.configure.OpikConfigurator._set_environment",
+        return_value=False,
+    )
+    @patch(
         "opik.configurator.configure.OpikConfigurator._set_project_name",
         return_value=True,
     )
@@ -1523,7 +1544,11 @@ class TestConfigureLocal:
         return_value=True,
     )
     def test_configure_local__use_local_is_True__url_not_provided__use_default_localhost_url(
-        self, mock_is_instance_active, mock_update_config, mock_set_project_name
+        self,
+        mock_is_instance_active,
+        mock_update_config,
+        mock_set_project_name,
+        mock_set_environment,
     ):
         """
         Test that the function configures the default localhost URL if use_local is True and url is not provided.
@@ -1582,6 +1607,10 @@ class TestConfigureLocal:
             assert actual_call.args == expected_call
 
     @patch(
+        "opik.configurator.configure.OpikConfigurator._set_environment",
+        return_value=False,
+    )
+    @patch(
         "opik.configurator.configure.OpikConfigurator._set_project_name",
         return_value=True,
     )
@@ -1599,6 +1628,7 @@ class TestConfigureLocal:
         mock_ask_user_for_approval,
         mock_is_interactive,
         mock_set_project_name,
+        mock_set_environment,
     ):
         """
         Test that the function configures the local instance when found and user approves.
@@ -1694,6 +1724,10 @@ class TestConfigureLocal:
         assert configurator.workspace == OPIK_WORKSPACE_DEFAULT_NAME
 
     @patch(
+        "opik.configurator.configure.OpikConfigurator._set_environment",
+        return_value=False,
+    )
+    @patch(
         "opik.configurator.configure.OpikConfigurator._set_project_name",
         return_value=True,
     )
@@ -1713,6 +1747,7 @@ class TestConfigureLocal:
         mock_ask_user_for_approval,
         mock_is_interactive,
         mock_set_project_name,
+        mock_set_environment,
     ):
         """
         Test that if the user declines using the local instance, they are prompted for a URL.
@@ -1977,6 +2012,7 @@ class TestLogProjectConfigurationMessage:
             patch.object(configurator, "_set_api_key", return_value=False),
             patch.object(configurator, "_set_workspace", return_value=False),
             patch.object(configurator, "_set_project_name", return_value=False),
+            patch.object(configurator, "_set_environment", return_value=False),
             patch.object(
                 configurator, "_log_project_configuration_message"
             ) as mock_log_message,
@@ -2002,6 +2038,7 @@ class TestLogProjectConfigurationMessage:
 
         with (
             patch.object(configurator, "_set_project_name", return_value=True),
+            patch.object(configurator, "_set_environment", return_value=False),
             patch.object(
                 configurator, "_log_project_configuration_message"
             ) as mock_log_message,
@@ -2028,6 +2065,7 @@ class TestLogProjectConfigurationMessage:
 
         with (
             patch.object(configurator, "_set_project_name", return_value=True),
+            patch.object(configurator, "_set_environment", return_value=False),
             patch.object(
                 configurator, "_log_project_configuration_message"
             ) as mock_log_message,
@@ -2311,6 +2349,7 @@ class TestConfigure:
             url_override="http://custom.example.com/opik/api/",
             workspace="my_workspace",
             project_name="my_project",
+            environment=None,
         )
         mock_config_instance.save_to_file.assert_called_once()
 
@@ -2347,6 +2386,7 @@ class TestConfigure:
             url_override="http://custom-local.example.com/api/",
             workspace=OPIK_WORKSPACE_DEFAULT_NAME,
             project_name="my_project",
+            environment=None,
         )
         mock_config_instance.save_to_file.assert_called_once()
 
@@ -2398,6 +2438,7 @@ class TestConfigure:
             url_override="http://new.example.com/opik/api/",
             workspace="new_workspace",
             project_name="new_project",
+            environment=None,
         )
         mock_config_instance.save_to_file.assert_called_once()
 
@@ -2407,6 +2448,7 @@ class TestConfigure:
         )
         mock_update_session_config.assert_any_call("workspace", "new_workspace")
         mock_update_session_config.assert_any_call("project_name", "new_project")
+        mock_update_session_config.assert_any_call("environment", None)
 
     @patch("opik.configurator.configure.opik.config.update_session_config")
     @patch("opik.configurator.configure.opik.config.OpikConfig")
@@ -2449,6 +2491,7 @@ class TestConfigure:
             url_override="http://new-local.example.com/api/",
             workspace=OPIK_WORKSPACE_DEFAULT_NAME,
             project_name="new_project",
+            environment=None,
         )
         mock_config_instance.save_to_file.assert_called_once()
 
@@ -2460,3 +2503,129 @@ class TestConfigure:
             "workspace", OPIK_WORKSPACE_DEFAULT_NAME
         )
         mock_update_session_config.assert_any_call("project_name", "new_project")
+        mock_update_session_config.assert_any_call("environment", None)
+
+
+class TestSetEnvironment:
+    def test_set_environment__provided_by_user_no_force__returns_false(self):
+        configurator = OpikConfigurator(environment="production")
+        result = configurator._set_environment()
+        assert result is False
+        assert configurator.environment == "production"
+
+    def test_set_environment__provided_by_user_with_force__returns_true(self):
+        configurator = OpikConfigurator(environment="production", force=True)
+        result = configurator._set_environment()
+        assert result is True
+        assert configurator.environment == "production"
+
+    @patch("opik.configurator.configure.is_interactive", return_value=False)
+    def test_set_environment__not_interactive_no_env__returns_false(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator()
+        result = configurator._set_environment()
+        assert result is False
+        assert configurator.environment is None
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    @patch("builtins.input", return_value="staging")
+    def test_set_environment__interactive_user_provides_name__returns_true(
+        self, mock_input, mock_is_interactive
+    ):
+        configurator = OpikConfigurator()
+        result = configurator._set_environment()
+        assert result is True
+        assert configurator.environment == "staging"
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    @patch("builtins.input", return_value="")
+    def test_set_environment__interactive_user_skips__returns_false(
+        self, mock_input, mock_is_interactive
+    ):
+        configurator = OpikConfigurator()
+        result = configurator._set_environment()
+        assert result is False
+        assert configurator.environment is None
+
+    @patch("opik.configurator.configure.is_interactive", return_value=True)
+    def test_set_environment__automatic_approvals__skips_prompt(
+        self, mock_is_interactive
+    ):
+        configurator = OpikConfigurator(automatic_approvals=True)
+        result = configurator._set_environment()
+        assert result is False
+        assert configurator.environment is None
+
+    def test_set_environment__existing_config_environment_no_force__uses_existing(
+        self, monkeypatch
+    ):
+        monkeypatch.setenv("OPIK_ENVIRONMENT", "dev")
+        configurator = OpikConfigurator()
+        result = configurator._set_environment()
+        assert result is False
+        assert configurator.environment == "dev"
+
+    @patch("opik.configurator.configure.opik.config.update_session_config")
+    @patch("opik.configurator.configure.opik.config.OpikConfig")
+    @patch(
+        "opik.configurator.configure.opik_rest_helpers.is_instance_active",
+        return_value=True,
+    )
+    def test_configure__with_environment__saves_environment_to_file(
+        self,
+        mock_is_instance_active,
+        mock_opik_config,
+        mock_update_session_config,
+    ):
+        from opik.configurator.configure import configure
+
+        mock_config_instance = MagicMock()
+        mock_opik_config.return_value = mock_config_instance
+
+        configure(
+            force=True,
+            use_local=True,
+            url_override="http://localhost:5173/",
+            project_name="my_project",
+            environment="production",
+        )
+
+        mock_opik_config.assert_any_call(
+            api_key=None,
+            url_override="http://localhost:5173/api/",
+            workspace=OPIK_WORKSPACE_DEFAULT_NAME,
+            project_name="my_project",
+            environment="production",
+        )
+        mock_update_session_config.assert_any_call("environment", "production")
+
+
+class TestSetEnvironmentVariablesForIntegrations:
+    def test_environment_set_in_os_environ(self):
+        from opik.configurator.configure import (
+            _set_environment_variables_for_integrations,
+        )
+
+        _set_environment_variables_for_integrations(
+            api_key=None,
+            workspace=None,
+            project_name=None,
+            environment="staging",
+        )
+
+        assert os.environ["OPIK_ENVIRONMENT"] == "staging"
+
+    def test_environment_none__not_set_in_os_environ(self):
+        from opik.configurator.configure import (
+            _set_environment_variables_for_integrations,
+        )
+
+        _set_environment_variables_for_integrations(
+            api_key=None,
+            workspace=None,
+            project_name=None,
+            environment=None,
+        )
+
+        assert "OPIK_ENVIRONMENT" not in os.environ

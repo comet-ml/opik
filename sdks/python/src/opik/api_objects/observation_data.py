@@ -33,6 +33,7 @@ class ObservationData:
     tags: Optional[List[str]] = None
     feedback_scores: Optional[List[FeedbackScoreDict]] = None
     project_name: Optional[str] = None
+    environment: Optional[str] = None
     error_info: Optional[ErrorInfoDict] = None
     attachments: Optional[List[attachment.Attachment]] = None
     source: TraceSource = "sdk"

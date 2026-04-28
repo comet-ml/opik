@@ -107,6 +107,7 @@ class Opik:
         workspace: Optional[str] = None,
         host: Optional[str] = None,
         api_key: Optional[str] = None,
+        environment: Optional[str] = None,
         batching: bool = True,
         _use_batching: bool = False,
         _show_misconfiguration_message: bool = True,
@@ -120,6 +121,8 @@ class Opik:
             workspace: The name of the workspace. If not provided, `default` will be used.
             host: The host URL for the Opik server. If not provided, it will default to `https://www.comet.com/opik/api`.
             api_key: The API key for Opik. This parameter is ignored for local installations.
+            environment: The name of the environment (e.g. "production", "staging"). If not provided,
+                falls back to the value in the config file or environment variable.
             batching: If True (default), enables request batching for higher throughput.
                 When enabled, update operations (``update_span``, ``update_trace``,
                 ``Span.update``, ``Trace.update``) may cause data loss if the update
@@ -136,6 +139,7 @@ class Opik:
             workspace=workspace,
             url_override=host,
             api_key=api_key,
+            environment=environment,
         )
 
         config_.check_for_known_misconfigurations(

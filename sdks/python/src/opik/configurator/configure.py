@@ -32,6 +32,7 @@ class OpikConfigurator:
         self_hosted_comet: bool = False,
         automatic_approvals: bool = False,
         project_name: Optional[str] = None,
+        environment: Optional[str] = None,
     ):
         self.api_key = api_key
         self.workspace = workspace
@@ -41,6 +42,7 @@ class OpikConfigurator:
         self.self_hosted_comet = self_hosted_comet
         self.automatic_approvals = automatic_approvals
         self.project_name = project_name
+        self.environment = environment
 
         # Handle URL
         #
@@ -91,12 +93,16 @@ class OpikConfigurator:
         # Handle project name: get or prompt for one if needed
         update_config_with_project_name = self._set_project_name()
 
+        # Handle environment: get or prompt for one if needed
+        update_config_with_environment = self._set_environment()
+
         # Update configuration if either API key or workspace has changed
         should_save_config = any(
             [
                 update_config_with_api_key,
                 update_config_with_workspace,
                 update_config_with_project_name,
+                update_config_with_environment,
             ]
         )
         if should_save_config:
@@ -107,6 +113,7 @@ class OpikConfigurator:
                 api_key=self.api_key,
                 workspace=self.workspace,
                 project_name=self.project_name,
+                environment=self.environment,
             )
             LOGGER.info(
                 "Opik is already configured. You can check the settings by viewing the config file at %s",
@@ -185,6 +192,7 @@ class OpikConfigurator:
                 to a file.
         """
         self._set_project_name()
+        self._set_environment()
 
         self._update_config(save_to_file=save_to_file)
         self._log_project_configuration_message()
@@ -485,6 +493,40 @@ class OpikConfigurator:
             )
         self.project_name = user_input_project_name
 
+    def _set_environment(self) -> bool:
+        """
+        Determines and sets the environment name based on the current configuration or user input.
+
+        Returns:
+            bool: Indicates whether a new environment name was explicitly set.
+        """
+        # Case 1: Environment was provided by the user
+        if self.environment is not None:
+            return True if self.force else False
+
+        # Case 2: Use environment from current configuration if not forced to change
+        if (
+            "environment" in self.current_config.model_fields_set
+            and self.current_config.environment is not None
+            and not self.force
+        ):
+            self.environment = self.current_config.environment
+            return False
+
+        # Case 3: No environment provided — prompt the user (optional, can be skipped)
+        if not is_interactive() or self.automatic_approvals:
+            return False
+
+        user_input_environment = input(
+            "Please enter your environment name (e.g. production, staging) or press Enter to skip: "
+        ).strip()
+
+        if user_input_environment == "":
+            return False
+
+        self.environment = user_input_environment
+        return True
+
     def _update_config(self, save_to_file: bool) -> None:
         """
         Save changes to the config file and update the current session configuration.
@@ -505,6 +547,7 @@ class OpikConfigurator:
                     project_name=self.project_name
                     if self.project_name
                     else config.OPIK_PROJECT_DEFAULT_NAME,
+                    environment=self.environment,
                 )
                 new_config.save_to_file()
 
@@ -514,6 +557,7 @@ class OpikConfigurator:
             opik.config.update_session_config("url_override", url)
             opik.config.update_session_config("workspace", self.workspace)
             opik.config.update_session_config("project_name", self.project_name)
+            opik.config.update_session_config("environment", self.environment)
         except Exception as e:
             LOGGER.error(f"Failed to update config: {str(e)}")
             raise ConfigurationError("Failed to update configuration.")
@@ -582,7 +626,10 @@ class OpikConfigurator:
 
 
 def _set_environment_variables_for_integrations(
-    api_key: Optional[str], workspace: Optional[str], project_name: Optional[str]
+    api_key: Optional[str],
+    workspace: Optional[str],
+    project_name: Optional[str],
+    environment: Optional[str] = None,
 ) -> None:
     """
     Environment variables are set for use by some integrations (liteLLM, etc.) when both the API key, workspace
@@ -596,6 +643,8 @@ def _set_environment_variables_for_integrations(
         os.environ["OPIK_WORKSPACE"] = workspace
     if project_name is not None:
         os.environ["OPIK_PROJECT_NAME"] = project_name
+    if environment is not None:
+        os.environ["OPIK_ENVIRONMENT"] = environment
 
 
 def _extract_base_url_from_api_key(api_key: str) -> Optional[str]:
@@ -616,6 +665,7 @@ def configure(
     automatic_approvals: Optional[bool] = None,
     url_override: Optional[str] = None,
     project_name: Optional[str] = None,
+    environment: Optional[str] = None,
 ) -> None:
     """
     Create a local configuration file for the Python SDK. If a configuration file already exists,
@@ -632,6 +682,7 @@ def configure(
                without user confirmation if `automatic_approvals` is not set to `False`.
         automatic_approvals: if True, `yes` will automatically be answered whenever a user approval is required
         project_name: The name of the project to configure. If not provided, the default project will be used.
+        environment: The name of the environment (e.g. "production", "staging"). Stored in config for future use.
 
     Raises:
         ConfigurationError
@@ -653,5 +704,6 @@ def configure(
         if automatic_approvals is not None
         else force,
         project_name=project_name,
+        environment=environment,
     )
     client.configure()

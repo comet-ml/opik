@@ -87,6 +87,8 @@ class TraceData(ObservationData):
             start_parameters["metadata"] = self.metadata
         if self.tags is not None:
             start_parameters["tags"] = self.tags
+        if self.environment is not None:
+            start_parameters["environment"] = self.environment
 
         return start_parameters
 
@@ -104,6 +106,7 @@ class TraceData(ObservationData):
             "tags": self.tags,
             "feedback_scores": self.feedback_scores,
             "project_name": self.project_name,
+            "environment": self.environment,
             "error_info": self.error_info,
             "thread_id": self.thread_id,
             "attachments": self.attachments,
