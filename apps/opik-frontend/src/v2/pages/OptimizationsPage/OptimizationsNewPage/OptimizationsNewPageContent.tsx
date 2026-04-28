@@ -46,7 +46,7 @@ const OptimizationsNewPageContent: React.FC = () => {
         onCancel={handleCancel}
       />
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 xl:flex-row">
         <OptimizationsNewPromptSection
           form={form}
           projectId={activeProjectId!}
