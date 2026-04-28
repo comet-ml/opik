@@ -1013,9 +1013,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT eia_t.dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
                 <if(push_top_needs_div)>
-                INNER JOIN experiment_aggregated_scope_ids eas_t ON eas_t.id = eia_t.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di_t ON (di_t.id = eia_t.dataset_item_id OR di_t.row_id = eia_t.dataset_item_id)
-                    AND di_t.dataset_version_id = eas_t.resolved_dataset_version_id
                 <endif>
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
