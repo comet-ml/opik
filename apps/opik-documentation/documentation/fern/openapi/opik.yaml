@@ -18276,6 +18276,11 @@ components:
         forceWorkspaceVersion:
           minLength: 1
           type: string
+        defaultPageSize:
+          maximum: 100
+          minimum: 5
+          type: integer
+          format: int32
         v2WorkspaceAllowlist:
           type: string
           writeOnly: true
