@@ -9,6 +9,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
+import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -97,7 +98,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
-                var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
+                var strategy = message.experimentId() != null
+                        ? new InstructionStrategy()
+                        : llmProviderFactory.getStructuredOutputStrategy(modelName);
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                         message.llmAsJudgeCode(), trace, strategy, message.promptType());
             } catch (Exception exception) {
@@ -129,8 +132,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 throw exception;
             }
 
-            // Handle tool calls if the LLM wants to inspect spans
-            chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
+            if (message.experimentId() != null) {
+                chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
+            }
 
             try {
                 List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
@@ -158,8 +162,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     private ChatRequest addToolSpecs(ChatRequest request) {
-        return request.toBuilder()
-                .responseFormat(null)
+        return ChatRequest.builder()
+                .messages(request.messages())
                 .toolSpecifications(TraceSpanToolDefinition.ALL_TOOLS)
                 .build();
     }
@@ -184,7 +188,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             messages.add(chatResponse.aiMessage());
 
             for (var toolExecRequest : chatResponse.aiMessage().toolExecutionRequests()) {
-                log.info("Tool call round '{}' for traceId '{}': tool '{}'",
+                log.debug("Tool call round '{}' for traceId '{}': tool '{}'",
                         round, trace.id(), toolExecRequest.name());
                 var result = TraceSpanToolDefinition.executeTool(
                         toolExecRequest.name(), toolExecRequest.arguments(), spans);
@@ -199,9 +203,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     followUp, message.llmAsJudgeCode().model(), message.workspaceId());
         }
 
-        // Tool mode disables responseFormat, so the final text response may contain
-        // invalid JSON. Re-send with the original structured output format to ensure
-        // the response is properly formatted.
         var finalRequest = structuredRequest.toBuilder()
                 .messages(messages)
                 .build();

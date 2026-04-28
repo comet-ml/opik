@@ -32,18 +32,21 @@ final class TestSuitePromptConstants {
 
             You have access to tools that let you inspect the agent's full execution trace:
 
-            1. **`get_trace_spans`** — Call this FIRST. It returns a tree of all spans \
+            1. **`%s`** — Call this FIRST. It returns a tree of all spans \
             (tool calls, LLM calls, intermediate steps) with truncated input/output. \
             Use it to understand what the agent actually did.
 
-            2. **`get_span_details`** — Call this AFTER reviewing the overview to get \
+            2. **`%s`** — Call this AFTER reviewing the overview to get \
             the full, untruncated input/output/metadata of a specific span by its ID.
 
             **When to call tools:** Before judging ANY assertion that references tool usage, \
             function calls, model selection, intermediate behavior, or execution details, \
-            you MUST call `get_trace_spans` first. Do NOT assume the tool was or was not called \
+            you MUST call `%s` first. Do NOT assume the tool was or was not called \
             based only on the top-level output — always verify by inspecting the trace.
-            """;
+            """.formatted(
+            TraceSpanToolDefinition.OVERVIEW_TOOL_NAME,
+            TraceSpanToolDefinition.DETAILS_TOOL_NAME,
+            TraceSpanToolDefinition.OVERVIEW_TOOL_NAME);
 
     static final String USER_MESSAGE_TEMPLATE = """
             ## Input
