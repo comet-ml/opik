@@ -106,7 +106,7 @@ const DataTablePagination = ({
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
-              variant="outline"
+              variant={isMinimal ? "ghost" : "outline"}
               size="sm"
               className={`min-w-4 px-2 ${
                 isMinimal
@@ -116,7 +116,7 @@ const DataTablePagination = ({
               disabled={disabledSizeChange}
             >
               {size}
-              <ChevronDown className="ml-1 size-3.5" />
+              {!isMinimal && <ChevronDown className="ml-1 size-3.5" />}
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
