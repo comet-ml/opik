@@ -1,5 +1,7 @@
 from typing import Optional, Dict
 
+from .attributes import OPIK_PARENT_SPAN_ID, OPIK_TRACE_ID
+
 
 class OpikDistributedTraceAttributes:
     """Represents distributed trace attributes for the OPIK tracing system.
@@ -30,8 +32,8 @@ class OpikDistributedTraceAttributes:
             A dictionary containing the trace ID and parent span ID (if applicable).
         """
         res = {
-            "opik.trace_id": self._opik_trace_id,
+            OPIK_TRACE_ID: self._opik_trace_id,
         }
         if self._opik_parent_span_id is not None:
-            res["opik.parent_span_id"] = self._opik_parent_span_id
+            res[OPIK_PARENT_SPAN_ID] = self._opik_parent_span_id
         return res

@@ -3,6 +3,7 @@ from typing import Dict, Optional, TYPE_CHECKING
 
 from opik import id_helpers
 from opik.integrations.otel import types as otel_types
+from opik.integrations.otel import attributes as otel_attributes
 
 if TYPE_CHECKING:
     from opentelemetry import trace
@@ -112,5 +113,9 @@ def attach_to_parent(span: "trace.Span", http_headers: Dict[str, str]) -> bool:
         return False
 
     attributes = opik_distributed_trace_headers.as_attributes()
+    # Mint a stable opik.span_id for this boundary span so descendants picked up by
+    # OpikSpanProcessor can chain through it (their opik.parent_span_id will reference
+    # this value, and the backend uses opik.span_id verbatim — see OpenTelemetryMapper).
+    attributes[otel_attributes.OPIK_SPAN_ID] = id_helpers.generate_id()
     span.set_attributes(attributes)
     return True

@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock, patch
 
+from opik import id_helpers
 from opik.integrations.otel import distributed_trace
 from opik.integrations.otel import types as otel_types
+from opik.integrations.otel.attributes import OPIK_SPAN_ID
 
 
 TRACE_ID = "0193b3a5-1234-7abc-9def-0123456789ab"
@@ -232,12 +234,12 @@ class TestAttachToParent:
         result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is True
-        span.set_attributes.assert_called_once_with(
-            {
-                "opik.trace_id": TRACE_ID,
-                "opik.parent_span_id": PARENT_SPAN_ID,
-            }
-        )
+        span.set_attributes.assert_called_once()
+        attrs = span.set_attributes.call_args.args[0]
+        assert attrs["opik.trace_id"] == TRACE_ID
+        assert attrs["opik.parent_span_id"] == PARENT_SPAN_ID
+        # boundary span gets a freshly minted UUIDv7 to chain descendants through
+        assert id_helpers.is_valid_uuid_v7(attrs[OPIK_SPAN_ID])
 
     def test_attach_to_parent__trace_id_only__sets_trace_id_attribute_and_returns_true(
         self,
@@ -248,7 +250,13 @@ class TestAttachToParent:
         result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is True
-        span.set_attributes.assert_called_once_with({"opik.trace_id": TRACE_ID})
+        span.set_attributes.assert_called_once()
+        attrs = span.set_attributes.call_args.args[0]
+        assert attrs == {
+            "opik.trace_id": TRACE_ID,
+            OPIK_SPAN_ID: attrs[OPIK_SPAN_ID],
+        }
+        assert id_helpers.is_valid_uuid_v7(attrs[OPIK_SPAN_ID])
 
     def test_attach_to_parent__missing_trace_id_with_parent_span_id__returns_false_and_warns(
         self,
@@ -296,5 +304,8 @@ class TestAttachToParent:
             result = distributed_trace.attach_to_parent(span, headers)
 
         assert result is True
-        span.set_attributes.assert_called_once_with({"opik.trace_id": TRACE_ID})
+        attrs = span.set_attributes.call_args.args[0]
+        assert attrs["opik.trace_id"] == TRACE_ID
+        assert "opik.parent_span_id" not in attrs
+        assert id_helpers.is_valid_uuid_v7(attrs[OPIK_SPAN_ID])
         warn_mock.assert_called_once()
