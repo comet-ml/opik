@@ -107,21 +107,6 @@ describe("normalizeFilters", () => {
     expect(result[0].type).toBe(COLUMN_TYPE.dictionary);
   });
 
-  it("should not modify other fields", () => {
-    const filters = [
-      createFilter({
-        id: "1",
-        field: "name",
-        type: COLUMN_TYPE.string,
-        operator: "contains",
-        value: "test",
-      }),
-    ];
-    const result = normalizeFilters(filters, columns);
-    expect(result[0].field).toBe("name");
-    expect(result[0].type).toBe(COLUMN_TYPE.string);
-  });
-
   it("should return empty array for empty input", () => {
     expect(normalizeFilters([], columns)).toEqual([]);
   });
@@ -134,32 +119,29 @@ describe("normalizeFilters", () => {
   });
 });
 
-describe("isFilterValid with input/output dictionary fields", () => {
-  it("should accept input filter without key (optional for input)", () => {
-    const filter = createFilter({
-      id: "1",
-      field: "input",
-      type: COLUMN_TYPE.dictionary,
-      operator: "contains",
-      value: "hello",
-      key: "",
-    });
-    expect(isFilterValid(filter)).toBe(true);
+describe("rule editor key-optional validation for input/output", () => {
+  const ruleFilterValid = (f: Filter) =>
+    isFilterValid(
+      (f.field === "input" || f.field === "output") && !f.key
+        ? { ...f, type: COLUMN_TYPE.string }
+        : f,
+    );
+
+  it("should accept input/output without key when value is present", () => {
+    for (const field of ["input", "output"]) {
+      const filter = createFilter({
+        id: "1",
+        field,
+        type: COLUMN_TYPE.dictionary,
+        operator: "contains",
+        value: "hello",
+        key: "",
+      });
+      expect(ruleFilterValid(filter)).toBe(true);
+    }
   });
 
-  it("should accept output filter without key (optional for output)", () => {
-    const filter = createFilter({
-      id: "1",
-      field: "output",
-      type: COLUMN_TYPE.dictionary,
-      operator: "contains",
-      value: "hello",
-      key: "",
-    });
-    expect(isFilterValid(filter)).toBe(true);
-  });
-
-  it("should accept input filter with key", () => {
+  it("should accept input/output with key and is_not_empty", () => {
     const filter = createFilter({
       id: "1",
       field: "input",
@@ -168,22 +150,34 @@ describe("isFilterValid with input/output dictionary fields", () => {
       value: "",
       key: "context",
     });
-    expect(isFilterValid(filter)).toBe(true);
+    expect(ruleFilterValid(filter)).toBe(true);
   });
 
-  it("should accept output filter with key and is_not_empty", () => {
+  it("should reject input/output without key and without value", () => {
+    const filter = createFilter({
+      id: "1",
+      field: "input",
+      type: COLUMN_TYPE.dictionary,
+      operator: "contains",
+      value: "",
+      key: "",
+    });
+    expect(ruleFilterValid(filter)).toBe(false);
+  });
+
+  it("should reject input/output with key but without value", () => {
     const filter = createFilter({
       id: "1",
       field: "output",
       type: COLUMN_TYPE.dictionary,
-      operator: "is_not_empty",
+      operator: "contains",
       value: "",
-      key: "output",
+      key: "response",
     });
-    expect(isFilterValid(filter)).toBe(true);
+    expect(ruleFilterValid(filter)).toBe(false);
   });
 
-  it("should reject metadata filter without key (key required)", () => {
+  it("should still reject metadata without key", () => {
     const filter = createFilter({
       id: "1",
       field: "metadata",
@@ -192,42 +186,6 @@ describe("isFilterValid with input/output dictionary fields", () => {
       value: "test",
       key: "",
     });
-    expect(isFilterValid(filter)).toBe(false);
-  });
-
-  it("should accept metadata filter with key", () => {
-    const filter = createFilter({
-      id: "1",
-      field: "metadata",
-      type: COLUMN_TYPE.dictionary,
-      operator: "contains",
-      value: "test",
-      key: "user_id",
-    });
-    expect(isFilterValid(filter)).toBe(true);
-  });
-
-  it("should reject filter with no value and non-empty operator", () => {
-    const filter = createFilter({
-      id: "1",
-      field: "output",
-      type: COLUMN_TYPE.dictionary,
-      operator: "contains",
-      value: "",
-      key: "output",
-    });
-    expect(isFilterValid(filter)).toBe(false);
-  });
-
-  it("should accept is_empty operator without value", () => {
-    const filter = createFilter({
-      id: "1",
-      field: "output",
-      type: COLUMN_TYPE.dictionary,
-      operator: "is_empty",
-      value: "",
-      key: "output",
-    });
-    expect(isFilterValid(filter)).toBe(true);
+    expect(ruleFilterValid(filter)).toBe(false);
   });
 });

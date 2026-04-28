@@ -20,13 +20,10 @@ export const isFilterValid = (filter: Filter) => {
     filter.operator === "is_empty" ||
     filter.operator === "is_not_empty";
 
-  const isKeyOptionalField =
-    filter.field === "input" || filter.field === "output";
-
   const hasKey =
     filter.type === COLUMN_TYPE.dictionary ||
     filter.type === COLUMN_TYPE.numberDictionary
-      ? isKeyOptionalField || filter.key !== ""
+      ? filter.key !== ""
       : true;
 
   const hasError = filter.error && filter.error.length > 0;
