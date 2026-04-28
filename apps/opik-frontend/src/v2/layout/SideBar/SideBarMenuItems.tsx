@@ -21,6 +21,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
       canViewDatasets,
       canViewDashboards,
       canUsePlayground,
+      canViewOptimizationRuns,
     },
   } = usePermissions();
 
@@ -30,6 +31,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewDatasets,
     canViewDashboards,
     canUsePlayground,
+    canViewOptimizationRuns,
     showHome: !!AssistantSidebar,
   });
 
