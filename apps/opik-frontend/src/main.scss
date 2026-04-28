@@ -20,12 +20,11 @@
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
 
-    --muted-slate: 215 16%, 47%;
+    --muted-slate: 215 16% 47%;
     --light-slate: 215 20% 65%;
     --tree-line: 213 16% 88%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
-    --breadcrumb-last: 216 20% 40%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
@@ -90,6 +89,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #ebf2f5;
+    --chart-gray-dark: #45575f;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -279,7 +280,6 @@
     --tree-line: 0 0% 30%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
-    --breadcrumb-last: 214, 32%, 91%;
     --secondary-foreground: 0, 0%, 10%;
     --primary-foreground: 0, 0%, 11%;
 
@@ -385,6 +385,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #2e2e2e;
+    --chart-gray-dark: #e2e8f0;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
