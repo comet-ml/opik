@@ -17,17 +17,24 @@ This sub-skill:
 ## Inputs
 
 - `branch` (required): branch name to look up the PR against. Caller passes `git rev-parse --abbrev-ref HEAD`.
-- `pr_number` (optional): if the caller already located the PR (e.g., `/comet:address-github-pr-comments`), pass it to skip the lookup.
+- `pr_number` (optional): if the caller already located the PR (e.g., `/comet:address-github-pr-comments`), pass it as a hint. The sub-skill **always validates** that the PR's `headRefName` matches `branch` before any read or write — never trust `pr_number` blindly.
 - `repo` (optional, defaults to `comet-ml/opik`): the GitHub repo to operate against.
 
 ## Steps
 
-### 1. No-op gates (silent return)
+### 1. Locate and validate the PR (no-op gates)
 
-Return without prompting or making any API call when any of these are true:
+Return without prompting or making any API call when any of the failure conditions below are reached.
 
-- **No open PR for the branch.** If `pr_number` was not passed, run `gh pr list --repo {repo} --head {branch} --state open --json number,url --jq '.[0]'`. If empty, return silently.
-- **Mute memory says "never for this repo".** Read the per-user memory file (see "Memory entry" below). If the normalized remote URL is in the `never` list, return silently.
+**1a. PR resolution.** Determine which PR to operate on:
+
+- **If `pr_number` was passed**: run `gh pr view {pr_number} --repo {repo} --json number,headRefName,headRefOid,state`. Verify `state == "OPEN"` and `headRefName == branch`. If either check fails, discard the hint and fall through to the branch lookup below — never edit the passed PR on mismatch.
+- **Branch lookup**: run `gh pr list --repo {repo} --head {branch} --state open --json number,url,headRefName,headRefOid`. Filter to PRs whose `headRefOid` matches the local `git rev-parse HEAD`.
+  - **0 matches**: no open PR for this exact HEAD — return silently.
+  - **Exactly 1 match**: use it.
+  - **More than 1 match** (e.g., multiple forks share the same head branch name): log `PR description sync skipped: {N} open PRs match branch={branch} and HEAD={oid}; refusing to guess` and return silently. Don't edit any of them.
+
+**1b. Mute memory check.** Read the per-user memory file (see "Memory entry" below). If the normalized remote URL is in the `never` list, return silently.
 
 ### 2. Fetch current state
 
