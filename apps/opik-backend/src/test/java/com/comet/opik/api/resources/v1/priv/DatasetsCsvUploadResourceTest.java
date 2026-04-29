@@ -6,7 +6,7 @@ import com.comet.opik.api.DatasetItemSource;
 import com.comet.opik.api.DatasetStatus;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
-import com.comet.opik.api.resources.utils.ConditionalGZipFilter;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
 import com.comet.opik.api.resources.utils.RedisContainerUtils;
@@ -19,17 +19,14 @@ import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
-import org.glassfish.jersey.client.ClientProperties;
 import org.glassfish.jersey.media.multipart.FormDataBodyPart;
 import org.glassfish.jersey.media.multipart.FormDataMultiPart;
-import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,21 +102,15 @@ class DatasetsCsvUploadResourceTest {
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     private String baseURI;
-    private Client registeredClient;
+    private ClientSupport registeredClient;
     private DatasetResourceClient datasetResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
         this.baseURI = "http://localhost:%d".formatted(client.getPort());
 
-        // Configure client but DON'T use GrizzlyConnectorProvider for multipart support
-        // GrizzlyConnector doesn't properly handle multipart Content-Type headers
-        client.getClient().register(new ConditionalGZipFilter());
-        client.getClient().property(ClientProperties.READ_TIMEOUT, 35_000);
-        // Note: NOT setting connectorProvider - use default HttpUrlConnector for multipart
-
-        // Register MultiPartFeature on the client and capture the registered client
-        this.registeredClient = client.getClient().register(MultiPartFeature.class);
+        this.registeredClient = client;
+        ClientSupportUtils.configMultiPartFeature(client);
 
         mockTargetWorkspace(API_KEY, TEST_WORKSPACE, WORKSPACE_ID, USER);
 
