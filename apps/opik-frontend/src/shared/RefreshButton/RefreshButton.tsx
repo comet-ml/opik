@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import { RotateCw } from "lucide-react";
 import { Button, ButtonProps } from "@/ui/button";
 import { cn } from "@/lib/utils";
@@ -14,10 +14,6 @@ interface RefreshButtonProps {
   className?: string;
 }
 
-// Fallback in case `animationiteration` never fires (e.g. animations
-// suppressed) so the button can't stay disabled forever.
-const SPIN_FALLBACK_MS = 1200;
-
 const RefreshButton: React.FC<RefreshButtonProps> = ({
   onRefresh,
   isFetching = false,
@@ -28,22 +24,7 @@ const RefreshButton: React.FC<RefreshButtonProps> = ({
   className,
 }) => {
   const [spin, setSpin] = useState(false);
-  const fallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSpinning = spin || isFetching;
-
-  useEffect(
-    () => () => {
-      if (fallbackRef.current) clearTimeout(fallbackRef.current);
-    },
-    [],
-  );
-
-  const handleClick = () => {
-    setSpin(true);
-    if (fallbackRef.current) clearTimeout(fallbackRef.current);
-    fallbackRef.current = setTimeout(() => setSpin(false), SPIN_FALLBACK_MS);
-    onRefresh();
-  };
 
   return (
     <TooltipWrapper content={tooltip}>
@@ -51,7 +32,10 @@ const RefreshButton: React.FC<RefreshButtonProps> = ({
         variant={variant}
         size={size}
         className={cn("shrink-0", className)}
-        onClick={handleClick}
+        onClick={() => {
+          setSpin(true);
+          onRefresh();
+        }}
         disabled={isSpinning}
       >
         <span
