@@ -24,7 +24,7 @@ type OptimizationProgressChartContainerProps = {
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   inProgressInfo?: InProgressInfo;
   isRunningMiniBatches?: boolean;
 };
@@ -39,7 +39,7 @@ const OptimizationProgressChartContainer: React.FC<
   selectedTrialId,
   onTrialSelect,
   onTrialClick,
-  isEvaluationSuite,
+  isTestSuite,
   inProgressInfo,
   isRunningMiniBatches,
 }) => {
@@ -54,11 +54,11 @@ const OptimizationProgressChartContainer: React.FC<
     () =>
       buildCandidateChartData(
         candidates,
-        isEvaluationSuite,
+        isTestSuite,
         isInProgress,
         inProgressInfo,
       ),
-    [candidates, isEvaluationSuite, isInProgress, inProgressInfo],
+    [candidates, isTestSuite, isInProgress, inProgressInfo],
   );
 
   const noData = useMemo(
@@ -96,7 +96,7 @@ const OptimizationProgressChartContainer: React.FC<
         selectedTrialId={selectedTrialId}
         onTrialSelect={onTrialSelect}
         onTrialClick={onTrialClick}
-        isEvaluationSuite={isEvaluationSuite}
+        isTestSuite={isTestSuite}
         isInProgress={isInProgress}
         inProgressInfo={inProgressInfo}
       />

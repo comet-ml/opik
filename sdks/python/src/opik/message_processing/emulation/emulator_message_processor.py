@@ -7,7 +7,7 @@ from typing import List, Dict, Union, Optional, Any, Type, Callable
 
 from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
-from opik.types import ErrorInfoDict, SpanType
+from opik.types import ErrorInfoDict, SpanType, TraceSource
 from . import models
 from .. import messages
 from ..processors import message_processors
@@ -181,14 +181,45 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
     def _build_spans_tree(self) -> None:
         """
         Builds a list of span trees based on the data from the processed messages.
-        Children's spans are sorted by creation time
+        Children's spans are sorted by creation time.
+
+        Children references are refreshed from `_span_observations` on every
+        rebuild. When `_save_span` replaces an entry under `merge_duplicates`
+        (a second CreateSpanMessage with the same ID but newer fields),
+        the parent's `.spans` list would otherwise keep the stale reference
+        with an out-of-date `start_time`, and the subsequent sort would put
+        children in the wrong order.
         """
         with self._rlock:
+            visited_parents: set = set()
             for span_id, parent_span_id in self._span_to_parent_span.items():
                 if parent_span_id is None:
                     continue
 
-                parent_span = self._span_observations[parent_span_id]
+                # Parent span may not have arrived yet when messages are
+                # produced by parallel async flows; skip attaching until the
+                # next rebuild instead of crashing. Log so orphans are
+                # observable instead of silently dropped — if the parent
+                # never arrives the child stays out of the tree, and this
+                # warning is the only signal.
+                parent_span = self._span_observations.get(parent_span_id)
+                if parent_span is None:
+                    LOGGER.warning(
+                        "Skipping span %s: parent span %s is not yet observed. "
+                        "Child will remain orphaned until the parent's "
+                        "CreateSpanMessage is processed.",
+                        span_id,
+                        parent_span_id,
+                    )
+                    continue
+
+                # First time we see this parent on this rebuild — drop stale
+                # references so we re-attach against the current observation
+                # snapshot.
+                if parent_span_id not in visited_parents:
+                    parent_span.spans = []
+                    visited_parents.add(parent_span_id)
+
                 if not _observation_already_stored(span_id, parent_span.spans):
                     parent_span.spans.append(self._span_observations[span_id])
                     parent_span.spans.sort(key=lambda x: x.start_time)
@@ -240,6 +271,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         feedback_scores: Optional[List[models.FeedbackScoreModel]],
         error_info: Optional[ErrorInfoDict],
         thread_id: Optional[str],
+        source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
     ) -> models.TraceModel:
         """
@@ -297,6 +329,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         error_info: Optional[ErrorInfoDict],
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
+        source: TraceSource,
     ) -> models.SpanModel:
         """
         Abstract method to create a span model representing a span of a trace.
@@ -322,6 +355,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             error_info: Information regarding errors encountered during the span's execution.
             total_cost: Total cost incurred during the span.
             last_updated_at: Timestamp marking the last update of the span's information.
+            source: The source of the span's data (e.g., sdk, experiment).
 
         Returns:
             models.SpanModel: A fully initialized span model.
@@ -397,6 +431,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             last_updated_at=message.last_updated_at,
             feedback_scores=None,
             spans=None,
+            source=message.source,
         )
 
         self._save_trace(trace)
@@ -421,6 +456,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             last_updated_at=message.last_updated_at,
             spans=None,
             feedback_scores=None,
+            source=message.source,
         )
 
         self._save_span(
@@ -525,6 +561,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             error_info=error_info,
+            source=message.source,
         )
 
         self._save_span(
@@ -562,6 +599,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             error_info=error_info,
+            source=message.source,
         )
         self._save_trace(trace)
 

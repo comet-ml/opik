@@ -16,14 +16,15 @@
     --white: #ffffff;
 
     --foreground-secondary: 224 71% 4%;
+    --new-foreground-secondary: 210 40% 98%;
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
 
-    --muted-slate: 215 16%, 47%;
+    --muted-slate: 215 16% 47%;
     --light-slate: 215 20% 65%;
+    --tree-line: 213 16% 88%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
-    --breadcrumb-last: 216 20% 40%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
@@ -53,6 +54,7 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 32%;
+    --library-loaded: 78 75% 59%;
 
     /* Gray scale for utility classes */
     --gray-100: #f3f4f6;
@@ -86,6 +88,9 @@
     --chart-purple: #945fcf;
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
+    --chart-teal: #12a4b4;
+    --chart-gray-light: #ebf2f5;
+    --chart-gray-dark: #45575f;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -95,8 +100,8 @@
     /* Trace thread colors */
     --thread-active: #ebf2f5;
     --thread-inactive: #e2effd;
-    --thread-icon-background: #dedefd;
-    --thread-icon-text: #1b1c7e;
+    --thread-icon-background: #3438d0;
+    --thread-icon-text: #ffffff;
     --message-input-background: #e7ecff;
 
     /* Action cards */
@@ -200,6 +205,32 @@
     --tag-turquoise-text: #15545b;
     --tag-blue-bg: #e2effd;
     --tag-blue-text: #19426b;
+    --tag-lavender-bg: #e5e5fe;
+    --tag-lavender-text: #3b3b8e;
+
+    --click-blue: #262ab5;
+
+    /* Trace/span type colors */
+    --type-trace: #945fcf;
+    --type-trace-bg: #efe2fd80;
+    --type-thread: #3438d0;
+    --type-thread-bg: #e5e5fe80;
+    --type-span-general: #19a979;
+    --type-span-general-bg: #dafbf080;
+    --type-span-guardrail: #fb9341;
+    --type-span-guardrail-bg: #fee8d780;
+    --type-span-llm: #5899da;
+    --type-span-llm-bg: #e2effd80;
+    --type-span-tool: #bf399e;
+    --type-span-tool-bg: #fde2f680;
+    --type-span-system: #5899da;
+    --type-span-system-bg: #e2effd80;
+    --type-span-function: #bf399e;
+    --type-span-function-bg: #fde2f680;
+    --type-llm-user: #12a4b4;
+    --type-llm-user-bg: #cdf5f980;
+    --type-llm-assistant: #f4b400;
+    --type-llm-assistant-bg: #fef0c880;
 
     /* Separator light color */
     --separator-light: #f1f5f9;
@@ -221,9 +252,12 @@
     --warning-box-icon-bg: 45 93% 58%;
     --warning-box-icon-text: 32 85% 32%;
 
+    --selection-bar: 237 68% 29%;
+    --row-selected: 235 85% 97%;
+
     --radius: 0.5rem;
 
-    --header-height: 60px;
+    --header-height: 48px;
     --sidebar-width: 61px;
   }
 
@@ -237,14 +271,15 @@
     --white: #ffffff;
 
     --foreground-secondary: 214, 32%, 91%;
+    --new-foreground-secondary: 0, 0%, 10%;
     --muted-gray: 0, 0%, 30%;
     --muted-disabled: 0, 0%, 14%;
 
     --muted-slate: 0, 0%, 64%;
     --light-slate: 0, 0%, 64%;
+    --tree-line: 0 0% 30%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
-    --breadcrumb-last: 214, 32%, 91%;
     --secondary-foreground: 0, 0%, 10%;
     --primary-foreground: 0, 0%, 11%;
 
@@ -275,6 +310,7 @@
 
     --warning: 348 86% 61%;
     --success: 142 64% 40%;
+    --library-loaded: 78 75% 65%;
 
     /* Gray scale for utility classes - Dark Mode */
     --gray-100: 217.2 32.6% 15%;
@@ -335,6 +371,8 @@
     --codemirror-syntax-keyword: #ff7b72;
     --codemirror-syntax-punctuation: #8b949e;
 
+    --click-blue: #262ab5;
+
     /* Chart colors */
     --chart-tick-stroke: #a3a3a3;
     --chart-grid-stroke: #303030;
@@ -346,6 +384,9 @@
     --chart-purple: #945fcf;
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
+    --chart-teal: #12a4b4;
+    --chart-gray-light: #2e2e2e;
+    --chart-gray-dark: #e2e8f0;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
@@ -398,6 +439,30 @@
     --tag-turquoise-text: #0fbfd2;
     --tag-blue-bg: #292e32;
     --tag-blue-text: #6eabe7;
+    --tag-lavender-bg: #2a2a3d;
+    --tag-lavender-text: #a8a8e0;
+
+    /* Trace/span type colors - Dark Mode */
+    --type-trace: #945fcf;
+    --type-trace-bg: #2e293280;
+    --type-thread: #3438d0;
+    --type-thread-bg: #2a2a3d80;
+    --type-span-general: #19a979;
+    --type-span-general-bg: #29322f80;
+    --type-span-guardrail: #fb9341;
+    --type-span-guardrail-bg: #322d2980;
+    --type-span-llm: #5899da;
+    --type-span-llm-bg: #292e3280;
+    --type-span-tool: #bf399e;
+    --type-span-tool-bg: #2b222980;
+    --type-span-system: #5899da;
+    --type-span-system-bg: #292e3280;
+    --type-span-function: #bf399e;
+    --type-span-function-bg: #2b222980;
+    --type-llm-user: #12a4b4;
+    --type-llm-user-bg: #29323280;
+    --type-llm-assistant: #f4b400;
+    --type-llm-assistant-bg: #32302980;
 
     /* Separator light color - Dark Mode */
     --separator-light: #2a2a2a;
@@ -418,6 +483,9 @@
     --warning-box-text: 48 96% 64%;
     --warning-box-icon-bg: 32 95% 44%;
     --warning-box-icon-text: 45 93% 58%;
+
+    --selection-bar: 237 58% 39%;
+    --row-selected: 0 0% 15%;
   }
 
   /* CodeMirror cursor and selection fix for dark mode */
@@ -590,8 +658,11 @@
   }
 
   .comet-content-inset {
-    --comet-content-width: calc(100vw - var(--sidebar-width));
+    --comet-content-width: calc(
+      100vw - var(--sidebar-width) - var(--assistant-sidebar-width, 0px)
+    );
     left: var(--sidebar-width);
+    right: 0;
   }
 
   .comet-table-row-best td {
@@ -702,6 +773,20 @@
 }
 
 // rewrite padding for first cell for tables that takes full width with sticky behaviour
+.comet-compare-optimizations-table {
+  thead[data-sticky-vertical] {
+    top: 0 !important;
+  }
+
+  thead:before {
+    height: 0 !important;
+  }
+
+  table {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+  }
+}
+
 .comet-sticky-table {
   thead:before {
     content: "";
@@ -725,15 +810,48 @@
     z-index: 10;
   }
 
+  [data-header-stuck] & thead[data-sticky-vertical] {
+    box-shadow: 0 4px 8px -2px hsl(var(--border) / 0.6);
+  }
+
   td:first-child [data-cell-wrapper="true"],
   th:first-child [data-header-wrapper="true"] {
-    padding-left: 24px;
+    padding-left: 24px !important;
   }
 
   td:last-child [data-cell-wrapper="true"],
   th:last-child [data-header-wrapper="true"] {
-    padding-right: 24px;
+    padding-right: 24px !important;
   }
+}
+
+.comet-cell-borders {
+  td,
+  th {
+    border-right: 1px solid hsl(var(--border));
+  }
+
+  td:last-child,
+  th:last-child,
+  // Pinned/grouped cells use box-shadow for their border (see getCommonPinningStyles)
+  .comet-pinned-cell,
+  .comet-grouped-cell ~ td {
+    border-right: none;
+  }
+
+  // Hide the last left-pinned column border (e.g. checkbox) until
+  // the user scrolls right and content slides under the pinned column
+  .comet-pinned-last-left {
+    box-shadow: none;
+  }
+
+  [data-scrolled-right] & .comet-pinned-last-left {
+    box-shadow: inset -1px 0px 0px 0px hsl(var(--border));
+  }
+}
+
+.mask-fade-to-bottom {
+  mask-image: linear-gradient(to bottom, rgb(0, 0, 0) 0%, transparent 100%);
 }
 
 .comet-table-body-loading-overlay {
@@ -759,20 +877,6 @@
   }
 }
 
-.comet-compare-optimizations-table {
-  thead[data-sticky-vertical] {
-    top: 0 !important;
-  }
-
-  thead:before {
-    height: 0 !important;
-  }
-
-  table {
-    border-bottom: 1px solid hsl(var(--border)) !important;
-  }
-}
-
 .comet-table {
   /* resets padding for all nested cells wrappers */
   td [data-cell-wrapper="true"] [data-cell-wrapper="true"],
@@ -793,7 +897,7 @@
     right: 0;
     bottom: 0;
     z-index: -5;
-    background: var(--secondary);
+    background: hsl(var(--secondary));
   }
 }
 
@@ -958,12 +1062,25 @@ div.cm-theme div.cm-search.cm-panel {
   opacity: 0.2;
 }
 
-/* Dashboard widget resize handle styles */
-.react-grid-item > .react-resizable-handle::after {
-  border-color: hsl(var(--light-slate)) !important;
-  transition: border-color 0.2s ease-in-out;
+/* Dashboard widget resize handle styles — visible on hover only */
+.react-grid-item > .react-resizable-handle {
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
 }
 
-.react-grid-item:hover > .react-resizable-handle::after {
+.react-grid-item:hover > .react-resizable-handle {
+  opacity: 1;
+}
+
+.react-grid-item > .react-resizable-handle::after {
   border-color: hsl(var(--muted-slate)) !important;
+}
+
+@keyframes travelPath {
+  0% {
+    offset-distance: 0%;
+  }
+  100% {
+    offset-distance: 100%;
+  }
 }

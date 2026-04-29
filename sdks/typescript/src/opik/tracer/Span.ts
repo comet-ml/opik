@@ -72,6 +72,7 @@ export class Span {
     const spanWithId: SavedSpan = {
       id: generateId(),
       startTime: new Date(),
+      source: this.data.source,
       ...spanData,
       projectName,
       traceId: this.data.traceId,

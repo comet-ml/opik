@@ -29,7 +29,7 @@ title: Optimizer Frequently Asked Questions
   2. A dataset of examples to optimizer on, you can start with as little as 10
   3. A metric to evaluate the performance of the prompt
 
-  Once you have these, check out the [Quickstart Guide](/agent_optimization/quickstart)
+  Once you have these, check out the [Quickstart Guide](/v1/agent_optimization/quickstart)
   to run your first optimization.
   </Accordion>
   <Accordion title="Can you help me optimize my prompt ?">
@@ -43,18 +43,18 @@ title: Optimizer Frequently Asked Questions
 <AccordionGroup>
   <Accordion title="What are the supported optimization algorithms?">
   Opik Agent Optimizer supports a wide range of optimization algorithms including:
-  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
-  - [GEPA Optimization](/agent_optimization/algorithms/gepa_optimizer)
-  - [Evolutionary Optimization](/agent_optimization/algorithms/evolutionary_optimizer)
-  - [Few-shot Bayesian Optimization](/agent_optimization/algorithms/fewshot_bayesian_optimizer)
-  - [MetaPrompt Optimization](/agent_optimization/algorithms/metaprompt_optimizer)
+  - [HRPO (Hierarchical Reflective Prompt Optimizer)](/v1/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
+  - [GEPA Optimization](/v1/agent_optimization/algorithms/gepa_optimizer)
+  - [Evolutionary Optimization](/v1/agent_optimization/algorithms/evolutionary_optimizer)
+  - [Few-shot Bayesian Optimization](/v1/agent_optimization/algorithms/fewshot_bayesian_optimizer)
+  - [MetaPrompt Optimization](/v1/agent_optimization/algorithms/metaprompt_optimizer)
 
   If you would like us to add a new optimization algorithm, simply create an issue on our
   [GitHub repository](https://github.com/comet-ml/opik/issues) and we will be happy to add it !
   </Accordion>
   <Accordion title="How do I choose the right optimizer for my task?">
   Knowing which optimizer to use depends on your specific needs. As a rule of thumb, we recommend
-  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
+  starting with [HRPO (Hierarchical Reflective Prompt Optimizer)](/v1/agent_optimization/algorithms/hierarchical_adaptive_optimizer)
   as this has been shown to be a strong baseline for most tasks.
 
   You can also try to use:
@@ -85,7 +85,7 @@ title: Optimizer Frequently Asked Questions
   Models use the LiteLLM format: `provider/model-name` (e.g., `gemini/gemini-2.0-flash`).
 
   <Tip>
-    See the [Configure LLM Providers](/agent_optimization/optimization/configure_models) guide for detailed setup instructions and examples for each provider.
+    See the [Configure LLM Providers](/v1/agent_optimization/optimization/configure_models) guide for detailed setup instructions and examples for each provider.
   </Tip>
   </Accordion>
   <Accordion title="The performance is not improving, what should I do?">
@@ -102,7 +102,7 @@ title: Optimizer Frequently Asked Questions
 
 ## Common Errors
 
-For frequent setup and usage errors, head to [Known Issues](/agent_optimization/known_issues). We keep the error catalog there so fixes and version notes stay in one place.
+For frequent setup and usage errors, head to [Known Issues](/v1/agent_optimization/known_issues). We keep the error catalog there so fixes and version notes stay in one place.
 
 ## Open challenges & advanced topics
 
@@ -111,7 +111,7 @@ For frequent setup and usage errors, head to [Known Issues](/agent_optimization/
     Research has shown "evil twin" prompts and unusual delimiters can perform well despite being hard to interpret. Optimizers explore the search space indiscriminately, so high-performing instructions aren't always human-readable. When interpretability matters, prefer algorithms like HRPO that include reasoning traces or enforce structure via custom metrics.
   </Accordion>
   <Accordion title="How expensive are optimizers in terms of API calls?">
-    Cost varies widely. Reflection-heavy optimizers (e.g., HRPO, GEPA) may call LLMs multiple times per trial, while MetaPrompt/Few-Shot Bayesian are lighter weight. Start with small `n_samples` and `max_trials`, monitor API usage, and review the [Benchmarks](/agent_optimization/algorithms/benchmarks) page for sample-efficiency notes.
+    Cost varies widely. Reflection-heavy optimizers (e.g., HRPO, GEPA) may call LLMs multiple times per trial, while MetaPrompt/Few-Shot Bayesian are lighter weight. Start with small `n_samples` and `max_trials`, monitor API usage, and review the [Benchmarks](/v1/agent_optimization/algorithms/benchmarks) page for sample-efficiency notes.
   </Accordion>
   <Accordion title="Do optimized prompts generalize across tasks?">
     Optimizers tune prompts for the dataset you provide. Prompts may overfit if the dataset lacks coverage. Use diverse datasets, consider chaining optimizers (e.g., Evolutionary → Few-Shot Bayesian) to encourage generalization, and re-evaluate on unseen samples before shipping.
@@ -135,10 +135,10 @@ For frequent setup and usage errors, head to [Known Issues](/agent_optimization/
     Yes—compose metrics using `MultiMetricObjective` or custom heuristics so optimizers weigh multiple goals. For complex trade-offs, capture human preferences in the metric reasons, or explore Pareto-aware optimizers like GEPA that surface trade-offs between accuracy and cost.
   </Accordion>
   <Accordion title="What about multimodal or agent workflows?">
-    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/agent_optimization/optimization/optimize_agents) and [Optimize multimodal](/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
+    Opik supports optimizing prompts that handle images/videos, as well as agents built with LangGraph, Google ADK, or MCP toolchains. Use the [Optimize agents](/v1/agent_optimization/optimization/optimize_agents) and [Optimize multimodal](/v1/agent_optimization/optimization/optimize_multimodal) guides for modality-specific advice.
   </Accordion>
   <Accordion title="How reliable are optimizer metrics?">
-    LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/agent_optimization/optimization/define_metrics) and [Custom metrics](/agent_optimization/advanced/custom_metrics) for best practices.
+    LLM-based metrics can be noisy. Always include deterministic checks when possible, and ensure your `ScoreResult.reason` is informative so reflective optimizers can identify true failure modes. See [Define metrics](/v1/agent_optimization/optimization/define_metrics) and [Custom metrics](/v1/agent_optimization/advanced/custom_metrics) for best practices.
   </Accordion>
   <Accordion title="Are there safety or ethical considerations?">
     Yes. When optimizing prompts that handle sensitive content, bake alignment constraints into your dataset/metrics (e.g., moderation scores) and review outputs manually before deployment. Multi-objective setups help enforce safety alongside accuracy.
@@ -147,6 +147,6 @@ For frequent setup and usage errors, head to [Known Issues](/agent_optimization/
 
 ## Next Steps
 
-- Explore [API Reference](/agent_optimization/advanced/api_reference) for detailed technical documentation.
-- Review the individual Optimizer pages under [Optimization Algorithms](/agent_optimization/algorithms/overview).
-- Check out the [Quickstart Guide](/agent_optimization/quickstart).
+- Explore [API Reference](/v1/agent_optimization/advanced/api_reference) for detailed technical documentation.
+- Review the individual Optimizer pages under [Optimization Algorithms](/v1/agent_optimization/algorithms/overview).
+- Check out the [Quickstart Guide](/v1/agent_optimization/quickstart).

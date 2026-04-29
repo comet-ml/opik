@@ -85,7 +85,10 @@ databaseAnalytics:
   #   - failover=3
   #   - custom_http_params=max_query_size=100000000
   #  Description: query parameters that will be added to the connection string
-  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1}
+  queryParameters: ${ANALYTICS_DB_QUERY_PARAMETERS:-health_check_interval=2000&compress=1&auto_discovery=true&failover=3&custom_http_params=max_query_size=100000000,async_insert_busy_timeout_max_ms=250,async_insert_busy_timeout_min_ms=100,async_insert=1,wait_for_async_insert=1,async_insert_use_adaptive_busy_timeout=1,async_insert_deduplicate=1,use_skip_indexes_if_final=1}
+  #  Default: 1s
+  #  Description: Timeout for the ClickHouse health check query (e.g. 1s, 500ms, 2 minutes)
+  healthCheckTimeout: ${ANALYTICS_DB_HEALTH_CHECK_TIMEOUT:-1s}
 
 # https://www.dropwizard.io/en/stable/manual/configuration.html#health
 health:
@@ -129,6 +132,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -256,9 +262,18 @@ experimentDenormalization:
   # Default: 300ms
   # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
   jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1m
+  # Default: 10m
   # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
-  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-10m}
+  # Default: 500ms
+  # Description: Time to wait when trying to acquire the per-experiment aggregation lock before skipping (fail-fast). Must be between 100ms and 5s.
+  lockAcquireWait: ${OPIK_EXPERIMENT_DENORM_LOCK_ACQUIRE_WAIT:-500ms}
+  # Default: 3
+  # Description: Maximum automatic re-trigger attempts per (workspace, experiment) when the aggregation lock TTL is exceeded. Must be between 1 and 10.
+  maxLockExpiryRetries: ${OPIK_EXPERIMENT_DENORM_MAX_LOCK_EXPIRY_RETRIES:-3}
+  # Default: 30m
+  # Description: TTL applied to the per-(workspace, experiment) lock-expiry retry counter in Redis (minimum 1m). Prevents stale counters from accumulating when an experiment stops producing events.
+  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-30m}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
@@ -443,6 +458,18 @@ usageLimit:
   # Description: The error to be displayed when submitting entities to a workspace where the usage limit is exceeded
   errorMessage: ${USAGE_LIMIT_ERROR_MESSAGE:-You have exceeded the usage limit for this operation.}
 
+# Configuration for product analytics events
+analytics:
+  # Default: false
+  # Description: Whether or not to send product analytics events
+  enabled: ${OPIK_ANALYTICS_ENABLED:-false}
+  # Default: empty
+  # Description: Environment name included in every analytics event (e.g. "staging", "production")
+  environment: ${OPIK_ANALYTICS_ENVIRONMENT:-}
+  # Default: 30d
+  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
+  firstTraceCreatedDedupTtl: ${OPIK_ANALYTICS_FIRST_TRACE_CREATED_DEDUP_TTL:-30d}
+
 # Configuration for anonymous usage reporting
 usageReport:
   # Default: true
@@ -451,6 +478,12 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: ${OPIK_USAGE_REPORT_CONNECT_TIMEOUT:-5s}
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: ${OPIK_USAGE_REPORT_READ_TIMEOUT:-10s}
   # Description: Configuration for anonymous ID used to identify the installation
   # Default: empty
   anonymousId: ${OPIK_ANONYMOUS_ID:-}
@@ -590,6 +623,57 @@ onlineScoring:
       streamMaxLen: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_MAX_LEN:-}
       streamTrimLimit: ${REDIS_SCORING_SPAN_USER_DEFINED_METRIC_PYTHON_STREAM_TRIM_LIMIT:-}
 
+# Configuration for Test Suite assertions
+testSuite:
+  # Default: 1
+  # Description: Number of LLM runs per dataset item during test suite execution
+  defaultRunsPerItem: ${TEST_SUITE_DEFAULT_RUNS_PER_ITEM:-1}
+  # Default: 10
+  # Description: Timeout in seconds for fetching dataset evaluators and item evaluators
+  fetchTimeoutSeconds: ${TEST_SUITE_FETCH_TIMEOUT_SECONDS:-10}
+
+# Configuration for Experiment Execution (Redis Streams-based processing)
+experimentExecution:
+  # Default: playground
+  # Description: Default project name when experiments are run from the playground without an explicit project
+  defaultProjectName: ${EXPERIMENT_EXECUTION_DEFAULT_PROJECT_NAME:-playground}
+  # Default: true
+  # Description: Whether the experiment item processing subscriber is enabled
+  enabled: ${EXPERIMENT_EXECUTION_ENABLED:-true}
+  # Default: experiment_item_processing_stream
+  # Description: Redis Stream name for experiment item processing messages
+  streamName: ${EXPERIMENT_EXECUTION_STREAM_NAME:-'experiment_item_processing_stream'}
+  # Default: experiment_item_processing
+  # Description: Consumer group name for experiment item processing
+  consumerGroupName: ${EXPERIMENT_EXECUTION_CONSUMER_GROUP_NAME:-'experiment_item_processing'}
+  # Default: 10
+  # Description: Maximum number of messages returned within a Redis Stream get
+  consumerBatchSize: ${EXPERIMENT_EXECUTION_CONSUMER_BATCH_SIZE:-10}
+  # Default: 500ms
+  # Description: How often the consumer checks Redis for new messages
+  poolingInterval: ${EXPERIMENT_EXECUTION_POOLING_INTERVAL:-500ms}
+  # Default: 5s
+  # Description: Duration for long-polling reads on the Redis Stream
+  longPollingDuration: ${EXPERIMENT_EXECUTION_LONG_POLLING_DURATION:-5s}
+  # Default: 10000
+  # Description: Maximum length of the Redis Stream (trimmed non-strictly)
+  streamMaxLen: ${EXPERIMENT_EXECUTION_STREAM_MAX_LEN:-10000}
+  # Default: 100
+  # Description: Trim limit for the Redis Stream
+  streamTrimLimit: ${EXPERIMENT_EXECUTION_STREAM_TRIM_LIMIT:-100}
+  # Default: 10
+  # Description: Ratio for claim interval calculation
+  claimIntervalRatio: ${EXPERIMENT_EXECUTION_CLAIM_INTERVAL_RATIO:-10}
+  # Default: 10m
+  # Description: Duration after which a pending message is eligible for claiming
+  pendingMessageDuration: ${EXPERIMENT_EXECUTION_PENDING_MESSAGE_DURATION:-10m}
+  # Default: 3
+  # Description: Maximum number of retries for failed messages
+  maxRetries: ${EXPERIMENT_EXECUTION_MAX_RETRIES:-3}
+  # Default: 24h
+  # Description: TTL for the batch completion counter in Redis
+  batchCounterTtl: ${EXPERIMENT_EXECUTION_BATCH_COUNTER_TTL:-24h}
+
 # Configuration for Dataset Export
 datasetExport:
   # Default: false
@@ -672,7 +756,30 @@ retention:
   executionsPerDay: ${RETENTION_EXECUTIONS_PER_DAY:-48}
   workspaceBatchSize: ${RETENTION_WORKSPACE_BATCH_SIZE:-1000}
   slidingWindowDays: ${RETENTION_SLIDING_WINDOW_DAYS:-3}
-  lockTimeoutSeconds: ${RETENTION_LOCK_TIMEOUT_SECONDS:-1800}
+  # Progressive catch-up for apply-to-past rules. Deletes historical data older than the sliding window.
+  # At rule creation, estimates workspace span velocity (spans/week) to triage into tiers:
+  #   small  (<smallThreshold/week): batch one-shot delete, up to smallBatchSize workspaces per cycle
+  #   medium (smallThreshold..largeThreshold/week): 10 most outdated, mediumChunkDays per cycle each
+  #   large  (>=largeThreshold/week or estimation hit row limit): 1 most outdated, largeChunkDays per cycle
+  catchUp:
+    enabled: ${RETENTION_CATCH_UP_ENABLED:-true}
+    # Velocity thresholds (spans/week). Free tier ~6K/week, so 10K keeps them in the small (fast) path.
+    smallThreshold: ${RETENTION_CATCH_UP_SMALL_THRESHOLD:-10000}
+    largeThreshold: ${RETENTION_CATCH_UP_LARGE_THRESHOLD:-100000}
+    # Max workspaces processed per cycle per tier
+    smallBatchSize: ${RETENTION_CATCH_UP_SMALL_BATCH_SIZE:-200}
+    mediumBatchSize: ${RETENTION_CATCH_UP_MEDIUM_BATCH_SIZE:-10}
+    # Time window (days) deleted per cycle for medium and large workspaces
+    mediumChunkDays: ${RETENTION_CATCH_UP_MEDIUM_CHUNK_DAYS:-7}
+    largeChunkDays: ${RETENTION_CATCH_UP_LARGE_CHUNK_DAYS:-1}
+    # Assumed velocity when the estimation query fails with TOO_MANY_ROWS (>20M rows)
+    defaultVelocity: ${RETENTION_CATCH_UP_DEFAULT_VELOCITY:-1000000}
+    # Interval in minutes between catch-up cycles (default: 45)
+    intervalMinutes: ${RETENTION_CATCH_UP_INTERVAL_MINUTES:-45}
+    # Interval in minutes between estimation cycles for new rules (default: 5)
+    estimationIntervalMinutes: ${RETENTION_CATCH_UP_ESTIMATION_INTERVAL_MINUTES:-5}
+    # Earliest date for catch-up cursor start (service launch date)
+    serviceStartDate: ${RETENTION_CATCH_UP_SERVICE_START_DATE:-2024-09-01}
 
 # LLM providers client configuration
 llmProviderClient:
@@ -741,6 +848,12 @@ cacheManager:
     # Description: Dynamically created caches with their respective time to live in seconds
     automationRules: ${CACHE_MANAGER_AUTOMATION_RULES_DURATION:-PT1S}
     workspace_metadata: ${CACHE_MANAGER_WORKSPACE_METADATA_DURATION:-PT1H}
+    # Default: PT5M
+    # Description: Cache TTL for workspace version determination results, applied per workspace
+    # Scope: Per workspace (cache key includes workspace ID)
+    # Overrides: Overrides defaultDuration for the workspace_version cache group
+    # Operational impact: Lower values increase DB query frequency on workspace load; higher values delay version transitions after entity changes
+    workspace_version: ${CACHE_MANAGER_WORKSPACE_VERSION_DURATION:-PT5M}
     experiment_metadata: ${CACHE_MANAGER_EXPERIMENT_METADATA_DURATION:-PT1H}
     # Default: PT30M
     # Description: Cache TTL for the max(timeout_mark_thread_as_inactive) across all workspaces, used to compute the closing job lookback window
@@ -791,6 +904,7 @@ ollieStateConfig:
   # Default: 52428800 (50MB)
   # Description: Maximum upload size in bytes for ollie state persistence
   maxUploadSizeBytes: ${OLLIE_STATE_MAX_UPLOAD_SIZE_BYTES:-52428800}
+
 
 # Attachments configuration
 attachmentsConfig:
@@ -880,6 +994,26 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Collaborators tab feature is enabled
   collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
+  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
+  # Default: disabled
+  # Description: Forces ALL workspaces to a specific navigation version.
+  # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
+  # Scope: Global — applies to all workspaces regardless of their entity state.
+  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
+  # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
 
 # Local Runner configuration
 localRunner:
@@ -916,12 +1050,6 @@ localRunner:
   # Default: 5s
   # Description: Extra buffer added to the async response timeout beyond nextJobPollTimeout
   nextJobAsyncTimeoutBuffer: ${OPIK_RUNNER_ASYNC_TIMEOUT_BUFFER:-5s}
-  # Default: 300s
-  # Description: Time-to-live for pairing codes used during runner registration
-  pairingCodeTtl: ${OPIK_RUNNER_PAIRING_CODE_TTL:-300s}
-  # Default: 600s
-  # Description: Time-to-live for runner entries during the pairing process
-  pairingRunnerTtl: ${OPIK_RUNNER_PAIRING_RUNNER_TTL:-600s}
   # Default: 100
   # Description: Maximum number of runners the reaper processes per cycle across all workspaces
   reaperMaxRunnersPerCycle: ${OPIK_RUNNER_REAPER_MAX_RUNNERS_PER_CYCLE:-100}
@@ -931,6 +1059,33 @@ localRunner:
   # Default: 1000
   # Description: Maximum number of log entries a runner can send in a single batch
   maxLogEntriesPerBatch: ${OPIK_RUNNER_MAX_LOG_ENTRIES_PER_BATCH:-1000}
+  # Default: 50
+  # Description: Maximum number of pending bridge commands allowed per runner
+  bridgeMaxPendingPerRunner: ${OPIK_RUNNER_BRIDGE_MAX_PENDING:-50}
+  # Default: 600
+  # Description: Maximum bridge commands per minute per runner
+  bridgeMaxCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_COMMANDS_PER_MIN:-600}
+  # Default: 120
+  # Description: Maximum bridge write commands per minute per runner
+  bridgeMaxWriteCommandsPerMinute: ${OPIK_RUNNER_BRIDGE_MAX_WRITE_COMMANDS_PER_MIN:-120}
+  # Default: 30s
+  # Description: How long the bridge nextCommands long-poll blocks before returning empty
+  bridgePollTimeout: ${OPIK_RUNNER_BRIDGE_POLL_TIMEOUT:-30s}
+  # Default: 30s
+  # Description: Default timeout for bridge commands when not specified by caller
+  bridgeDefaultCommandTimeout: ${OPIK_RUNNER_BRIDGE_DEFAULT_CMD_TIMEOUT:-30s}
+  # Default: 120s
+  # Description: Maximum allowed timeout for bridge commands
+  bridgeMaxCommandTimeout: ${OPIK_RUNNER_BRIDGE_MAX_CMD_TIMEOUT:-120s}
+  # Default: 1h
+  # Description: How long completed bridge command metadata is retained in Redis
+  bridgeCompletedCommandTtl: ${OPIK_RUNNER_BRIDGE_COMPLETED_CMD_TTL:-1h}
+  # Default: 5s
+  # Description: Extra buffer added to async response timeout beyond bridge poll/command timeout
+  bridgeAsyncTimeoutBuffer: ${OPIK_RUNNER_BRIDGE_ASYNC_TIMEOUT_BUFFER:-5s}
+  # Default: 1048576 (1MB)
+  # Description: Maximum payload size in bytes for bridge command args and results
+  bridgeMaxPayloadBytes: ${OPIK_RUNNER_BRIDGE_MAX_PAYLOAD_BYTES:-1048576}
 
 # Trace Thread configuration
 traceThreadConfig:
@@ -1158,4 +1313,17 @@ datasetVersioningMigration:
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  # Remote CDN fetch is opt-in. Self-hosted / OSS deployments stay on the
+  # classpath YAML shipped with the release by default, so no outbound
+  # traffic unless the operator explicitly enables it. Comet SaaS sets
+  # LLM_MODEL_REGISTRY_REMOTE_ENABLED=true + LLM_MODEL_REGISTRY_REMOTE_URL
+  # via its own Helm overrides.
+  remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
+  remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
   refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}
+
+# Agent Config configuration
+agentConfig:
+  # Default: 5000ms
+  # Description: Duration of the distributed lock held during blueprint create/update operations
+  blueprintLockDuration: ${OPIK_AGENT_CONFIG_BLUEPRINT_LOCK_DURATION:-5000ms}

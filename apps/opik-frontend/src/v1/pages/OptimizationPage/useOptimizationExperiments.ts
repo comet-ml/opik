@@ -8,7 +8,7 @@ import {
   IN_PROGRESS_OPTIMIZATION_STATUSES,
   MAX_EXPERIMENTS_LOADED,
   CANDIDATE_SORT_FIELD_MAP,
-  checkIsEvaluationSuite,
+  checkIsTestSuite,
   getBaselineCandidate,
   aggregateCandidates,
   mergeExperimentScores,
@@ -93,8 +93,8 @@ export const useOptimizationExperiments = () => {
     [],
   );
 
-  const isEvaluationSuite = useMemo(
-    () => checkIsEvaluationSuite(data?.content ?? []),
+  const isTestSuite = useMemo(
+    () => checkIsTestSuite(data?.content ?? []),
     [data?.content],
   );
 
@@ -112,17 +112,17 @@ export const useOptimizationExperiments = () => {
         ? [...(experiment.feedback_scores ?? []), ...additional]
         : experiment.feedback_scores;
 
-      if (isEvaluationSuite && objectiveName && feedbackScores) {
+      if (isTestSuite && objectiveName && feedbackScores) {
         feedbackScores = feedbackScores.filter((s) => s.name === objectiveName);
       }
 
-      if (!additional.length && !isEvaluationSuite) return experiment;
+      if (!additional.length && !isTestSuite) return experiment;
       return {
         ...experiment,
         feedback_scores: feedbackScores,
       };
     });
-  }, [data?.content, isEvaluationSuite, optimization?.objective_name]);
+  }, [data?.content, isTestSuite, optimization?.objective_name]);
 
   const candidates = useMemo(
     () => aggregateCandidates(experiments, optimization?.objective_name),
@@ -192,7 +192,7 @@ export const useOptimizationExperiments = () => {
     optimization,
     experiments,
     candidates,
-    isEvaluationSuite,
+    isTestSuite,
     scoreMap,
     baseScore,
     bestExperiment: bestExperiment,

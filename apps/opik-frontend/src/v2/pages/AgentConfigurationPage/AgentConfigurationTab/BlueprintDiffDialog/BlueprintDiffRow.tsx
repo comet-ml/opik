@@ -35,6 +35,11 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
     diffPromptTemplate,
   } = pair;
   const isPrompt = type === BlueprintValueType.PROMPT;
+  const hasPromptContent =
+    !!baseValue?.value ||
+    !!diffValue?.value ||
+    !!basePromptTemplate ||
+    !!diffPromptTemplate;
 
   const baseText = baseValue ? formatBlueprintValue(baseValue) : undefined;
   const diffText = diffValue ? formatBlueprintValue(diffValue) : undefined;
@@ -63,10 +68,10 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
           <p className="comet-body-xs mt-1 text-light-slate">{description}</p>
         )}
       </TableCell>
-      {isPrompt && baseValue?.value && diffValue?.value ? (
+      {isPrompt && hasPromptContent ? (
         <PromptDiffPair
-          baseCommit={baseValue.value}
-          diffCommit={diffValue.value}
+          baseCommit={baseValue?.value ?? ""}
+          diffCommit={diffValue?.value ?? ""}
           baseTemplate={basePromptTemplate}
           diffTemplate={diffPromptTemplate}
         />

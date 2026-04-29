@@ -10,6 +10,7 @@ import opik
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
 from opik.integrations.genai import track_genai
 
+from ... import llm_constants
 from ...testlib import (
     ANY_BUT_NONE,
     ANY_DICT,
@@ -24,16 +25,17 @@ import tenacity
 
 pytestmark = pytest.mark.usefixtures("ensure_vertexai_configured")
 
-MODEL = "gemini-2.0-flash"
+MODEL = llm_constants.GEMINI_FLASH
 
-EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = {
-    "prompt_tokens": ANY_BUT_NONE,
-    "completion_tokens": ANY_BUT_NONE,
-    "total_tokens": ANY_BUT_NONE,
-    "original_usage.total_token_count": ANY_BUT_NONE,
-    "original_usage.candidates_token_count": ANY_BUT_NONE,
-    "original_usage.prompt_token_count": ANY_BUT_NONE,
-}
+EXPECTED_GOOGLE_USAGE_LOGGED_FORMAT = ANY_DICT.containing(
+    {
+        "prompt_tokens": ANY_BUT_NONE,
+        "completion_tokens": ANY_BUT_NONE,
+        "total_tokens": ANY_BUT_NONE,
+        "original_usage.total_token_count": ANY_BUT_NONE,
+        "original_usage.prompt_token_count": ANY_BUT_NONE,
+    }
+)
 
 
 def _is_rate_limit_error(exception: Exception) -> bool:
@@ -114,8 +116,10 @@ def test_genai_client__generate_content__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -168,8 +172,10 @@ def test_genai_client__async_generate_content__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -233,8 +239,10 @@ async def test_genai_client__async_generate_content__opik_args__happyflow(fake_b
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -305,10 +313,13 @@ def test_genai_client__generate_content_called_inside_another_tracked_function__
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -371,10 +382,13 @@ def test_genai_client__async_generate_content_called_inside_another_tracked_func
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -430,8 +444,10 @@ def test_genai_client__generate_content_stream__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -489,8 +505,10 @@ def test_genai_client__async_generate_content_stream__happyflow(fake_backend):
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -559,10 +577,13 @@ def test_genai_client__generate_content_stream_called_inside_another_tracked_fun
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -634,10 +655,13 @@ def test_genai_client__async_generate_content_stream_called_inside_another_track
                         spans=[],
                         model=ANY_STRING.starting_with(MODEL),
                         provider="google_vertexai",
+                        source="sdk",
                     )
                 ],
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -716,8 +740,10 @@ def test_genai_client__generate_content__opik_args__happyflow(
                 spans=[],
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -781,8 +807,10 @@ def test_genai_client__generate_content__cost_callback__sets_span_total_cost(
                 model=ANY_STRING.starting_with(MODEL),
                 provider="google_vertexai",
                 total_cost=CUSTOM_COST,
+                source="sdk",
             )
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1

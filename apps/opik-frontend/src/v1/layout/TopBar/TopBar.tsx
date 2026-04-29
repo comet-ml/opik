@@ -5,6 +5,7 @@ import SettingsMenu from "../SettingsMenu/SettingsMenu";
 
 const TopBar = () => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
+  const UpgradeButton = usePluginsStore((state) => state.UpgradeButton);
 
   return (
     <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
@@ -13,6 +14,11 @@ const TopBar = () => {
       </div>
 
       <AppDebugInfo />
+      {UpgradeButton && (
+        <div className="-mr-4">
+          <UpgradeButton />
+        </div>
+      )}
       {UserMenu ? <UserMenu /> : <SettingsMenu />}
     </nav>
   );

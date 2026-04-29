@@ -5,6 +5,7 @@ import com.comet.opik.infrastructure.redis.RedisUrl;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.dropwizard.util.Duration;
+import io.dropwizard.validation.MaxDuration;
 import io.dropwizard.validation.MinDuration;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -23,6 +24,11 @@ public class RedisConfig {
 
     @Valid @JsonProperty
     private String singleNodeUrl;
+
+    @Valid @JsonProperty
+    @NotNull @MinDuration(value = 500, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+    private Duration healthCheckTimeout = Duration.seconds(1);
 
     @Valid @JsonProperty
     private AwsIamAuthConfig awsIamAuth = new AwsIamAuthConfig();

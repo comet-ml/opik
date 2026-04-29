@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
+  ChevronsRight,
   Clock,
   Coins,
   Copy,
   Download,
+  ArrowUpRight,
   Hash,
   MessagesSquare,
   MoreHorizontal,
@@ -44,6 +45,7 @@ import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import { Button } from "@/ui/button";
+import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
@@ -69,11 +71,10 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/ui/resizable";
-import ThreadComments from "./ThreadComments";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Accordion } from "@/ui/accordion";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
-import ThreadAnnotations from "./ThreadAnnotations";
+import ThreadAnnotatePanel from "./ThreadAnnotatePanel";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
 import { Separator } from "@/ui/separator";
@@ -86,6 +87,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { useThreadMedia } from "@/hooks/useThreadMedia";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { LOGS_TYPE } from "@/constants/traces";
+import { useHotkeys } from "react-hotkeys-hook";
 
 type ThreadDetailsPanelProps = {
   projectId: string;
@@ -161,7 +163,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       projectId,
     },
     {
-      placeholderData: keepPreviousData,
       enabled: Boolean(threadId),
     },
   );
@@ -174,9 +175,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const currentActiveTab = activeTab!;
 
   const currentActiveSection = activeSection;
-
-  const annotationCount = threadFeedbackScores.length;
-  const commentsCount = threadComments.length;
 
   const { data: tracesData, isPending: isTracesPending } = useTracesList(
     {
@@ -195,7 +193,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       truncate: false,
     },
     {
-      placeholderData: keepPreviousData,
       enabled: Boolean(threadId),
     },
   );
@@ -352,6 +349,29 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     [hasNextRow, hasPreviousRow, onRowChange],
   );
 
+  useHotkeys(
+    "a",
+    (e) => {
+      e.preventDefault();
+      setActiveSection(DetailsActionSection.Annotate);
+    },
+    { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
+    [setActiveSection, canAnnotateTraceSpanThread],
+  );
+  useHotkeys(
+    "j",
+    () =>
+      horizontalNavigation?.hasPrevious && horizontalNavigation.onChange(-1),
+    { enabled: Boolean(horizontalNavigation) },
+    [horizontalNavigation],
+  );
+  useHotkeys(
+    "k",
+    () => horizontalNavigation?.hasNext && horizontalNavigation.onChange(1),
+    { enabled: Boolean(horizontalNavigation) },
+    [horizontalNavigation],
+  );
+
   const bodyStyle = {
     ...(height && { height: `${height}px` }),
   };
@@ -363,17 +383,11 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
     return (
       <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 overflow-x-hidden">
-          <div className="relative flex size-[22px] shrink-0 items-center justify-center rounded-md bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
-            <MessagesSquare className="size-3.5" />
-          </div>
-          <div className="comet-title-s truncate py-0.5">Thread</div>
-        </div>
         <div className=" flex w-full items-center gap-3 overflow-x-hidden py-1">
           <TooltipWrapper content="Thread start time">
             <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
               <Calendar className="size-4 shrink-0" />
-              <span className="comet-body-s-accented truncate">
+              <span className="comet-body-s truncate">
                 {thread?.start_time ? formatDate(thread?.start_time) : "NA"}
               </span>
             </div>
@@ -381,7 +395,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <TooltipWrapper content="Number of messages in the thread">
             <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
               <Hash className="size-4 shrink-0" />
-              <span className="comet-body-s-accented truncate">
+              <span className="comet-body-s truncate">
                 {thread?.number_of_messages
                   ? `${thread.number_of_messages} messages`
                   : "NA"}
@@ -391,7 +405,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
           <TooltipWrapper content="Thread duration">
             <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
               <Clock className="size-4 shrink-0" />
-              <span className="comet-body-s-accented truncate">
+              <span className="comet-body-s truncate">
                 {formatDuration(thread?.duration, false)}
               </span>
             </div>
@@ -405,7 +419,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             >
               <div className="flex flex-nowrap items-center gap-x-1.5 px-1 text-muted-slate">
                 <Coins className="size-4 shrink-0" />
-                <span className="comet-body-s-accented truncate">
+                <span className="comet-body-s truncate">
                   {formatCost(thread?.total_estimated_cost)}
                 </span>
               </div>
@@ -434,7 +448,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         value={currentActiveTab}
         onValueChange={setActiveTab}
       >
-        <div className="mx-6" data-panel-tabs="true">
+        <div className="mx-4" data-panel-tabs="true">
           <TabsList variant="underline">
             <TabsTrigger variant="underline" value="messages">
               Messages
@@ -447,7 +461,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
         <TabsContent value="messages">
           <MediaProvider media={media}>
             {media.length > 0 && (
-              <div className="mb-4 px-6">
+              <div className="mb-4 px-4">
                 <Accordion type="multiple" defaultValue={["attachments"]}>
                   <AttachmentsList media={media} />
                 </Accordion>
@@ -462,32 +476,36 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             </div>
           </MediaProvider>
         </TabsContent>
-        <TabsContent value="feedback_scores" className="px-6">
-          <ConfigurableFeedbackScoreTable
-            onDeleteFeedbackScore={
-              canAnnotateTraceSpanThread ? handleDeleteFeedbackScore : undefined
-            }
-            feedbackScores={threadFeedbackScores}
-            onAddHumanReview={() =>
-              setActiveSection(DetailsActionSection.Annotations)
-            }
-            entityType="thread"
-          />
-          {canAnnotateTraceSpanThread && (
-            <ThreadFeedbackScoresInfo
+        <TabsContent value="feedback_scores">
+          <div style={bodyStyle} className="overflow-y-auto px-4">
+            <ConfigurableFeedbackScoreTable
+              onDeleteFeedbackScore={
+                canAnnotateTraceSpanThread
+                  ? handleDeleteFeedbackScore
+                  : undefined
+              }
               feedbackScores={threadFeedbackScores}
               onAddHumanReview={() =>
-                setActiveSection(DetailsActionSection.Annotations)
+                setActiveSection(DetailsActionSection.Annotate)
               }
+              entityType="thread"
             />
-          )}
+            {canAnnotateTraceSpanThread && (
+              <ThreadFeedbackScoresInfo
+                feedbackScores={threadFeedbackScores}
+                onAddHumanReview={() =>
+                  setActiveSection(DetailsActionSection.Annotate)
+                }
+              />
+            )}
+          </div>
         </TabsContent>
       </Tabs>
     );
   };
 
   const renderContent = () => {
-    if (isThreadPending && isTracesPending) {
+    if (isThreadPending || isTracesPending) {
       return <Loader />;
     }
 
@@ -499,14 +517,40 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       <div className="relative size-full">
         <ResizablePanelGroup direction="horizontal" autoSaveId="trace-sidebar">
           <ResizablePanel id="thread-viewer" defaultSize={70} minSize={50}>
-            <div ref={ref} className="relative size-full">
-              <div className="px-6 pb-6 pt-4" data-panel-header="true">
-                {renderHeader()}
+            <div className="flex size-full flex-col">
+              <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-muted/50 px-4">
+                <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
+                  Inspect
+                </span>
+                <div className="flex-auto" />
+                <AddToDropdown
+                  getDataForExport={async () => rows}
+                  selectedRows={rows}
+                  dataType="threads"
+                  buttonVariant="ghost"
+                  buttonSize="2xs"
+                />
+                {canAnnotateTraceSpanThread && (
+                  <DetailsActionSectionToggle
+                    activeSection={null}
+                    setActiveSection={setActiveSection}
+                    layoutSize={ButtonLayoutSize.Large}
+                    type={DetailsActionSection.Annotate}
+                    variant="ghost"
+                    buttonSize="2xs"
+                    hotkey="A"
+                  />
+                )}
               </div>
-              <div data-panel-body="true">{renderBody()}</div>
+              <div ref={ref} className="relative min-h-0 flex-auto">
+                <div className="px-4 pb-6 pt-4" data-panel-header="true">
+                  {renderHeader()}
+                </div>
+                <div data-panel-body="true">{renderBody()}</div>
+              </div>
             </div>
           </ResizablePanel>
-          {Boolean(currentActiveSection) && (
+          {Boolean(currentActiveSection) && canAnnotateTraceSpanThread && (
             <>
               <ResizableHandle />
               <ResizablePanel
@@ -514,23 +558,15 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 defaultSize={30}
                 minSize={30}
               >
-                {currentActiveSection === DetailsActionSection.Annotations && (
-                  <ThreadAnnotations
+                {currentActiveSection === DetailsActionSection.Annotate && (
+                  <ThreadAnnotatePanel
                     threadId={threadId}
                     projectId={projectId}
                     projectName={projectName}
                     activeSection={activeSection}
                     setActiveSection={setActiveSection}
                     feedbackScores={threadFeedbackScores}
-                  />
-                )}
-                {currentActiveSection === DetailsActionSection.Comments && (
-                  <ThreadComments
-                    activeSection={activeSection}
-                    setActiveSection={setActiveSection}
                     comments={threadComments}
-                    threadId={thread.thread_model_id}
-                    projectId={projectId}
                   />
                 )}
               </ResizablePanel>
@@ -544,64 +580,22 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
   const renderHeaderContent = () => {
     return (
       <div className="flex flex-auto items-center justify-between">
-        <div className="flex items-center">
-          <Separator orientation="vertical" className="mx-3 h-4" />
-          <Button
-            variant="outline"
-            size="sm"
-            key="Go to project"
-            onClick={() => {
-              navigate({
-                to: "/$workspaceName/projects/$projectId/logs",
-                params: {
-                  projectId,
-                  workspaceName,
-                },
-                search: {
-                  logsType: LOGS_TYPE.traces,
-                  traces_filters: [
-                    {
-                      id: "thread_id_filter",
-                      field: "thread_id",
-                      type: COLUMN_TYPE.string,
-                      operator: "=",
-                      value: threadId,
-                    },
-                  ],
-                },
-              });
-            }}
-          >
-            View all traces
-          </Button>
+        <div className="flex items-center gap-1 overflow-hidden">
+          <TooltipWrapper content="Close panel">
+            <Button variant="ghost" size="icon-2xs" onClick={onClose}>
+              <ChevronsRight />
+            </Button>
+          </TooltipWrapper>
+          <div className="relative flex size-4 shrink-0 items-center justify-center rounded bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
+            <MessagesSquare className="size-2" />
+          </div>
+          <span className="comet-body-s-accented truncate">Thread</span>
         </div>
-        <div className="flex gap-2 pl-6">
-          <AddToDropdown
-            getDataForExport={async () => rows}
-            selectedRows={rows}
-            dataType="threads"
-          />
-          <DetailsActionSectionToggle
-            activeSection={currentActiveSection}
-            setActiveSection={setActiveSection}
-            layoutSize={ButtonLayoutSize.Large}
-            count={commentsCount}
-            type={DetailsActionSection.Comments}
-          />
 
-          {canAnnotateTraceSpanThread && (
-            <DetailsActionSectionToggle
-              activeSection={currentActiveSection}
-              setActiveSection={setActiveSection}
-              layoutSize={ButtonLayoutSize.Large}
-              count={annotationCount}
-              type={DetailsActionSection.Annotations}
-            />
-          )}
-
+        <div className="flex shrink-0 items-center gap-2 pl-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-sm">
+              <Button variant="outline" size="icon-2xs">
                 <span className="sr-only">Actions menu</span>
                 <MoreHorizontal />
               </Button>
@@ -632,48 +626,32 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 </DropdownMenuItem>
               </TooltipWrapper>
               <DropdownMenuSeparator />
-              {!isExportEnabled ? (
-                <TooltipWrapper
-                  content="Export functionality is disabled for this installation"
-                  side="left"
-                >
-                  <div>
-                    <DropdownMenuItem
-                      onClick={handleExportCSV}
-                      disabled={!isExportEnabled}
-                    >
-                      <Download className="mr-2 size-4" />
-                      Export as CSV
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipWrapper>
-              ) : (
-                <DropdownMenuItem onClick={handleExportCSV}>
-                  <Download className="mr-2 size-4" />
-                  Export as CSV
-                </DropdownMenuItem>
-              )}
-              {!isExportEnabled ? (
-                <TooltipWrapper
-                  content="Export functionality is disabled for this installation"
-                  side="left"
-                >
-                  <div>
-                    <DropdownMenuItem
-                      onClick={handleExportJSON}
-                      disabled={!isExportEnabled}
-                    >
-                      <Download className="mr-2 size-4" />
-                      Export as JSON
-                    </DropdownMenuItem>
-                  </div>
-                </TooltipWrapper>
-              ) : (
-                <DropdownMenuItem onClick={handleExportJSON}>
-                  <Download className="mr-2 size-4" />
-                  Export as JSON
-                </DropdownMenuItem>
-              )}
+              {(["csv", "json"] as const).map((format) => {
+                const handler =
+                  format === "csv" ? handleExportCSV : handleExportJSON;
+                const item = (
+                  <DropdownMenuItem
+                    key={format}
+                    onClick={handler}
+                    disabled={!isExportEnabled}
+                  >
+                    <Download className="mr-2 size-4" />
+                    Export as {format.toUpperCase()}
+                  </DropdownMenuItem>
+                );
+
+                return isExportEnabled ? (
+                  item
+                ) : (
+                  <TooltipWrapper
+                    key={format}
+                    content="Export functionality is disabled for this installation"
+                    side="left"
+                  >
+                    <div>{item}</div>
+                  </TooltipWrapper>
+                );
+              })}
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() => setPopupOpen(true)}
@@ -693,6 +671,63 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
             confirmText="Delete thread"
             confirmButtonVariant="destructive"
           />
+
+          {horizontalNavigation && (
+            <>
+              <Separator orientation="vertical" className="mx-1 h-4" />
+              <Button
+                variant="outline"
+                size="2xs"
+                disabled={!horizontalNavigation.hasPrevious}
+                onClick={() => horizontalNavigation.onChange(-1)}
+                className="gap-1"
+              >
+                Previous
+                <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
+              </Button>
+              <Button
+                variant="outline"
+                size="2xs"
+                disabled={!horizontalNavigation.hasNext}
+                onClick={() => horizontalNavigation.onChange(1)}
+                className="gap-1"
+              >
+                Next
+                <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
+              </Button>
+            </>
+          )}
+
+          <TooltipWrapper content="View all traces for this thread">
+            <Button
+              variant="outline"
+              size="2xs"
+              onClick={() => {
+                navigate({
+                  to: "/$workspaceName/projects/$projectId/logs",
+                  params: {
+                    projectId,
+                    workspaceName,
+                  },
+                  search: {
+                    logsType: LOGS_TYPE.traces,
+                    traces_filters: [
+                      {
+                        id: "thread_id_filter",
+                        field: "thread_id",
+                        type: COLUMN_TYPE.string,
+                        operator: "=",
+                        value: threadId,
+                      },
+                    ],
+                  },
+                });
+              }}
+            >
+              Traces
+              <ArrowUpRight className="ml-1 size-3.5" />
+            </Button>
+          </TooltipWrapper>
         </div>
       </div>
     );
@@ -705,7 +740,9 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       open={open}
       headerContent={renderHeaderContent()}
       onClose={onClose}
+      hideDefaultControls
       initialWidth={0.5}
+      minWidth={700}
       horizontalNavigation={horizontalNavigation}
     >
       {renderContent()}

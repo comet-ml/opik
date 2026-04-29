@@ -85,7 +85,33 @@ jobs:
           git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
           git add apps/opik-frontend/src/types/providers.ts
           git add apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts
+          git add apps/opik-backend/src/main/resources/llm-models-default.yaml
           git commit -m "[NA] [BE][FE] chore: sync provider model definitions"
+
+      - name: Configure AWS credentials
+        if: steps.sync.outputs.exit_code == '0'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_OPIK_CDN_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_OPIK_CDN_SECRET }}
+          aws-region: us-east-1
+          role-to-assume: ${{ vars.AWS_OPIK_CDN_ROLE }}
+          role-session-name: sync-provider-models
+
+      - name: Upload YAML to S3
+        if: steps.sync.outputs.exit_code == '0'
+        run: |
+          aws s3 cp \
+            apps/opik-backend/src/main/resources/llm-models-default.yaml \
+            ${{ vars.AWS_OPIK_CDN_BUCKET }}/llm-models-default.yaml \
+            --cache-control "max-age=300"
+
+      - name: Invalidate CloudFront distribution
+        if: steps.sync.outputs.exit_code == '0'
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.AWS_OPIK_CDN_DISTRIBUTION }} \
+            --paths "/opik/llm-models-default.yaml"
 
       - name: Create Pull Request
         if: steps.check_changes.outputs.has_changes == 'true'

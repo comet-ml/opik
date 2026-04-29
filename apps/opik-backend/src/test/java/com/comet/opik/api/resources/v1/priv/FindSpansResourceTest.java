@@ -16,6 +16,7 @@ import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
 import com.comet.opik.api.resources.utils.DurationUtils;
+import com.comet.opik.api.resources.utils.FilterTestUtils;
 import com.comet.opik.api.resources.utils.MigrationUtils;
 import com.comet.opik.api.resources.utils.MinIOContainerUtils;
 import com.comet.opik.api.resources.utils.MySQLContainerUtils;
@@ -465,36 +466,6 @@ class FindSpansResourceTest {
                     arguments("/spans/search", spanStreamTestAssertion, arg.get()[0], arg.get()[1])));
         }
 
-        private String getValidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, LIST, DICTIONARY, DICTIONARY_STATE_DB, MAP, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, CUSTOM ->
-                    RandomStringUtils.secure().nextAlphanumeric(10);
-                case NUMBER, DURATION, FEEDBACK_SCORES_NUMBER -> String.valueOf(randomNumber(1, 10));
-                case DATE_TIME, DATE_TIME_STATE_DB -> Instant.now().toString();
-            };
-        }
-
-        private String getKey(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, NUMBER, DURATION, DATE_TIME, LIST, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                    null;
-                case FEEDBACK_SCORES_NUMBER, CUSTOM -> RandomStringUtils.secure().nextAlphanumeric(10);
-                case DICTIONARY, DICTIONARY_STATE_DB, MAP -> "";
-            };
-        }
-
-        private String getInvalidValue(Field field) {
-            return switch (field.getType()) {
-                case STRING, STRING_EXACT, DICTIONARY, DICTIONARY_STATE_DB, MAP, CUSTOM, LIST, ENUM, ERROR_CONTAINER,
-                        STRING_STATE_DB, DATE_TIME_STATE_DB ->
-                    " ";
-                case NUMBER, DURATION, DATE_TIME, FEEDBACK_SCORES_NUMBER ->
-                    RandomStringUtils.secure().nextAlphanumeric(10);
-            };
-        }
-
         private Stream<Arguments> getFilterInvalidOperatorForFieldTypeArgs() {
             return filterQueryBuilder.getUnSupportedOperators(SpanField.values())
                     .entrySet()
@@ -505,20 +476,20 @@ class FindSpansResourceTest {
                                     Arguments.of("/stats", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()),
                                     Arguments.of("", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()),
                                     Arguments.of("/search", SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .key(getKey(filter.getKey()))
-                                            .value(getValidValue(filter.getKey()))
+                                            .key(FilterTestUtils.getKey(filter.getKey()))
+                                            .value(FilterTestUtils.getValidValue(filter.getKey()))
                                             .build()))));
         }
 
@@ -536,7 +507,7 @@ class FindSpansResourceTest {
                                                 .field(filter.getKey())
                                                 .operator(operator)
                                                 .key(null)
-                                                .value(getValidValue(filter.getKey()))
+                                                .value(FilterTestUtils.getValidValue(filter.getKey()))
                                                 .build(),
                                         SpanFilter.builder()
                                                 .field(filter.getKey())
@@ -544,8 +515,8 @@ class FindSpansResourceTest {
                                                 // if no value is expected, create an invalid filter by an empty key
                                                 .key(Operator.NO_VALUE_OPERATORS.contains(operator)
                                                         ? ""
-                                                        : getKey(filter.getKey()))
-                                                .value(getInvalidValue(filter.getKey()))
+                                                        : FilterTestUtils.getKey(filter.getKey()))
+                                                .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
                                 case LIST -> {
@@ -557,13 +528,13 @@ class FindSpansResourceTest {
                                     yield Stream.of(SpanFilter.builder()
                                             .field(filter.getKey())
                                             .operator(operator)
-                                            .value(getInvalidValue(filter.getKey()))
+                                            .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                             .build());
                                 }
                                 default -> Stream.of(SpanFilter.builder()
                                         .field(filter.getKey())
                                         .operator(operator)
-                                        .value(getInvalidValue(filter.getKey()))
+                                        .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                         .build());
                             }));
 
@@ -1108,6 +1079,46 @@ class FindSpansResourceTest {
                     .toList();
 
             List<Span> actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
+
+            assertSpan(actualSpans, expectedSpans, USER);
+        }
+
+        @Test
+        void searchSpansStream__whenExcludeFeedbackScores__thenReturnSpansWithoutScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var expectedSpans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                                    span.startTime(), span.endTime()))
+                            .build())
+                    .sorted(Comparator.comparing(Span::id).reversed())
+                    .toList();
+            spanResourceClient.batchCreateSpans(expectedSpans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = expectedSpans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var streamRequest = SpanSearchStreamRequest.builder()
+                    .projectName(projectName)
+                    .exclude(Set.of(Span.SpanField.FEEDBACK_SCORES))
+                    .build();
+            var actualSpans = spanResourceClient.getStreamAndAssertContent(apiKey, workspaceName, streamRequest);
 
             assertSpan(actualSpans, expectedSpans, USER);
         }
@@ -4290,6 +4301,51 @@ class FindSpansResourceTest {
 
             getAndAssertPage(workspaceName, projectName, List.of(), spans, spans.reversed(), List.of(), apiKey,
                     List.of(), exclude);
+        }
+
+        @Test
+        void findSpans__whenExcludeFeedbackScoresWithFilter__thenReturnSpansExcludingAndFilteringScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = RandomStringUtils.secure().nextAlphanumeric(32);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var spans = PodamFactoryUtils.manufacturePojoList(podamFactory, Span.class)
+                    .stream()
+                    .map(span -> span.toBuilder()
+                            .projectName(projectName)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, apiKey, workspaceName);
+
+            List<FeedbackScoreItem.FeedbackScoreBatchItem> feedbackScores = spans.stream()
+                    .flatMap(span -> PodamFactoryUtils
+                            .manufacturePojoList(podamFactory, FeedbackScoreItem.FeedbackScoreBatchItem.class)
+                            .stream()
+                            .map(score -> score.toBuilder()
+                                    .projectName(span.projectName())
+                                    .id(span.id())
+                                    .build()))
+                    .collect(Collectors.toList());
+            spanResourceClient.feedbackScores(feedbackScores, apiKey, workspaceName);
+
+            var filters = List.of(
+                    SpanFilter.builder()
+                            .field(SpanField.FEEDBACK_SCORES)
+                            .operator(Operator.EQUAL)
+                            .key(feedbackScores.getFirst().name())
+                            .value(feedbackScores.getFirst().value().toString())
+                            .build());
+
+            // The query still runs feedback score CTEs because feedback_scores_filters is active,
+            // even though exclude_feedback_scores is requested.
+            // However, returned feedback scores are excluded (nulled) from the response.
+            var expectedSpans = List.of(spans.getFirst());
+            var unexpectedSpans = spans.subList(1, spans.size());
+            getAndAssertPage(workspaceName, projectName, filters, spans, expectedSpans,
+                    unexpectedSpans, apiKey, List.of(), List.of(Span.SpanField.FEEDBACK_SCORES));
         }
 
         @ParameterizedTest

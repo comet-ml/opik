@@ -8,24 +8,22 @@ from opik.evaluation import metrics
 from opik.evaluation import test_result
 from opik.evaluation.metrics import score_result
 from .. import verifiers
+from ...testlib import generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     """Test that experiment scoring functions can compute and log standard deviation of metric scores."""
-    project_name = "test_project_experiment_scoring_functions_standard_deviation"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
 
     dataset.insert(
         [
             {
                 "input": {"question": "What is the capital of France?"},
                 "expected_output": "Paris",
-            },
-            {
-                "input": {"question": "What is the capital of Germany?"},
-                "expected_output": "Berlin",
             },
             {
                 "input": {"question": "What is the capital of Poland?"},
@@ -35,12 +33,10 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
     )
 
     def task(item: Dict[str, Any]):
-        # Return correct answers for France and Germany, wrong answer for Poland
-        # This will generate scores: 1.0, 1.0, 0.0
+        # Return correct answer for France, wrong answer for Poland so
+        # metric scores are [1.0, 0.0] — enough to exercise stdev.
         if item["input"] == {"question": "What is the capital of France?"}:
             return {"output": "Paris", "reference": item["expected_output"]}
-        if item["input"] == {"question": "What is the capital of Germany?"}:
-            return {"output": "Berlin", "reference": item["expected_output"]}
         if item["input"] == {"question": "What is the capital of Poland?"}:
             return {"output": "Krakow", "reference": item["expected_output"]}
 
@@ -71,10 +67,8 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
             "model_name": "test-model",
         },
         experiment_scoring_functions=[compute_std_deviation],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
-
-    opik.flush_tracker()
 
     # Verify experiment scores are in the result
     assert len(evaluation_result.experiment_scores) == 1, (
@@ -86,7 +80,7 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         f"Full score object: {evaluation_result.experiment_scores[0]}"
     )
 
-    expected_stdev = statistics.stdev([1.0, 1.0, 0.0])
+    expected_stdev = statistics.stdev([1.0, 0.0])
     assert evaluation_result.experiment_scores[0].value == pytest.approx(
         expected_stdev, abs=0.0001
     ), (
@@ -98,10 +92,10 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         f"Score: {evaluation_result.experiment_scores[0]}"
     )
     assert (
-        "Standard deviation of 3 metric scores"
+        "Standard deviation of 2 metric scores"
         in evaluation_result.experiment_scores[0].reason
     ), (
-        f"Expected reason to contain 'Standard deviation of 3 metric scores', but got: '{evaluation_result.experiment_scores[0].reason}'"
+        f"Expected reason to contain 'Standard deviation of 2 metric scores', but got: '{evaluation_result.experiment_scores[0].reason}'"
     )
 
     # Verify experiment was created
@@ -110,9 +104,9 @@ def test_experiment_scoring_functions__standard_deviation__computed_and_logged(
         id=evaluation_result.experiment_id,
         experiment_name=evaluation_result.experiment_name,
         experiment_metadata={"model_name": "test-model"},
-        traces_amount=3,  # one trace per dataset item
+        traces_amount=2,  # one trace per dataset item
         feedback_scores_amount=1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify experiment scores are logged to backend by retrieving the experiment

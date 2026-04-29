@@ -23,5 +23,8 @@ export interface ServiceTogglesConfig {
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
-    agentConfigurationEnabled: boolean;
+    v2WorkspaceAllowlistIds: string[];
+    forceWorkspaceVersion: string;
+    defaultPageSize?: number;
+    v2WorkspaceAllowlist?: string;
 }

@@ -2,9 +2,10 @@ import React from "react";
 import useAppStore from "@/store/AppStore";
 import usePluginsStore from "@/store/PluginsStore";
 import { Link, Outlet } from "@tanstack/react-router";
-import Logo from "@/v2/layout/Logo/Logo";
+import Logo from "@/shared/Logo/Logo";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "@/v2/layout/SettingsMenu/SettingsMenu";
+import LayoutDialogs from "@/v2/layout/LayoutDialogs";
 
 export const PartialPageLayout = ({
   children = <Outlet />,
@@ -12,14 +13,9 @@ export const PartialPageLayout = ({
   children?: React.ReactNode;
 }) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
-  const LogoComponent = usePluginsStore((state) => state.Logo);
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
-  const logo = LogoComponent ? (
-    <LogoComponent expanded={true} />
-  ) : (
-    <Logo expanded={false} />
-  );
+  const logo = <Logo expanded={false} />;
 
   return (
     <section className="relative flex h-screen min-h-0 w-screen min-w-0 flex-col overflow-hidden">
@@ -39,6 +35,8 @@ export const PartialPageLayout = ({
           {children}
         </section>
       </main>
+
+      <LayoutDialogs />
     </section>
   );
 };

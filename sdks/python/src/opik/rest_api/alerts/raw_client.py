@@ -97,6 +97,7 @@ class RawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -117,6 +118,9 @@ class RawAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -140,6 +144,7 @@ class RawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",
@@ -296,6 +301,7 @@ class RawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -319,6 +325,9 @@ class RawAlertsClient:
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -341,6 +350,7 @@ class RawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",
@@ -443,6 +453,7 @@ class RawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[WebhookTestResult]:
         """
@@ -463,6 +474,9 @@ class RawAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -487,6 +501,7 @@ class RawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",
@@ -591,6 +606,7 @@ class AsyncRawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -611,6 +627,9 @@ class AsyncRawAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -634,6 +653,7 @@ class AsyncRawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",
@@ -790,6 +810,7 @@ class AsyncRawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -813,6 +834,9 @@ class AsyncRawAlertsClient:
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
 
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -835,6 +859,7 @@ class AsyncRawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",
@@ -937,6 +962,7 @@ class AsyncRawAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[WebhookTestResult]:
         """
@@ -957,6 +983,9 @@ class AsyncRawAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -981,6 +1010,7 @@ class AsyncRawAlertsClient:
                 "triggers": convert_and_respect_annotation_metadata(
                     object_=triggers, annotation=typing.Sequence[AlertTriggerWrite], direction="write"
                 ),
+                "project_id": project_id,
             },
             headers={
                 "content-type": "application/json",

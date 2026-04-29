@@ -9,7 +9,7 @@ import {
 } from "@/ui/dialog";
 import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 
 type UseThisPromptDialogProps = {

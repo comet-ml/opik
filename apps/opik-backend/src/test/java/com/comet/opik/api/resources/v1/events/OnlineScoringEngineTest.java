@@ -4,14 +4,19 @@ import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.LogItem.LogLevel;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Source;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.events.TracesCreated;
+import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.api.resources.utils.AuthTestUtils;
 import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
 import com.comet.opik.api.resources.utils.ClientSupportUtils;
@@ -24,9 +29,9 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AutomationRuleEvaluatorResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.llm.ChatCompletionService;
-import com.comet.opik.domain.llm.MessageContentNormalizer;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
@@ -34,7 +39,6 @@ import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.dockerjava.api.exception.InternalServerErrorException;
@@ -64,7 +68,9 @@ import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -154,9 +160,6 @@ class OnlineScoringEngineTest {
             {{context}}
             """;
 
-    private static final String IMAGE_PLACEHOLDER = MessageContentNormalizer.IMAGE_PLACEHOLDER_START + "%s"
-            + MessageContentNormalizer.IMAGE_PLACEHOLDER_END;
-
     private final String unquoted;
 
     {
@@ -197,6 +200,10 @@ class OnlineScoringEngineTest {
                 "output": "%s"
             }
             """.formatted(OUTPUT_STR).trim();
+
+    private static final String MOCK_AI_RESPONSE = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+            + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+            + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
 
     private static final String EDGE_CASE_TEMPLATE = "Summary: {{summary}}\\nInstruction: {{ instruction     }}\\n\\nLiteral: {{literal}}\\nNonexistent: {{nonexistent}}";
     private static final String TEST_EVALUATOR_EDGE_CASE = """
@@ -276,6 +283,7 @@ class OnlineScoringEngineTest {
 
     private AutomationRuleEvaluatorResourceClient evaluatorsResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private TraceResourceClient traceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -286,14 +294,20 @@ class OnlineScoringEngineTest {
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
         this.evaluatorsResourceClient = new AutomationRuleEvaluatorResourceClient(client, baseURI);
+        this.traceResourceClient = new TraceResourceClient(client, baseURI);
 
         Mockito.reset(aiProxyService, feedbackScoreService, eventBus);
     }
 
-    @Test
+    @ParameterizedTest
+    @EnumSource(value = Source.class, names = {"SDK"})
+    @NullSource
     @DisplayName("test Redis producer and consumer base flow")
-    void testRedisProducerAndConsumerBaseFlow(OnlineScoringSampler onlineScoringSampler) throws Exception {
-        var projectId = projectResourceClient.createProject(PROJECT_NAME, API_KEY, WORKSPACE_NAME);
+    void testRedisProducerAndConsumerBaseFlow(Source source, OnlineScoringSampler onlineScoringSampler) {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
 
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
 
@@ -302,7 +316,7 @@ class OnlineScoringEngineTest {
         evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
 
         var traceId = generator.generate();
-        var trace = createTrace(traceId, projectId);
+        var trace = createTrace(traceId, projectId, source);
         var event = new TracesCreated(List.of(trace), WORKSPACE_ID, USER_NAME);
 
         Mockito.doNothing().when(eventBus).register(Mockito.any());
@@ -340,7 +354,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("test filtering evaluators by trace metadata")
-    void testFilteringEvaluatorsByTraceMetadata(OnlineScoringSampler onlineScoringSampler) throws Exception {
+    void testFilteringEvaluatorsByTraceMetadata(OnlineScoringSampler onlineScoringSampler) {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
         var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -364,7 +378,9 @@ class OnlineScoringEngineTest {
                 .add(evaluatorId1.toString())
                 .add(evaluatorId2.toString());
 
-        var trace = createTrace(traceId, projectId).toBuilder()
+        // non-SDK traces, such as playground with "selected_rule_ids" must still be scored
+        // by the explicitly selected evaluators.
+        var trace = createTrace(traceId, projectId, Source.PLAYGROUND).toBuilder()
                 .metadata(metadata)
                 .build();
 
@@ -410,7 +426,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("test User Facing log error when AI provider fails")
-    void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) throws Exception {
+    void testUserFacingLogErrorWhenAIProviderFails(OnlineScoringSampler onlineScoringSampler) {
         Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
 
         var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
@@ -454,14 +470,166 @@ class OnlineScoringEngineTest {
                 .anyMatch(logItem -> logItem.level().equals(LogLevel.ERROR) && logItem.message().contains(logMessage));
     }
 
-    private Trace createTrace(UUID traceId, UUID projectId) throws JsonProcessingException {
+    @Test
+    @DisplayName("test partial trace without end_time is skipped, complete trace is scored once")
+    void testPartialTraceThenCompleteTraceScoresOnlyOnce(OnlineScoringSampler onlineScoringSampler) {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        // First event: partial trace (no end_time, no output) — simulates SDK "start" call
+        var partialTrace = Trace.builder()
+                .id(traceId)
+                .projectName(projectName)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .build();
+        var partialEvent = new TracesCreated(List.of(partialTrace), WORKSPACE_ID, USER_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiMessage = "{\"Relevance\":{\"score\":4,\"reason\":\"Test\"},"
+                + "\"Technical Accuracy\":{\"score\":4.5,\"reason\":\"Test\"},"
+                + "\"Conciseness\":{\"score\":true,\"reason\":\"Test\"}}";
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(aiMessage)).build();
+
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        // Send partial trace — should be skipped
+        onlineScoringSampler.onTracesCreated(partialEvent);
+
+        Mono.delay(Duration.ofSeconds(2)).block();
+
+        // Verify no scoring happened for the partial trace
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(Mockito.any());
+
+        // Second event: complete trace (with end_time and output) — simulates SDK "end" call
+        var completeTrace = createTrace(traceId, projectId);
+        var completeEvent = new TracesCreated(List.of(completeTrace), WORKSPACE_ID, USER_NAME);
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+
+        onlineScoringSampler.onTracesCreated(completeEvent);
+
+        Mono.delay(Duration.ofMillis(300)).block();
+
+        // Verify scoring happened exactly once
+        Mockito.verify(feedbackScoreService, Mockito.times(1)).scoreBatchOfTraces(captor.capture());
+
+        List<FeedbackScoreBatchItem> processed = captor.getValue();
+        assertThat(processed).hasSize(3); // 3 scores from one evaluator
+    }
+
+    @Test
+    @DisplayName("onTracesUpdated when endTime is set triggers scoring")
+    void onTracesUpdatedWhenEndTimeSetTriggersScoring(OnlineScoringSampler onlineScoringSampler) {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        // Insert a complete trace into the DB via REST API (simulates SDK POST + PATCH lifecycle)
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(traceId)
+                .projectName(projectName)
+                .projectId(projectId)
+                .createdBy(USER_NAME)
+                .startTime(java.time.Instant.now())
+                .input(JsonUtils.getJsonNodeFromString(INPUT))
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT))
+                .endTime(java.time.Instant.now())
+                .source(null)
+                .feedbackScores(null)
+                .build();
+        traceResourceClient.createTrace(trace, API_KEY, WORKSPACE_NAME);
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        var aiResponse = ChatResponse.builder().aiMessage(AiMessage.aiMessage(MOCK_AI_RESPONSE)).build();
+
+        ArgumentCaptor<List<FeedbackScoreBatchItem>> captor = ArgumentCaptor.forClass(List.class);
+        Mockito.doReturn(Mono.empty()).when(feedbackScoreService).scoreBatchOfTraces(Mockito.any());
+        Mockito.doReturn(aiResponse).when(aiProxyService).scoreTrace(Mockito.any(), Mockito.any(), Mockito.any());
+
+        // Fire TracesUpdated with endTime set — should trigger scoring
+        var traceUpdate = TraceUpdate.builder().endTime(java.time.Instant.now()).build();
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, traceUpdate);
+        onlineScoringSampler.onTracesUpdated(event);
+
+        Awaitility.await().untilAsserted(() -> {
+            Mockito.verify(feedbackScoreService, Mockito.atLeastOnce()).scoreBatchOfTraces(captor.capture());
+
+            var allScores = captor.getAllValues().stream()
+                    .flatMap(List::stream)
+                    .toList();
+
+            assertThat(allScores).hasSize(3);
+
+            var resultMap = allScores.stream()
+                    .collect(Collectors.toMap(FeedbackScoreItem::name, java.util.function.Function.identity()));
+            assertThat(resultMap.get("Relevance").value()).isEqualTo(new BigDecimal(4));
+            assertThat(resultMap.get("Technical Accuracy").value()).isEqualTo(new BigDecimal("4.5"));
+            assertThat(resultMap.get("Conciseness").value()).isEqualTo(BigDecimal.ONE);
+        });
+    }
+
+    @Test
+    @DisplayName("onTracesUpdated when endTime is null does NOT trigger scoring")
+    void onTracesUpdatedWithoutEndTimeDoesNotTriggerScoring(OnlineScoringSampler onlineScoringSampler) {
+        Mockito.reset(feedbackScoreService, aiProxyService, eventBus);
+
+        var projectName = "project" + RandomStringUtils.secure().nextAlphanumeric(36);
+        var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+        var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
+        var evaluator = createRule(projectId, evaluatorCode);
+        evaluatorsResourceClient.createEvaluator(evaluator, WORKSPACE_NAME, API_KEY);
+
+        var traceId = generator.generate();
+
+        Mockito.doNothing().when(eventBus).register(Mockito.any());
+
+        // Fire TracesUpdated without endTime (e.g., tag addition) — should NOT score
+        var traceUpdate = TraceUpdate.builder().name("updated-name").build();
+        var event = new TracesUpdated(Set.of(projectId), Set.of(traceId), WORKSPACE_ID, USER_NAME, traceUpdate);
+        onlineScoringSampler.onTracesUpdated(event);
+
+        TestUtils.waitForMillis(1000);
+
+        // Verify no scoring happened
+        Mockito.verify(feedbackScoreService, Mockito.never()).scoreBatchOfTraces(Mockito.any());
+    }
+
+    private Trace createTrace(UUID traceId, UUID projectId) {
+        return createTrace(traceId, projectId, null);
+    }
+
+    private Trace createTrace(UUID traceId, UUID projectId, Source source) {
         return Trace.builder()
                 .id(traceId)
                 .projectName(PROJECT_NAME)
                 .projectId(projectId)
                 .createdBy(USER_NAME)
                 .input(JsonUtils.getJsonNodeFromString(INPUT))
-                .output(JsonUtils.getJsonNodeFromString(OUTPUT)).build();
+                .output(JsonUtils.getJsonNodeFromString(OUTPUT))
+                .endTime(java.time.Instant.now())
+                .source(source)
+                .build();
     }
 
     private AutomationRuleEvaluatorLlmAsJudge createRule(UUID projectId, LlmAsJudgeCode evaluatorCode) {
@@ -477,7 +645,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("parse variable mapping into a usable one")
-    void testVariableMapping() throws JsonProcessingException {
+    void testVariableMapping() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var variableMappings = OnlineScoringEngine.toVariableMapping(evaluatorCode.variables());
 
@@ -574,7 +742,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("toReplacements should produce valid JSON for complex objects (Python evaluator path)")
-    void testToReplacementsProducesValidJsonForComplexObjects() throws JsonProcessingException {
+    void testToReplacementsProducesValidJsonForComplexObjects() {
         // Given - a trace with a complex nested object in output (similar to the customer's sql_template case)
         var complexOutput = """
                 {
@@ -633,7 +801,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("render message templates with root object variables")
-    void testRenderTemplateWithRootObjects() throws JsonProcessingException {
+    void testRenderTemplateWithRootObjects() {
         // Given
         var messageTemplate = "Full input: {{full_input}}\\nNested field: {{nested_field}}";
         var evaluatorJson = """
@@ -678,7 +846,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("render message templates with output root object")
-    void testRenderTemplateWithOutputRootObject() throws JsonProcessingException {
+    void testRenderTemplateWithOutputRootObject() {
         // Given
         var messageTemplate = "Full output: {{full_output}}";
         var evaluatorJson = """
@@ -718,7 +886,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("render span message templates with root object variables")
-    void testRenderSpanTemplateWithRootObjects() throws JsonProcessingException {
+    void testRenderSpanTemplateWithRootObjects() {
         // Given
         var messageTemplate = "Full input: {{full_input}}\\nNested field: {{nested_field}}";
         var evaluatorJson = """
@@ -738,7 +906,7 @@ class OnlineScoringEngineTest {
                 """.formatted(messageTemplate).trim();
 
         var evaluatorCode = JsonUtils.readValue(evaluatorJson,
-                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+                AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
         var spanId = generator.generate();
         var projectId = generator.generate();
         var span = createSpan(spanId, projectId);
@@ -767,7 +935,7 @@ class OnlineScoringEngineTest {
     @ParameterizedTest
     @MethodSource
     @DisplayName("render message templates with a trace")
-    void testRenderTemplate(String evaluator) throws JsonProcessingException {
+    void testRenderTemplate(String evaluator) {
         var evaluatorCode = JsonUtils.readValue(evaluator, LlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
@@ -790,7 +958,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("render message templates with a trace thread")
-    void testRenderTemplateWithTraceThread() throws JsonProcessingException {
+    void testRenderTemplateWithTraceThread() {
         var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var traceId = generator.generate();
         var projectId = generator.generate();
@@ -814,7 +982,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepare trace thread LLM request with tool-calling strategy")
-    void testPrepareTraceThreadLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+    void testPrepareTraceThreadLlmRequestWithToolCallingStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_TRACE_THREAD_EVALUATOR, TraceThreadLlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate()).toBuilder()
                 .threadId("thread-" + RandomStringUtils.secure().nextAlphanumeric(36))
@@ -830,7 +998,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepare LLM request with tool-calling strategy")
-    void testPrepareLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+    void testPrepareLlmRequestWithToolCallingStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
@@ -843,7 +1011,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepare LLM request with instruction strategy")
-    void testPrepareLlmRequestWithInstructionStrategy() throws JsonProcessingException {
+    void testPrepareLlmRequestWithInstructionStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);
         var trace = createTrace(generator.generate(), generator.generate());
 
@@ -951,7 +1119,7 @@ class OnlineScoringEngineTest {
     @ParameterizedTest
     @MethodSource
     @DisplayName("renderMessages should support keys with dots in their names")
-    void testExtractFromJsonWithDotKey(String key, String jsonBody) throws Exception {
+    void testExtractFromJsonWithDotKey(String key, String jsonBody) {
         // variable mapping: variable 'testVar' maps to 'input.' + key
         var variables = Map.of("testVar", "input." + key);
         var trace = Trace.builder()
@@ -1227,8 +1395,8 @@ class OnlineScoringEngineTest {
         assertThat(isString).isFalse();
         assertThat(isArray).isTrue();
         assertThat(message.asContentList()).hasSize(1);
-        assertThat(message.asContentList().get(0).type()).isEqualTo("text");
-        assertThat(message.asContentList().get(0).text()).isEqualTo("Analyze this video");
+        assertThat(message.asContentList().getFirst().type()).isEqualTo("text");
+        assertThat(message.asContentList().getFirst().text()).isEqualTo("Analyze this video");
     }
 
     @Test
@@ -1287,7 +1455,7 @@ class OnlineScoringEngineTest {
 
         // When & Then
         assertThat(message.isStructuredContent()).isTrue();
-        var videoPart = message.asContentList().get(0);
+        var videoPart = message.asContentList().getFirst();
         assertThat(videoPart.videoUrl().url()).startsWith("data:video/mp4;base64,");
     }
 
@@ -1329,7 +1497,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("should render template variables in array content with video URL from input")
-    void shouldRenderTemplateVariables_whenVideoUrlFromInput() throws JsonProcessingException {
+    void shouldRenderTemplateVariables_whenVideoUrlFromInput() {
         // Given
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1366,7 +1534,7 @@ class OnlineScoringEngineTest {
 
         // Then
         assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
         var textContent = (TextContent) userMessage.contents().get(0);
@@ -1379,7 +1547,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("should render template variables with base64 video from input")
-    void shouldRenderTemplateVariables_whenBase64VideoFromInput() throws JsonProcessingException {
+    void shouldRenderTemplateVariables_whenBase64VideoFromInput() {
         // Given
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1416,7 +1584,7 @@ class OnlineScoringEngineTest {
 
         // Then
         assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
         var videoContent = (VideoContent) userMessage.contents().get(1);
@@ -1425,7 +1593,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("should render mixed media with template variables")
-    void shouldRenderTemplateVariables_whenMixedMedia() throws JsonProcessingException {
+    void shouldRenderTemplateVariables_whenMixedMedia() {
         // Given
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1469,7 +1637,7 @@ class OnlineScoringEngineTest {
 
         // Then
         assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(3);
 
         var textContent = (TextContent) userMessage.contents().get(0);
@@ -1484,7 +1652,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("should render template variables in multimodal content with video URL")
-    void shouldRenderTemplateVariables_whenMultimodalContentWithVideoUrl() throws JsonProcessingException {
+    void shouldRenderTemplateVariables_whenMultimodalContentWithVideoUrl() {
         // Given
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
@@ -1522,7 +1690,7 @@ class OnlineScoringEngineTest {
 
         // Then
         assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
         var textContent = (TextContent) userMessage.contents().get(0);
@@ -1552,7 +1720,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("should render video URL from output field")
-    void shouldRenderTemplateVariables_whenVideoUrlFromOutput() throws JsonProcessingException {
+    void shouldRenderTemplateVariables_whenVideoUrlFromOutput() {
         // Given
         var outputWithVideo = """
                 {
@@ -1595,7 +1763,7 @@ class OnlineScoringEngineTest {
 
         // Then
         assertThat(renderedMessages).hasSize(1);
-        var userMessage = (UserMessage) renderedMessages.get(0);
+        var userMessage = (UserMessage) renderedMessages.getFirst();
         assertThat(userMessage.contents()).hasSize(2);
 
         var videoContent = (VideoContent) userMessage.contents().get(1);
@@ -1604,9 +1772,9 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("render span message templates")
-    void testRenderSpanTemplate() throws JsonProcessingException {
+    void testRenderSpanTemplate() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
-                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+                AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
         var spanId = generator.generate();
         var projectId = generator.generate();
         var span = createSpan(spanId, projectId);
@@ -1628,9 +1796,9 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepare span LLM request with tool-calling strategy")
-    void testPrepareSpanLlmRequestWithToolCallingStrategy() throws JsonProcessingException {
+    void testPrepareSpanLlmRequestWithToolCallingStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
-                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+                AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
         var span = createSpan(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span, new ToolCallingStrategy());
@@ -1642,9 +1810,9 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("prepare span LLM request with instruction strategy")
-    void testPrepareSpanLlmRequestWithInstructionStrategy() throws JsonProcessingException {
+    void testPrepareSpanLlmRequestWithInstructionStrategy() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR,
-                com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
+                AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode.class);
         var span = createSpan(generator.generate(), generator.generate());
 
         var request = OnlineScoringEngine.prepareSpanLlmRequest(evaluatorCode, span, new InstructionStrategy());
@@ -1667,8 +1835,8 @@ class OnlineScoringEngineTest {
         assertThat(userMessage.singleText()).contains("Literal: some literal value");
     }
 
-    private com.comet.opik.api.Span createSpan(UUID spanId, UUID projectId) throws JsonProcessingException {
-        return com.comet.opik.api.Span.builder()
+    private Span createSpan(UUID spanId, UUID projectId) {
+        return Span.builder()
                 .id(spanId)
                 .projectName(PROJECT_NAME)
                 .projectId(projectId)

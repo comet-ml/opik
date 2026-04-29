@@ -60,12 +60,15 @@ def test_distributed_headers__happy_flow(fake_backend):
                         end_time=ANY_BUT_NONE,
                         project_name="Default Project",
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -107,9 +110,11 @@ def test_distributed_headers__only_trace__happy_flow(fake_backend):
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     pprint.pp(fake_backend.trace_trees[0])
@@ -157,9 +162,11 @@ def test_distributed_headers__empty_headers_warning__child_span_created(
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=fake_backend.trace_trees[0])
@@ -276,15 +283,19 @@ def test_distributed_headers__nested_spans(fake_backend):
                                 end_time=ANY_BUT_NONE,
                                 project_name="Default Project",
                                 last_updated_at=ANY_BUT_NONE,
+                                source="sdk",
                             )
                         ],
                         last_updated_at=ANY_BUT_NONE,
+                        source="sdk",
                     )
                 ],
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     trace_tree = fake_backend.trace_trees[0]

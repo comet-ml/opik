@@ -30,7 +30,10 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
     collaboratorsTabEnabled: core.serialization.boolean(),
-    agentConfigurationEnabled: core.serialization.boolean(),
+    v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
+    forceWorkspaceVersion: core.serialization.string(),
+    defaultPageSize: core.serialization.number().optional(),
+    v2WorkspaceAllowlist: core.serialization.string().optional(),
 });
 
 export declare namespace ServiceTogglesConfig {
@@ -57,6 +60,9 @@ export declare namespace ServiceTogglesConfig {
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
         collaboratorsTabEnabled: boolean;
-        agentConfigurationEnabled: boolean;
+        v2WorkspaceAllowlistIds: string[];
+        forceWorkspaceVersion: string;
+        defaultPageSize?: number | null;
+        v2WorkspaceAllowlist?: string | null;
     }
 }

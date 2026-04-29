@@ -36,7 +36,7 @@ import {
 import { Separator } from "@/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/v1/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/shared/DataTableCells/FeedbackScoreNameCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 

@@ -19,6 +19,7 @@ import { getOutroMessage } from '../lib/messages';
 import {
   addOrUpdateEnvironmentVariablesStep,
   runPrettierStep,
+  saveToOpikConfigStep,
 } from '../steps/index';
 import { uploadEnvironmentVariablesStep } from '../steps/upload-environment-variables/index';
 import { buildOpikApiUrl } from '../utils/urls';
@@ -152,6 +153,16 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
       installDir: options.installDir,
     });
   debug(`Environment variables added to ${relativeEnvFilePath}`);
+
+  debug('Saving configuration to ~/.opik.config');
+  await saveToOpikConfigStep({
+    projectName,
+    urlOverride: buildOpikApiUrl(host),
+    ...(isLocalDeployment
+      ? {}
+      : { apiKey: projectApiKey, workspace: workspaceName }),
+  });
+  debug('Configuration saved to ~/.opik.config');
 
   analytics.capture('environment variables configured', {
     envFilePath: relativeEnvFilePath,

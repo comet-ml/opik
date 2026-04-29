@@ -14,8 +14,21 @@ from .json_node import JsonNode
 
 
 class DatasetItemPublic(UniversalBaseModel):
-    id: typing.Optional[str] = None
-    dataset_item_id: typing.Optional[str] = None
+    id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Stable item identifier.
+    On write, used as the upsert key.
+    If omitted, a new ID is generated.
+    Remains the same across dataset versions
+    """
+
+    dataset_item_id: typing.Optional[str] = pydantic.Field(default=None)
+    """
+    Deprecated.
+    Always equals 'id'.
+    Retained for backward compatibility and will be removed in a future version
+    """
+
     trace_id: typing.Optional[str] = None
     span_id: typing.Optional[str] = None
     source: DatasetItemPublicSource

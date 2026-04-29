@@ -8,6 +8,10 @@ subtitle: Evaluate prompts that include images
 title: Evaluate multimodal traces
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 Opik lets you evaluate multimodal prompts that combine text and images. You can run these experiments straight from the UI, or by using the SDKs. This page covers both flows, clarifies which models support image inputs, and explains how to customise model detection.
 
 ## Online evaluation in the UI
@@ -32,7 +36,7 @@ from opik import Opik
 from opik.evaluation import evaluate_prompt, metrics
 
 client = Opik()
-dataset = client.get_or_create_dataset("vision_captions")
+dataset = client.get_or_create_dataset("vision_captions", project_name="my-project")
 dataset.insert(
     [
         {
@@ -72,6 +76,7 @@ evaluate_prompt(
     messages=MESSAGES,
     model="gpt-4o-mini",
     scoring_metrics=[metrics.Equals()],  # compares output against the dataset `reference`
+    project_name="my-project",
 )
 ```
 

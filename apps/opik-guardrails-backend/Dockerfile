@@ -37,7 +37,9 @@ USER 1001:1001
 RUN python -m spacy download en_core_web_lg
 
 # Download transformer model for restricted topic validation
-RUN python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli'); AutoTokenizer.from_pretrained('facebook/bart-large-mnli')"
+# HF_HUB_DISABLE_XET=1 forces standard HTTP fallback; the Xet protocol
+# used by huggingface_hub[hf_xet] is blocked in most CI/Docker build environments.
+RUN HF_HUB_DISABLE_XET=1 python -c "from transformers import AutoModelForSequenceClassification, AutoTokenizer; AutoModelForSequenceClassification.from_pretrained('facebook/bart-large-mnli'); AutoTokenizer.from_pretrained('facebook/bart-large-mnli')"
 
 COPY --chown=1001:1001 opik_guardrails ./opik_guardrails
 

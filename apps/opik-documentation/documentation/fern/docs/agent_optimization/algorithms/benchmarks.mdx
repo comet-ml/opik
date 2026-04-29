@@ -54,7 +54,7 @@ Results shown below use `openai/gpt-5-nano` for evaluation on non multi-hop base
    ```
 4. Inspect the JSON or load it into a notebook to compare against the published table.
 
-The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.py`, runs each optimizer with consistent trial budgets, and logs runs to Opik so you can review traces. Note that production use should include separate validation datasets to prevent overfitting—see [Define datasets](/agent_optimization/optimization/define_datasets) for guidance.
+The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.py`, runs each optimizer with consistent trial budgets, and logs runs to Opik so you can review traces. Note that production use should include separate validation datasets to prevent overfitting—see [Define datasets](/v1/agent_optimization/optimization/define_datasets) for guidance.
 
 <Tip>
   Looking for production-style examples beyond synthetic benchmarks? Check out the [agent optimizations demos](https://github.com/comet-ml/agent-optimizations-demos) repo. It contains end-to-end scenarios (LangGraph, RAG, support bots) and shows how different optimizers behave in real workloads.
@@ -62,6 +62,6 @@ The script spins up datasets defined in `sdks/opik_optimizer/benchmarks/config.p
 
 ## Next steps
 
-- Learn how each optimizer works in the [Algorithms overview](/agent_optimization/algorithms/overview).
+- Learn how each optimizer works in the [Algorithms overview](/v1/agent_optimization/algorithms/overview).
 - Customize the benchmark configs (datasets, metrics, budgets) to mirror your production workload.
 - Share results or contribute improvements via [GitHub](https://github.com/comet-ml/opik/tree/main/sdks/opik_optimizer/benchmarks).

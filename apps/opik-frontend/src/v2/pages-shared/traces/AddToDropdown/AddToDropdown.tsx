@@ -1,7 +1,13 @@
 import React, { useRef, useState } from "react";
-import { ChevronDown, Database, UserPen } from "lucide-react";
+import {
+  ChevronDown,
+  Database,
+  ListChecks,
+  UserPen,
+  LucideIcon,
+} from "lucide-react";
 
-import { Button } from "@/ui/button";
+import { Button, ButtonProps } from "@/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,19 +15,51 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Span, Trace, Thread } from "@/types/traces";
+import { cn } from "@/lib/utils";
 import AddToDatasetDialog from "@/v2/pages-shared/traces/AddToDatasetDialog/AddToDatasetDialog";
 import AddToQueueDialog from "@/v2/pages-shared/traces/AddToQueueDialog/AddToQueueDialog";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { DATASET_TYPE } from "@/types/datasets";
+
+type DatasetOption = {
+  datasetType: DATASET_TYPE;
+  label: string;
+  icon: LucideIcon;
+  openValue: number;
+};
+
+const DATASET_OPTIONS: DatasetOption[] = [
+  {
+    datasetType: DATASET_TYPE.TEST_SUITE,
+    label: "Test suite",
+    icon: ListChecks,
+    openValue: 1,
+  },
+  {
+    datasetType: DATASET_TYPE.DATASET,
+    label: "Dataset",
+    icon: Database,
+    openValue: 3,
+  },
+];
 
 export type AddToDropdownProps = {
   getDataForExport: () => Promise<Array<Trace | Span | Thread>>;
   selectedRows: Array<Trace | Span | Thread>;
   disabled?: boolean;
   dataType?: "traces" | "spans" | "threads";
+  buttonVariant?: ButtonProps["variant"];
+  buttonSize?: ButtonProps["size"];
 };
 
 const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
-  const { selectedRows, disabled = false, dataType = "traces" } = props;
+  const {
+    selectedRows,
+    disabled = false,
+    dataType = "traces",
+    buttonVariant = "outline",
+    buttonSize = "sm",
+  } = props;
   // getDataForExport is accepted for backwards compatibility but no longer used
   const resetKeyRef = useRef(0);
   const [open, setOpen] = useState<number>(0);
@@ -41,14 +79,16 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
 
   return (
     <>
-      {showAddToDataset && (
-        <AddToDatasetDialog
-          key={`dataset-${resetKeyRef.current}`}
-          selectedRows={selectedRows as Array<Trace | Span>}
-          open={open === 1}
-          setOpen={() => setOpen(0)}
-        />
-      )}
+      {showAddToDataset &&
+        DATASET_OPTIONS.map((opt) => (
+          <AddToDatasetDialog
+            key={`${opt.label}-${resetKeyRef.current}`}
+            selectedRows={selectedRows as Array<Trace | Span>}
+            datasetType={opt.datasetType}
+            open={open === opt.openValue}
+            setOpen={() => setOpen(0)}
+          />
+        ))}
       {showAddToQueue && (
         <AddToQueueDialog
           key={`queue-${resetKeyRef.current}`}
@@ -60,28 +100,30 @@ const AddToDropdown: React.FunctionComponent<AddToDropdownProps> = (props) => {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="outline"
-            size="sm"
+            variant={buttonVariant}
+            size={buttonSize}
             disabled={disabled}
-            className="font-normal"
+            className={cn("font-normal", buttonVariant === "ghost" && "px-0")}
           >
             Add to
             <ChevronDown className="ml-2 size-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-60">
-          {showAddToDataset && (
-            <DropdownMenuItem
-              onClick={() => {
-                setOpen(1);
-                resetKeyRef.current = resetKeyRef.current + 1;
-              }}
-              disabled={disabled}
-            >
-              <Database className="mr-2 size-4" />
-              Evaluation suite
-            </DropdownMenuItem>
-          )}
+          {showAddToDataset &&
+            DATASET_OPTIONS.map((opt) => (
+              <DropdownMenuItem
+                key={opt.label}
+                onClick={() => {
+                  setOpen(opt.openValue);
+                  resetKeyRef.current = resetKeyRef.current + 1;
+                }}
+                disabled={disabled}
+              >
+                <opt.icon className="mr-2 size-4" />
+                {opt.label}
+              </DropdownMenuItem>
+            ))}
           {showAddToQueue && (
             <DropdownMenuItem
               onClick={() => {

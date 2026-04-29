@@ -33,9 +33,16 @@ def clear_context_storage():
 @pytest.fixture(autouse=True)
 def shutdown_cached_client_after_test():
     yield
-    if opik_client.get_client_cached.cache_info().currsize > 0:
-        opik_client.get_client_cached().end()
-        opik_client.get_client_cached.cache_clear()
+    opik_client.reset_global_client(end_client=False)
+
+
+@pytest.fixture(autouse=True)
+def skip_local_configuration_file(tmp_path):
+    # Point config path to a non-existent file so the global config is never read
+    # We need to do this because there are a lot of tests that compare the logged project name
+    # in saved traces/spans using "Default Project" as value. But the global config
+    # can already have the project name saved, so the comparison will fail.
+    os.environ["OPIK_CONFIG_PATH"] = str(tmp_path / "nonexistent_opik.config")
 
 
 @pytest.fixture
@@ -90,7 +97,10 @@ def patch_streamer(
         yield streamer, fake_message_processor_
     finally:
         if streamer is not None:
-            streamer.close(timeout=5)
+            # Tests that rely on fake_backend already call `opik.flush_tracker()`
+            # (or access `.trace_trees` after the work is done) during the test
+            # body, so the teardown has nothing meaningful left to drain.
+            streamer.close(flush=False)
 
 
 @pytest.fixture
@@ -120,7 +130,7 @@ def patch_streamer_without_batching(
         yield streamer, fake_message_processor_
     finally:
         if streamer is not None:
-            streamer.close(timeout=5)
+            streamer.close(flush=False)
 
 
 @pytest.fixture
@@ -224,6 +234,7 @@ def configure_opik_not_configured():
             "OPIK_URL_OVERRIDE",
             "OPIK_API_KEY",
             "OPIK_WORKSPACE",
+            "OPIK_PROJECT_NAME",
         ],
     ):
         yield

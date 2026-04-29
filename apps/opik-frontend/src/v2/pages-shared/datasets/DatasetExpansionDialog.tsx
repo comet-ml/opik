@@ -44,9 +44,9 @@ import {
   OPIK_ASSERTIONS_FIELD,
 } from "@/constants/datasets";
 
-const DATASET_EXPANSION_PROGRESS_MESSAGES = [
+const getProgressMessages = (entityName: string) => [
   "Initializing AI generation...",
-  "Analyzing evaluation suite patterns...",
+  `Analyzing ${entityName} patterns...`,
   "Generating synthetic samples...",
   "Finalizing generated data...",
 ];
@@ -95,13 +95,20 @@ const DatasetExpansionDialog: React.FunctionComponent<
   const [validationError, setValidationError] = useState<string | null>(null);
   const [showAllFields, setShowAllFields] = useState<boolean>(false);
 
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+  const entityName = isTestSuite ? "test suite" : "dataset";
+
   const { mutate, isPending, error, isError } = useDatasetExpansionMutation();
+  const progressMessages = useMemo(
+    () => getProgressMessages(entityName),
+    [entityName],
+  );
   const {
     progress: generationProgress,
     message: progressMessage,
     complete,
   } = useProgressSimulation({
-    messages: DATASET_EXPANSION_PROGRESS_MESSAGES,
+    messages: progressMessages,
     isPending,
   });
 
@@ -163,8 +170,6 @@ const DatasetExpansionDialog: React.FunctionComponent<
     };
   }, [sampleData?.content]);
 
-  const isEvaluationSuite = datasetType === DATASET_TYPE.EVALUATION_SUITE;
-
   const defaultPrompt = useMemo(() => {
     if (!sampleData?.content?.length) return "";
 
@@ -172,7 +177,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
       .slice(0, 3)
       .map((item) => JSON.stringify(item.data, null, 2));
 
-    let prompt = `You are a synthetic data generator for machine learning evaluation suites. Generate ${sampleCount} new evaluation suite samples that follow the same JSON structure and patterns as the examples provided.\n\nEXAMPLES:\n`;
+    let prompt = `You are a synthetic data generator for machine learning ${entityName}s. Generate ${sampleCount} new ${entityName} samples that follow the same JSON structure and patterns as the examples provided.\n\nEXAMPLES:\n`;
 
     exampleJsons.forEach((example, i) => {
       prompt += `Example ${i + 1}:\n${example}\n\n`;
@@ -190,8 +195,8 @@ const DatasetExpansionDialog: React.FunctionComponent<
       prompt += `- Additional instructions: ${variationInstructions}\n`;
     }
 
-    if (isEvaluationSuite) {
-      prompt += `\nEVALUATION SUITE METADATA:\nFor each generated sample, include these two additional fields in the JSON object:\n- "${OPIK_DESCRIPTION_FIELD}": A brief (1-2 sentence) description of what this specific test case evaluates\n- "${OPIK_ASSERTIONS_FIELD}": An array of 1-3 natural language assertion strings that an LLM judge should verify for this specific item's expected output\n`;
+    if (isTestSuite) {
+      prompt += `\nTEST SUITE METADATA:\nFor each generated sample, include these two additional fields in the JSON object:\n- "${OPIK_DESCRIPTION_FIELD}": A brief (1-2 sentence) description of what this specific test case evaluates\n- "${OPIK_ASSERTIONS_FIELD}": An array of 1-3 natural language assertion strings that an LLM judge should verify for this specific item's expected output\n`;
 
       if (suiteAssertions && suiteAssertions.length > 0) {
         prompt += `\nThe following assertions already apply to ALL items at the suite level. Do NOT duplicate them. Generate complementary, item-specific assertions:\n`;
@@ -208,8 +213,9 @@ const DatasetExpansionDialog: React.FunctionComponent<
     sampleCount,
     preserveFields,
     variationInstructions,
-    isEvaluationSuite,
+    isTestSuite,
     suiteAssertions,
+    entityName,
   ]);
 
   useEffect(() => {
@@ -253,7 +259,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
 
     if (!sampleData?.content?.length) {
       setValidationError(
-        "Evaluation suite analysis is still in progress. Please wait for it to complete.",
+        "Analysis is still in progress. Please wait for it to complete.",
       );
       return false;
     }
@@ -283,7 +289,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
       preserve_fields: preserveFields.length > 0 ? preserveFields : undefined,
       variation_instructions: variationInstructions?.trim() || undefined,
       custom_prompt:
-        hasUserEditedPrompt || isEvaluationSuite ? customPrompt : undefined,
+        hasUserEditedPrompt || isTestSuite ? customPrompt : undefined,
     };
 
     mutate(
@@ -312,7 +318,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
     onSamplesGenerated,
     setOpen,
     hasUserEditedPrompt,
-    isEvaluationSuite,
+    isTestSuite,
     complete,
   ]);
 
@@ -324,7 +330,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
           <p className="comet-body-s my-4 text-muted-foreground">
             This will generate synthetic samples based on your existing data
             patterns. The generated samples will be available for review before
-            adding to your evaluation suite.
+            adding to your {entityName}.
           </p>
         </DialogHeader>
         <DialogAutoScrollBody className="flex flex-col gap-4">
@@ -343,10 +349,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
                 <Spinner size="small" className="text-primary" />
                 <div className="flex-1">
                   <div className="text-sm font-medium text-primary">
-                    Analyzing evaluation suite structure
+                    Analyzing {entityName} structure
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    Analyzing evaluation suite structure and field patterns
+                    Analyzing {entityName} structure and field patterns
                   </div>
                 </div>
               </div>
@@ -370,11 +376,10 @@ const DatasetExpansionDialog: React.FunctionComponent<
             sampleData.content.length === 0 && (
               <Alert variant="callout" size="sm">
                 <AlertTriangle className="size-4" />
-                <AlertTitle>No evaluation suite samples found</AlertTitle>
+                <AlertTitle>No {entityName} samples found</AlertTitle>
                 <AlertDescription>
-                  This evaluation suite appears to be empty. Add some sample
-                  data to your evaluation suite first before trying to expand it
-                  with AI.
+                  This {entityName} appears to be empty. Add some sample data to
+                  your {entityName} first before trying to expand it with AI.
                 </AlertDescription>
               </Alert>
             )}
@@ -406,7 +411,7 @@ const DatasetExpansionDialog: React.FunctionComponent<
                             htmlFor="fields"
                             className="text-sm font-medium"
                           >
-                            Detected evaluation suite structure
+                            Detected {entityName} structure
                           </Label>
                           <TooltipWrapper
                             content="Choose which fields to maintain consistency for"

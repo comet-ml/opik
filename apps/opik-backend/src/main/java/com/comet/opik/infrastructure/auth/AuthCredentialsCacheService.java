@@ -1,5 +1,6 @@
 package com.comet.opik.infrastructure.auth;
 
+import com.comet.opik.api.OpikVersion;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.utils.JsonUtils;
 import lombok.NonNull;
@@ -34,8 +35,14 @@ class AuthCredentialsCacheService implements CacheService {
     private static final String WORKSPACE_ID_KEY = "workspaceId";
     private static final String WORKSPACE_NAME_KEY = "workspaceName";
     private static final String QUOTAS_KEY = "quotas";
-    private static final Set<String> V2_MAP_FIELDS = Set.of(USER_NAME_KEY, WORKSPACE_ID_KEY, WORKSPACE_NAME_KEY,
-            QUOTAS_KEY);
+    private static final String OPIK_VERSION_KEY = "opikVersion";
+
+    private static final Set<String> V2_MAP_FIELDS = Set.of(
+            USER_NAME_KEY,
+            WORKSPACE_ID_KEY,
+            WORKSPACE_NAME_KEY,
+            QUOTAS_KEY,
+            OPIK_VERSION_KEY);
 
     private final @NonNull RedissonReactiveClient redissonClient;
     private final int ttlInSeconds;
@@ -61,6 +68,7 @@ class AuthCredentialsCacheService implements CacheService {
                         .workspaceId(m.get(WORKSPACE_ID_KEY))
                         .workspaceName(m.get(WORKSPACE_NAME_KEY))
                         .quotas(getQuotas(m))
+                        .opikVersion(OpikVersion.findByValue(m.get(OPIK_VERSION_KEY)).orElse(null))
                         .build());
     }
 
@@ -86,18 +94,16 @@ class AuthCredentialsCacheService implements CacheService {
             @NonNull String apiKey,
             @NonNull String requestWorkspaceName,
             List<String> requiredPermissions,
-            @NonNull String userName,
-            @NonNull String workspaceId,
-            String resolvedWorkspaceName,
-            List<Quota> quotas) {
+            @NonNull AuthCredentials credentials) {
         Duration ttl = Duration.ofSeconds(ttlInSeconds);
 
         String v2Key = getV2Key(apiKey, requestWorkspaceName);
         Map<String, String> v2Entry = Map.of(
-                USER_NAME_KEY, userName,
-                WORKSPACE_ID_KEY, workspaceId,
-                WORKSPACE_NAME_KEY, Optional.ofNullable(resolvedWorkspaceName).orElse(requestWorkspaceName),
-                QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(quotas).orElse(List.of())));
+                USER_NAME_KEY, credentials.userName(),
+                WORKSPACE_ID_KEY, credentials.workspaceId(),
+                WORKSPACE_NAME_KEY, Optional.ofNullable(credentials.workspaceName()).orElse(requestWorkspaceName),
+                QUOTAS_KEY, JsonUtils.writeValueAsString(Optional.ofNullable(credentials.quotas()).orElse(List.of())),
+                OPIK_VERSION_KEY, Optional.ofNullable(credentials.opikVersion()).map(OpikVersion::getValue).orElse(""));
 
         RBatchReactive batch = redissonClient.createBatch();
         RMapReactive<String, String> v2Map = batch.getMap(v2Key);
@@ -107,7 +113,7 @@ class AuthCredentialsCacheService implements CacheService {
         if (CollectionUtils.isNotEmpty(requiredPermissions)) {
             for (String permission : requiredPermissions) {
                 String permKey = getV3PermissionKey(apiKey, requestWorkspaceName, permission);
-                batch.getBucket(permKey).set(userName, ttl);
+                batch.getBucket(permKey).set(credentials.userName(), ttl);
             }
         }
 
@@ -126,5 +132,4 @@ class AuthCredentialsCacheService implements CacheService {
         var rawQuotas = Optional.ofNullable(redisMap.get(QUOTAS_KEY)).orElse("[]");
         return JsonUtils.readCollectionValue(rawQuotas, List.class, Quota.class);
     }
-
 }

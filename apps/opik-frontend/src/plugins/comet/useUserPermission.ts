@@ -79,6 +79,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canCreateDatasets = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.DATASET_CREATE),
+    [checkNullablePermission],
+  );
+
   const canEditDatasets = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.DATASET_EDIT),
     [checkNullablePermission],
@@ -136,6 +141,12 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
+  const canEditAnnotationQueues = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.ANNOTATION_QUEUE_EDIT),
+    [checkNullablePermission],
+  );
+
   const canDeleteAnnotationQueues = useMemo(
     () =>
       checkNullablePermission(
@@ -146,6 +157,11 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
 
   const canDeleteTraces = useMemo(
     () => checkNullablePermission(ManagementPermissionsNames.TRACE_DELETE),
+    [checkNullablePermission],
+  );
+
+  const canCreatePrompts = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PROMPT_CREATE),
     [checkNullablePermission],
   );
 
@@ -181,11 +197,6 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     [checkNullablePermission],
   );
 
-  const canWriteComments = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.COMMENT_WRITE),
-    [checkNullablePermission],
-  );
-
   const canUpdateOnlineEvaluationRules = useMemo(
     () =>
       checkNullablePermission(
@@ -200,7 +211,8 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
   );
 
   const canTagTrace = useMemo(
-    () => checkNullablePermission(ManagementPermissionsNames.TRACE_TAG),
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.TRACE_SPAN_THREAD_LOG),
     [checkNullablePermission],
   );
 
@@ -210,6 +222,26 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
         ManagementPermissionsNames.TRACE_SPAN_THREAD_ANNOTATE,
       ),
     [checkNullablePermission],
+  );
+
+  const canUsePlayground = useMemo(
+    () => checkNullablePermission(ManagementPermissionsNames.PLAYGROUND_USE),
+    [checkNullablePermission],
+  );
+
+  const canViewOptimizationRuns = useMemo(
+    () =>
+      checkNullablePermission(ManagementPermissionsNames.OPTIMIZATION_RUN_VIEW),
+    [checkNullablePermission],
+  );
+
+  const canUseOptimizationStudio = useMemo(
+    () =>
+      canViewOptimizationRuns &&
+      checkNullablePermission(
+        ManagementPermissionsNames.OPTIMIZATION_STUDIO_USE,
+      ),
+    [canViewOptimizationRuns, checkNullablePermission],
   );
 
   return {
@@ -222,22 +254,27 @@ const useUserPermission = (config?: { enabled?: boolean }) => {
     canEditDashboards,
     canDeleteDashboards,
     canViewDatasets,
+    canCreateDatasets,
     canEditDatasets,
     canDeleteDatasets,
     canCreateProjects,
     canDeleteProjects,
     canCreateAnnotationQueues,
+    canEditAnnotationQueues,
     canDeleteAnnotationQueues,
     canDeleteTraces,
+    canCreatePrompts,
     canDeletePrompts,
     canDeleteOptimizationRuns,
     canConfigureWorkspaceSettings,
     canUpdateAIProviders,
-    canWriteComments,
     canUpdateOnlineEvaluationRules,
     canUpdateAlerts,
     canAnnotateTraceSpanThread,
     canTagTrace,
+    canUsePlayground,
+    canUseOptimizationStudio,
+    canViewOptimizationRuns,
     isPending: isEnabled && isPending,
   };
 };

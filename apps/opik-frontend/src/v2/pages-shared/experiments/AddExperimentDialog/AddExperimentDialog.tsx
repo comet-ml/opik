@@ -8,14 +8,15 @@ import CodeBlockWithHeader from "@/shared/CodeBlockWithHeader/CodeBlockWithHeade
 import CodeSectionTitle from "@/shared/CodeSectionTitle/CodeSectionTitle";
 import InstallOpikSection from "@/shared/InstallOpikSection/InstallOpikSection";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
-import useDatasetsList from "@/api/datasets/useDatasetsList";
+import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/shared/SideDialog/SideDialog";
 import { SheetTitle } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
+import useProjectById from "@/api/projects/useProjectById";
 import { ExternalLink } from "lucide-react";
 import { Button } from "@/ui/button";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
@@ -89,7 +90,6 @@ const EVALUATOR_MODEL_MAP: Record<EVALUATOR_MODEL, ModelData> = {
 
 interface MetricOption extends DropdownOption<EVALUATOR_MODEL> {
   docLink: string;
-  docHash?: string;
 }
 
 const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
@@ -97,36 +97,37 @@ const HEURISTICS_MODELS_OPTIONS: MetricOption[] = [
     value: EVALUATOR_MODEL.equals,
     label: "Equals",
     description: "Checks if the output exactly matches the text.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#equals",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#equals"),
   },
   {
     value: EVALUATOR_MODEL.regex_match,
     label: "Regex match",
     description: "Verifies pattern conformity using regex.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#regexmatch",
+    docLink: buildDocsUrl(
+      "/evaluation/metrics/heuristic_metrics",
+      "#regexmatch",
+    ),
   },
   {
     value: EVALUATOR_MODEL.contains,
     label: "Contains",
     description: "Identifies presence of a substring.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#contains",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#contains"),
   },
   {
     value: EVALUATOR_MODEL.isJSON,
     label: "isJson",
     description: "Validates JSON format compliance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#isjson",
+    docLink: buildDocsUrl("/evaluation/metrics/heuristic_metrics", "#isjson"),
   },
   {
     value: EVALUATOR_MODEL.levenshtein,
     label: "Levenshtein",
     description: "Calculates text similarity via edit distance.",
-    docLink: "/evaluation/metrics/heuristic_metrics",
-    docHash: "#levenshteinratio",
+    docLink: buildDocsUrl(
+      "/evaluation/metrics/heuristic_metrics",
+      "#levenshteinratio",
+    ),
   },
 ];
 
@@ -135,31 +136,31 @@ const LLM_JUDGES_MODELS_OPTIONS: MetricOption[] = [
     value: EVALUATOR_MODEL.hallucination,
     label: "Hallucination",
     description: "Detects generated false information.",
-    docLink: "/evaluation/metrics/hallucination",
+    docLink: buildDocsUrl("/evaluation/metrics/hallucination"),
   },
   {
     value: EVALUATOR_MODEL.moderation,
     label: "Moderation",
     description: "Checks adherence to content standards.",
-    docLink: "/evaluation/metrics/moderation",
+    docLink: buildDocsUrl("/evaluation/metrics/moderation"),
   },
   {
     value: EVALUATOR_MODEL.answer_relevance,
     label: "Answer relevance",
     description: "Evaluates how well the answer fits the question.",
-    docLink: "/evaluation/metrics/answer_relevance",
+    docLink: buildDocsUrl("/evaluation/metrics/answer_relevance"),
   },
   {
     value: EVALUATOR_MODEL.context_recall,
     label: "Context recall",
     description: "Measures retrieval of relevant context.",
-    docLink: "/evaluation/metrics/context_recall",
+    docLink: buildDocsUrl("/evaluation/metrics/context_recall"),
   },
   {
     value: EVALUATOR_MODEL.context_precision,
     label: "Context precision",
     description: "Checks accuracy of provided context details.",
-    docLink: "/evaluation/metrics/context_precision",
+    docLink: buildDocsUrl("/evaluation/metrics/context_precision"),
   },
 ];
 
@@ -178,11 +179,12 @@ type AddExperimentDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
   datasetName?: string;
+  projectId?: string | null;
 };
 
 const AddExperimentDialog: React.FunctionComponent<
   AddExperimentDialogProps
-> = ({ open, setOpen, datasetName: initialDatasetName = "" }) => {
+> = ({ open, setOpen, datasetName: initialDatasetName = "", projectId }) => {
   const {
     permissions: { canCreateExperiments },
   } = usePermissions();
@@ -190,6 +192,11 @@ const AddExperimentDialog: React.FunctionComponent<
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const apiKey = useUserApiKey();
   const { isPhonePortrait } = useIsPhone();
+  const { data: projectData } = useProjectById(
+    { projectId: projectId! },
+    { enabled: !!projectId },
+  );
+  const projectName = projectData?.name;
 
   const [isLoadedMore, setIsLoadedMore] = useState(false);
   const [datasetName, setDatasetName] = useState(initialDatasetName);
@@ -197,14 +204,15 @@ const AddExperimentDialog: React.FunctionComponent<
     LLM_JUDGES_MODELS_OPTIONS[0].value,
   ]); // Set the first LLM judge model as checked
 
-  const { data, isLoading } = useDatasetsList(
+  const { data, isLoading } = useProjectDatasetsList(
     {
-      workspaceName,
+      projectId: projectId!,
       page: 1,
       size: isLoadedMore ? 10000 : DEFAULT_LOADED_DATASET_ITEMS,
     },
     {
       placeholderData: keepPreviousData,
+      enabled: !!projectId,
     },
   );
 
@@ -214,12 +222,11 @@ const AddExperimentDialog: React.FunctionComponent<
     () => data?.content?.find((d) => d.name === datasetName),
     [data?.content, datasetName],
   );
-  const isEvaluationSuite =
-    selectedDataset?.type === DATASET_TYPE.EVALUATION_SUITE;
+  const isTestSuite = selectedDataset?.type === DATASET_TYPE.TEST_SUITE;
 
-  // When the selected dataset is an evaluation suite, evaluators are defined
+  // When the selected dataset is a test suite, evaluators are defined
   // on the suite itself — skip metrics in the generated code.
-  const effectiveModels = isEvaluationSuite ? [] : models;
+  const effectiveModels = isTestSuite ? [] : models;
 
   const importString =
     effectiveModels.length > 0
@@ -296,7 +303,7 @@ const AddExperimentDialog: React.FunctionComponent<
 
     return result`;
 
-  const suiteName = datasetName || "evaluation suite name placeholder";
+  const suiteName = datasetName || "test suite name placeholder";
   const datasetDisplayName = datasetName || "dataset name placeholder";
 
   const suiteExperimentCode = `import os
@@ -307,11 +314,12 @@ import opik
 # INJECT_OPIK_CONFIGURATION
 
 client = opik.Opik()
-suite = client.get_evaluation_suite(name="${suiteName}")
+suite = client.get_or_create_test_suite(name="${suiteName}")
 
 ${evaluationTaskCode}
 
-result = suite.run(
+result = opik.run_tests(
+  test_suite=suite,
   task=evaluation_task,
   experiment_name="my_evaluation"
 )`;
@@ -326,7 +334,7 @@ from opik.evaluation import evaluate
 
 ${importString}
 client = Opik()
-dataset = client.get_dataset(name="${datasetDisplayName}")
+dataset = client.get_or_create_dataset(name="${datasetDisplayName}")
 
 ${evaluationTaskCode}
 ${metricsString}
@@ -336,7 +344,7 @@ eval_results = evaluate(
   task=evaluation_task${metricsParam}
 )`;
 
-  const experimentCode = isEvaluationSuite
+  const experimentCode = isTestSuite
     ? suiteExperimentCode
     : datasetExperimentCode;
 
@@ -346,12 +354,14 @@ eval_results = evaluate(
     apiKey,
     shouldMaskApiKey: true,
     withHighlight: true,
+    projectName,
   });
   const { code: codeWithConfigToCopy } = putConfigInCode({
     code: experimentCode,
     workspaceName,
     apiKey,
     withHighlight: true,
+    projectName,
   });
 
   const loadMoreHandler = useCallback(() => setIsLoadedMore(true), []);
@@ -410,7 +420,6 @@ eval_results = evaluate(
                     isMinimalLink
                     description={m.description || ""}
                     docLink={m.docLink}
-                    docHash={m.docHash}
                     iconSize="size-3"
                   />
                 </div>
@@ -507,19 +516,19 @@ eval_results = evaluate(
         <div className="pb-8">
           <SheetTitle>Create a new experiment</SheetTitle>
           <div className="comet-body-s mx-auto mt-4 max-w-[468px] text-center text-muted-slate">
-            Select an evaluation suite, assign the relevant evaluators, and
-            follow the instructions to track and compare your training runs
+            Select a test suite, assign the relevant evaluators, and follow the
+            instructions to track and compare your training runs
           </div>
         </div>
         <div className="mx-auto flex w-full flex-col gap-6 md:max-w-[1250px] md:flex-row md:items-start">
-          {!isEvaluationSuite && renderEvaluatorsSection()}
+          {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>
-              <CodeSectionTitle>1. Select evaluation suite</CodeSectionTitle>
+              <CodeSectionTitle>1. Select test suite</CodeSectionTitle>
               <LoadableSelectBox
                 options={options}
                 value={datasetName}
-                placeholder="Select an evaluation suite"
+                placeholder="Select a test suite"
                 onChange={setDatasetName}
                 onLoadMore={
                   total > DEFAULT_LOADED_DATASET_ITEMS && !isLoadedMore

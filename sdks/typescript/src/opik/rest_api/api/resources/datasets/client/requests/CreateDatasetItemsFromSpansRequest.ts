@@ -13,4 +13,7 @@ export interface CreateDatasetItemsFromSpansRequest {
     /** Set of span IDs to add to the dataset */
     spanIds: string[];
     enrichmentOptions: OpikApi.SpanEnrichmentOptions;
+    /** Optional evaluators to apply to the created items */
+    evaluators?: OpikApi.EvaluatorItem[];
+    executionPolicy?: OpikApi.ExecutionPolicy;
 }

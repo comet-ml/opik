@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from "react";
 import { Span, Trace } from "@/types/traces";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import FeedbackScoreTag from "@/shared/FeedbackScoreTag/FeedbackScoreTag";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import {
   DetailsActionSectionLayout,
   DetailsActionSectionValue,

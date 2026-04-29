@@ -27,6 +27,10 @@ export const buildDocsUrl = (path: string = "", hash: string = "") => {
   return `${BASE_DOCUMENTATION_URL}${path}?from=llm${hash}`;
 };
 
+export const buildDocsMarkdownUrl = (path: string = "") => {
+  return `${BASE_DOCUMENTATION_URL}${path}.md`;
+};
+
 export const buildFullBaseUrl = () => {
   return new URL(import.meta.env.VITE_BASE_URL, location.origin).toString();
 };
@@ -306,3 +310,22 @@ export const isLooseEqual = <T>(a: T, b: T): boolean => {
 };
 
 export const generateBatchGroupId = (): string => uuidv4();
+
+export const escapeJsString = (value: string): string => {
+  return value.replace(/["\\\n\r\t]/g, (ch) => {
+    switch (ch) {
+      case "\\":
+        return "\\\\";
+      case '"':
+        return '\\"';
+      case "\n":
+        return "\\n";
+      case "\r":
+        return "\\r";
+      case "\t":
+        return "\\t";
+      default:
+        return ch;
+    }
+  });
+};

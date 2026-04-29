@@ -56,6 +56,109 @@ describe("Dataset Deduplication", () => {
       .mockResolvedValue(undefined);
   });
 
+  it("should not deduplicate items with same data but different evaluators", async () => {
+    const items = [
+      {
+        id: "eval-1",
+        input: "test",
+        evaluators: [
+          { name: "judge-a", type: "llm_judge", config: { model: "gpt-4o" } },
+        ],
+      },
+      {
+        id: "eval-2",
+        input: "test",
+        evaluators: [
+          {
+            name: "judge-b",
+            type: "code_metric",
+            config: { threshold: 0.5 },
+          },
+        ],
+      },
+    ];
+
+    await dataset.insert(items);
+
+    expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(1);
+    const sentItems = createOrUpdateDatasetItemsSpy.mock.calls[0][0].items;
+    expect(sentItems.length).toBe(2);
+  });
+
+  it("should not deduplicate items with same data but different executionPolicy", async () => {
+    const items = [
+      {
+        id: "policy-1",
+        input: "test",
+        executionPolicy: { runsPerItem: 3, passThreshold: 2 },
+      },
+      {
+        id: "policy-2",
+        input: "test",
+        executionPolicy: { runsPerItem: 5, passThreshold: 4 },
+      },
+    ];
+
+    await dataset.insert(items);
+
+    expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(1);
+    const sentItems = createOrUpdateDatasetItemsSpy.mock.calls[0][0].items;
+    expect(sentItems.length).toBe(2);
+  });
+
+  it("should deduplicate items with same data and same evaluators", async () => {
+    const evaluators = [
+      { name: "judge-a", type: "llm_judge", config: { model: "gpt-4o" } },
+    ];
+
+    const items = [
+      { id: "dup-eval-1", input: "test", evaluators },
+      { id: "dup-eval-2", input: "test", evaluators },
+    ];
+
+    await dataset.insert(items);
+
+    expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(1);
+    const sentItems = createOrUpdateDatasetItemsSpy.mock.calls[0][0].items;
+    expect(sentItems.length).toBe(1);
+    expect(sentItems[0].id).toBe("dup-eval-1");
+  });
+
+  it("should deduplicate items with same data and same executionPolicy", async () => {
+    const executionPolicy = { runsPerItem: 3, passThreshold: 2 };
+
+    const items = [
+      { id: "dup-policy-1", input: "test", executionPolicy },
+      { id: "dup-policy-2", input: "test", executionPolicy },
+    ];
+
+    await dataset.insert(items);
+
+    expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(1);
+    const sentItems = createOrUpdateDatasetItemsSpy.mock.calls[0][0].items;
+    expect(sentItems.length).toBe(1);
+    expect(sentItems[0].id).toBe("dup-policy-1");
+  });
+
+  it("should deduplicate items with same data, evaluators, and executionPolicy", async () => {
+    const evaluators = [
+      { name: "judge-a", type: "llm_judge", config: { model: "gpt-4o" } },
+    ];
+    const executionPolicy = { runsPerItem: 3, passThreshold: 2 };
+
+    const items = [
+      { id: "dup-both-1", input: "test", evaluators, executionPolicy },
+      { id: "dup-both-2", input: "test", evaluators, executionPolicy },
+    ];
+
+    await dataset.insert(items);
+
+    expect(createOrUpdateDatasetItemsSpy).toHaveBeenCalledTimes(1);
+    const sentItems = createOrUpdateDatasetItemsSpy.mock.calls[0][0].items;
+    expect(sentItems.length).toBe(1);
+    expect(sentItems[0].id).toBe("dup-both-1");
+  });
+
   it("should deduplicate items before insertion", async () => {
     // Create items with duplicate content
     const item1 = { id: "item1", content: "test content" };

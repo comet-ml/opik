@@ -18,7 +18,6 @@ interface LLMPromptMessagesVariableProps {
   errorText?: string;
   onChange: (changes: DropdownOption<string>) => void;
   projectId: string;
-  projectName?: string;
   datasetColumnNames?: string[];
   type?: TRACE_DATA_TYPE;
   includeIntermediateNodes?: boolean;
@@ -29,7 +28,6 @@ const LLMPromptMessagesVariable = ({
   errorText,
   onChange,
   projectId,
-  projectName,
   datasetColumnNames,
   type = TRACE_DATA_TYPE.traces,
   includeIntermediateNodes = false,
@@ -51,7 +49,6 @@ const LLMPromptMessagesVariable = ({
             onValueChange={(value: string) =>
               onChange({ ...variable, value: value })
             }
-            projectName={projectName}
             datasetColumnNames={datasetColumnNames}
             type={type}
             includeIntermediateNodes={includeIntermediateNodes}

@@ -10,7 +10,6 @@ import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ConflictException;
 import com.comet.opik.api.error.EntityAlreadyExistsException;
-import com.comet.opik.api.events.PromptVersionCreatedEvent;
 import com.comet.opik.api.events.webhooks.AlertEvent;
 import com.comet.opik.api.filter.Filter;
 import com.comet.opik.api.sorting.SortingFactoryPromptVersions;
@@ -50,6 +49,7 @@ import static com.comet.opik.api.Prompt.PromptPage;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
+import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.toMap;
 
 @ImplementedBy(PromptServiceImpl.class)
@@ -158,6 +158,7 @@ class PromptServiceImpl implements PromptService {
                 .userName(userName)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
+                .projectId(newPrompt.projectId())
                 .payload(newPrompt)
                 .build());
 
@@ -336,8 +337,7 @@ class PromptServiceImpl implements PromptService {
                     .build();
 
             var savedPromptVersion = savePromptVersion(workspaceId, promptVersion);
-            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
-                    createPromptVersion.excludeBlueprintUpdateForProjects());
+            postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
             return savedPromptVersion;
         });
@@ -348,8 +348,7 @@ class PromptServiceImpl implements PromptService {
             // only retry if commit is not provided
             return handler.onErrorDo(() -> {
                 var savedPromptVersion = retryableCreateVersion(workspaceId, createPromptVersion, prompt, userName);
-                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName,
-                        createPromptVersion.excludeBlueprintUpdateForProjects());
+                postPromptCommittedEvent(savedPromptVersion, workspaceId, workspaceName, userName, projectId);
 
                 return savedPromptVersion;
             });
@@ -792,33 +791,29 @@ class PromptServiceImpl implements PromptService {
     }
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
-            String userName, Set<UUID> excludeProjectIds) {
+            String userName, UUID projectId) {
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
                 .workspaceName(workspaceName)
                 .userName(userName)
+                .projectId(projectId)
                 .payload(promptVersion)
-                .build());
-
-        eventBus.post(PromptVersionCreatedEvent.builder()
-                .workspaceId(workspaceId)
-                .promptId(promptVersion.promptId())
-                .commit(promptVersion.commit())
-                .userName(userName)
-                .excludeProjectIds(excludeProjectIds)
                 .build());
     }
 
     private void postPromptsDeletedEvent(List<Prompt> prompts, String workspaceId, String workspaceName,
             String userName) {
-        eventBus.post(AlertEvent.builder()
-                .eventType(PROMPT_DELETED)
-                .userName(userName)
-                .workspaceId(workspaceId)
-                .workspaceName(workspaceName)
-                .payload(prompts)
-                .build());
+        prompts.stream()
+                .collect(groupingBy(p -> Optional.ofNullable(p.projectId())))
+                .forEach((projectId, projectPrompts) -> eventBus.post(AlertEvent.builder()
+                        .eventType(PROMPT_DELETED)
+                        .userName(userName)
+                        .workspaceId(workspaceId)
+                        .workspaceName(workspaceName)
+                        .projectId(projectId.orElse(null))
+                        .payload(projectPrompts)
+                        .build()));
     }
 
 }

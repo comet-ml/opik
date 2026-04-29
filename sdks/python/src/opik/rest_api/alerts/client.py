@@ -84,6 +84,7 @@ class AlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -104,6 +105,9 @@ class AlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -127,6 +131,7 @@ class AlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data
@@ -193,6 +198,7 @@ class AlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -215,6 +221,9 @@ class AlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -239,6 +248,7 @@ class AlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data
@@ -283,6 +293,7 @@ class AlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WebhookTestResult:
         """
@@ -303,6 +314,9 @@ class AlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -327,6 +341,7 @@ class AlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data
@@ -401,6 +416,7 @@ class AsyncAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -421,6 +437,9 @@ class AsyncAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -447,6 +466,7 @@ class AsyncAlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data
@@ -519,6 +539,7 @@ class AsyncAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -541,6 +562,9 @@ class AsyncAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -568,6 +592,7 @@ class AsyncAlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data
@@ -615,6 +640,7 @@ class AsyncAlertsClient:
         alert_type: typing.Optional[AlertWriteAlertType] = OMIT,
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         triggers: typing.Optional[typing.Sequence[AlertTriggerWrite]] = OMIT,
+        project_id: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> WebhookTestResult:
         """
@@ -635,6 +661,9 @@ class AsyncAlertsClient:
         metadata : typing.Optional[typing.Dict[str, str]]
 
         triggers : typing.Optional[typing.Sequence[AlertTriggerWrite]]
+
+        project_id : typing.Optional[str]
+            Optional project scope for this alert. When set, the alert is scoped to the specified project. Do NOT also provide a 'scope:project' trigger config — the system will create it automatically from this field. Sending both project_id and a scope:project trigger config will result in an error.
 
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
@@ -662,6 +691,7 @@ class AsyncAlertsClient:
             alert_type=alert_type,
             metadata=metadata,
             triggers=triggers,
+            project_id=project_id,
             request_options=request_options,
         )
         return _response.data

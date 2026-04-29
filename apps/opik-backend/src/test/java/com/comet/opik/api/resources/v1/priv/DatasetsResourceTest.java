@@ -434,6 +434,72 @@ class DatasetsResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
         }
+
+        @Test
+        @DisplayName("Create dataset passes required permissions to auth endpoint")
+        void createDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create dataset returns 403 when permission is denied")
+        void createDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_CREATE.getValue());
+
+            try (var response = datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update dataset passes required permissions to auth endpoint")
+        void updateDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = datasetResourceClient.createDataset(buildDataset(), apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callUpdateDataset(id, factory.manufacturePojo(DatasetUpdate.class), apiKey,
+                    workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_EDIT.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update dataset returns 403 when permission is denied")
+        void updateDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_EDIT.getValue());
+
+            try (var response = datasetResourceClient.callUpdateDataset(UUID.randomUUID(),
+                    factory.manufacturePojo(DatasetUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -1272,16 +1338,11 @@ class DatasetsResourceTest {
             String name = UUID.randomUUID().toString();
 
             var datasetId = createAndAssert(buildDataset().toBuilder()
-                    .id(null)
                     .name(name)
                     .visibility(visibility)
                     .build());
 
-            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class).stream()
-                    .map(item -> item.toBuilder()
-                            .id(null)
-                            .build())
-                    .toList();
+            var items = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
 
             var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
                     .items(items)
@@ -1484,11 +1545,11 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when type is evaluation_suite, then create and return type in response")
-        void create__whenTypeIsEvaluationSuite__thenReturnTypeInResponse() {
+        @DisplayName("when type is test_suite, then create and return type in response")
+        void create__whenTypeIsTestSuite__thenReturnTypeInResponse() {
             var dataset = buildDataset().toBuilder()
                     .id(null)
-                    .type(DatasetType.EVALUATION_SUITE)
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             var id = createAndAssert(dataset);
@@ -1636,6 +1697,56 @@ class DatasetsResourceTest {
                         .ignoringFields(DATASET_IGNORED_FIELDS)
                         .isEqualTo(dataset);
             }
+        }
+
+        @Test
+        @DisplayName("when retrieving dataset by name with items, experiments and optimizations, then return enriched dataset")
+        void getDatasetByIdentifier__whenDatasetHasItemsExperimentsAndOptimizations__thenReturnEnrichedDataset() {
+            var dataset = buildDataset();
+            createAndAssert(dataset);
+
+            // Create dataset items
+            var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class);
+            var batch = DatasetItemBatch.builder().datasetName(dataset.name()).items(datasetItems).build();
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            // Create experiment and its items
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .build();
+            createAndAssert(experiment, API_KEY, TEST_WORKSPACE);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createTrace(trace, API_KEY, TEST_WORKSPACE);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id())
+                    .traceId(trace.id())
+                    .build();
+
+            Instant beforeCreateExperimentItems = Instant.now();
+            createAndAssert(ExperimentItemsBatch.builder()
+                    .experimentItems(Set.of(experimentItem))
+                    .build(), API_KEY, TEST_WORKSPACE);
+
+            // Create optimizations
+            Instant beforeCreateOptimizations = Instant.now();
+            int optimizationCount = 3;
+            for (int i = 0; i < optimizationCount; i++) {
+                var optimization = optimizationResourceClient.createPartialOptimization()
+                        .datasetName(dataset.name())
+                        .build();
+                optimizationResourceClient.create(optimization, API_KEY, TEST_WORKSPACE);
+            }
+
+            var identifier = DatasetIdentifier.builder().datasetName(dataset.name()).build();
+            var actualEntity = datasetResourceClient.getDatasetByIdentifier(identifier, API_KEY, TEST_WORKSPACE);
+
+            assertThat(actualEntity.datasetItemsCount()).isEqualTo(datasetItems.size());
+            assertThat(actualEntity.experimentCount()).isEqualTo(1);
+            assertThat(actualEntity.mostRecentExperimentAt()).isAfter(beforeCreateExperimentItems);
+            assertThat(actualEntity.optimizationCount()).isEqualTo(optimizationCount);
+            assertThat(actualEntity.mostRecentOptimizationAt()).isAfter(beforeCreateOptimizations);
         }
 
         @Test
@@ -3180,7 +3291,7 @@ class DatasetsResourceTest {
         Stream<Arguments> filterByType() {
             return Stream.of(
                     arguments(DatasetType.DATASET, "dataset"),
-                    arguments(DatasetType.EVALUATION_SUITE, "evaluation_suite"));
+                    arguments(DatasetType.TEST_SUITE, "evaluation_suite"));
         }
 
         @Test
@@ -3195,12 +3306,12 @@ class DatasetsResourceTest {
             var regularDataset = buildDataset().toBuilder()
                     .type(DatasetType.DATASET)
                     .build();
-            var evaluationSuite = buildDataset().toBuilder()
-                    .type(DatasetType.EVALUATION_SUITE)
+            var testSuite = buildDataset().toBuilder()
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             createAndAssert(regularDataset, apiKey, workspaceName);
-            createAndAssert(evaluationSuite, apiKey, workspaceName);
+            createAndAssert(testSuite, apiKey, workspaceName);
 
             var actualResponse = client.target(BASE_RESOURCE_URI.formatted(baseURI))
                     .queryParam("size", 100)
@@ -3212,7 +3323,7 @@ class DatasetsResourceTest {
             var actualEntity = actualResponse.readEntity(Dataset.DatasetPage.class);
             assertThat(actualResponse.getStatusInfo().getStatusCode()).isEqualTo(200);
 
-            findAndAssertPage(actualEntity, 2, 2, 1, List.of(evaluationSuite, regularDataset));
+            findAndAssertPage(actualEntity, 2, 2, 1, List.of(testSuite, regularDataset));
         }
 
         @ParameterizedTest
@@ -3229,14 +3340,14 @@ class DatasetsResourceTest {
             var regularDataset = buildDataset().toBuilder()
                     .type(DatasetType.DATASET)
                     .build();
-            var evaluationSuite = buildDataset().toBuilder()
-                    .type(DatasetType.EVALUATION_SUITE)
+            var testSuite = buildDataset().toBuilder()
+                    .type(DatasetType.TEST_SUITE)
                     .build();
 
             createAndAssert(regularDataset, apiKey, workspaceName);
-            createAndAssert(evaluationSuite, apiKey, workspaceName);
+            createAndAssert(testSuite, apiKey, workspaceName);
 
-            var expected = filterType == DatasetType.DATASET ? regularDataset : evaluationSuite;
+            var expected = filterType == DatasetType.DATASET ? regularDataset : testSuite;
 
             var typeFilter = DatasetFilter.builder()
                     .field(DatasetField.TYPE)
@@ -4576,6 +4687,29 @@ class DatasetsResourceTest {
                     TEST_WORKSPACE);
 
             assertThat(actualItems).hasSize(items.size());
+        }
+
+        @Test
+        @DisplayName("when streaming dataset items with non-existing project_name, then return X-Opik-Deprecation header")
+        void streamDataItems__whenNonExistingProjectName__thenReturnDeprecationHeader() {
+            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build()))
+                    .datasetId(null)
+                    .build();
+
+            putAndAssert(batch, TEST_WORKSPACE, API_KEY);
+
+            var streamRequest = DatasetItemStreamRequest.builder()
+                    .datasetName(batch.datasetName())
+                    .projectName("nonexistent-project-" + UUID.randomUUID())
+                    .build();
+
+            try (var response = datasetResourceClient.callStreamDatasetItems(streamRequest, API_KEY, TEST_WORKSPACE)) {
+                assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(200);
+                assertThat(response.getHeaderString(RequestContext.WORKSPACE_FALLBACK_HEADER))
+                        .isEqualTo(RequestContext.WORKSPACE_FALLBACK_MESSAGE_TEMPLATE.formatted("Dataset",
+                                batch.datasetName()));
+            }
         }
     }
 
@@ -6372,6 +6506,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
@@ -6391,6 +6526,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
@@ -6409,6 +6545,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
@@ -6514,8 +6651,16 @@ class DatasetsResourceTest {
                         }
                     }
 
-                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    if (expectedDatasetItem.createdAt() == null) {
+                        assertThat(actualDatasetItem.createdAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                    }
+                    if (expectedDatasetItem.lastUpdatedAt() == null) {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                    } else {
+                        assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                    }
                 }
             }
         }
@@ -6579,6 +6724,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
@@ -6597,6 +6743,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
@@ -6670,8 +6817,16 @@ class DatasetsResourceTest {
                             .isEqualTo(USER);
                 }
 
-                assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
-                assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                if (expectedDatasetItem.createdAt() == null) {
+                    assertThat(actualDatasetItem.createdAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.createdAt()).isAfter(expectedDatasetItem.createdAt());
+                }
+                if (expectedDatasetItem.lastUpdatedAt() == null) {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isNull();
+                } else {
+                    assertThat(actualDatasetItem.lastUpdatedAt()).isAfter(expectedDatasetItem.lastUpdatedAt());
+                }
             }
         }
 
@@ -6773,6 +6928,7 @@ class DatasetsResourceTest {
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatchWithImage.items().get(i).description())
                             .build())
                     .toList();
@@ -7073,6 +7229,7 @@ class DatasetsResourceTest {
                     .traceId(trace.id())
                     .input(trace.input())
                     .output(trace.output())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -7144,6 +7301,7 @@ class DatasetsResourceTest {
                         .input(trace.input())
                         .output(trace.output())
                         .traceVisibilityMode(VisibilityMode.DEFAULT)
+                        .executionPolicy(ExecutionPolicy.DEFAULT)
                         .feedbackScores(score == null
                                 ? null
                                 : Stream.of(score)
@@ -7596,6 +7754,172 @@ class DatasetsResourceTest {
                     Arguments.of("trace_output"),
                     Arguments.of("dataset_item_data"));
         }
+
+        @Test
+        @DisplayName("when test suite is deleted, then experiment items should still be retrievable")
+        void find__whenTestSuiteIsDeleted__thenExperimentItemsShouldStillBeRetrievable() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            // Create test suite
+            var testSuite = buildDataset().toBuilder()
+                    .id(null)
+                    .type(DatasetType.TEST_SUITE)
+                    .build();
+            var datasetId = createAndAssert(testSuite, apiKey, workspaceName);
+
+            // Create trace
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            // Create dataset item linked to that trace
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build()))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var datasetItem = datasetItemBatch.items().getFirst();
+
+            // Create experiment linked to the test suite
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .datasetName(testSuite.name())
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            // Create experiment item
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            // Delete the test suite
+            datasetResourceClient.deleteDatasetItems(DatasetItemsDelete.builder()
+                    .datasetId(datasetId)
+                    .build(), workspaceName, apiKey);
+            datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
+
+            // Since the test suite (and its versions) was deleted, the dataset_items data is gone.
+            // The legacy fallback query returns synthetic items from experiment_items with null dataset item fields.
+            var expectedItem = datasetItem.toBuilder()
+                    .traceId(null)
+                    .spanId(null)
+                    .source(null)
+                    .description(null)
+                    .evaluators(null)
+                    .executionPolicy(null)
+                    .data(Map.of())
+                    .createdAt(null)
+                    .lastUpdatedAt(null)
+                    .build();
+
+            // The experiment item should still reference the original trace
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .feedbackScores(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .usage(null)
+                    .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .description(null)
+                    .build();
+
+            assertPageAndContent(datasetId, List.of(experimentId), apiKey, workspaceName,
+                    List.of(expectedExperimentItem), Set.of(), List.of(expectedItem));
+        }
+
+        @Test
+        @DisplayName("when test suite is deleted and has assertion scores, then experiment items still return with assertionResults")
+        void find__whenTestSuiteDeletedWithAssertionScores__thenReturnAssertionResults() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var testSuite = buildDataset().toBuilder()
+                    .id(null)
+                    .type(DatasetType.TEST_SUITE)
+                    .build();
+            var datasetId = createAndAssert(testSuite, apiKey, workspaceName);
+
+            var trace = factory.manufacturePojo(Trace.class);
+            createAndAssert(trace, workspaceName, apiKey);
+
+            var datasetItemBatch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
+                    .datasetId(datasetId)
+                    .items(List.of(DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build()))
+                    .build();
+            putAndAssert(datasetItemBatch, workspaceName, apiKey);
+
+            var datasetItem = datasetItemBatch.items().getFirst();
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .datasetName(testSuite.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentId = experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+            var experimentItem = factory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experimentId)
+                    .datasetItemId(datasetItem.id())
+                    .traceId(trace.id())
+                    .build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(experimentItem)), apiKey, workspaceName);
+
+            var assertionScore = factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                    .id(trace.id())
+                    .projectName(trace.projectName())
+                    .name("Should be accurate")
+                    .categoryName("suite_assertion")
+                    .value(BigDecimal.ONE)
+                    .reason("Accurate")
+                    .source(ScoreSource.SDK)
+                    .build();
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(assertionScore)).build(), apiKey,
+                    workspaceName);
+
+            datasetResourceClient.deleteDataset(datasetId, apiKey, workspaceName);
+
+            var expectedAssertionResult = AssertionResult.builder()
+                    .value("Should be accurate")
+                    .passed(true)
+                    .reason("Accurate")
+                    .build();
+
+            var expectedExperimentItem = experimentItem.toBuilder()
+                    .input(trace.input())
+                    .output(trace.output())
+                    .feedbackScores(null)
+                    .comments(null)
+                    .totalEstimatedCost(null)
+                    .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
+                            trace.startTime(), trace.endTime()))
+                    .usage(null)
+                    .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
+                    .description(null)
+                    .assertionResults(List.of(expectedAssertionResult))
+                    .status(RunStatus.PASSED)
+                    .build();
+
+            assertPageAndContent(datasetId, List.of(experimentId), apiKey, workspaceName,
+                    List.of(expectedExperimentItem), Set.of(), List.of(datasetItem));
+        }
     }
 
     private Dataset buildDataset() {
@@ -7676,7 +8000,7 @@ class DatasetsResourceTest {
                     workspaceName, apiKey);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7739,7 +8063,7 @@ class DatasetsResourceTest {
                     workspaceName, apiKey);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7797,7 +8121,7 @@ class DatasetsResourceTest {
 
             // Suite experiment
             var suiteExperiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7895,7 +8219,7 @@ class DatasetsResourceTest {
             datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7971,7 +8295,7 @@ class DatasetsResourceTest {
             datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8035,7 +8359,7 @@ class DatasetsResourceTest {
 
             // Suite experiment A
             var experimentA = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8043,7 +8367,7 @@ class DatasetsResourceTest {
 
             // Suite experiment B
             var experimentB = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8108,6 +8432,7 @@ class DatasetsResourceTest {
             assertThat(summaryB.passedRuns()).isEqualTo(0);
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
         }
+
     }
 
     @DisplayName("Find dataset items with experiment items sorting test")

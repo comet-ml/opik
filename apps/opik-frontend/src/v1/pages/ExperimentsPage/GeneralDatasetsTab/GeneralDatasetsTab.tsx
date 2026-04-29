@@ -30,7 +30,7 @@ import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import Loader from "@/shared/Loader/Loader";
 import useAppStore from "@/store/AppStore";
 import { formatDate } from "@/lib/date";
-import { isEvalSuiteExperiment } from "@/lib/experiments";
+import { isTestSuiteExperiment } from "@/lib/experiments";
 import {
   transformExperimentScores,
   getScoreDisplayName,
@@ -73,19 +73,17 @@ import { getIsGroupRow, renderCustomRow } from "@/shared/DataTable/utils";
 import { calculateGroupLabel, isGroupFullyExpanded } from "@/lib/groups";
 import MultiResourceCell from "@/shared/DataTableCells/MultiResourceCell";
 import FeedbackScoreListCell from "@/shared/DataTableCells/FeedbackScoreListCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v1/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v1/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
-import { EXPERIMENT_TYPE } from "@/types/datasets";
-
-const ALL_EXPERIMENT_TYPES = Object.values(EXPERIMENT_TYPE);
+import { usePermissions } from "@/contexts/PermissionsContext";
 const PASS_RATE_LABEL = "Pass rate";
 
 const STORAGE_KEY_PREFIX = "experiments";
@@ -132,6 +130,10 @@ const GeneralDatasetsTab: React.FC = () => {
   const resetDialogKeyRef = useRef(0);
   const [query] = useQueryParam("new", JsonParam);
 
+  const {
+    permissions: { canCreateExperiments },
+  } = usePermissions();
+
   const [openDialog, setOpenDialog] = useState<boolean>(
     Boolean(query?.experiment),
   );
@@ -148,15 +150,7 @@ const GeneralDatasetsTab: React.FC = () => {
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -193,7 +187,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: COLUMN_DATASET_ID,
-        label: "Evaluation suite",
+        label: "Test suite",
         type: COLUMN_TYPE.string,
         cell: ResourceCell as never,
         customMeta: {
@@ -204,7 +198,7 @@ const GeneralDatasetsTab: React.FC = () => {
       },
       {
         id: "dataset_version",
-        label: "Evaluation suite version",
+        label: "Test suite version",
         type: COLUMN_TYPE.string,
         iconType: "version" as const,
         accessorFn: (row: GroupedExperiment) =>
@@ -388,7 +382,6 @@ const GeneralDatasetsTab: React.FC = () => {
       filters,
       sorting: sortedColumns,
       groups,
-      types: ALL_EXPERIMENT_TYPES,
       search: search!,
       page: page!,
       size: size!,
@@ -525,7 +518,7 @@ const GeneralDatasetsTab: React.FC = () => {
           id: datasetId,
           name: [
             {
-              label: "Evaluation suite",
+              label: "Test suite",
               value: datasetExperiments[0]?.dataset_name || "Undefined",
             },
           ],
@@ -566,7 +559,7 @@ const GeneralDatasetsTab: React.FC = () => {
                   label: calculateGroupLabel(groups[index]),
                   value:
                     label === DELETED_ENTITY_LABEL
-                      ? "Deleted evaluation suite"
+                      ? "Deleted test suite"
                       : label || value || "Undefined",
                 };
               }),
@@ -599,7 +592,7 @@ const GeneralDatasetsTab: React.FC = () => {
           scores[s.name] = s.value;
         });
         if (
-          isEvalSuiteExperiment(experiment) &&
+          isTestSuiteExperiment(experiment) &&
           isNumber(experiment.pass_rate)
         ) {
           scores[PASS_RATE_LABEL] = experiment.pass_rate;
@@ -720,14 +713,16 @@ const GeneralDatasetsTab: React.FC = () => {
             onOrderChange={setColumnsOrder}
             sections={columnSections}
           ></ColumnsButton>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleNewExperimentClick}
-          >
-            <Info className="mr-1.5 size-3.5" />
-            Create new experiment
-          </Button>
+          {canCreateExperiments && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNewExperimentClick}
+            >
+              <Info className="mr-1.5 size-3.5" />
+              Create new experiment
+            </Button>
+          )}
         </div>
       </PageBodyStickyContainer>
       <DataTable
@@ -750,7 +745,7 @@ const GeneralDatasetsTab: React.FC = () => {
         columnPinning={columnPinningConfig}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreateExperiments && (
               <Button variant="link" onClick={handleNewExperimentClick}>
                 Create new experiment
               </Button>

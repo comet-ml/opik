@@ -8,7 +8,7 @@ import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/shared/DateTag/DateTag";
 import PromptTab from "@/v2/pages/PromptPage/PromptTab/PromptTab";
 import CommitsTab from "@/v2/pages/PromptPage/CommitsTab/CommitsTab";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import PromptTagsList from "@/v2/pages/PromptPage/PromptTagsList";
 import { Separator } from "@/ui/separator";
@@ -49,7 +49,7 @@ const PromptPage: React.FunctionComponent = () => {
         className="mb-4 mt-6 flex min-h-8 items-center justify-between"
         direction="horizontal"
       >
-        <h1 className="comet-title-l truncate break-words">{promptName}</h1>
+        <h1 className="comet-title-xs truncate break-words">{promptName}</h1>
       </PageBodyStickyContainer>
       {prompt?.description && (
         <PageBodyStickyContainer

@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AssertionResult;
 import com.comet.opik.api.Dataset;
 import com.comet.opik.api.DatasetItem;
 import com.comet.opik.api.DatasetItemBatch;
@@ -10,10 +11,12 @@ import com.comet.opik.api.ExperimentGroupAggregationsResponse;
 import com.comet.opik.api.ExperimentGroupCriteria;
 import com.comet.opik.api.ExperimentGroupResponse;
 import com.comet.opik.api.ExperimentItem;
+import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import com.comet.opik.api.Project;
+import com.comet.opik.api.RunStatus;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -49,6 +52,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,8 +78,10 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.random.RandomGenerator;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -113,7 +119,7 @@ class ExperimentAggregatesIntegrationTest {
             "createdBy", "lastUpdatedBy", "datasetId", "tags", "datasetItemId"};
 
     public static final String[] IGNORED_FIELDS_EXPERIMENT_ITEM = {"createdAt", "lastUpdatedAt", "createdBy",
-            "lastUpdatedBy", "comments", "projectName", "executionPolicy", "assertionResults", "status"};
+            "lastUpdatedBy", "comments", "projectName", "executionPolicy"};
 
     @RegisterApp
     private final TestDropwizardAppExtension APP;
@@ -1310,7 +1316,7 @@ class ExperimentAggregatesIntegrationTest {
                     .usingRecursiveComparison()
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "duration")
-                    .ignoringCollectionOrderInFields("feedbackScores")
+                    .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
                     .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
                     .isEqualTo(expectedExperiments);
         }
@@ -1691,16 +1697,16 @@ class ExperimentAggregatesIntegrationTest {
     }
 
     @Test
-    @DisplayName("Pass rate aggregation reads from assertion_results (not feedback_scores) for evaluation suite experiments")
+    @DisplayName("Pass rate aggregation reads from assertion_results (not feedback_scores) for test suite experiments")
     void passRateAggregationReadsFromAssertionResults() {
         var project = createProject(API_KEY, TEST_WORKSPACE);
         var dataset = createDataset(API_KEY, TEST_WORKSPACE);
 
-        // Create an evaluation_suite experiment
+        // Create an test_suite experiment
         var experiment = experimentResourceClient.createPartialExperiment()
                 .datasetId(dataset.id())
                 .datasetName(dataset.name())
-                .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
                 .build();
         experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
 
@@ -2172,6 +2178,291 @@ class ExperimentAggregatesIntegrationTest {
                 Arguments.of("usage.completion_tokens", com.comet.opik.api.sorting.Direction.DESC),
                 Arguments.of("output.result", com.comet.opik.api.sorting.Direction.ASC),
                 Arguments.of("output.result", com.comet.opik.api.sorting.Direction.DESC));
+    }
+
+    @Test
+    @DisplayName("ExperimentItemDAO has_aggregated branch: assertionResults and status are preserved in stream after aggregation")
+    void assertionResultsArePreservedAfterExperimentItemAggregation() {
+        var project = createProject(API_KEY, TEST_WORKSPACE);
+        var dataset = createDataset(API_KEY, TEST_WORKSPACE);
+
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                .build();
+        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        var experimentItems = createExperimentItemWithData(
+                experiment.id(), dataset.id(), project.name(),
+                feedbackScoreNames, API_KEY, TEST_WORKSPACE);
+
+        var traceId = experimentItems.getFirst().traceId();
+        var assertionScores = List.of(
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-grounded")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ONE)
+                        .reason("Grounded in context")
+                        .source(ScoreSource.SDK)
+                        .build(),
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-concise")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ONE)
+                        .reason("Under 200 words")
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        traceResourceClient.feedbackScores(assertionScores, API_KEY, TEST_WORKSPACE);
+
+        var streamRequest = ExperimentItemStreamRequest.builder()
+                .experimentName(experiment.name())
+                .build();
+
+        // Query BEFORE aggregation (has_raw branch)
+        var beforeItems = experimentResourceClient.streamExperimentItems(streamRequest, API_KEY, TEST_WORKSPACE);
+
+        var expectedAssertionResults = List.of(
+                AssertionResult.builder().value("assertion-grounded").passed(true).reason("Grounded in context")
+                        .build(),
+                AssertionResult.builder().value("assertion-concise").passed(true).reason("Under 200 words").build());
+
+        assertThat(beforeItems).isNotEmpty();
+        var beforeItem = beforeItems.stream()
+                .filter(i -> traceId.equals(i.traceId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(beforeItem.assertionResults())
+                .as("assertionResults must be populated from raw path before aggregation")
+                .containsExactlyInAnyOrderElementsOf(expectedAssertionResults);
+        assertThat(beforeItem.status())
+                .as("status must be PASSED before aggregation (all assertions pass)")
+                .isEqualTo(RunStatus.PASSED);
+
+        // Populate aggregates
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        // Query AFTER aggregation (has_aggregated branch): assertionResults must still be present
+        var afterItems = experimentResourceClient.streamExperimentItems(streamRequest, API_KEY, TEST_WORKSPACE);
+
+        assertThat(afterItems).isNotEmpty();
+        var afterItem = afterItems.stream()
+                .filter(i -> traceId.equals(i.traceId()))
+                .findFirst()
+                .orElseThrow();
+        assertThat(afterItem)
+                .as("experiment item must be identical before and after aggregation")
+                .usingRecursiveComparison()
+                .ignoringFields(IGNORED_FIELDS_EXPERIMENT_ITEM)
+                .ignoringCollectionOrderInFields("feedbackScores", "assertionResults")
+                .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                .isEqualTo(beforeItem);
+    }
+
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: assertionResults in dataset items view are preserved after aggregation")
+    void assertionResultsInDatasetItemsArePreservedAfterAggregation() {
+        var project = createProject(API_KEY, TEST_WORKSPACE);
+        var dataset = createDataset(API_KEY, TEST_WORKSPACE);
+
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                .build();
+        experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        var experimentItems = createExperimentItemWithData(
+                experiment.id(), dataset.id(), project.name(),
+                feedbackScoreNames, API_KEY, TEST_WORKSPACE);
+
+        var traceId = experimentItems.getFirst().traceId();
+        var assertionScores = List.of(
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-grounded")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ONE)
+                        .reason("Grounded in context")
+                        .source(ScoreSource.SDK)
+                        .build(),
+                (FeedbackScoreBatchItem) factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                        .id(traceId)
+                        .projectName(project.name())
+                        .name("assertion-concise")
+                        .categoryName("suite_assertion")
+                        .value(BigDecimal.ZERO)
+                        .reason("Too long")
+                        .source(ScoreSource.SDK)
+                        .build());
+
+        traceResourceClient.feedbackScores(assertionScores, API_KEY, TEST_WORKSPACE);
+
+        var experimentIds = List.of(experiment.id());
+
+        // Query BEFORE aggregation (has_raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, API_KEY, TEST_WORKSPACE);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        // Populate aggregates
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, WORKSPACE_ID))
+                .block();
+
+        // Query AFTER aggregation (has_aggregated branch)
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, API_KEY, TEST_WORKSPACE);
+
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
+    @Test
+    @DisplayName("ExperimentService.delete triggers ExperimentsDeleted event that cleans up aggregates")
+    void deleteExperimentCleansUpAggregatesViaEvent() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        // Query BEFORE aggregation (has_raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Query AFTER aggregation (has_aggregated branch): must match raw
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+
+        experimentService.delete(Set.of(experiment.id()))
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        Awaitility.await()
+                .atMost(10, TimeUnit.SECONDS)
+                .pollInterval(200, TimeUnit.MILLISECONDS)
+                .untilAsserted(() -> {
+                    var aggregatedAfter = experimentAggregatesService
+                            .getExperimentFromAggregates(experiment.id())
+                            .contextWrite(ctx -> ctx
+                                    .put(RequestContext.USER_NAME, USER)
+                                    .put(RequestContext.WORKSPACE_ID, workspaceId))
+                            .block();
+                    assertThat(aggregatedAfter)
+                            .as("Aggregated experiment must be removed by the ExperimentsDeleted event handler")
+                            .isNull();
+
+                    var afterDelete = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                            dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+                    assertThat(afterDelete).isNotNull();
+                    assertThat(afterDelete.content()).isEmpty();
+                });
+    }
+
+    @Test
+    @DisplayName("Deleting some experiment items removes their rows from experiment_item_aggregates via ExperimentItemsDeleted event")
+    void deleteExperimentItemsCleansUpItemAggregatesViaEvent() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(),
+                feedbackScoreNames, apiKey, workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        // BEFORE aggregation (has_raw branch)
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // AFTER aggregation (has_aggregated branch): must match raw
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+
+        // Delete HALF of the experiment items (partial delete), using ids captured from the raw query
+        var allExperimentItems = beforeAggregation.content().stream()
+                .flatMap(datasetItem -> datasetItem.experimentItems().stream())
+                .toList();
+        var deletedItemIds = allExperimentItems.subList(0, allExperimentItems.size() / 2).stream()
+                .map(ExperimentItem::id)
+                .collect(Collectors.toSet());
+
+        experimentResourceClient.deleteExperimentItems(deletedItemIds, apiKey, workspaceName);
+
+        TestUtils.waitForMillis(1000); // Wait for the delete to be processed and the ExperimentItemsDeleted event to be published
+
+        // Expected: beforeAggregation content with the deleted experiment items stripped out
+        var expectedAfterDelete = beforeAggregation.content().stream()
+                .map(datasetItem -> datasetItem.toBuilder()
+                        .experimentItems(datasetItem.experimentItems().stream()
+                                .filter(ei -> !deletedItemIds.contains(ei.id()))
+                                .toList())
+                        .build())
+                .filter(datasetItem -> !datasetItem.experimentItems().isEmpty())
+                .toList();
+
+        // Manually trigger populateAggregations to bypass the publisher's debounce window
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterDelete = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+        assertPageNotEmpty(afterDelete);
+        assertDatasetItemsWithExperimentItems(expectedAfterDelete, afterDelete.content());
     }
 
 }

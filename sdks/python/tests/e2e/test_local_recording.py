@@ -5,7 +5,20 @@ from opik.api_objects import opik_client
 from opik.message_processing.emulation.models import TraceModel, SpanModel
 from opik.message_processing.processors import message_processors_chain
 
+from .. import testlib
 from ..testlib import assert_equal, ANY_BUT_NONE
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _local_recording_default_project():
+    """Override the e2e default-project env patch for this module.
+
+    `record_traces_locally()` captures traces in-process and tests assert
+    against the SDK's hardcoded "Default Project" fallback. The autouse
+    `configure_e2e_tests_env` fixture in conftest.py would otherwise set
+    OPIK_PROJECT_NAME to the per-module backend project."""
+    with testlib.patch_environ({}, remove_keys=["OPIK_PROJECT_NAME"]):
+        yield
 
 
 @opik.track
@@ -44,9 +57,11 @@ def test_records_spans_and_traces__happy_path():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
@@ -60,7 +75,7 @@ def test_prevents_nested_usage():
 
 
 def test_cleanup_and_reuse_after_exit__should_save_new_data():
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
 
     # First run: record and ensure the local processor becomes active
     with opik.record_traces_locally() as storage:
@@ -94,9 +109,11 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])
@@ -135,9 +152,11 @@ def test_cleanup_and_reuse_after_exit__should_save_new_data():
                 end_time=ANY_BUT_NONE,
                 project_name="Default Project",
                 last_updated_at=ANY_BUT_NONE,
+                source="sdk",
             )
         ],
         last_updated_at=ANY_BUT_NONE,
+        source="sdk",
     )
 
     assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees[0])

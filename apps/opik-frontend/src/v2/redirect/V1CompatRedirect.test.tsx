@@ -70,11 +70,11 @@ describe("V1CompatRedirect", () => {
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it("redirects /$ws/evaluation-suites with nested path", () => {
+  it("redirects /$ws/test-suites with nested path", () => {
     mockSplat = "suite-id/items";
-    render(<V1CompatRedirect toPath="/evaluation-suites" />);
+    render(<V1CompatRedirect toPath="/test-suites" />);
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/default/projects/proj-123/evaluation-suites/suite-id/items",
+      to: "/default/projects/proj-123/test-suites/suite-id/items",
       search: {},
       replace: true,
     });

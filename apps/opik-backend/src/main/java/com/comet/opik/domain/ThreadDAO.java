@@ -23,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
+import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -35,10 +36,9 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToMono;
-import static com.comet.opik.infrastructure.DatabaseUtils.bindTraceThreadSearchCriteria;
-import static com.comet.opik.infrastructure.DatabaseUtils.newTraceThreadFindTemplate;
+import static com.comet.opik.infrastructure.FilterUtils.bindTraceThreadSearchCriteria;
+import static com.comet.opik.infrastructure.FilterUtils.getLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.newTraceThreadFindTemplate;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
 import static com.comet.opik.utils.AsyncUtils.makeFluxContextAware;
@@ -74,30 +74,90 @@ class ThreadDAOImpl implements ThreadDAO {
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH traces_final AS (
+            WITH <if(traces_final_ids)>traces_final_ids AS (
+                SELECT DISTINCT id, thread_id
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND thread_id \\<> ''
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                )
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>traces_final AS (
                 SELECT
-                    *,
+                    id,
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    start_time,
+                    end_time,
+                    input,
+                    output,
                     truncated_input,
                     truncated_output,
                     input_length,
-                    output_length
-                FROM traces final
+                    output_length,
+                    truncation_threshold,
+                    last_updated_at,
+                    last_updated_by,
+                    created_by,
+                    created_at
+                FROM (
+                    SELECT
+                        *,
+                        truncated_input,
+                        truncated_output,
+                        input_length,
+                        output_length
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND thread_id \\<> ''
+                      <if(traces_final_ids)>
+                          AND id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                          <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
+            ), spans_deduped AS (
+                SELECT
+                    workspace_id,
+                    project_id,
+                    trace_id,
+                    parent_span_id,
+                    id,
+                    last_updated_at,
+                    usage,
+                    total_estimated_cost,
+                    provider
+                FROM spans
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND thread_id \\<> ''
-                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                  <if(search_text)> AND <search_text> <endif>
+                  <if(traces_final_ids)>
+                      AND trace_id IN (SELECT id FROM traces_final_ids)
+                  <else>
+                      <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                      <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                  <endif>
+                ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
                     sumMap(usage) as usage,
                     sum(total_estimated_cost) as total_estimated_cost,
                     arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                FROM spans_deduped
                 GROUP BY workspace_id, project_id, trace_id
             ), trace_threads_final AS (
                 SELECT
@@ -111,97 +171,73 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at
-                FROM trace_threads final
+                FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                    <if(traces_final_ids)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <endif>
                 <endif>
-            ), feedback_scores_combined_raw AS (
+                <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_deduped AS (
+                SELECT *
+                FROM (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id IN :project_id
+                      AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id IN :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+            ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_by,
-                    last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                  AND workspace_id = :workspace_id
-                  AND project_id IN :project_id
-                  AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_by,
-                    last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id IN :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        *,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                     project_id,
-                     entity_id,
-                     name,
-                     category_name,
-                     value,
-                     reason,
-                     source,
-                     created_by,
-                     last_updated_by,
-                     created_at,
-                     last_updated_at,
-                     author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
-             ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values,
-                    groupArray(reason) AS reasons,
-                    groupArray(category_name) AS categories,
-                    groupArray(author) AS authors,
-                    groupArray(source) AS sources,
-                    groupArray(created_by) AS created_bies,
-                    groupArray(last_updated_by) AS updated_bies,
-                    groupArray(created_at) AS created_ats,
-                    groupArray(last_updated_at) AS last_updated_ats
-                FROM feedback_scores_combined
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
                 SELECT
@@ -209,22 +245,19 @@ class ThreadDAOImpl implements ThreadDAO {
                     project_id,
                     entity_id,
                     name,
-                    arrayStringConcat(categories, ', ') AS category_name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
-                    arrayElement(sources, 1) AS source,
+                    arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                    IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
+                    entries[1].4 AS source,
                     mapFromArrays(
-                        authors,
-                        arrayMap(
-                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                            arrayEnumerate(values)
-                        )
+                        arrayMap(e -> e.5, entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
                     ) AS value_by_author,
-                    arrayStringConcat(created_bies, ', ') AS created_by,
-                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                    arrayMin(created_ats) AS created_at,
-                    arrayMax(last_updated_ats) AS last_updated_at
-                FROM feedback_scores_combined_grouped
+                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                    arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
+                    arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
+                FROM feedback_scores_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -261,11 +294,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     entity_id,
                     workspace_id,
                     project_id
-                FROM comments final
+                FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
             ), thread_annotation_queue_ids AS (
@@ -389,6 +423,7 @@ class ThreadDAOImpl implements ThreadDAO {
             <if(sort_fields)> ORDER BY <sort_fields>, last_updated_at DESC <else> ORDER BY last_updated_at DESC, start_time ASC, end_time DESC <endif>
             <endif>
             LIMIT :limit <if(offset)>OFFSET :offset<endif>
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -398,27 +433,51 @@ class ThreadDAOImpl implements ThreadDAO {
      * Please refer to the SELECT_TRACES_THREAD_BY_ID query for more details.
      ***/
     private static final String SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS = """
-            WITH traces_final AS (
+            WITH <if(traces_final_ids)>traces_final_ids AS (
+                SELECT DISTINCT id, thread_id
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                    AND project_id = :project_id
+                    AND thread_id \\<> ''
+                    <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                    <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                )
+                WHERE 1 = 1
+                <if(filters)> AND <filters> <endif>
+                <if(search_text)> AND <search_text> <endif>
+            ), <endif>traces_final AS (
                 SELECT
-                    *
-                FROM traces final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND thread_id \\<> ''
-                  <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
-                  <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
-                  <if(search_text)> AND <search_text> <endif>
-            ), spans_agg AS (
-                SELECT
-                    trace_id,
-                    sumMap(usage) as usage,
-                    sum(total_estimated_cost) as total_estimated_cost,
-                    arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                FROM spans final
-                WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
-                GROUP BY workspace_id, project_id, trace_id
+                    id,
+                    workspace_id,
+                    project_id,
+                    thread_id,
+                    start_time,
+                    end_time,
+                    input,
+                    output,
+                    last_updated_at,
+                    last_updated_by,
+                    created_by,
+                    created_at
+                FROM (
+                    SELECT *
+                    FROM traces
+                    WHERE workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND thread_id \\<> ''
+                      <if(traces_final_ids)>
+                          AND id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                          <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                          <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                )
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -431,97 +490,74 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at
-                FROM trace_threads final
+                FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 <if(uuid_from_time)>
                     AND id >= :uuid_from_time
                     <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
                 <else>
-                AND thread_id IN (SELECT thread_id FROM traces_final)
+                    <if(traces_final_ids)>
+                        AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                    <endif>
                 <endif>
-            ), feedback_scores_combined_raw AS (
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            <if(feedback_scores_needed)>
+            , feedback_scores_deduped AS (
+                SELECT *
+                FROM (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+            ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_by,
-                    last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                UNION ALL
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_by,
-                    last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        *,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                     project_id,
-                     entity_id,
-                     name,
-                     category_name,
-                     value,
-                     reason,
-                     source,
-                     created_by,
-                     last_updated_by,
-                     created_at,
-                     last_updated_at,
-                     author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
-             ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values,
-                    groupArray(reason) AS reasons,
-                    groupArray(category_name) AS categories,
-                    groupArray(author) AS authors,
-                    groupArray(source) AS sources,
-                    groupArray(created_by) AS created_bies,
-                    groupArray(last_updated_by) AS updated_bies,
-                    groupArray(created_at) AS created_ats,
-                    groupArray(last_updated_at) AS last_updated_ats
-                FROM feedback_scores_combined
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
                 SELECT
@@ -529,44 +565,23 @@ class ThreadDAOImpl implements ThreadDAO {
                     project_id,
                     entity_id,
                     name,
-                    arrayStringConcat(categories, ', ') AS category_name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
-                    arrayElement(sources, 1) AS source,
+                    arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                    IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
+                    entries[1].4 AS source,
                     mapFromArrays(
-                        authors,
-                        arrayMap(
-                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                            arrayEnumerate(values)
-                        )
+                        arrayMap(e -> e.5, entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
                     ) AS value_by_author,
-                    arrayStringConcat(created_bies, ', ') AS created_by,
-                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                    arrayMin(created_ats) AS created_at,
-                    arrayMax(last_updated_ats) AS last_updated_at
-                FROM feedback_scores_combined_grouped
-            ), feedback_scores_agg AS (
-                SELECT
-                    entity_id,
-                    mapFromArrays(
-                            groupArray(name),
-                            groupArray(value)
-                    ) AS feedback_scores,
-                    groupArray(tuple(
-                        name,
-                        category_name,
-                        value,
-                        reason,
-                        source,
-                        value_by_author,
-                        created_at,
-                        last_updated_at,
-                        created_by,
-                        last_updated_by
-                    )) AS feedback_scores_list
-                FROM feedback_scores_final
-                GROUP BY workspace_id, project_id, entity_id
-            ), thread_annotation_queue_ids AS (
+                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                    arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
+                    arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
+                FROM feedback_scores_grouped
+            )
+            <endif>
+            <if(annotation_queue_filters)>
+            , thread_annotation_queue_ids AS (
                  SELECT thread_id,
                         groupArray(id) AS annotation_queue_ids
                  FROM (
@@ -581,6 +596,7 @@ class ThreadDAOImpl implements ThreadDAO {
                  ) AS annotation_queue_ids_with_thread_id
                  GROUP BY thread_id
             )
+            <endif>
             <if(feedback_scores_empty_filters)>
              , fsc AS (SELECT entity_id, COUNT(entity_id) AS feedback_scores_count
                  FROM (
@@ -606,17 +622,13 @@ class ThreadDAOImpl implements ThreadDAO {
                     t.first_message as first_message,
                     t.last_message as last_message,
                     t.number_of_messages as number_of_messages,
-                    t.total_estimated_cost as total_estimated_cost,
-                    t.usage as usage,
                     if(tt.created_by = '', t.created_by, tt.created_by) as created_by,
                     if(tt.last_updated_by = '', t.last_updated_by, tt.last_updated_by) as last_updated_by,
                     if(tt.last_updated_at == toDateTime64(0, 6, 'UTC'), t.last_updated_at, tt.last_updated_at) as last_updated_at,
                     if(tt.created_at = toDateTime64(0, 9, 'UTC'), t.created_at, tt.created_at) as created_at,
                     if(tt.status = 'unknown', 'active', tt.status) as status,
                     if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
-                    tt.tags as tags,
-                    fsagg.feedback_scores_list as feedback_scores_list,
-                    fsagg.feedback_scores as feedback_scores
+                    tt.tags as tags
                 FROM (
                     SELECT
                         t.thread_id as id,
@@ -631,21 +643,17 @@ class ThreadDAOImpl implements ThreadDAO {
                         argMin(t.input, t.start_time) as first_message,
                         argMax(t.output, t.end_time) as last_message,
                         count(DISTINCT t.id) * 2 as number_of_messages,
-                        sum(s.total_estimated_cost) as total_estimated_cost,
-                        sumMap(s.usage) as usage,
                         max(t.last_updated_at) as last_updated_at,
                         argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                         argMin(t.created_by, t.created_at) as created_by,
                         min(t.created_at) as created_at
                     FROM traces_final AS t
-                        LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                     GROUP BY
                         t.workspace_id, t.project_id, t.thread_id
                 ) AS t
                 <if(uuid_from_time)>INNER<else>LEFT<endif> JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id
                     AND t.project_id = tt.project_id
                     AND t.id = tt.thread_id
-                LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
                 <if(annotation_queue_filters)>
                 LEFT JOIN thread_annotation_queue_ids as ttaqi ON ttaqi.thread_id = tt.thread_model_id
                 <endif>
@@ -674,6 +682,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(trace_thread_filters)>AND<trace_thread_filters><endif>
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS t
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     /***
@@ -689,7 +698,14 @@ class ThreadDAOImpl implements ThreadDAO {
      *  - The creation time of the thread, which is the created_at of the first trace in the list.
      ***/
     private static final String SELECT_TRACES_THREAD_BY_ID = """
-            WITH traces_final AS (
+            WITH traces_ids AS (
+                SELECT
+                    id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id = :thread_id
+            ), traces_final AS (
                 SELECT
                     *,
                     truncated_input,
@@ -697,10 +713,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     input_length,
                     output_length,
                     truncation_threshold
-                FROM traces final
+                FROM traces
                 WHERE workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND thread_id = :thread_id
+                AND project_id = :project_id
+                AND id IN (SELECT id FROM traces_ids)
+                ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
             ), spans_agg AS (
                 SELECT
                     trace_id,
@@ -710,8 +728,15 @@ class ThreadDAOImpl implements ThreadDAO {
                 FROM spans final
                 WHERE workspace_id = :workspace_id
                   AND project_id = :project_id
-                  AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                  AND trace_id IN (SELECT DISTINCT id FROM traces_ids)
                 GROUP BY workspace_id, project_id, trace_id
+            ), trace_threads_ids AS (
+                SELECT
+                    id as thread_model_id
+                FROM trace_threads
+                WHERE workspace_id = :workspace_id
+                AND project_id = :project_id
+                AND thread_id = :thread_id
             ), trace_threads_final AS (
                 SELECT
                     workspace_id,
@@ -724,91 +749,64 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_by,
                     created_at,
                     last_updated_at
-                FROM trace_threads final
+                FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
                 AND thread_id = :thread_id
-            ), feedback_scores_combined_raw AS (
-                SELECT workspace_id,
-                       project_id,
-                       entity_id,
-                       name,
-                       category_name,
-                       value,
-                       reason,
-                       source,
-                       created_by,
-                       last_updated_by,
-                       created_at,
-                       last_updated_at,
-                       feedback_scores.last_updated_by AS author
-                FROM feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                  AND workspace_id = :workspace_id
-                  AND project_id = :project_id
-                  AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                UNION ALL
+                ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            ), feedback_scores_deduped AS (
+                SELECT *
+                FROM (
+                    SELECT workspace_id,
+                           project_id,
+                           entity_id,
+                           name,
+                           category_name,
+                           value,
+                           reason,
+                           source,
+                           created_by,
+                           last_updated_by,
+                           created_at,
+                           last_updated_at,
+                           feedback_scores.last_updated_by AS author
+                    FROM feedback_scores
+                    WHERE entity_type = 'thread'
+                      AND workspace_id = :workspace_id
+                      AND project_id = :project_id
+                      AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
+                    UNION ALL
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        entity_id,
+                        name,
+                        category_name,
+                        value,
+                        reason,
+                        source,
+                        created_by,
+                        last_updated_by,
+                        created_at,
+                        last_updated_at,
+                        author
+                    FROM authored_feedback_scores
+                    WHERE entity_type = 'thread'
+                       AND workspace_id = :workspace_id
+                       AND project_id = :project_id
+                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
+                )
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+            ), feedback_scores_grouped AS (
                 SELECT
                     workspace_id,
                     project_id,
                     entity_id,
                     name,
-                    category_name,
-                    value,
-                    reason,
-                    source,
-                    created_by,
-                    last_updated_by,
-                    created_at,
-                    last_updated_at,
-                    author
-                FROM authored_feedback_scores FINAL
-                WHERE entity_type = 'thread'
-                   AND workspace_id = :workspace_id
-                   AND project_id = :project_id
-                   AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-             ),
-             feedback_scores_with_ranking AS (
-                 SELECT workspace_id,
-                        *,
-                        ROW_NUMBER() OVER (
-                            PARTITION BY workspace_id, project_id, entity_id, name, author
-                            ORDER BY last_updated_at DESC
-                        ) as rn
-                 FROM feedback_scores_combined_raw
-             ),
-             feedback_scores_combined AS (
-                 SELECT workspace_id,
-                     project_id,
-                     entity_id,
-                     name,
-                     category_name,
-                     value,
-                     reason,
-                     source,
-                     created_by,
-                     last_updated_by,
-                     created_at,
-                     last_updated_at,
-                     author
-                 FROM feedback_scores_with_ranking
-                 WHERE rn = 1
-             ), feedback_scores_combined_grouped AS (
-                SELECT
-                    workspace_id,
-                    project_id,
-                    entity_id,
-                    name,
-                    groupArray(value) AS values,
-                    groupArray(reason) AS reasons,
-                    groupArray(category_name) AS categories,
-                    groupArray(author) AS authors,
-                    groupArray(source) AS sources,
-                    groupArray(created_by) AS created_bies,
-                    groupArray(last_updated_by) AS updated_bies,
-                    groupArray(created_at) AS created_ats,
-                    groupArray(last_updated_at) AS last_updated_ats
-                FROM feedback_scores_combined
+                    groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                FROM feedback_scores_deduped
                 GROUP BY workspace_id, project_id, entity_id, name
             ), feedback_scores_final AS (
                 SELECT
@@ -816,22 +814,19 @@ class ThreadDAOImpl implements ThreadDAO {
                     project_id,
                     entity_id,
                     name,
-                    arrayStringConcat(categories, ', ') AS category_name,
-                    IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                    IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
-                    arrayElement(sources, 1) AS source,
+                    arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                    IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                    IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
+                    entries[1].4 AS source,
                     mapFromArrays(
-                        authors,
-                        arrayMap(
-                            i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                            arrayEnumerate(values)
-                        )
+                        arrayMap(e -> e.5, entries),
+                        arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
                     ) AS value_by_author,
-                    arrayStringConcat(created_bies, ', ') AS created_by,
-                    arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                    arrayMin(created_ats) AS created_at,
-                    arrayMax(last_updated_ats) AS last_updated_at
-                 FROM feedback_scores_combined_grouped
+                    arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                    arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                    arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
+                    arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
+                FROM feedback_scores_grouped
             ), feedback_scores_agg AS (
                 SELECT
                     entity_id,
@@ -868,11 +863,12 @@ class ThreadDAOImpl implements ThreadDAO {
                     entity_id,
                     workspace_id,
                     project_id
-                FROM comments final
+                FROM comments
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
-                AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                AND entity_id IN (SELECT thread_model_id FROM trace_threads_ids)
                 ORDER BY (workspace_id, project_id, entity_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
               )
               GROUP BY workspace_id, project_id, entity_id
             )
@@ -933,6 +929,7 @@ class ThreadDAOImpl implements ThreadDAO {
             LEFT JOIN trace_threads_final AS tt ON t.workspace_id = tt.workspace_id AND t.project_id = tt.project_id AND t.thread_id = tt.thread_id
             LEFT JOIN feedback_scores_agg fsagg ON fsagg.entity_id = tt.thread_model_id
             LEFT JOIN comments_final c ON c.entity_id = tt.thread_model_id
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     /***
@@ -971,26 +968,80 @@ class ThreadDAOImpl implements ThreadDAO {
                 toInt64(0) AS guardrails_failed_count,
                 toInt64(0) AS error_count
             FROM (
-                WITH traces_final AS (
+                WITH <if(traces_final_ids)>traces_final_ids AS (
+                    SELECT DISTINCT id, thread_id
+                    FROM (
+                        SELECT *
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                        AND project_id = :project_id
+                        AND thread_id \\<> ''
+                        <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                        <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                        <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    )
+                    WHERE 1 = 1
+                    <if(filters)> AND <filters> <endif>
+                    <if(search_text)> AND <search_text> <endif>
+                ), <endif>traces_final AS (
                     SELECT
-                        *
-                    FROM traces final
+                        id,
+                        workspace_id,
+                        project_id,
+                        thread_id,
+                        start_time,
+                        end_time,
+                        input,
+                        output,
+                        last_updated_at,
+                        last_updated_by,
+                        created_by,
+                        created_at
+                    FROM (
+                        SELECT *
+                        FROM traces
+                        WHERE workspace_id = :workspace_id
+                          AND project_id = :project_id
+                          AND thread_id \\<> ''
+                          <if(traces_final_ids)>
+                              AND id IN (SELECT id FROM traces_final_ids)
+                          <else>
+                              <if(uuid_from_time)> AND id >= :uuid_from_time <endif>
+                              <if(uuid_to_time)> AND id \\<= :uuid_to_time <endif>
+                              <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                          <endif>
+                        ORDER BY (workspace_id, project_id, id) DESC, last_updated_at DESC
+                        LIMIT 1 BY id
+                    )
+                ), spans_deduped AS (
+                    SELECT
+                        workspace_id,
+                        project_id,
+                        trace_id,
+                        parent_span_id,
+                        id,
+                        last_updated_at,
+                        usage,
+                        total_estimated_cost,
+                        provider
+                    FROM spans
                     WHERE workspace_id = :workspace_id
                       AND project_id = :project_id
-                      AND thread_id \\<> ''
-                    <if(search_text)> AND <search_text> <endif>
-                    <if(uuid_from_time)>AND id >= :uuid_from_time<endif>
-                    <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                      <if(traces_final_ids)>
+                          AND trace_id IN (SELECT id FROM traces_final_ids)
+                      <else>
+                          <if(uuid_from_time)> AND trace_id >= :uuid_from_time <endif>
+                          <if(uuid_to_time)> AND trace_id \\<= :uuid_to_time <endif>
+                      <endif>
+                    ORDER BY (workspace_id, project_id, trace_id, parent_span_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
                 ), spans_agg AS (
                     SELECT
                         trace_id,
                         sumMap(usage) as usage,
                         sum(total_estimated_cost) as total_estimated_cost,
                         arraySort(groupUniqArrayIf(provider, provider != '')) as providers
-                    FROM spans final
-                    WHERE workspace_id = :workspace_id
-                      AND project_id = :project_id
-                      AND trace_id IN (SELECT DISTINCT id FROM traces_final)
+                    FROM spans_deduped
                     GROUP BY workspace_id, project_id, trace_id
                 ), trace_threads_final AS (
                     SELECT
@@ -1004,92 +1055,73 @@ class ThreadDAOImpl implements ThreadDAO {
                         last_updated_by,
                         created_at,
                         last_updated_at
-                    FROM trace_threads final
+                    FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND thread_id IN (SELECT thread_id FROM traces_final)
-                ), feedback_scores_combined_raw AS (
+                    <if(uuid_from_time)>
+                        AND id >= :uuid_from_time
+                        <if(uuid_to_time)>AND id \\<= :uuid_to_time<endif>
+                    <else>
+                        <if(traces_final_ids)>
+                            AND thread_id IN (SELECT thread_id FROM traces_final_ids)
+                        <endif>
+                    <endif>
+                    <if(traces_pushdown_filter)> AND thread_id = :thread_id_pushdown <endif>
+                    ORDER BY (workspace_id, project_id, thread_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY id
+                ), feedback_scores_deduped AS (
+                    SELECT *
+                    FROM (
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            category_name,
+                            value,
+                            reason,
+                            source,
+                            created_by,
+                            last_updated_by,
+                            created_at,
+                            last_updated_at,
+                            feedback_scores.last_updated_by AS author
+                        FROM feedback_scores
+                        WHERE entity_type = 'thread'
+                          AND workspace_id = :workspace_id
+                          AND project_id IN :project_id
+                          AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                        UNION ALL
+                        SELECT
+                            workspace_id,
+                            project_id,
+                            entity_id,
+                            name,
+                            category_name,
+                            value,
+                            reason,
+                            source,
+                            created_by,
+                            last_updated_by,
+                            created_at,
+                            last_updated_at,
+                            author
+                        FROM authored_feedback_scores
+                        WHERE entity_type = 'thread'
+                           AND workspace_id = :workspace_id
+                           AND project_id IN :project_id
+                           AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
+                    )
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, project_id, entity_id, name, author
+                ), feedback_scores_grouped AS (
                     SELECT
                         workspace_id,
                         project_id,
                         entity_id,
                         name,
-                        category_name,
-                        value,
-                        reason,
-                        source,
-                        created_by,
-                        last_updated_by,
-                        created_at,
-                        last_updated_at,
-                        feedback_scores.last_updated_by AS author
-                    FROM feedback_scores FINAL
-                    WHERE entity_type = 'thread'
-                      AND workspace_id = :workspace_id
-                      AND project_id IN :project_id
-                      AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                    UNION ALL
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        category_name,
-                        value,
-                        reason,
-                        source,
-                        created_by,
-                        last_updated_by,
-                        created_at,
-                        last_updated_at,
-                        author
-                    FROM authored_feedback_scores FINAL
-                    WHERE entity_type = 'thread'
-                       AND workspace_id = :workspace_id
-                       AND project_id IN :project_id
-                       AND entity_id IN (SELECT thread_model_id FROM trace_threads_final)
-                 ),
-                 feedback_scores_with_ranking AS (
-                     SELECT workspace_id,
-                            *,
-                            ROW_NUMBER() OVER (
-                                PARTITION BY workspace_id, project_id, entity_id, name, author
-                                ORDER BY last_updated_at DESC
-                            ) as rn
-                     FROM feedback_scores_combined_raw
-                 ),
-                 feedback_scores_combined AS (
-                     SELECT workspace_id,
-                         project_id,
-                         entity_id,
-                         name,
-                         category_name,
-                         value,
-                         reason,
-                         source,
-                         created_by,
-                         last_updated_by,
-                         created_at,
-                         last_updated_at,
-                         author
-                     FROM feedback_scores_with_ranking
-                     WHERE rn = 1
-                 ), feedback_scores_combined_grouped AS (
-                    SELECT
-                        workspace_id,
-                        project_id,
-                        entity_id,
-                        name,
-                        groupArray(value) AS values,
-                        groupArray(reason) AS reasons,
-                        groupArray(category_name) AS categories,
-                        groupArray(author) AS authors,
-                        groupArray(source) AS sources,
-                        groupArray(created_by) AS created_bies,
-                        groupArray(last_updated_by) AS updated_bies,
-                        groupArray(created_at) AS created_ats,
-                        groupArray(last_updated_at) AS last_updated_ats
-                    FROM feedback_scores_combined
+                        groupArray(tuple(value, reason, category_name, source, author, created_by, last_updated_by, created_at, last_updated_at)) AS entries
+                    FROM feedback_scores_deduped
                     GROUP BY workspace_id, project_id, entity_id, name
                 ), feedback_scores_final AS (
                     SELECT
@@ -1097,22 +1129,19 @@ class ThreadDAOImpl implements ThreadDAO {
                         project_id,
                         entity_id,
                         name,
-                        arrayStringConcat(categories, ', ') AS category_name,
-                        IF(length(values) = 1, arrayElement(values, 1), toDecimal64(arrayAvg(values), 9)) AS value,
-                        IF(length(reasons) = 1, arrayElement(reasons, 1), arrayStringConcat(arrayMap(x -> if(x = '', '\\<no reason>', x), reasons), ', ')) AS reason,
-                        arrayElement(sources, 1) AS source,
+                        arrayStringConcat(arrayMap(e -> e.3, entries), ', ') AS category_name,
+                        IF(length(entries) = 1, entries[1].1, toDecimal64(arrayAvg(arrayMap(e -> e.1, entries)), 9)) AS value,
+                        IF(length(entries) = 1, entries[1].2, arrayStringConcat(arrayMap(e -> if(e.2 = '', '\\<no reason>', e.2), entries), ', ')) AS reason,
+                        entries[1].4 AS source,
                         mapFromArrays(
-                            authors,
-                            arrayMap(
-                                i -> tuple(values[i], reasons[i], categories[i], sources[i], last_updated_ats[i]),
-                                arrayEnumerate(values)
-                            )
+                            arrayMap(e -> e.5, entries),
+                            arrayMap(e -> tuple(e.1, e.2, e.3, e.4, e.9), entries)
                         ) AS value_by_author,
-                        arrayStringConcat(created_bies, ', ') AS created_by,
-                        arrayStringConcat(updated_bies, ', ') AS last_updated_by,
-                        arrayMin(created_ats) AS created_at,
-                        arrayMax(last_updated_ats) AS last_updated_at
-                     FROM feedback_scores_combined_grouped
+                        arrayStringConcat(arrayMap(e -> e.6, entries), ', ') AS created_by,
+                        arrayStringConcat(arrayMap(e -> e.7, entries), ', ') AS last_updated_by,
+                        arrayMin(arrayMap(e -> e.8, entries)) AS created_at,
+                        arrayMax(arrayMap(e -> e.9, entries)) AS last_updated_at
+                    FROM feedback_scores_grouped
                 ), feedback_scores_agg AS (
                     SELECT
                         entity_id,
@@ -1227,6 +1256,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 <if(annotation_queue_filters)> AND <annotation_queue_filters> <endif>
             ) AS threads
             GROUP BY threads.workspace_id, threads.project_id
+            SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
@@ -1234,69 +1264,93 @@ class ThreadDAOImpl implements ThreadDAO {
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull TraceThreadSortingFactory traceThreadSortingFactory;
 
+    /**
+     * Determines whether to activate the traces_final_ids CTE for narrowing the raw traces / spans scans
+     * in the thread list and count queries. Mirrors {@code TraceDAO#shouldUseTraceIdPrefilter}.
+     *
+     * <p>Only activates when there are narrowing predicates beyond the workspace/project/uuid-range filters:
+     * either a free-text search or a TRACE-strategy filter ({@code <filters>}). When neither is present,
+     * the downstream CTEs apply the uuid range directly, skipping the prefilter scan.
+     */
+    private static boolean shouldUseTracesFinalIdsPrefilter(TraceSearchCriteria criteria, ST template) {
+        return criteria.searchText() != null || template.getAttribute("filters") != null;
+    }
+
     @Override
     @WithSpan
     public Mono<TraceThread.TraceThreadPage> find(int size, int page, @NonNull TraceSearchCriteria criteria) {
 
-        return asyncTemplate.nonTransaction(connection -> countThreadTotal(criteria, connection)
-                .flatMap(count -> {
+        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate
+                .nonTransaction(connection -> countThreadTotal(criteria, connection, userName, workspaceId)
+                        .flatMap(count -> {
 
-                    int offset = (page - 1) * size;
+                            int offset = (page - 1) * size;
 
-                    var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
-                            THREAD_SEARCH_CLAUSE);
+                            var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
+                                    THREAD_SEARCH_CLAUSE);
 
-                    template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
-                    template = template.add("offset", offset);
+                            template = template.add("offset", offset)
+                                    .add("log_comment", getLogComment("find_threads_by_project", workspaceId, userName,
+                                            "page:" + page + ":size:" + size));
 
-                    var finalTemplate = template;
-                    Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
-                            .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
+                            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                                template.add("traces_final_ids", true);
+                            }
 
-                    var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
+                            var finalTemplate = template;
+                            Optional.ofNullable(sortingQueryBuilder.toOrderBySql(criteria.sortingFields()))
+                                    .ifPresent(sortFields -> finalTemplate.add("sort_fields", sortFields));
 
-                    var statement = connection.createStatement(template.render())
-                            .bind("project_id", criteria.projectId())
-                            .bind("limit", size)
-                            .bind("offset", offset);
+                            var hasDynamicKeys = sortingQueryBuilder.hasDynamicKeys(criteria.sortingFields());
 
-                    if (hasDynamicKeys) {
-                        statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
-                    }
+                            var statement = connection.createStatement(template.render())
+                                    .bind("project_id", criteria.projectId())
+                                    .bind("limit", size)
+                                    .bind("offset", offset)
+                                    .bind("workspace_id", workspaceId);
 
-                    bindTraceThreadSearchCriteria(criteria, statement);
+                            if (hasDynamicKeys) {
+                                statement = sortingQueryBuilder.bindDynamicKeys(statement, criteria.sortingFields());
+                            }
 
-                    InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "findThreads");
+                            bindTraceThreadSearchCriteria(criteria, statement);
 
-                    return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                            .flatMap(this::mapThreadToDto)
-                            .collectList()
-                            .doFinally(signalType -> endSegment(segment))
-                            .map(threads -> new TraceThread.TraceThreadPage(page, threads.size(), count, threads,
-                                    traceThreadSortingFactory.getSortableFields()))
-                            .defaultIfEmpty(TraceThread.TraceThreadPage.empty(page,
-                                    traceThreadSortingFactory.getSortableFields()));
-                }));
+                            InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "findThreads");
+
+                            return Flux.from(statement.execute())
+                                    .flatMap(this::mapThreadToDto)
+                                    .collectList()
+                                    .doFinally(signalType -> endSegment(segment))
+                                    .map(threads -> new TraceThread.TraceThreadPage(page, threads.size(), count,
+                                            threads,
+                                            traceThreadSortingFactory.getSortableFields()))
+                                    .defaultIfEmpty(TraceThread.TraceThreadPage.empty(page,
+                                            traceThreadSortingFactory.getSortableFields()));
+                        })));
     }
 
     @Override
     public Mono<TraceThread> findById(@NonNull UUID projectId, @NonNull String threadId, boolean truncate) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
             var template = TemplateUtils.newST(SELECT_TRACES_THREAD_BY_ID);
-            template.add("truncate", truncate);
+            template.add("truncate", truncate)
+                    .add("log_comment",
+                            getLogComment("find_thread_by_id", workspaceId, userName, threadId));
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", projectId)
-                    .bind("thread_id", threadId);
+                    .bind("thread_id", threadId)
+                    .bind("workspace_id", workspaceId);
 
             InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "findThreadById");
 
-            return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+            return Mono.from(statement.execute())
                     .flatMapMany(this::mapThreadToDto)
                     .singleOrEmpty()
                     .doFinally(signalType -> endSegment(segment));
-        });
+        }));
     }
 
     @Override
@@ -1304,26 +1358,33 @@ class ThreadDAOImpl implements ThreadDAO {
     public Flux<TraceThread> search(int limit, @NonNull TraceSearchCriteria criteria) {
         Preconditions.checkArgument(limit > 0, "limit must be greater than 0");
 
-        return asyncTemplate.stream(connection -> {
+        return makeFluxContextAware((userName, workspaceId) -> asyncTemplate.stream(connection -> {
 
             var template = newTraceThreadFindTemplate(SELECT_TRACES_THREADS_BY_PROJECT_IDS, criteria,
                     THREAD_SEARCH_CLAUSE);
             template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
 
             template.add("limit", limit)
-                    .add("stream", true);
+                    .add("stream", true)
+                    .add("log_comment", getLogComment("search_threads", workspaceId, userName,
+                            "limit:" + limit));
+
+            if (shouldUseTracesFinalIdsPrefilter(criteria, template)) {
+                template.add("traces_final_ids", true);
+            }
 
             var statement = connection.createStatement(template.render())
                     .bind("project_id", criteria.projectId())
-                    .bind("limit", limit);
+                    .bind("limit", limit)
+                    .bind("workspace_id", workspaceId);
 
             bindTraceThreadSearchCriteria(criteria, statement);
 
             InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "threadsSearch");
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment));
-        })
+        }))
                 .flatMap(this::mapThreadToDto)
                 .buffer(limit > 100 ? limit / 2 : limit)
                 .concatWith(Mono.just(List.of()))
@@ -1333,40 +1394,58 @@ class ThreadDAOImpl implements ThreadDAO {
 
     @Override
     public Mono<ProjectStats> getThreadStats(@NonNull TraceSearchCriteria criteria) {
-        return asyncTemplate.nonTransaction(connection -> {
+        return makeMonoContextAware((userName, workspaceId) -> asyncTemplate.nonTransaction(connection -> {
 
             var statsSQL = newTraceThreadFindTemplate(SELECT_TRACE_THREADS_STATS, criteria, THREAD_SEARCH_CLAUSE);
+            statsSQL.add("log_comment", getLogComment("thread_stats", workspaceId, userName, ""));
+
+            if (shouldUseTracesFinalIdsPrefilter(criteria, statsSQL)) {
+                statsSQL.add("traces_final_ids", true);
+            }
 
             var statement = connection.createStatement(statsSQL.render())
-                    .bind("project_id", criteria.projectId());
+                    .bind("project_id", criteria.projectId())
+                    .bind("workspace_id", workspaceId);
 
             bindTraceThreadSearchCriteria(criteria, statement);
 
             InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "stats");
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+            return Flux.from(statement.execute())
                     .doFinally(signalType -> endSegment(segment))
                     .flatMap(
                             result -> result
                                     .map((row, rowMetadata) -> StatsMapper.mapProjectStats(row, "thread_count")))
                     .singleOrEmpty();
-        });
+        }));
     }
 
-    private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection) {
+    private Mono<Long> countThreadTotal(TraceSearchCriteria traceSearchCriteria, Connection connection,
+            String userName, String workspaceId) {
         var template = newTraceThreadFindTemplate(SELECT_COUNT_TRACES_THREADS_BY_PROJECT_IDS, traceSearchCriteria,
                 THREAD_SEARCH_CLAUSE);
+        template.add("log_comment", getLogComment("count_threads_by_project", workspaceId, userName, ""));
+
+        if (shouldUseTracesFinalIdsPrefilter(traceSearchCriteria, template)) {
+            template.add("traces_final_ids", true);
+        }
+
+        if (template.getAttribute("feedback_scores_filters") != null
+                || template.getAttribute("feedback_scores_empty_filters") != null) {
+            template.add("feedback_scores_needed", true);
+        }
 
         var statement = connection.createStatement(template.render())
-                .bind("project_id", traceSearchCriteria.projectId());
+                .bind("project_id", traceSearchCriteria.projectId())
+                .bind("workspace_id", workspaceId);
 
         bindTraceThreadSearchCriteria(traceSearchCriteria, statement);
 
         InstrumentAsyncUtils.Segment segment = startSegment("threads", "Clickhouse", "countThreads");
 
-        return makeMonoContextAware(bindWorkspaceIdToMono(statement))
+        return Flux.from(statement.execute())
                 .doFinally(signalType -> endSegment(segment))
-                .flatMapMany(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
+                .flatMap(result -> result.map((row, rowMetadata) -> row.get("count", Long.class)))
                 .reduce(0L, Long::sum);
     }
 

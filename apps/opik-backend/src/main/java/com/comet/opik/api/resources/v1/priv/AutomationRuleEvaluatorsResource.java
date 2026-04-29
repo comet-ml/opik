@@ -14,6 +14,8 @@ import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorSearchCriteria;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -162,6 +164,7 @@ public class AutomationRuleEvaluatorsResource {
             })
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE)
     public Response createEvaluator(
             @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluator.class))) @JsonView(View.Write.class) @NotNull @Valid AutomationRuleEvaluator<?, ?> evaluator,
             @Context UriInfo uriInfo) {
@@ -190,6 +193,7 @@ public class AutomationRuleEvaluatorsResource {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ONLINE_EVALUATION_RULE_UPDATE)
     public Response updateEvaluator(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = AutomationRuleEvaluatorUpdate.class))) @NotNull @Valid AutomationRuleEvaluatorUpdate<?, ?> evaluatorUpdate) {
 

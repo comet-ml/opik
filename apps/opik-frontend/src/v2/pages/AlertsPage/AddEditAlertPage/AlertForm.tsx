@@ -31,13 +31,9 @@ import {
 
 type AlertFormProps = {
   alert?: Alert;
-  projectsIds: string[];
 };
 
-const AlertForm: React.FunctionComponent<AlertFormProps> = ({
-  alert,
-  projectsIds,
-}) => {
+const AlertForm: React.FunctionComponent<AlertFormProps> = ({ alert }) => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -65,7 +61,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
             value,
           }))
         : [],
-      triggers: alertTriggersToFormTriggers(alert?.triggers ?? [], projectsIds),
+      triggers: alertTriggersToFormTriggers(alert?.triggers ?? []),
     },
   });
 
@@ -76,6 +72,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
       name: formData.name.trim(),
       enabled: formData.enabled,
       alert_type: formData.alertType,
+      project_id: activeProjectId ?? undefined,
       metadata: {
         ...alert?.metadata,
         base_url: buildFullBaseUrl(),
@@ -99,9 +96,9 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
               )
             : undefined,
       },
-      triggers: formTriggersToAlertTriggers(formData.triggers, projectsIds),
+      triggers: formTriggersToAlertTriggers(formData.triggers),
     };
-  }, [form, projectsIds, alert?.metadata]);
+  }, [form, activeProjectId, alert?.metadata]);
 
   const handleNavigateBack = useCallback(() => {
     navigate({
@@ -171,7 +168,7 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
           />
         </div>
       )}
-      <h1 className="comet-title-l">{title}</h1>
+      <h1 className="comet-title-xs">{title}</h1>
 
       <div className="relative mt-6 flex flex-col gap-6 lg:flex-row lg:items-start">
         <div className="flex-1 lg:max-w-[720px]">
@@ -239,7 +236,10 @@ const AlertForm: React.FunctionComponent<AlertFormProps> = ({
 
               <WebhookSettings form={form} />
 
-              <EventTriggers form={form} projectsIds={projectsIds} />
+              <EventTriggers
+                form={form}
+                projectId={alert?.project_id || activeProjectId!}
+              />
 
               <Separator className="lg:hidden" />
 

@@ -9,6 +9,7 @@ import { ExperimentItemReferencePublic } from "./ExperimentItemReferencePublic.j
 import { FeedbackScorePublic } from "./FeedbackScorePublic.js";
 import { GuardrailsValidationPublic } from "./GuardrailsValidationPublic.js";
 import { JsonListStringPublic } from "./JsonListStringPublic.js";
+import { TracePublicSource } from "./TracePublicSource.js";
 import { TracePublicVisibilityMode } from "./TracePublicVisibilityMode.js";
 
 export const TracePublic: core.serialization.ObjectSchema<serializers.TracePublic.Raw, OpikApi.TracePublic> =
@@ -51,6 +52,7 @@ export const TracePublic: core.serialization.ObjectSchema<serializers.TracePubli
         hasToolSpans: core.serialization.property("has_tool_spans", core.serialization.boolean().optional()),
         providers: core.serialization.list(core.serialization.string()).optional(),
         experiment: ExperimentItemReferencePublic.optional(),
+        source: TracePublicSource.optional(),
     });
 
 export declare namespace TracePublic {
@@ -84,5 +86,6 @@ export declare namespace TracePublic {
         has_tool_spans?: boolean | null;
         providers?: string[] | null;
         experiment?: ExperimentItemReferencePublic.Raw | null;
+        source?: TracePublicSource.Raw | null;
     }
 }

@@ -400,6 +400,66 @@ class SpansResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.TRACE_SPAN_THREAD_LOG.getValue()))));
         }
+
+        @Test
+        @DisplayName("Add span comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void addSpanCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = spanResourceClient.callAddSpanComment(
+                    UUID.randomUUID(), podamFactory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update span comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void updateSpanCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = spanResourceClient.callUpdateSpanComment(
+                    UUID.randomUUID(), podamFactory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete span comments returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void deleteSpanCommentsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = spanResourceClient.callDeleteSpanComments(
+                    new BatchDelete(Set.of(UUID.randomUUID())), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Add span feedback score returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void addSpanFeedbackScoreReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = spanResourceClient.callAddSpanFeedbackScore(
+                    UUID.randomUUID(), podamFactory.manufacturePojo(FeedbackScore.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

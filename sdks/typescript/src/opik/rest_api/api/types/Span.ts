@@ -33,4 +33,5 @@ export interface Span {
     duration?: number;
     /** Time to first token in milliseconds */
     ttft?: number;
+    source?: OpikApi.SpanSource;
 }

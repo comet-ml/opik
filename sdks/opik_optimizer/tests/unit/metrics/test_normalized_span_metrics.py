@@ -21,6 +21,7 @@ def _make_span(
         end_time=end_time or now,
         total_cost=total_cost,
         spans=[],
+        source="optimization",
     )
 
 

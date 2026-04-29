@@ -7,6 +7,7 @@ import pydantic
 from ..core.pydantic_utilities import IS_PYDANTIC_V2, UniversalBaseModel
 from .error_info_experiment_item_bulk_write_view import ErrorInfoExperimentItemBulkWriteView
 from .json_list_string_experiment_item_bulk_write_view import JsonListStringExperimentItemBulkWriteView
+from .span_experiment_item_bulk_write_view_source import SpanExperimentItemBulkWriteViewSource
 from .span_experiment_item_bulk_write_view_type import SpanExperimentItemBulkWriteViewType
 
 
@@ -32,6 +33,8 @@ class SpanExperimentItemBulkWriteView(UniversalBaseModel):
     """
     Time to first token in milliseconds
     """
+
+    source: typing.Optional[SpanExperimentItemBulkWriteViewSource] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

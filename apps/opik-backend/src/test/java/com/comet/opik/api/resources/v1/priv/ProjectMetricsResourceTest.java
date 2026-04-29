@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.priv;
 
 import com.comet.opik.api.DataPoint;
+import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.FeedbackScore;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.api.Guardrail;
@@ -1923,7 +1924,7 @@ class ProjectMetricsResourceTest {
                 List<Trace> traces = IntStream
                         .range(0, tracesPerThread == null || threadIdIdx != 0 ? 2 : tracesPerThread) // 2 traces per thread except for the first thread, needed for number of messages filter
                         .mapToObj(i -> {
-                            Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * (i + 1));
+                            Instant traceStartTime = marker.plusSeconds((long) threadIdIdx * 10 + i + 1);
                             return factory.manufacturePojo(Trace.class).toBuilder()
                                     .id(idGenerator.generateId(traceStartTime))
                                     .projectName(projectName)
@@ -2226,7 +2227,11 @@ class ProjectMetricsResourceTest {
                 metricType == MetricType.GUARDRAILS_FAILED_COUNT ||
                 metricType == MetricType.TOKEN_USAGE ||
                 metricType == MetricType.COST ||
-                metricType == MetricType.SPAN_TOKEN_USAGE;
+                metricType == MetricType.SPAN_TOKEN_USAGE ||
+                metricType == MetricType.TRACE_ERROR_RATE ||
+                metricType == MetricType.SPAN_COST ||
+                metricType == MetricType.SPAN_ERROR_RATE ||
+                metricType == MetricType.THREAD_COST;
 
         return names.stream()
                 .map(name -> {
@@ -3413,6 +3418,927 @@ class ProjectMetricsResourceTest {
     }
 
     @Nested
+    @DisplayName("Trace average duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceAverageDurationTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var avgMinus3 = Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION,
+                    createTracesAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var avgMinus1 = Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION,
+                    createTracesAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var avgCurrent = Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION,
+                    createTracesAndGetAvgDuration(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION), BigDecimal.class,
+                    avgMinus3, avgMinus1, avgCurrent);
+        }
+
+        private BigDecimal createTracesAndGetAvgDuration(String projectName, Instant marker) {
+            List<Trace> traces = IntStream.range(0, 5)
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plusMillis(RANDOM.nextInt(50, 100));
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(idGenerator.generateId(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .endTime(marker.plusMillis(RANDOM.nextInt(100, 1000)))
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+
+            return calcAverageDuration(traces.stream()
+                    .map(t -> t.startTime().until(t.endTime(), ChronoUnit.MICROS) / 1_000.0)
+                    .toList());
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var startTime = subtract(marker, TIME_BUCKET_3, interval).plusMillis(RANDOM.nextInt(50));
+            var endTime = subtract(marker, TIME_BUCKET_3, interval).plus(4, ChronoUnit.HOURS);
+
+            List<Trace> traceForFilter = createTracesWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 1, startTime, endTime);
+            List<Trace> tracesMinus3 = createTracesWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5, null, endTime.plusMillis(RANDOM.nextInt(50)));
+
+            BigDecimal avgFiltered = calcAvgDuration(traceForFilter);
+            BigDecimal avgOthers = calcAvgDuration(tracesMinus3);
+            BigDecimal avgAll = calcAvgDuration(
+                    Stream.concat(traceForFilter.stream(), tracesMinus3.stream()).toList());
+
+            BigDecimal avgMinus1 = createTracesAndGetAvgDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            BigDecimal avgCurrent = createTracesAndGetAvgDuration(projectName, marker);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION, avgFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION, avgOthers),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION, avgAll),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION, avgMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION, avgCurrent),
+                    null);
+
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(traceForFilter);
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
+                    traceForFilter.getFirst().id(), randomUUID(), projectName).getFirst().toBuilder()
+                    .result(GuardrailResult.PASSED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(getFilter.apply(traceForFilter.getFirst())))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACE_AVERAGE_DURATION), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments();
+        }
+
+        private List<Trace> createTracesWithDuration(String projectName, Instant marker, int count,
+                Instant startTime, Instant endTime) {
+            List<Trace> traces = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant traceStartTime = startTime != null
+                                ? startTime
+                                : marker.plusMillis(RANDOM.nextInt(50, 100));
+                        return factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(idGenerator.generateId(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime)
+                                .endTime(endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000)))
+                                .build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            return traces;
+        }
+
+        private BigDecimal calcAvgDuration(List<Trace> traces) {
+            double avg = traces.stream()
+                    .mapToDouble(t -> t.startTime().until(t.endTime(), ChronoUnit.MICROS) / 1_000.0)
+                    .average().orElse(0);
+            return BigDecimal.valueOf(avg).setScale(9, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal calcAverageDuration(List<Double> durations) {
+            double avg = durations.stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            return BigDecimal.valueOf(avg).setScale(9, RoundingMode.HALF_UP);
+        }
+    }
+
+    @Nested
+    @DisplayName("Trace error rate")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class TraceErrorRateTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var rateMinus3 = Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE,
+                    createTracesAndGetErrorRate(projectName, subtract(marker, TIME_BUCKET_3, interval), 5, 2));
+            var rateMinus1 = Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE,
+                    createTracesAndGetErrorRate(projectName, subtract(marker, TIME_BUCKET_1, interval), 4, 0));
+            var rateCurrent = Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE,
+                    createTracesAndGetErrorRate(projectName, marker, 3, 3));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_ERROR_RATE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE), BigDecimal.class,
+                    rateMinus3, rateMinus1, rateCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Trace, TraceFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<Trace> traces = createTracesWithErrors(projectName, subtract(marker, TIME_BUCKET_3, interval), 6, 3);
+            var traceForFilter = traces.getFirst();
+            boolean firstHasError = traceForFilter.errorInfo() != null;
+
+            BigDecimal rateFiltered = BigDecimal.valueOf(firstHasError ? 100.0 : 0.0);
+            long othersWithErrors = traces.subList(1, traces.size()).stream()
+                    .filter(t -> t.errorInfo() != null).count();
+            BigDecimal rateOthers = BigDecimal.valueOf(othersWithErrors * 100.0 / 5);
+            BigDecimal rateAll = BigDecimal.valueOf(3 * 100.0 / 6);
+
+            BigDecimal rateMinus1 = createTracesAndGetErrorRate(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval), 4, 0);
+            BigDecimal rateCurrent = createTracesAndGetErrorRate(projectName, marker, 3, 3);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE, rateFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE, rateOthers),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE, rateAll),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE, rateMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE, rateCurrent),
+                    null);
+
+            List<FeedbackScoreBatchItem> scores = getScoreBatchItems(List.of(traceForFilter));
+            traceResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var guardrail = guardrailsGenerator.generateGuardrailsForTrace(
+                    traceForFilter.id(), randomUUID(), projectName).getFirst().toBuilder()
+                    .result(GuardrailResult.PASSED)
+                    .build();
+            guardrailsResourceClient.addBatch(List.of(guardrail), API_KEY, WORKSPACE_NAME);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.TRACE_ERROR_RATE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(getFilter.apply(traceForFilter)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_TRACE_ERROR_RATE), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.happyPathWithFilterArguments()
+                    .filter(arg -> {
+                        @SuppressWarnings("unchecked")
+                        var filterFn = (Function<Trace, TraceFilter>) arg.get()[0];
+                        var dummyTrace = factory.manufacturePojo(Trace.class);
+                        var filter = filterFn.apply(dummyTrace);
+                        return filter.field() != TraceField.ERROR_INFO;
+                    });
+        }
+
+        private List<Trace> createTracesWithErrors(String projectName, Instant marker, int total, int withErrors) {
+            List<Trace> traces = IntStream.range(0, total)
+                    .mapToObj(i -> {
+                        Instant traceStartTime = marker.plusSeconds(i);
+                        var builder = factory.manufacturePojo(Trace.class).toBuilder()
+                                .id(idGenerator.generateId(traceStartTime))
+                                .projectName(projectName)
+                                .startTime(traceStartTime);
+                        if (i < withErrors) {
+                            builder.errorInfo(ErrorInfo.builder()
+                                    .exceptionType("TestError")
+                                    .message("test error")
+                                    .traceback("traceback")
+                                    .build());
+                        } else {
+                            builder.errorInfo(null);
+                        }
+                        return builder.build();
+                    })
+                    .toList();
+            traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
+            return traces;
+        }
+
+        private BigDecimal createTracesAndGetErrorRate(String projectName, Instant marker, int total,
+                int withErrors) {
+            createTracesWithErrors(projectName, marker, total, withErrors);
+            return BigDecimal.valueOf(withErrors * 100.0 / total);
+        }
+    }
+
+    @Nested
+    @DisplayName("Span average duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanAverageDurationTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var avgMinus3 = Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION,
+                    createSpansAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var avgMinus1 = Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION,
+                    createSpansAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var avgCurrent = Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION,
+                    createSpansAndGetAvgDuration(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION), BigDecimal.class,
+                    avgMinus3, avgMinus1, avgCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var startTime = subtract(marker, TIME_BUCKET_3, interval).plusMillis(RANDOM.nextInt(50));
+            var endTime = subtract(marker, TIME_BUCKET_3, interval).plus(4, ChronoUnit.HOURS);
+
+            List<Span> spans = createSpansInternal(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5, startTime, endTime);
+
+            BigDecimal avgMinus1 = createSpansAndGetAvgDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            BigDecimal avgCurrent = createSpansAndGetAvgDuration(projectName, marker);
+
+            List<FeedbackScoreBatchItem> scores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spans.getFirst().id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            BigDecimal avgFirst = calcAvgDuration(List.of(spans.getFirst()));
+            BigDecimal avgOthers = calcAvgDuration(spans.subList(1, spans.size()));
+            BigDecimal avgAll = calcAvgDuration(spans);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION, avgFirst),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION, avgOthers),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION, avgAll),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION, avgMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION, avgCurrent),
+                    null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(getFilter.apply(spans.getFirst())))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_AVERAGE_DURATION), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        private List<Span> createSpansInternal(String projectName, Instant marker, int count,
+                Instant startTime, Instant endTime) {
+            List<Span> spans = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = startTime != null
+                                ? startTime
+                                : marker.plusMillis(RANDOM.nextInt(50, 100));
+                        Instant spanEndTime = endTime != null ? endTime : marker.plusMillis(RANDOM.nextInt(100, 1000));
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .endTime(spanEndTime)
+                                .build();
+                    })
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans;
+        }
+
+        private BigDecimal calcAvgDuration(List<Span> spans) {
+            double avg = spans.stream()
+                    .mapToDouble(s -> s.startTime().until(s.endTime(), ChronoUnit.MICROS) / 1_000.0)
+                    .average().orElse(0);
+            return BigDecimal.valueOf(avg).setScale(9, RoundingMode.HALF_UP);
+        }
+
+        private BigDecimal createSpansAndGetAvgDuration(String projectName, Instant marker) {
+            List<Span> spans = createSpansInternal(projectName, marker, 5, null, null);
+            return calcAvgDuration(spans);
+        }
+    }
+
+    @Nested
+    @DisplayName("Span cost")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanCostTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_SPAN_COST,
+                    createSpansAndGetTotalCost(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_SPAN_COST,
+                    createSpansAndGetTotalCost(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var costCurrent = Map.of(ProjectMetricsDAO.NAME_SPAN_COST,
+                    createSpansAndGetTotalCost(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_COST), BigDecimal.class,
+                    costMinus3, costMinus1, costCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<Span> spansMinus3 = createSpansWithCost(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 6);
+            var spanForFilter = spansMinus3.getFirst();
+            BigDecimal costFiltered = spanForFilter.totalEstimatedCost();
+            BigDecimal costOthers = sumCost(spansMinus3.subList(1, spansMinus3.size()));
+            BigDecimal costAll = sumCost(spansMinus3);
+
+            BigDecimal costMinus1 = createSpansAndGetTotalCost(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            BigDecimal costCurrent = createSpansAndGetTotalCost(projectName, marker);
+
+            List<FeedbackScoreBatchItem> scores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spanForFilter.id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spanForFilter.id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_COST, costFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_COST, costOthers),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_COST, costAll),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_COST, costMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_COST, costCurrent),
+                    null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(getFilter.apply(spanForFilter)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_COST), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        private List<Span> createSpansWithCost(String projectName, Instant marker, int count) {
+            List<Span> spans = IntStream.range(0, count)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plusSeconds(i);
+                        return factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime)
+                                .totalEstimatedCost(BigDecimal.valueOf(Math.abs(RANDOM.nextInt(10000))))
+                                .build();
+                    })
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans;
+        }
+
+        private BigDecimal sumCost(List<Span> spans) {
+            return spans.stream()
+                    .map(Span::totalEstimatedCost)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+
+        private BigDecimal createSpansAndGetTotalCost(String projectName, Instant marker) {
+            return sumCost(createSpansWithCost(projectName, marker, 5));
+        }
+    }
+
+    @Nested
+    @DisplayName("Span error rate")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class SpanErrorRateTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var rateMinus3 = Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE,
+                    createSpansAndGetErrorRate(projectName, subtract(marker, TIME_BUCKET_3, interval), 5, 2));
+            var rateMinus1 = Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE,
+                    createSpansAndGetErrorRate(projectName, subtract(marker, TIME_BUCKET_1, interval), 4, 0));
+            var rateCurrent = Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE,
+                    createSpansAndGetErrorRate(projectName, marker, 3, 3));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_ERROR_RATE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE), BigDecimal.class,
+                    rateMinus3, rateMinus1, rateCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<Span, SpanFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            List<Span> spans = createSpansWithErrors(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 6, 3);
+            var spanForFilter = spans.getFirst();
+            boolean firstHasError = spanForFilter.errorInfo() != null;
+
+            BigDecimal rateFiltered = BigDecimal.valueOf(firstHasError ? 100.0 : 0.0);
+            long othersWithErrors = spans.subList(1, spans.size()).stream()
+                    .filter(s -> s.errorInfo() != null).count();
+            BigDecimal rateOthers = BigDecimal.valueOf(othersWithErrors * 100.0 / 5);
+            BigDecimal rateAll = BigDecimal.valueOf(3 * 100.0 / 6);
+
+            BigDecimal rateMinus1 = createSpansAndGetErrorRate(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval), 4, 0);
+            BigDecimal rateCurrent = createSpansAndGetErrorRate(projectName, marker, 3, 3);
+
+            List<FeedbackScoreBatchItem> scores = List.of(
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spanForFilter.id())
+                            .name("score1")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build(),
+                    factory.manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                            .id(spanForFilter.id())
+                            .name("score2")
+                            .value(BigDecimal.ONE)
+                            .projectName(projectName)
+                            .build());
+            spanResourceClient.feedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE, rateFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE, rateOthers),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE, rateAll),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE, rateMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE, rateCurrent),
+                    null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.SPAN_ERROR_RATE)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .spanFilters(List.of(getFilter.apply(spanForFilter)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_SPAN_ERROR_RATE), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.spanHappyPathWithFilterArguments();
+        }
+
+        private List<Span> createSpansWithErrors(String projectName, Instant marker, int total, int withErrors) {
+            List<Span> spans = IntStream.range(0, total)
+                    .mapToObj(i -> {
+                        Instant spanStartTime = marker.plusSeconds(i);
+                        var builder = factory.manufacturePojo(Span.class).toBuilder()
+                                .id(idGenerator.generateId(spanStartTime))
+                                .projectName(projectName)
+                                .startTime(spanStartTime);
+                        if (i < withErrors) {
+                            builder.errorInfo(ErrorInfo.builder()
+                                    .exceptionType("TestError")
+                                    .message("test error")
+                                    .traceback("traceback")
+                                    .build());
+                        } else {
+                            builder.errorInfo(null);
+                        }
+                        return builder.build();
+                    })
+                    .toList();
+            spanResourceClient.batchCreateSpans(spans, API_KEY, WORKSPACE_NAME);
+            return spans;
+        }
+
+        private BigDecimal createSpansAndGetErrorRate(String projectName, Instant marker, int total, int withErrors) {
+            createSpansWithErrors(projectName, marker, total, withErrors);
+            return BigDecimal.valueOf(withErrors * 100.0 / total);
+        }
+    }
+
+    @Nested
+    @DisplayName("Thread average duration")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadAverageDurationTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var avgMinus3 = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                    createThreadsAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var avgMinus1 = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                    createThreadsAndGetAvgDuration(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var avgCurrent = Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION,
+                    createThreadsAndGetAvgDuration(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION), BigDecimal.class,
+                    avgMinus3, avgMinus1, avgCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var threadsMinus3 = createTraceThreadsWithDuration(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5, 7);
+            var threadForFilterId = threadsMinus3.getLeft().getFirst();
+
+            BigDecimal avgFiltered = BigDecimal.valueOf(threadsMinus3.getRight().getFirst())
+                    .setScale(9, RoundingMode.HALF_UP);
+            BigDecimal avgOthers = BigDecimal.valueOf(threadsMinus3.getRight().subList(1,
+                    threadsMinus3.getRight().size()).stream().mapToDouble(Double::doubleValue).average().orElse(0))
+                    .setScale(9, RoundingMode.HALF_UP);
+
+            BigDecimal avgMinus1 = createThreadsAndGetAvgDuration(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            BigDecimal avgCurrent = createThreadsAndGetAvgDuration(projectName, marker);
+
+            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
+            traceResourceClient.updateThread(update, createdThread.threadModelId(), API_KEY, WORKSPACE_NAME, 204);
+
+            var scores = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
+                    .stream()
+                    .map(score -> (FeedbackScoreBatchItemThread) score.toBuilder()
+                            .threadId(createdThread.id())
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+            traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION, avgFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION, avgOthers),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION, avgMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION, avgCurrent),
+                    null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_AVERAGE_DURATION)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .threadFilters(List.of(getFilter.apply(updatedThread)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_AVERAGE_DURATION), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
+        }
+
+        private Pair<List<String>, List<Double>> createTraceThreadsWithDuration(String projectName, Instant marker,
+                int count) {
+            return createTraceThreadsWithDuration(projectName, marker, count, null);
+        }
+
+        private Pair<List<String>, List<Double>> createTraceThreadsWithDuration(String projectName, Instant marker,
+                int count, Integer firstThreadTraceCount) {
+            List<String> threadIds = new ArrayList<>();
+            List<Double> threadDurations = new ArrayList<>();
+            List<Trace> allTraces = new ArrayList<>();
+
+            for (int i = 0; i < count; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+                threadIds.add(threadId);
+                int numTraces = firstThreadTraceCount != null && i == 0 ? firstThreadTraceCount : 2 + i;
+                int durationMs = (i + 1) * 300 + RANDOM.nextInt(200);
+                Instant threadStartTime = marker.plusMillis(i * 100L);
+                Instant threadEndTime = threadStartTime.plusMillis(durationMs);
+
+                List<Trace> traces = IntStream.range(0, numTraces)
+                        .mapToObj(j -> {
+                            Instant traceStart = j == 0 ? threadStartTime : threadStartTime.plusMillis(j * 50L);
+                            Instant traceEnd = j == (numTraces - 1) ? threadEndTime : traceStart.plusMillis(100);
+                            return factory.manufacturePojo(Trace.class).toBuilder()
+                                    .id(idGenerator.generateId(traceStart))
+                                    .projectName(projectName)
+                                    .startTime(traceStart)
+                                    .endTime(traceEnd)
+                                    .threadId(threadId)
+                                    .build();
+                        })
+                        .toList();
+
+                allTraces.addAll(traces);
+                threadDurations.add(threadStartTime.until(threadEndTime, ChronoUnit.MICROS) / 1000.0);
+            }
+
+            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            return Pair.of(threadIds, threadDurations);
+        }
+
+        private BigDecimal createThreadsAndGetAvgDuration(String projectName, Instant marker) {
+            var result = createTraceThreadsWithDuration(projectName, marker, 3);
+            double avg = result.getRight().stream().mapToDouble(Double::doubleValue).average().orElse(0);
+            return BigDecimal.valueOf(avg).setScale(9, RoundingMode.HALF_UP);
+        }
+    }
+
+    @Nested
+    @DisplayName("Thread cost")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class ThreadCostTest {
+
+        @ParameterizedTest
+        @EnumSource(value = TimeInterval.class, names = "TOTAL", mode = EnumSource.Mode.EXCLUDE)
+        void happyPath(TimeInterval interval) {
+            mockTargetWorkspace();
+
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var costMinus3 = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    createThreadsAndGetTotalCost(projectName, subtract(marker, TIME_BUCKET_3, interval)));
+            var costMinus1 = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    createThreadsAndGetTotalCost(projectName, subtract(marker, TIME_BUCKET_1, interval)));
+            var costCurrent = Map.of(ProjectMetricsDAO.NAME_THREAD_COST,
+                    createThreadsAndGetTotalCost(projectName, marker));
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
+                    costMinus3, costMinus1, costCurrent);
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void happyPathWithFilter(Function<TraceThread, TraceThreadFilter> getFilter, List<Integer> expectedIndexes) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = getIntervalStart(interval);
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            var threadsMinus3 = createTraceThreadsWithCost(projectName,
+                    subtract(marker, TIME_BUCKET_3, interval), 5, 7);
+            var threadForFilterId = threadsMinus3.getLeft().getFirst();
+
+            BigDecimal costFiltered = threadsMinus3.getRight().getFirst();
+            BigDecimal costOthers = threadsMinus3.getRight().subList(1, threadsMinus3.getRight().size()).stream()
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            BigDecimal costMinus1 = createThreadsAndGetTotalCost(projectName,
+                    subtract(marker, TIME_BUCKET_1, interval));
+            BigDecimal costCurrent = createThreadsAndGetTotalCost(projectName, marker);
+
+            var createdThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            var update = factory.manufacturePojo(TraceThreadUpdate.class);
+            traceResourceClient.updateThread(update, createdThread.threadModelId(), API_KEY, WORKSPACE_NAME, 204);
+
+            var scores = PodamFactoryUtils.manufacturePojoList(factory, FeedbackScoreBatchItemThread.class)
+                    .stream()
+                    .map(score -> (FeedbackScoreBatchItemThread) score.toBuilder()
+                            .threadId(createdThread.id())
+                            .projectName(projectName)
+                            .build())
+                    .toList();
+            traceResourceClient.threadFeedbackScores(scores, API_KEY, WORKSPACE_NAME);
+
+            var updatedThread = traceResourceClient.getTraceThread(threadForFilterId, projectId, API_KEY,
+                    WORKSPACE_NAME);
+
+            var expectedValues = Arrays.<Map<String, BigDecimal>>asList(
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_COST, costFiltered),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_COST, costOthers),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_COST, costMinus1),
+                    Map.of(ProjectMetricsDAO.NAME_THREAD_COST, costCurrent),
+                    null);
+
+            getMetricsAndAssert(projectId, ProjectMetricRequest.builder()
+                    .metricType(MetricType.THREAD_COST)
+                    .interval(interval)
+                    .intervalStart(subtract(marker, TIME_BUCKET_4, interval))
+                    .intervalEnd(Instant.now())
+                    .threadFilters(List.of(getFilter.apply(updatedThread)))
+                    .build(), marker, List.of(ProjectMetricsDAO.NAME_THREAD_COST), BigDecimal.class,
+                    expectedValues.get(expectedIndexes.get(0)),
+                    expectedValues.get(expectedIndexes.get(1)),
+                    expectedValues.get(expectedIndexes.get(2)));
+        }
+
+        Stream<Arguments> happyPathWithFilter() {
+            return ProjectMetricsResourceTest.threadHappyPathWithFilterArguments();
+        }
+
+        private Pair<List<String>, List<BigDecimal>> createTraceThreadsWithCost(String projectName, Instant marker,
+                int count) {
+            return createTraceThreadsWithCost(projectName, marker, count, null);
+        }
+
+        private Pair<List<String>, List<BigDecimal>> createTraceThreadsWithCost(String projectName, Instant marker,
+                int count, Integer firstThreadTraceCount) {
+            List<String> threadIds = new ArrayList<>();
+            List<BigDecimal> threadCosts = new ArrayList<>();
+            List<Trace> allTraces = new ArrayList<>();
+            List<Span> allSpans = new ArrayList<>();
+
+            for (int i = 0; i < count; i++) {
+                String threadId = RandomStringUtils.secure().nextAlphabetic(10);
+                threadIds.add(threadId);
+                int numTraces = firstThreadTraceCount != null && i == 0 ? firstThreadTraceCount : 2 + i;
+                BigDecimal threadCost = BigDecimal.ZERO;
+
+                for (int j = 0; j < numTraces; j++) {
+                    Instant traceStart = marker.plusMillis(i * 100L + j * 50L);
+
+                    Trace trace = factory.manufacturePojo(Trace.class).toBuilder()
+                            .id(idGenerator.generateId(traceStart))
+                            .projectName(projectName)
+                            .startTime(traceStart)
+                            .threadId(threadId)
+                            .build();
+                    allTraces.add(trace);
+
+                    BigDecimal spanCost = BigDecimal.valueOf(Math.abs(RANDOM.nextInt(10000)));
+                    Span span = factory.manufacturePojo(Span.class).toBuilder()
+                            .projectName(projectName)
+                            .traceId(trace.id())
+                            .startTime(traceStart)
+                            .totalEstimatedCost(spanCost)
+                            .build();
+                    allSpans.add(span);
+                    threadCost = threadCost.add(spanCost);
+                }
+                threadCosts.add(threadCost);
+            }
+
+            traceResourceClient.batchCreateTraces(allTraces, API_KEY, WORKSPACE_NAME);
+            spanResourceClient.batchCreateSpans(allSpans, API_KEY, WORKSPACE_NAME);
+            Mono.delay(Duration.ofMillis(100)).block();
+            traceResourceClient.closeTraceThreads(Set.copyOf(threadIds), null, projectName, API_KEY, WORKSPACE_NAME);
+
+            return Pair.of(threadIds, threadCosts);
+        }
+
+        private BigDecimal createThreadsAndGetTotalCost(String projectName, Instant marker) {
+            var result = createTraceThreadsWithCost(projectName, marker, 3);
+            return result.getRight().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        }
+    }
+
+    @Nested
     @DisplayName("Total interval aggregation")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class TotalIntervalTest {
@@ -3465,6 +4391,70 @@ class ProjectMetricsResourceTest {
                     .toList();
             traceResourceClient.batchCreateTraces(traces, API_KEY, WORKSPACE_NAME);
             return traces;
+        }
+    }
+
+    @Nested
+    @DisplayName("Cross-filter isolation: metrics must ignore filters from other entity types")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class CrossFilterIsolationTest {
+
+        @ParameterizedTest
+        @EnumSource(MetricType.class)
+        void shouldNotFailWhenCrossEntityFiltersArePresent(MetricType metricType) {
+            mockTargetWorkspace();
+            TimeInterval interval = TimeInterval.HOURLY;
+            Instant marker = Instant.now().truncatedTo(ChronoUnit.HOURS);
+
+            String projectName = RandomStringUtils.secure().nextAlphabetic(10);
+            var projectId = projectResourceClient.createProject(projectName, API_KEY, WORKSPACE_NAME);
+
+            Instant traceStart = marker.minus(1, ChronoUnit.HOURS);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .id(idGenerator.generateId(traceStart))
+                    .projectName(projectName)
+                    .startTime(traceStart)
+                    .endTime(traceStart.plusMillis(500))
+                    .build();
+            traceResourceClient.batchCreateTraces(List.of(trace), API_KEY, WORKSPACE_NAME);
+
+            var span = factory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(trace.id())
+                    .startTime(traceStart)
+                    .endTime(traceStart.plusMillis(200))
+                    .build();
+            spanResourceClient.createSpan(span, API_KEY, WORKSPACE_NAME);
+
+            // OPIK-5678: frontend always sends all three filter arrays via logsSource
+            var request = ProjectMetricRequest.builder()
+                    .metricType(metricType)
+                    .interval(interval)
+                    .intervalStart(marker.minus(2, ChronoUnit.HOURS))
+                    .intervalEnd(Instant.now())
+                    .traceFilters(List.of(TraceFilter.builder()
+                            .field(TraceField.NAME)
+                            .operator(EQUAL)
+                            .value(trace.name())
+                            .build()))
+                    .threadFilters(List.of(TraceThreadFilter.builder()
+                            .field(TraceThreadField.STATUS)
+                            .operator(EQUAL)
+                            .value(ACTIVE.getValue())
+                            .build()))
+                    .spanFilters(List.of(SpanFilter.builder()
+                            .field(SpanField.NAME)
+                            .operator(EQUAL)
+                            .value(span.name())
+                            .build()))
+                    .build();
+
+            var response = projectMetricsResourceClient.getProjectMetrics(
+                    projectId, request, Number.class, API_KEY, WORKSPACE_NAME);
+
+            assertThat(response.projectId()).isEqualTo(projectId);
+            assertThat(response.metricType()).isEqualTo(metricType);
+            assertThat(response.interval()).isEqualTo(interval);
         }
     }
 }

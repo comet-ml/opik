@@ -336,6 +336,41 @@ class ExperimentsResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.EXPERIMENT_VIEW.getValue()))));
         }
+
+        @Test
+        @DisplayName("Create experiment passes required permissions to auth endpoint")
+        void createExperimentPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            wireMock.server().resetRequests();
+            experimentResourceClient.callCreate(experiment, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.EXPERIMENT_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create experiment returns 403 when permission is denied")
+        void createExperimentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.EXPERIMENT_CREATE.getValue());
+
+            var experiment = experimentResourceClient.createPartialExperiment().build();
+
+            try (var response = experimentResourceClient.callCreate(experiment, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -589,6 +624,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -5423,6 +5459,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(experimentItems1).build();
@@ -5437,6 +5474,7 @@ class ExperimentsResourceTest {
                             .usage(null)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceWithScores1.getLeft().startTime(), traceWithScores1.getLeft().endTime()))
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest2 = ExperimentItemsBatch.builder().experimentItems(experimentItems2).build();
@@ -5447,6 +5485,7 @@ class ExperimentsResourceTest {
                             .totalEstimatedCost(null)
                             .usage(null)
                             .duration(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .collect(toUnmodifiableSet());
             var createRequest3 = ExperimentItemsBatch.builder().experimentItems(experimentItems3).build();
@@ -5603,6 +5642,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItem2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
@@ -5620,6 +5660,7 @@ class ExperimentsResourceTest {
                     .feedbackScores(null)
                     .createdBy(USER)
                     .lastUpdatedBy(USER)
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var createRequest1 = ExperimentItemsBatch.builder().experimentItems(Set.of(experimentItem, experimentItem2))
@@ -5757,6 +5798,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject1.startTime(), traceProject1.endTime()))
                             .build())
@@ -5771,6 +5813,7 @@ class ExperimentsResourceTest {
                             .comments(null)
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traceProject2.startTime(), traceProject2.endTime()))
                             .build())
@@ -5853,6 +5896,7 @@ class ExperimentsResourceTest {
                             .input(null)
                             .output(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build())
                     .sorted(Comparator.comparing(ExperimentItem::id).reversed())
                     .toList();
@@ -6084,15 +6128,15 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when eval suite experiment has no feedback scores and no experiment_scores, then return empty")
-        void getFeedbackScoreNames__evalSuiteNoScores__thenReturnEmpty() {
+        @DisplayName("when test suite experiment has no feedback scores and no experiment_scores, then return empty")
+        void getFeedbackScoreNames__testSuiteNoScores__thenReturnEmpty() {
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .experimentScores(null)
                     .optimizationId(null)
                     .build();
@@ -6113,8 +6157,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when eval suite experiment has experiment_scores but no feedback scores, then return experiment_scores only")
-        void getFeedbackScoreNames__evalSuiteWithExperimentScores__thenReturnExperimentScoresOnly() {
+        @DisplayName("when test suite experiment has experiment_scores but no feedback scores, then return experiment_scores only")
+        void getFeedbackScoreNames__testSuiteWithExperimentScores__thenReturnExperimentScoresOnly() {
             var apiKey = "apiKey-" + UUID.randomUUID();
             var workspaceName = "workspace-" + UUID.randomUUID();
             var workspaceId = UUID.randomUUID().toString();
@@ -6125,7 +6169,7 @@ class ExperimentsResourceTest {
                     ExperimentScore.builder().name("latency").value(new BigDecimal("120.5")).build());
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .experimentScores(experimentScores)
                     .optimizationId(null)
                     .build();
@@ -6182,31 +6226,59 @@ class ExperimentsResourceTest {
             createScoreAndAssert(FeedbackScoreBatch.builder().scores(List.of(feedbackScore)).build(),
                     apiKey, workspaceName);
 
-            // Create eval suite experiment with no feedback scores
-            var evalSuiteExperiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+            // Create test suite experiment with no feedback scores
+            var testSuiteExperiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .experimentScores(null)
                     .optimizationId(null)
                     .build();
-            experimentResourceClient.create(evalSuiteExperiment, apiKey, workspaceName);
+            experimentResourceClient.create(testSuiteExperiment, apiKey, workspaceName);
 
             var evalTrace = podamFactory.manufacturePojo(Trace.class);
             traceResourceClient.batchCreateTraces(List.of(evalTrace), apiKey, workspaceName);
 
             var evalItem = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
-                    .experimentId(evalSuiteExperiment.id())
+                    .experimentId(testSuiteExperiment.id())
                     .traceId(evalTrace.id())
                     .build();
             experimentResourceClient.createExperimentItem(Set.of(evalItem), apiKey, workspaceName);
 
             // Query both experiment IDs
             var actualEntity = experimentResourceClient.getFeedbackScoreNames(
-                    List.of(regularExperiment.id(), evalSuiteExperiment.id()), apiKey, workspaceName);
+                    List.of(regularExperiment.id(), testSuiteExperiment.id()), apiKey, workspaceName);
             var feedbackScoreNames = actualEntity.scores().stream()
                     .filter(score -> "feedback_scores".equals(score.type()))
                     .map(FeedbackScoreNames.ScoreName::name)
                     .toList();
             assertThat(feedbackScoreNames).containsExactly("hallucination");
+        }
+
+        @Test
+        @DisplayName("when filtered by project_id, then return only scores from that project")
+        void getFeedbackScoreNames__whenFilteredByProjectId__thenReturnOnlyProjectScores() {
+            var apiKey = "apiKey-" + UUID.randomUUID();
+            var workspaceName = "workspace-" + UUID.randomUUID();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var projectA = podamFactory.manufacturePojo(Project.class);
+            var projectAId = projectResourceClient.createProject(projectA, apiKey, workspaceName);
+            projectA = projectA.toBuilder().id(projectAId).build();
+
+            var projectB = podamFactory.manufacturePojo(Project.class);
+            var projectBId = projectResourceClient.createProject(projectB, apiKey, workspaceName);
+            projectB = projectB.toBuilder().id(projectBId).build();
+
+            var scoreNamesA = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var scoresA = traceResourceClient.createMultiValueScores(scoreNamesA, projectA, apiKey, workspaceName);
+            createExperimentsItems(apiKey, workspaceName, scoresA, List.of());
+
+            var scoreNamesB = PodamFactoryUtils.manufacturePojoList(podamFactory, String.class);
+            var scoresB = traceResourceClient.createMultiValueScores(scoreNamesB, projectB, apiKey, workspaceName);
+            createExperimentsItems(apiKey, workspaceName, scoresB, List.of());
+
+            var actualEntity = experimentResourceClient.getFeedbackScoreNames(null, projectAId, apiKey, workspaceName);
+            assertFeedbackScoreNames(actualEntity, scoreNamesA);
         }
 
     }
@@ -6410,6 +6482,7 @@ class ExperimentsResourceTest {
                             .createdBy(USER)
                             .lastUpdatedBy(USER)
                             .traceVisibilityMode(trace == null ? VisibilityMode.HIDDEN : VisibilityMode.DEFAULT)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .build());
         }
 
@@ -7649,7 +7722,7 @@ class ExperimentsResourceTest {
     }
 
     @Nested
-    @DisplayName("Pass Rate for Evaluation Suite Experiments:")
+    @DisplayName("Pass Rate for Test Suite Experiments:")
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class PassRate {
 
@@ -7670,8 +7743,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when experiment is evaluation_suite with assertion scores, then return pass rate")
-        void findEvaluationSuiteExperiment__thenReturnPassRate() {
+        @DisplayName("when experiment is test_suite with assertion scores, then return pass rate")
+        void findTestSuiteExperiment__thenReturnPassRate() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7682,7 +7755,7 @@ class ExperimentsResourceTest {
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7737,7 +7810,7 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when experiment is regular (not evaluation_suite), then pass rate is null")
+        @DisplayName("when experiment is regular (not test_suite), then pass rate is null")
         void findRegularExperiment__thenPassRateIsNull() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
@@ -7776,8 +7849,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when evaluation_suite has multiple assertions per run, then all must pass for run to pass")
-        void findEvaluationSuiteExperiment__multipleAssertions__thenAllMustPass() {
+        @DisplayName("when test_suite has multiple assertions per run, then all must pass for run to pass")
+        void findTestSuiteExperiment__multipleAssertions__thenAllMustPass() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7788,7 +7861,7 @@ class ExperimentsResourceTest {
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7839,8 +7912,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when evaluation_suite experiment has no items, then pass rate is null")
-        void findEvaluationSuiteExperiment__noItems__thenPassRateIsNull() {
+        @DisplayName("when test_suite experiment has no items, then pass rate is null")
+        void findTestSuiteExperiment__noItems__thenPassRateIsNull() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7848,7 +7921,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7857,8 +7930,8 @@ class ExperimentsResourceTest {
         }
 
         @Test
-        @DisplayName("when evaluation_suite has items but no scores, then all runs pass and pass_rate=1.0")
-        void findEvaluationSuiteExperiment__itemsNoScores__thenAllPass() {
+        @DisplayName("when test_suite has items but no scores, then all items are skipped and pass_rate=null")
+        void findTestSuiteExperiment__itemsNoScores__thenPassRateIsNull() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7869,7 +7942,7 @@ class ExperimentsResourceTest {
             var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             createAndAssert(experiment, apiKey, workspaceName);
@@ -7894,16 +7967,73 @@ class ExperimentsResourceTest {
             var expectedExperiment = experiment.toBuilder()
                     .duration(actual.duration())
                     .projectId(projectId)
-                    .passedCount(2L)
+                    .passedCount(0L)
+                    .totalCount(0L)
+                    .build();
+            getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
+        }
+
+        @Test
+        @DisplayName("when test_suite has mix of scored and unscored items, then skipped items are excluded from pass_rate")
+        void findTestSuiteExperiment__someSkipped__thenExcludedFromPassRate() {
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = podamFactory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var experiment = experimentResourceClient.createPartialExperiment()
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
+                    .optimizationId(null)
+                    .build();
+            createAndAssert(experiment, apiKey, workspaceName);
+
+            // 4 traces: trace1=passed, trace2=skipped (no scores), trace3=failed, trace4=skipped (no scores)
+            var trace1 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace2 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace3 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            var trace4 = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(project.name()).build();
+            traceResourceClient.batchCreateTraces(List.of(trace1, trace2, trace3, trace4), apiKey, workspaceName);
+
+            var item1 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace1.id()).build();
+            var item2 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace2.id()).build();
+            var item3 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace3.id()).build();
+            var item4 = podamFactory.manufacturePojo(ExperimentItem.class).toBuilder()
+                    .experimentId(experiment.id()).traceId(trace4.id()).build();
+            createAndAssert(new ExperimentItemsBatch(Set.of(item1, item2, item3, item4)), apiKey, workspaceName);
+
+            // Only score trace1 (pass) and trace3 (fail); trace2 and trace4 have no assertions
+            var scoreName = UUID.randomUUID().toString();
+            var scores = List.of(
+                    score(trace1, scoreName, BigDecimal.ONE),
+                    score(trace3, scoreName, BigDecimal.ZERO));
+            createScoreAndAssert(FeedbackScoreBatch.builder().scores(scores).build(), apiKey, workspaceName);
+
+            // pass_rate = 1 passed / (1 passed + 1 failed) = 0.5; skipped items excluded
+            var actual = experimentResourceClient.getExperiment(experiment.id(), apiKey, workspaceName);
+            var expectedExperiment = experiment.toBuilder()
+                    .duration(actual.duration())
+                    .projectId(projectId)
+                    .passedCount(1L)
                     .totalCount(2L)
-                    .passRate(BigDecimal.ONE)
+                    .passRate(BigDecimal.valueOf(0.5))
                     .build();
             getAndAssert(experiment.id(), expectedExperiment, workspaceName, apiKey);
         }
 
         @Test
         @DisplayName("when suite-level pass_threshold=2 and 2 of 3 runs pass, then item passes and pass_rate=1.0")
-        void findEvaluationSuiteExperiment__suiteThreshold__passThresholdMet() {
+        void findTestSuiteExperiment__suiteThreshold__passThresholdMet() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -7943,7 +8073,7 @@ class ExperimentsResourceTest {
 
             // Create experiment linked to same dataset (auto-resolves to latest version = version2 with pass_threshold=2)
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -7999,7 +8129,7 @@ class ExperimentsResourceTest {
 
         @Test
         @DisplayName("when suite-level pass_threshold=2 and only 1 of 3 runs pass, then item fails and pass_rate=0.0")
-        void findEvaluationSuiteExperiment__suiteThreshold__passThresholdNotMet() {
+        void findTestSuiteExperiment__suiteThreshold__passThresholdNotMet() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -8039,7 +8169,7 @@ class ExperimentsResourceTest {
 
             // Create experiment linked to same dataset (auto-resolves to latest version = version2 with pass_threshold=2)
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8103,7 +8233,7 @@ class ExperimentsResourceTest {
 
         @Test
         @DisplayName("when item-level pass_threshold=3 overrides suite default, then only that item requires 3 passing runs")
-        void findEvaluationSuiteExperiment__itemThreshold__overridesSuiteDefault() {
+        void findTestSuiteExperiment__itemThreshold__overridesSuiteDefault() {
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
             var apiKey = UUID.randomUUID().toString();
@@ -8137,7 +8267,7 @@ class ExperimentsResourceTest {
 
             // Create experiment linked to same dataset
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .datasetName(dataset.name())
                     .optimizationId(null)
                     .build();
@@ -8252,7 +8382,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             experimentResourceClient.create(experiment, apiKey, workspaceName);
@@ -8292,7 +8422,7 @@ class ExperimentsResourceTest {
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
             var experiment = experimentResourceClient.createPartialExperiment()
-                    .evaluationMethod(EvaluationMethod.EVALUATION_SUITE)
+                    .evaluationMethod(EvaluationMethod.TEST_SUITE)
                     .optimizationId(null)
                     .build();
             experimentResourceClient.create(experiment, apiKey, workspaceName);

@@ -3,28 +3,41 @@ import Breadcrumbs from "@/v2/layout/Breadcrumbs/Breadcrumbs";
 import usePluginsStore from "@/store/PluginsStore";
 import AppDebugInfo from "@/v2/layout/AppDebugInfo/AppDebugInfo";
 import SettingsMenu from "../SettingsMenu/SettingsMenu";
-import SupportHub from "@/v2/layout/SupportHub/SupportHub";
+import { Button } from "@/ui/button";
+import OllieOwl from "@/icons/ollie-owl.svg?react";
 
 type TopBarProps = {
-  startSlot?: React.ReactNode;
+  showOllieToggle?: boolean;
+  onOpenAssistant?: () => void;
 };
 
-const TopBar: React.FunctionComponent<TopBarProps> = ({ startSlot }) => {
+const TopBar: React.FC<TopBarProps> = ({
+  showOllieToggle,
+  onOpenAssistant,
+}) => {
   const UserMenu = usePluginsStore((state) => state.UserMenu);
+  const UpgradeButton = usePluginsStore((state) => state.UpgradeButton);
 
   return (
     <nav className="comet-header-height flex w-full items-center justify-between gap-6 border-b pl-4 pr-6">
-      <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-        {startSlot}
-        <div className="min-w-0 flex-1">
-          <Breadcrumbs />
-        </div>
+      <div className="min-w-0 flex-1">
+        <Breadcrumbs />
       </div>
 
       <div className="flex items-center gap-2">
         <AppDebugInfo />
-        <SupportHub />
+        {UpgradeButton && <UpgradeButton />}
         {UserMenu ? <UserMenu /> : <SettingsMenu />}
+        {showOllieToggle && (
+          <Button
+            size="icon-sm"
+            variant="outline"
+            className="text-[#F46E41]"
+            onClick={onOpenAssistant}
+          >
+            <OllieOwl />
+          </Button>
+        )}
       </div>
     </nav>
   );

@@ -1,0 +1,152 @@
+---
+description: Pick the right optimizer, run experiments, and ship better prompts.
+headline: Optimize prompts | Opik Documentation
+og:description: Learn to enhance your prompt optimization process using proven techniques
+  for better performance and efficiency.
+og:site_name: Opik Documentation
+og:title: Optimize prompts effectively with Opik
+title: Optimize prompts
+---
+
+Use this playbook whenever you need to improve a prompt (single-turn or agentic) and want a repeatable process rather than manual tweaks.
+
+## 1. Establish baselines
+
+- Record the current prompt and score using your production metric.
+- Log at least 10 representative dataset rows so the optimizer can generalize.
+- Capture latency and token costs—optimizations should not regress them unexpectedly.
+
+## 2. Choose an optimizer
+
+| Scenario | Recommended optimizer |
+| --- | --- |
+| General prompt copy edits | [MetaPrompt](/development/optimization-runs/algorithms/metaprompt_optimizer) |
+| Complex failure analysis | [HRPO](/development/optimization-runs/algorithms/hierarchical_adaptive_optimizer) |
+| Need diverse candidates | [Evolutionary](/development/optimization-runs/algorithms/evolutionary_optimizer) |
+| Few-shot heavy prompts | [Few-Shot Bayesian](/development/optimization-runs/algorithms/fewshot_bayesian_optimizer) |
+| Tune sampling params | [Parameter optimizer](/development/optimization-runs/algorithms/parameter_optimizer) |
+
+## 3. Configure the run
+
+```python
+from opik_optimizer import HRPO
+
+optimizer = HRPO(
+    model="openai/gpt-4o",
+    max_parallel_batches=4,
+    seed=42,
+)
+result = optimizer.optimize_prompt(
+    prompt=my_prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+    max_trials=5,
+    n_samples=50,
+)
+```
+
+- Set `project_name` on the optimizer to group runs by team or initiative.
+- Start with `max_trials` = 3–5. Increase once you confirm the metric is reliable.
+- Use `n_samples` to limit cost during early exploration; rerun on the full dataset before promoting a prompt.
+- For optimizers with inner-loop evaluations (HRPO, GEPA), set `n_samples_minibatch` to keep those steps lightweight.
+- Use `n_samples_strategy` to keep subsampling deterministic (default: `"random_sorted"`).
+
+### Optimize tools (MCP)
+
+Tool optimization is now documented separately. Use it when you want to improve MCP tool
+descriptions without changing prompt text.
+
+- [Optimize tools (MCP)](/development/optimization-runs/optimization/optimize_tools)
+
+### Target specific sections inside a prompt (advanced)
+
+If you need finer control than roles (for example, only optimize a specific assistant message),
+use `prompt_segments` to extract and update parts by segment ID.
+
+Intent/Trigger: use segment-level updates when you need to constrain changes to exact message segments.
+
+- Required parameters: `prompt`, `dataset`, `metric`
+- Optional parameters: segment update args (`updates` passed to `prompt_segments.apply_segment_updates`)
+- Minimal valid payload: `optimizer.optimize_prompt(prompt=updated_prompt, dataset=my_dataset, metric=answer_quality)`
+
+```python
+from opik_optimizer.utils import prompt_segments
+
+segments = prompt_segments.extract_prompt_segments(my_prompt)
+for segment in segments:
+    print(segment.segment_id, segment.role)
+
+# Update only message:1 (second message)
+updates = {"message:1": "User question: {user_query}"}
+updated_prompt = prompt_segments.apply_segment_updates(my_prompt, updates)
+
+# Use the updated prompt in optimization (the original prompt is unchanged)
+result = optimizer.optimize_prompt(
+    prompt=updated_prompt,
+    dataset=my_dataset,
+    metric=answer_quality,
+)
+```
+
+### Optimize multiple prompts together
+
+You can pass a dict of `ChatPrompt` objects to optimize a coordinated prompt bundle (for example, a multi-agent setup or system/user prompt pair that must stay in sync). Each key names a prompt and is preserved through optimization.
+
+```python
+from opik_optimizer import MetaPromptOptimizer, ChatPrompt
+
+prompts = {
+    "researcher": ChatPrompt(
+        name="researcher",
+        messages=[
+            {"role": "system", "content": "Gather facts and cite sources."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+    "synthesizer": ChatPrompt(
+        name="synthesizer",
+        messages=[
+            {"role": "system", "content": "Summarize findings clearly."},
+            {"role": "user", "content": "{question}"},
+        ],
+    ),
+}
+
+optimizer = MetaPromptOptimizer(model="openai/gpt-4o-mini", prompts_per_round=2)
+result = optimizer.optimize_prompt(
+    prompt=prompts,
+    dataset=my_dataset,
+    metric=answer_quality,
+    max_trials=3,
+)
+```
+
+`result.prompt` returns a dict keyed by the same names so you can update each agent prompt together.
+
+## 4. Evaluate outcomes
+
+- Compare `result.score` vs. `result.initial_score` to ensure material improvement.
+- Review the `history` attribute for regression reasons.
+- Use [Dashboard results](/development/optimization-runs/optimization/dashboard_results) to visualize per-trial performance.
+
+## 5. Ship safely
+
+<Steps>
+  <Step title="Export the prompt">
+    `result.prompt` returns the best-performing `ChatPrompt`. Serialize it as JSON and check it into your repo.
+  </Step>
+  <Step title="Automate regression tests">
+    Wire the optimizer run into CI with a smaller dataset so future prompt edits have guardrails.
+  </Step>
+  <Step title="Monitor in production">
+    Trace the new prompt with Opik tracing to confirm real-world performance matches experiment results.
+  </Step>
+</Steps>
+
+## Related guides
+
+- [Optimization Studio](/development/optimization-runs/optimization_studio)
+- [Define datasets](/development/optimization-runs/optimization/define_datasets)
+- [Define metrics](/development/optimization-runs/optimization/define_metrics)
+- [Chaining optimizers](/development/optimization-runs/advanced/chaining_optimizers)
+- [Avoiding overfitting](/development/optimization-runs/optimization/define_datasets#trainvalidation-splits) – Prevent your prompt from memorizing the training data by using separate validation datasets

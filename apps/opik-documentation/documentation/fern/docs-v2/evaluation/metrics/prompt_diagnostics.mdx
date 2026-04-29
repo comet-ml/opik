@@ -1,0 +1,43 @@
+---
+description: Estimate prompt ambiguity with PromptUncertaintyJudge
+headline: Prompt uncertainty | Opik Documentation
+og:description: Evaluate risky user requests with Opik's PromptUncertaintyJudge to
+  enhance model clarity and decision-making.
+og:site_name: Opik Documentation
+og:title: Prompt Uncertainty Scoring - Opik
+title: Prompt uncertainty
+---
+
+# Prompt Uncertainty
+
+Prompt uncertainty scoring helps you triage risky or underspecified user requests before they reach your production model. `PromptUncertaintyJudge` highlights missing context or conflicting instructions that could confuse an assistant.
+
+Run the judge on raw prompts to decide whether to request clarification, route to a human, or fan out to more capable models.
+
+```python title="Triaging tricky prompts"
+from opik.evaluation.metrics import PromptUncertaintyJudge
+
+prompt = (
+    "Summarise the attached 200-page legal agreement into a single bullet, "
+    "guaranteeing there are no omissions."
+)
+
+uncertainty = PromptUncertaintyJudge().score(input=prompt)
+
+print(uncertainty.value, uncertainty.reason)
+```
+
+## Inputs
+
+The judge accepts a single string via the `input` keyword. You can optionally pass additional metadata (dataset row contents, prompt IDs) via keyword arguments – these will be forwarded to the underlying base metric for tracking.
+
+## Configuration
+
+| Parameter | Default | Notes |
+| --- | --- | --- |
+| `model` | `gpt-5-nano` | Swap to any LiteLLM chat model if you need a larger evaluator. |
+| `temperature` | `0.0` | Lower values improve reproducibility; higher values explore more interpretations. |
+| `track` | `True` | Disable to skip logging evaluations. |
+| `project_name` | `None` | Override the project when logging results. |
+
+The evaluator emits an integer between 0 and 10 (normalised to 0–1 by Opik). Inspect the `reason` text for rationale and per-criterion feedback, and trigger follow-up automations when scores cross a threshold.

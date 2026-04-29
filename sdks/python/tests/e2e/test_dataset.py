@@ -5,7 +5,10 @@ from opik import synchronization
 from opik.api_objects.dataset import dataset_item
 from opik.api_objects import helpers
 from . import verifiers
+from ..testlib import generate_project_name
 import pytest
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def test_create_and_populate_dataset__happyflow(
@@ -13,9 +16,8 @@ def test_create_and_populate_dataset__happyflow(
 ):
     DESCRIPTION = "E2E test dataset"
 
-    project_name = opik_client.project_name
     dataset = opik_client.create_dataset(
-        dataset_name, description=DESCRIPTION, project_name=project_name
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
 
     dataset.insert(
@@ -55,7 +57,7 @@ def test_create_and_populate_dataset__happyflow(
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=EXPECTED_DATASET_ITEMS,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -63,10 +65,9 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
     opik_client: opik.Opik, dataset_name: str
 ):
     DESCRIPTION = "E2E test dataset"
-    project_name = opik_client.project_name
 
     dataset = opik_client.create_dataset(
-        dataset_name, description=DESCRIPTION, project_name=project_name
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
 
     ITEM_ID = helpers.generate_id()
@@ -97,7 +98,7 @@ def test_insert_and_update_item__dataset_size_should_be_the_same__an_item_with_t
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=EXPECTED_DATASET_ITEMS,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -110,11 +111,13 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
     }
 
     # Write the dataset
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
+    )
     dataset.insert([item])
 
     # Read the dataset and insert the same item
-    new_dataset = opik_client.get_dataset(dataset_name)
+    new_dataset = opik_client.get_dataset(dataset_name, project_name=PROJECT_NAME)
     new_dataset.insert([item])
 
     # Verify the dataset
@@ -125,14 +128,16 @@ def test_deduplication(opik_client: opik.Opik, dataset_name: str):
         dataset_items=[
             dataset_item.DatasetItem(**item),
         ],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=PROJECT_NAME,
     )
 
 
 def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
     DESCRIPTION = "E2E test dataset"
 
-    dataset = opik_client.create_dataset(dataset_name, description=DESCRIPTION)
+    dataset = opik_client.create_dataset(
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
+    )
 
     dataset.insert(
         [
@@ -153,7 +158,7 @@ def test_dataset_clearing(opik_client: opik.Opik, dataset_name: str):
         name=dataset_name,
         description=DESCRIPTION,
         dataset_items=[],
-        project_name=opik_client.project_name,  # use the default project name from the client
+        project_name=PROJECT_NAME,
     )
 
 
@@ -162,11 +167,10 @@ def test_get_items_with_filter__returns_filtered_items(
 ):
     """Test that get_items with filter_string returns correct filtered items."""
     DESCRIPTION = "E2E test dataset for filtering"
-    project_name = "dataset-test-project"
 
     # Create dataset with items that have different data.category values
     dataset = opik_client.create_dataset(
-        dataset_name, description=DESCRIPTION, project_name=project_name
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
     dataset.insert(
         [
@@ -197,7 +201,7 @@ def test_get_items_with_filter__returns_filtered_items(
             "What is the capital of France?",
             "What is the capital of Poland?",
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -206,11 +210,10 @@ def test_get_items_with_filter__filter_excludes_all_items__returns_empty_list(
 ):
     """Test that get_items with filter that matches no items returns empty list."""
     DESCRIPTION = "E2E test dataset for empty filter"
-    project_name = "dataset-test-project"
 
     # Create dataset with items
     dataset = opik_client.create_dataset(
-        dataset_name, description=DESCRIPTION, project_name=project_name
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
     dataset.insert(
         [
@@ -243,7 +246,7 @@ def test_get_items_with_filter__filter_excludes_all_items__returns_empty_list(
         filter_string='data.category = "nonexistent"',
         expected_count=0,
         expected_inputs=set(),
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -264,10 +267,9 @@ def test_get_version_view__returns_items_from_specific_version(
     Also tests that get_current_version_name returns correct version after mutations.
     """
     DESCRIPTION = "E2E test dataset for version view"
-    project_name = "dataset-test-project"
 
     dataset = opik_client.create_dataset(
-        dataset_name, description=DESCRIPTION, project_name=project_name
+        dataset_name, description=DESCRIPTION, project_name=PROJECT_NAME
     )
 
     # Version should be None before any items are inserted
@@ -302,7 +304,7 @@ def test_get_version_view__returns_items_from_specific_version(
     assert v1_items[0]["input"] == {"question": "What is the capital of France?"}
     assert v1_view.version_name == "v1"
     assert v1_view.items_total == 1
-    assert v1_view.project_name == project_name
+    assert v1_view.project_name == PROJECT_NAME
 
     # Get version view for v2 - should have 2 items
     v2_view = dataset.get_version_view("v2")
@@ -310,7 +312,7 @@ def test_get_version_view__returns_items_from_specific_version(
     assert len(v2_items) == 2
     assert v2_view.version_name == "v2"
     assert v2_view.items_total == 2
-    assert v2_view.project_name == project_name
+    assert v2_view.project_name == PROJECT_NAME
 
     # Current dataset should also have 2 items
     current_items = dataset.get_items()
@@ -326,7 +328,7 @@ def test_get_version_view__returns_items_from_specific_version(
     assert len(v3_items) == 1
     assert v3_view.version_name == "v3"
     assert v3_view.items_total == 1
-    assert v3_view.project_name == project_name
+    assert v3_view.project_name == PROJECT_NAME
 
 
 def test_get_version_view__version_not_found__raises_exception(
@@ -350,3 +352,24 @@ def test_get_version_view__version_not_found__raises_exception(
     # Try to get a non-existent version
     with pytest.raises(opik.exceptions.DatasetVersionNotFound):
         dataset.get_version_view("v999")
+
+
+def test_dataset_items_count__returns_correct_count_after_insert(
+    opik_client: opik.Opik, dataset_name: str
+):
+    """Test that dataset_items_count returns the correct count after insert."""
+    dataset = opik_client.create_dataset(dataset_name, description="items_count test")
+
+    dataset.insert(
+        [
+            {"input": {"question": "What is 2+2?"}},
+            {"input": {"question": "What is 3+3?"}},
+            {"input": {"question": "What is 4+4?"}},
+        ]
+    )
+
+    success = synchronization.until(
+        lambda: dataset.dataset_items_count == 3,
+        max_try_seconds=30,
+    )
+    assert success, f"Expected dataset_items_count=3, got {dataset.dataset_items_count}"

@@ -1,4 +1,4 @@
-import NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
+import V1NewQuickstart from "@/v1/pages/GetStartedPage/NewQuickstart";
 import useUser from "./useUser";
 import useOrganizations from "@/plugins/comet/useOrganizations";
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
@@ -29,7 +29,7 @@ const GetStartedPage = () => {
   const isEnterpriseCustomer =
     currentOrganization?.paymentPlan === ORGANIZATION_PLAN_ENTERPRISE;
 
-  return <NewQuickstart shouldSkipQuestions={isEnterpriseCustomer} />;
+  return <V1NewQuickstart shouldSkipQuestions={isEnterpriseCustomer} />;
 };
 
 export default GetStartedPage;

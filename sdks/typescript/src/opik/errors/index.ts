@@ -7,3 +7,4 @@ export * from "./types";
 export * from "./dataset";
 export * from "./search";
 export * from "@/annotation-queue/errors";
+export * from "./agent-config/errors";

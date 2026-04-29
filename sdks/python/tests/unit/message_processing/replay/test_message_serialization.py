@@ -408,6 +408,7 @@ class TestCreateTraceMessageSerialization:
             error_info=error_info,
             thread_id="thread-1",
             last_updated_at=last_updated_at,
+            source="sdk",
         )
 
         # Serialize to JSON string
@@ -434,6 +435,7 @@ class TestCreateTraceMessageSerialization:
         assert deserialized.error_info == error_info
         assert deserialized.thread_id == "thread-1"
         assert str(deserialized.last_updated_at) == str(last_updated_at)
+        assert deserialized.source == "sdk"
 
 
 class TestUpdateTraceMessageSerialization:
@@ -451,6 +453,7 @@ class TestUpdateTraceMessageSerialization:
             tags=["updated-tag"],
             error_info=None,
             thread_id="thread-2",
+            source="sdk",
         )
 
         # Serialize to JSON string
@@ -474,6 +477,7 @@ class TestUpdateTraceMessageSerialization:
         assert deserialized.tags == ["updated-tag"]
         assert deserialized.error_info is None
         assert deserialized.thread_id == "thread-2"
+        assert deserialized.source == "sdk"
 
 
 class TestCreateSpanMessageSerialization:
@@ -511,6 +515,7 @@ class TestCreateSpanMessageSerialization:
             error_info=error_info,
             total_cost=0.05,
             last_updated_at=last_updated_at,
+            source="sdk",
         )
 
         # Serialize to JSON string
@@ -543,6 +548,7 @@ class TestCreateSpanMessageSerialization:
         assert deserialized.error_info == error_info
         assert deserialized.total_cost == 0.05
         assert str(deserialized.last_updated_at) == str(last_updated_at)
+        assert deserialized.source == "sdk"
 
 
 class TestUpdateSpanMessageSerialization:
@@ -565,6 +571,7 @@ class TestUpdateSpanMessageSerialization:
             provider="openai",
             error_info=None,
             total_cost=0.08,
+            source="sdk",
         )
 
         # Serialize to JSON string
@@ -593,6 +600,7 @@ class TestUpdateSpanMessageSerialization:
         assert deserialized.provider == "openai"
         assert deserialized.error_info is None
         assert deserialized.total_cost == 0.08
+        assert deserialized.source == "sdk"
 
 
 class TestDatetimeObjectHook:
@@ -705,6 +713,7 @@ class TestIsoStringsInDataFieldsPreserved:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         json_str = message_serialization.serialize_message(original)
@@ -751,6 +760,7 @@ class TestIsoStringsInDataFieldsPreserved:
             error_info=None,
             total_cost=None,
             last_updated_at=None,
+            source="sdk",
         )
 
         json_str = message_serialization.serialize_message(original)
@@ -937,6 +947,7 @@ class TestNonJsonSerializableTypesInMessageFields:
             error_info=None,
             thread_id=None,
             last_updated_at=None,
+            source="sdk",
         )
 
     def _round_trip(

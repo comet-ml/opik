@@ -8,6 +8,7 @@ import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.ExperimentItemBulkUpload;
 import com.comet.opik.api.ExperimentItemStreamRequest;
 import com.comet.opik.api.ExperimentItemsBatch;
+import com.comet.opik.api.ExperimentItemsDelete;
 import com.comet.opik.api.ExperimentStreamRequest;
 import com.comet.opik.api.ExperimentType;
 import com.comet.opik.api.ExperimentUpdate;
@@ -429,11 +430,20 @@ public class ExperimentResourceClient {
     }
 
     public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds, String apiKey, String workspaceName) {
-        var ids = JsonUtils.writeValueAsString(experimentIds);
+        return getFeedbackScoreNames(experimentIds, null, apiKey, workspaceName);
+    }
+
+    public FeedbackScoreNames getFeedbackScoreNames(List<UUID> experimentIds, UUID projectId, String apiKey,
+            String workspaceName) {
         WebTarget webTarget = client.target(RESOURCE_PATH.formatted(baseURI))
                 .path("feedback-scores")
-                .path("names")
-                .queryParam("experiment_ids", ids);
+                .path("names");
+        if (experimentIds != null) {
+            webTarget = webTarget.queryParam("experiment_ids", JsonUtils.writeValueAsString(experimentIds));
+        }
+        if (projectId != null) {
+            webTarget = webTarget.queryParam("project_id", projectId);
+        }
         try (var response = webTarget
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
@@ -510,6 +520,18 @@ public class ExperimentResourceClient {
                 return response.readEntity(Experiment.ExperimentPage.class);
             }
             return null;
+        }
+    }
+
+    public void deleteExperimentItems(Set<UUID> ids, String apiKey, String workspaceName) {
+        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("delete")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(new ExperimentItemsDelete(ids)))) {
+            assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
         }
     }
 

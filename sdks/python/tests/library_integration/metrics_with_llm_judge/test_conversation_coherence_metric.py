@@ -36,7 +36,7 @@ def real_model_conversation():
 def test_conversation_coherence_metric(real_model_conversation):
     """Integration test with a real model."""
     metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, window_size=2
+        track=False, window_size=5, reasoning_effort="minimal"
     )  # Uses default model
     result = metric.score(real_model_conversation)
 
@@ -50,7 +50,7 @@ async def test_conversation_coherence_metric_async(real_model_conversation):
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
     metric = conversational_coherence.ConversationalCoherenceMetric(
-        track=False, window_size=2
+        track=False, window_size=5, reasoning_effort="minimal"
     )  # Uses default model
     result = await metric.ascore(real_model_conversation)
 

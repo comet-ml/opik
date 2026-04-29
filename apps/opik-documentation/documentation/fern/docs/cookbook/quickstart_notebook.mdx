@@ -9,6 +9,10 @@ title: Quickstart notebook
 
 # Quickstart notebook - Summarization
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 In this notebook, we will look at how you can use Opik to track your LLM calls, chains and agents. We will introduce the concept of tracing and how to automate the evaluation of your LLM workflows.
 
 We will be using a technique called Chain of Density Summarization to summarize Arxiv papers. You can learn more about this technique in the [From Sparse to Dense: GPT-4 Summarization with Chain of Density Prompting](https://arxiv.org/abs/2309.04269) paper.
@@ -61,6 +65,7 @@ Guidelines:
 - The summary should become highly dense and concise yet self-contained, e.g. , easily understood without the Document.
 - Make sure that the summary specifically addresses the given Instruction
 """.rstrip().lstrip(),
+    project_name="my-project",
 )
 
 FINAL_SUMMARY_PROMPT = opik.Prompt(
@@ -70,6 +75,7 @@ Given this summary: {{current_summary}}
 And this instruction to focus on: {{instruction}}
 Create an extremely dense, final summary that captures all key technical information in the most concise form possible, while specifically addressing the given instruction.
 """.rstrip().lstrip(),
+    project_name="my-project",
 )
 ```
 
@@ -236,7 +242,7 @@ dataset_items = [
 
 client = opik.Opik()
 DATASET_NAME = "arXiv Papers"
-dataset = client.get_or_create_dataset(name=DATASET_NAME)
+dataset = client.get_or_create_dataset(name=DATASET_NAME, project_name="my-project")
 dataset.insert(dataset_items)
 ```
 
@@ -487,6 +493,7 @@ Guidelines:
 4. **Align with Instruction**: Make sure the summary specifically addresses the given instruction.
 
 """.rstrip().lstrip(),
+    project_name="my-project",
 )
 ```
 

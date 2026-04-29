@@ -9,28 +9,17 @@ export const AgentConfigValueHistory: core.serialization.ObjectSchema<
     serializers.AgentConfigValueHistory.Raw,
     OpikApi.AgentConfigValueHistory
 > = core.serialization.object({
-    id: core.serialization.string().optional(),
-    projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     key: core.serialization.string(),
     value: core.serialization.string().optional(),
     type: AgentConfigValueHistoryType,
     description: core.serialization.string().optional(),
-    validFromBlueprintId: core.serialization.property(
-        "valid_from_blueprint_id",
-        core.serialization.string().optional(),
-    ),
-    validToBlueprintId: core.serialization.property("valid_to_blueprint_id", core.serialization.string().optional()),
 });
 
 export declare namespace AgentConfigValueHistory {
     export interface Raw {
-        id?: string | null;
-        project_id?: string | null;
         key: string;
         value?: string | null;
         type: AgentConfigValueHistoryType.Raw;
         description?: string | null;
-        valid_from_blueprint_id?: string | null;
-        valid_to_blueprint_id?: string | null;
     }
 }

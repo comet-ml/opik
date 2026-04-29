@@ -4,6 +4,7 @@ import com.codahale.metrics.annotation.Timed;
 import com.comet.opik.api.BatchDelete;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
+import com.comet.opik.api.DashboardScope;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.filter.FiltersFactory;
@@ -70,6 +71,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "201", description = "Created", headers = {
                     @Header(name = "Location", required = true, example = "${basePath}/v1/private/dashboards/{dashboardId}", schema = @Schema(implementation = String.class))}, content = @Content(schema = @Schema(implementation = Dashboard.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_CREATE)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response createDashboard(
@@ -79,7 +81,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Creating dashboard with name '{}' in workspace '{}'", dashboard.name(), workspaceId);
 
-        Dashboard savedDashboard = service.create(dashboard);
+        Dashboard savedDashboard = service.create(dashboard, DashboardScope.WORKSPACE);
 
         log.info("Created dashboard with id '{}', name '{}', slug '{}' in workspace '{}'",
                 savedDashboard.id(), savedDashboard.name(), savedDashboard.slug(), workspaceId);
@@ -101,7 +103,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Finding dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        Dashboard dashboard = service.findById(id);
+        Dashboard dashboard = service.findById(id, DashboardScope.WORKSPACE);
 
         log.info("Found dashboard by id '{}', name '{}' in workspace '{}'", id, dashboard.name(), workspaceId);
         return Response.ok().entity(dashboard).build();
@@ -128,7 +130,8 @@ public class DashboardsResource {
         log.info("Finding dashboards in workspace '{}', page '{}', size '{}', name '{}', sorting '{}'",
                 workspaceId, page, size, name, sorting);
 
-        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters);
+        DashboardPage dashboardPage = service.find(page, size, name, projectId, sortingFields, dashboardFilters,
+                DashboardScope.WORKSPACE);
 
         log.info("Found '{}' dashboards in workspace '{}'", dashboardPage.total(), workspaceId);
 
@@ -142,6 +145,7 @@ public class DashboardsResource {
             @ApiResponse(responseCode = "404", description = "Dashboard not found"),
             @ApiResponse(responseCode = "409", description = "Conflict - dashboard with this name already exists")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_EDIT)
     @JsonView(Dashboard.View.Public.class)
     @RateLimited
     public Response updateDashboard(
@@ -151,7 +155,7 @@ public class DashboardsResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Updating dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        Dashboard updatedDashboard = service.update(id, dashboardUpdate);
+        Dashboard updatedDashboard = service.update(id, dashboardUpdate, DashboardScope.WORKSPACE);
 
         log.info("Updated dashboard by id '{}', name '{}' in workspace '{}'",
                 id, updatedDashboard.name(), workspaceId);
@@ -164,12 +168,13 @@ public class DashboardsResource {
     @Operation(operationId = "deleteDashboard", summary = "Delete dashboard", description = "Delete dashboard by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content")
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteDashboard(@PathParam("dashboardId") UUID id) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
         log.info("Deleting dashboard by id '{}' in workspace '{}'", id, workspaceId);
 
-        service.delete(id);
+        service.delete(id, DashboardScope.WORKSPACE);
 
         log.info("Deleted dashboard by id '{}' in workspace '{}'", id, workspaceId);
         return Response.noContent().build();
@@ -180,13 +185,14 @@ public class DashboardsResource {
     @Operation(operationId = "deleteDashboardsBatch", summary = "Delete dashboards", description = "Delete dashboards batch", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DASHBOARD_DELETE)
     public Response deleteDashboardsBatch(
             @NotNull @RequestBody(content = @Content(schema = @Schema(implementation = BatchDelete.class))) @Valid BatchDelete batchDelete) {
 
         String workspaceId = requestContext.get().getWorkspaceId();
 
         log.info("Deleting dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
-        service.delete(batchDelete.ids());
+        service.delete(batchDelete.ids(), DashboardScope.WORKSPACE);
         log.info("Deleted dashboards by ids, count '{}' in workspace '{}'", batchDelete.ids().size(), workspaceId);
 
         return Response.noContent().build();

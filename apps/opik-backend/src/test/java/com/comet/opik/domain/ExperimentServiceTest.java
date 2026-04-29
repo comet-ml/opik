@@ -13,6 +13,7 @@ import com.comet.opik.infrastructure.ExperimentAggregatesConfig;
 import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
@@ -102,6 +103,9 @@ class ExperimentServiceTest {
     @Mock
     private ExperimentAggregationPublisher experimentAggregationPublisher;
 
+    @Mock
+    private AnalyticsService analyticsService;
+
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
@@ -126,7 +130,8 @@ class ExperimentServiceTest {
                 config,
                 experimentGroupEnricher,
                 experimentAggregatesService,
-                experimentAggregationPublisher);
+                experimentAggregationPublisher,
+                analyticsService);
     }
 
     @Nested

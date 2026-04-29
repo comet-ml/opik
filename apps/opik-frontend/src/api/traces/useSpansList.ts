@@ -2,7 +2,8 @@ import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
 import api, { QueryConfig, SPANS_KEY, SPANS_REST_ENDPOINT } from "@/api/api";
 import { Span, SPAN_TYPE } from "@/types/traces";
 import { Filters } from "@/types/filters";
-import { processFilters } from "@/lib/filters";
+import { generateLogsSourceFilter, processFilters } from "@/lib/filters";
+import { LOGS_SOURCE } from "@/types/traces";
 import { Sorting } from "@/types/sorting";
 import { processSorting } from "@/lib/sorting";
 
@@ -20,6 +21,7 @@ export type UseSpansListParams = {
   exclude?: string[];
   fromTime?: string;
   toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 export type UseSpansListResponse = {
@@ -44,6 +46,7 @@ const getSpansList = async (
     exclude,
     fromTime,
     toTime,
+    logsSource,
   }: UseSpansListParams,
 ) => {
   const { data } = await api.get(SPANS_REST_ENDPOINT, {
@@ -52,7 +55,10 @@ const getSpansList = async (
       project_id: projectId,
       ...(traceId && { trace_id: traceId }),
       ...(type && { type }),
-      ...processFilters(filters),
+      ...processFilters(
+        filters,
+        logsSource ? generateLogsSourceFilter(logsSource) : undefined,
+      ),
       ...processSorting(sorting),
       ...(search && { search }),
       ...(exclude && { exclude: JSON.stringify(exclude) }),

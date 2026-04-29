@@ -36,8 +36,8 @@ const ConfigurationPage = () => {
   }, [tab, setTab]);
 
   return (
-    <div className="pt-6">
-      <h1 className="comet-title-l">Configuration</h1>
+    <div className="pt-5">
+      <h1 className="comet-body-accented">Configuration</h1>
 
       <div className="mt-6">
         <Tabs

@@ -14,6 +14,10 @@ on:
       - 'sdks/typescript/**'
       - 'apps/opik-backend/**'
       - '.github/workflows/typescript_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
@@ -23,18 +27,40 @@ env:
   OPIK_URL_OVERRIDE: http://localhost:8080
   OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
 jobs:
+  select-matrix:
+    name: Select Node version matrix
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      node_versions: ${{ steps.pick.outputs.versions }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/actions/select-e2e-matrix
+          sparse-checkout-cone-mode: false
+      - uses: ./.github/actions/select-e2e-matrix
+        id: pick
+        with:
+          all-versions: ${{ vars.NODE_VERSIONS }}
+          match-regex: '^sdks/typescript/|^\.github/workflows/typescript_sdk_e2e_tests\.yml$'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
   run-e2e:
+    needs: select-matrix
     name: TypeScript SDK E2E Tests Node ${{matrix.node_version}}
     permissions:
       contents: read
       checks: write
       pull-requests: write
-    runs-on: ubuntu-latest-m
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        node_version: [18, 20, 22]
+        node_version: ${{ fromJSON(needs.select-matrix.outputs.node_versions) }}
 
     steps:
       - name: Checkout
@@ -49,6 +75,7 @@ jobs:
         env:
           OPIK_USAGE_REPORT_ENABLED: false
           COMPOSE_BAKE: false
+          TOGGLE_RUNNERS_ENABLED: "true"
         run: |
           cd ${{ github.workspace }}
           ./opik.sh --backend --port-mapping --build

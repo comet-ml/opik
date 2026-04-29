@@ -17,7 +17,7 @@ from typing import (
 from .. import context_storage, logging_messages, tracing_runtime_config
 from ..api_objects import opik_client, span, trace
 from ..runner import registry
-from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType
+from ..types import DistributedTraceHeadersDict, ErrorInfoDict, SpanType, TraceSource
 from . import (
     arguments_helpers,
     error_info_collector,
@@ -71,6 +71,7 @@ class BaseTrackDecorator(abc.ABC):
         project_name: Optional[str] = None,
         create_duplicate_root_span: bool = True,
         entrypoint: bool = False,
+        source: Optional[TraceSource] = None,
     ) -> Union[Callable, Callable[[Callable], Callable]]:
         """
         Decorator to track the execution of a function.
@@ -89,6 +90,7 @@ class BaseTrackDecorator(abc.ABC):
             flush: Whether to flush the client after logging.
             project_name: The name of the project to log data.
             create_duplicate_root_span: Whether to create a root span duplicating the root trace data.
+            source: The source of the trace.
 
         Returns:
             Callable: The decorated function(if used without parentheses)
@@ -118,6 +120,7 @@ class BaseTrackDecorator(abc.ABC):
             flush=flush,
             project_name=project_name,
             create_duplicate_root_span=create_duplicate_root_span,
+            source=source,
         )
 
         if callable(name):
@@ -465,6 +468,7 @@ class BaseTrackDecorator(abc.ABC):
             opik_args_data=track_start_options.opik_args,
             tracing_active=tracing_runtime_config.is_tracing_active(),
             create_duplicate_root_span=track_options.create_duplicate_root_span,
+            source=track_options.source,
         )
 
     def _after_call(
@@ -547,21 +551,21 @@ class BaseTrackDecorator(abc.ABC):
         else:
             end_arguments = arguments_helpers.EndSpanParameters(error_info=error_info)
 
-        client = opik_client.get_client_cached()
+        client = opik_client.get_global_client()
 
         if should_process_span_data and span_data_to_end is not None:
             # save span data only if appropriate
             span_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(),
             )
-            client.span(**span_data_to_end.as_parameters)
+            client.__internal_api__span__(**span_data_to_end.as_parameters)
 
         if trace_data_to_end is not None:
             trace_data_to_end.init_end_time().update(
                 **end_arguments.to_kwargs(ignore_keys=["usage", "model", "provider"]),
             )
 
-            client.trace(**trace_data_to_end.as_parameters)
+            client.__internal_api__trace__(**trace_data_to_end.as_parameters)
 
         if flush:
             client.flush()
@@ -650,6 +654,8 @@ def pop_end_candidates() -> Tuple[span.SpanData, Optional[trace.TraceData]]:
         "When pop_end_candidates is called, top span data must not be None. Otherwise something is wrong."
     )
 
+    context_storage.release_context_project_name_if_owner(span_data_to_end.id)
+
     trace_data_to_end = pop_end_candidate_trace_data()
     return span_data_to_end, trace_data_to_end
 
@@ -676,11 +682,33 @@ def pop_end_candidate_trace_data() -> Optional[trace.TraceData]:
         and possible_trace_data_to_end is not None
         and possible_trace_data_to_end.id in TRACES_CREATED_BY_DECORATOR
     ):
-        trace_data_to_end = context_storage.pop_trace_data()
+        trace_data_to_end = context_storage.pop_trace_data(
+            ensure_id=possible_trace_data_to_end.id
+        )
         TRACES_CREATED_BY_DECORATOR.discard(possible_trace_data_to_end.id)
+        context_storage.release_context_project_name_if_owner(
+            possible_trace_data_to_end.id
+        )
         return trace_data_to_end
 
     return None
+
+
+def _try_acquire_project_name(
+    span_creation_result: span_creation_handler.SpanCreationResult,
+) -> None:
+    if span_creation_result.should_process_span_data:
+        span_data = span_creation_result.span_data
+        if span_data.project_name is not None:
+            context_storage.try_acquire_context_project_name(
+                span_data.project_name, span_data.id
+            )
+    elif span_creation_result.trace_data is not None:
+        trace_data = span_creation_result.trace_data
+        if trace_data.project_name is not None:
+            context_storage.try_acquire_context_project_name(
+                trace_data.project_name, trace_data.id
+            )
 
 
 def add_start_candidates(
@@ -689,6 +717,7 @@ def add_start_candidates(
     opik_args_data: Optional[opik_args.OpikArgs],
     tracing_active: bool,
     create_duplicate_root_span: bool,
+    source: Optional[TraceSource],
 ) -> span_creation_handler.SpanCreationResult:
     """
     Handles the creation and registration of a new start span and trace while respecting the
@@ -705,6 +734,7 @@ def add_start_candidates(
         tracing_active: A boolean indicating whether a tracing is active.
         create_duplicate_root_span: A boolean indicating whether to create a root span along with the root trace
             and duplicating its data.
+        source: The source of the trace, which determines how the trace is created.
 
     Returns:
         The result of the span creation, including the span and trace data.
@@ -718,15 +748,18 @@ def add_start_candidates(
         distributed_trace_headers=opik_distributed_trace_headers,
         should_create_duplicate_root_span=create_duplicate_root_span,
         preset_trace_id=preset_trace_id,
+        source=source,
     )
     if span_creation_result.should_process_span_data:
         context_storage.add_span_data(span_creation_result.span_data)
 
         if tracing_active:
-            client = opik_client.get_client_cached()
+            client = opik_client.get_global_client()
 
             if client.config.log_start_trace_span:
-                client.span(**span_creation_result.span_data.as_start_parameters)
+                client.__internal_api__span__(
+                    **span_creation_result.span_data.as_start_parameters
+                )
     else:
         _show_root_span_not_created_warning_if_needed(
             start_span_parameters=start_span_parameters,
@@ -740,6 +773,8 @@ def add_start_candidates(
             opik_args_data=opik_args_data,
             tracing_active=tracing_active,
         )
+
+    _try_acquire_project_name(span_creation_result)
 
     return span_creation_result
 
@@ -775,9 +810,9 @@ def add_start_trace_candidate(
     if not tracing_active:
         return
 
-    client = opik_client.get_client_cached()
+    client = opik_client.get_global_client()
     if client.config.log_start_trace_span:
-        client.trace(**trace_data.as_start_parameters)
+        client.__internal_api__trace__(**trace_data.as_start_parameters)
 
 
 def _show_root_span_not_created_warning_if_needed(

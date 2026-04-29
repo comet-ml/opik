@@ -6,6 +6,9 @@ import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.domain.LlmProviderApiKeyService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.LlmProviderService;
+import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
+import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.llm.antropic.AnthropicModelName;
 import com.comet.opik.infrastructure.llm.customllm.CustomLlmModelNameChecker;
@@ -39,6 +42,7 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
 
     private final @NonNull LlmProviderApiKeyService llmProviderApiKeyService;
     private final @NonNull OpikConfiguration configuration;
+    private final @NonNull LlmModelRegistryService registryService;
     private final Map<LlmProvider, LlmServiceProvider> services = new EnumMap<>(LlmProvider.class);
 
     public void register(LlmProvider llmProvider, LlmServiceProvider service) {
@@ -90,7 +94,29 @@ class LlmProviderFactoryImpl implements LlmProviderFactory {
      * The agreed requirement is to resolve the LLM provider and its API key based on the model.
      */
     public LlmProvider getLlmProvider(@NonNull String model) {
-        // Check if this is the free model
+        // Check YAML registry first — models added here are routable without enum changes
+        var registryResult = registryService.findModel(model);
+        if (registryResult.isPresent()) {
+            return registryResult.get().provider();
+        }
+
+        return getLlmProviderFromEnums(model);
+    }
+
+    @Override
+    public StructuredOutputStrategy getStructuredOutputStrategy(@NonNull String model) {
+        var registryResult = registryService.findModel(model);
+        if (registryResult.isPresent()) {
+            return registryResult.get().model().structuredOutput()
+                    ? new ToolCallingStrategy()
+                    : new InstructionStrategy();
+        }
+
+        var provider = getLlmProviderFromEnums(model);
+        return StructuredOutputStrategy.getStrategy(provider, model);
+    }
+
+    private LlmProvider getLlmProviderFromEnums(@NonNull String model) {
         var freeModelConfig = configuration.getFreeModel();
         if (freeModelConfig.isEnabled() && model.equals(freeModelConfig.getModel())) {
             return LlmProvider.OPIK_FREE;

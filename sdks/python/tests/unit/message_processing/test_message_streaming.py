@@ -30,7 +30,7 @@ def batched_streamer_and_mock_message_processor(
         yield tested, mock_message_processor
     finally:
         if tested is not None:
-            tested.close(timeout=5)
+            tested.close(flush=False)
 
 
 def test_streamer__happy_flow(batched_streamer_and_mock_message_processor):
@@ -86,7 +86,7 @@ def test_streamer__batching_disabled__messages_that_support_batching_are_process
         )
     finally:
         if tested is not None:
-            tested.close(timeout=1)
+            tested.close(flush=False)
 
 
 def test_streamer__span__batching_enabled__messages_that_support_batching_are_processed_in_batch(

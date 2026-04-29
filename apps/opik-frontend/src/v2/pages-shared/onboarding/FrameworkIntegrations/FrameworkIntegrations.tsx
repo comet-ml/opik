@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { ExternalLink } from "lucide-react";
 import { useTheme } from "@/contexts/theme-provider";
 import { THEME_MODE } from "@/constants/theme";
@@ -15,6 +15,7 @@ import IntegrationListLayout from "../IntegrationListLayout/IntegrationListLayou
 import IntegrationTabs from "../IntegrationTabs/IntegrationTabs";
 import { useUserApiKey } from "@/store/AppStore";
 import { useIsPhone } from "@/hooks/useIsPhone";
+import useActiveProjectName from "@/hooks/useActiveProjectName";
 import {
   Select,
   SelectContent,
@@ -36,6 +37,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
   const apiKey = useUserApiKey();
   const { themeMode } = useTheme();
   const { isPhonePortrait } = useIsPhone();
+  const projectName = useActiveProjectName();
 
   const handleFrameworkSelect = (value: string) => {
     const index = integrationList.findIndex((item) => item.label === value);
@@ -96,7 +98,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
       </IntegrationTabs>
       <Button className="w-fit pl-2" variant="ghost" asChild>
         <a
-          href={buildDocsUrl("/tracing/integrations/overview")}
+          href={buildDocsUrl("/integrations/overview")}
           target="_blank"
           rel="noreferrer"
         >
@@ -128,6 +130,7 @@ const FrameworkIntegrations: React.FC<FrameworkIntegrationsProps> = ({
         executionLogs={integration.executionLogs}
         withLineHighlights
         onRunCodeCallback={onRunCodeCallback}
+        projectName={projectName}
       />
     </IntegrationListLayout>
   );
