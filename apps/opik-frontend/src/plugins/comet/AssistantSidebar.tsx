@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
@@ -26,10 +25,8 @@ import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
 import OllieLoader, { OllieLoaderVariant } from "@/plugins/comet/OllieLoader";
-import {
-  ASSISTANT_DEV_BASE_URL,
-  IS_ASSISTANT_DEV,
-} from "@/plugins/comet/constants/assistant";
+import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import useAssistantManifest from "@/plugins/comet/useAssistantManifest";
 import {
   ASSISTANT_SIDEBAR_COLLAPSED_WIDTH,
   getStoredAssistantSidebarWidth,
@@ -38,14 +35,6 @@ import {
 } from "@/constants/assistantSidebar";
 
 const BRIDGE_PROTOCOL_VERSION = 1;
-
-// Pod may serve /console/manifest.json before /health/ready flips — retry
-// with backoff so transient 404/503 during warmup don't permanently fail.
-// Budget (~140s) exceeds the 2 min health-poll timeout so manifest doesn't
-// give up before health polling does.
-const MANIFEST_RETRY_COUNT = 30;
-const MANIFEST_RETRY_BASE_DELAY_MS = 500;
-const MANIFEST_RETRY_MAX_DELAY_MS = 5000;
 
 interface AssistantSidebarLoaderProps {
   error: string | null;
@@ -115,13 +104,6 @@ function useLatestRef<T>(value: T): React.MutableRefObject<T> {
   const ref = useRef(value);
   ref.current = value;
   return ref;
-}
-
-interface AssistantManifest {
-  js: string;
-  css?: string;
-  shell: string;
-  ver: string;
 }
 
 type HostListeners = {
@@ -272,61 +254,6 @@ function useBridgeContext(
   );
 }
 
-interface AssistantMeta {
-  scriptUrl: string;
-  cssUrl?: string;
-  shellUrl: string;
-  version: string;
-}
-
-function resolveManifestUrl(backendUrl: string | null): string | null {
-  if (ASSISTANT_DEV_BASE_URL) return `${ASSISTANT_DEV_BASE_URL}/manifest.json`;
-  if (backendUrl) return `${backendUrl}/console/manifest.json`;
-  return null;
-}
-
-const DEV_META: AssistantMeta = {
-  scriptUrl: "/assistant/assistant.js",
-  cssUrl: "/assistant/assistant.css",
-  shellUrl: "/assistant/shell",
-  version: "dev",
-};
-
-function useAssistantMeta(backendUrl: string | null): AssistantMeta | null {
-  const manifestUrl = resolveManifestUrl(backendUrl);
-
-  const manifestBase = manifestUrl
-    ? manifestUrl.substring(0, manifestUrl.lastIndexOf("/"))
-    : null;
-
-  const { data } = useQuery<AssistantMeta>({
-    queryKey: ["assistant-manifest", manifestUrl],
-    queryFn: async () => {
-      const res = await fetch(manifestUrl!);
-      if (!res.ok) throw new Error(`manifest ${res.status}`);
-      const manifest: AssistantManifest = await res.json();
-      return {
-        scriptUrl: `${manifestBase}/${manifest.js}`,
-        cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `${manifestBase}/${manifest.shell}`,
-        version: manifest.ver,
-      };
-    },
-    enabled: !IS_ASSISTANT_DEV && !!manifestUrl,
-    staleTime: Infinity,
-    retry: MANIFEST_RETRY_COUNT,
-    retryDelay: (attempt) =>
-      Math.min(
-        MANIFEST_RETRY_BASE_DELAY_MS * 2 ** attempt,
-        MANIFEST_RETRY_MAX_DELAY_MS,
-      ),
-  });
-
-  if (IS_ASSISTANT_DEV) return DEV_META;
-
-  return data ?? null;
-}
-
 interface AssistantSidebarProps {
   surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
@@ -345,7 +272,7 @@ const AssistantSidebar: React.FC<AssistantSidebarProps> = ({
     retry,
     retryCount,
   } = useAssistantBackend();
-  const meta = useAssistantMeta(probeUrl);
+  const meta = useAssistantManifest(probeUrl);
   const context = useBridgeContext(backendUrl ?? "", surface);
   const router = useRouter();
 
