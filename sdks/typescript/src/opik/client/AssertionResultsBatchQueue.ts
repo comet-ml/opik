@@ -49,7 +49,11 @@ export class AssertionResultsBatchQueue extends BatchQueue<
         this.api.requestOptions
       );
     } catch (error) {
-      if (error instanceof OpikApiError && error.statusCode === 404) {
+      if (
+        error instanceof OpikApiError &&
+        error.statusCode === 404 &&
+        this.entityType === "TRACE"
+      ) {
         this.useLegacyFallback = true;
         logger.warn(
           "Opik backend does not support PUT /v1/private/assertion-results yet — falling back to the legacy feedback-scores path with categoryName=\"suite_assertion\". Upgrade the Opik backend to a version that includes OPIK-6048 to enable native assertion-results ingestion."
@@ -64,19 +68,13 @@ export class AssertionResultsBatchQueue extends BatchQueue<
   private async writeViaLegacyFeedbackScores(
     assertionResults: AssertionResultBatchItem[]
   ): Promise<void> {
-    if (this.entityType !== "TRACE") {
-      throw new Error(
-        `AssertionResultsBatchQueue legacy fallback is only implemented for entityType="TRACE", got "${this.entityType}". The /v1/private/assertion-results endpoint is required for SPAN/THREAD assertions.`
-      );
-    }
-
     const scores: FeedbackScoreBatchItem[] = assertionResults.map((item) => ({
       id: item.entityId,
       name: item.name,
       value: item.status === "passed" ? 1 : 0,
       categoryName: LEGACY_SUITE_ASSERTION_CATEGORY,
       reason: item.reason,
-      source: "sdk",
+      source: item.source,
       projectName: item.projectName,
       projectId: item.projectId,
     }));

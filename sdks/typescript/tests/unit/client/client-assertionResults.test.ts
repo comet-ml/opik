@@ -240,5 +240,53 @@ describe("AssertionResultsBatchQueue.createEntities", () => {
 
       expect(scoreBatchOfTraces).not.toHaveBeenCalled();
     });
+
+    it("should propagate 404 for non-TRACE entity types instead of falling back", async () => {
+      const spanQueue = new AssertionResultsBatchQueue(
+        api as unknown as OpikApiClientTemp,
+        0,
+        "SPAN"
+      );
+      storeAssertionsBatch.mockRejectedValueOnce(make404());
+
+      await expect(
+        (spanQueue as unknown as {
+          createEntities: (
+            items: { entityId: string; name: string; status: string; source: string; projectName: string }[]
+          ) => Promise<void>;
+        }).createEntities([
+          {
+            entityId: "span-1",
+            name: "First",
+            status: "passed",
+            source: "sdk",
+            projectName: "test-project",
+          },
+        ])
+      ).rejects.toMatchObject({ statusCode: 404 });
+
+      expect(scoreBatchOfTraces).not.toHaveBeenCalled();
+    });
+
+    it("should forward AssertionResultBatchItem.source through the legacy fallback mapping", async () => {
+      vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      storeAssertionsBatch.mockRejectedValueOnce(make404());
+
+      queue.create({
+        entityId: "trace-1",
+        projectName: "test-project",
+        name: "From the UI",
+        status: "passed",
+        source: "ui",
+      });
+
+      await queue.flush();
+
+      expect(scoreBatchOfTraces).toHaveBeenCalledTimes(1);
+      const [{ scores }] = scoreBatchOfTraces.mock.calls[0] as [
+        { scores: Array<{ source: string }> },
+      ];
+      expect(scores[0].source).toBe("ui");
+    });
   });
 });
