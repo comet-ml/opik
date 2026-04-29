@@ -2,12 +2,14 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -38,6 +40,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -56,6 +59,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final Logger userFacingLogger;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    private final SpanService spanService;
 
     @Inject
     public OnlineScoringTraceThreadUserDefinedMetricPythonScorer(
@@ -67,7 +71,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull TraceService traceService,
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
-            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull SpanService spanService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
                 Constants.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
@@ -75,6 +80,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
+        this.spanService = spanService;
         this.userFacingLogger = UserFacingLoggingFactory
                 .getLogger(OnlineScoringTraceThreadUserDefinedMetricPythonScorer.class);
     }
@@ -166,9 +172,12 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             return;
         }
 
+        Set<UUID> traceIds = traces.stream().map(Trace::id).collect(Collectors.toSet());
+        List<Span> spans = fetchSpans(spanService, traceIds, message.workspaceId(), message.userName());
+
         List<ChatMessage> context;
         try {
-            context = OnlineScoringEngine.fromTraceToThread(traces);
+            context = OnlineScoringEngine.fromTraceToThread(traces, spans);
         } catch (Exception exception) {
             userFacingLogger.error("Error preparing Python request for threadId: '{}': \n\n{}",
                     threadId, exception.getMessage());

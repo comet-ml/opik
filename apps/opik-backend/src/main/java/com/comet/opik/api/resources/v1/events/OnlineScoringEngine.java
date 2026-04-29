@@ -39,12 +39,15 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -61,11 +64,15 @@ public class OnlineScoringEngine {
 
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
+    public static final String SPANS_VARIABLE_NAME = "spans";
 
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+
+    private static final Comparator<Span> BY_SPAN_START_TIME = Comparator.comparing(
+            Span::startTime, Comparator.nullsLast(Comparator.naturalOrder()));
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
@@ -79,13 +86,13 @@ public class OnlineScoringEngine {
      */
     public static ChatRequest prepareLlmRequest(
             @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
-        return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
+        return prepareLlmRequest(evaluatorCode, trace, List.of(), structuredOutputStrategy, PromptType.MUSTACHE);
     }
 
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, @NotNull List<Span> spans,
             StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType) {
-        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace, spans);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -131,13 +138,25 @@ public class OnlineScoringEngine {
     public static ChatRequest prepareThreadLlmRequest(
             @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
             @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+        return prepareThreadLlmRequest(evaluatorCode, traces, List.of(), structuredOutputStrategy);
+    }
+
+    public static ChatRequest prepareThreadLlmRequest(
+            @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
+            @NotNull List<Span> spans, @NotNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces, spans);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     static List<ChatMessage> renderThreadMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
+        return renderThreadMessages(templateMessages, variablesMap, traces, List.of());
+    }
+
+    static List<ChatMessage> renderThreadMessages(
+            List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces,
+            List<Span> spans) {
         // prepare the map of replacements to use in all messages
         Map<String, String> replacements = variablesMap.keySet().stream()
                 .map(variableName -> switch (variableName) {
@@ -145,7 +164,8 @@ public class OnlineScoringEngine {
                         try {
                             yield MessageVariableMapping.builder()
                                     .variableName(variableName)
-                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)))
+                                    .valueToReplace(
+                                            OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces, spans)))
                                     .build();
                         } catch (JsonProcessingException ex) {
                             throw new UncheckedIOException(ex);
@@ -306,11 +326,23 @@ public class OnlineScoringEngine {
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Trace trace) {
-        return toReplacements(variables, section -> switch (section) {
+        return toReplacements(variables, trace, List.of());
+    }
+
+    public static Map<String, String> toReplacements(
+            Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
+        var base = toReplacements(variables, section -> switch (section) {
             case INPUT -> trace.input();
             case OUTPUT -> trace.output();
             case METADATA -> trace.metadata();
         });
+        if (spans.isEmpty()) {
+            return base;
+        }
+        var result = new HashMap<>(base);
+        // user-defined "spans" mapping (if any) wins over the auto-injected dump.
+        result.putIfAbsent(SPANS_VARIABLE_NAME, serializeSpans(spans));
+        return result;
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
@@ -319,6 +351,14 @@ public class OnlineScoringEngine {
             case OUTPUT -> span.output();
             case METADATA -> span.metadata();
         });
+    }
+
+    private static String serializeSpans(List<Span> spans) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(spans.stream().sorted(BY_SPAN_START_TIME).toList());
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     /**
@@ -493,18 +533,29 @@ public class OnlineScoringEngine {
         }
     }
 
-    public static List<TraceThreadPythonEvaluatorRequest.ChatMessage> fromTraceToThread(List<Trace> traces) {
+    public static List<TraceThreadPythonEvaluatorRequest.ChatMessage> fromTraceToThread(
+            List<Trace> traces, List<Span> spans) {
+        Map<UUID, List<Span>> spansByTraceId = spans.stream().collect(Collectors.groupingBy(Span::traceId));
         return traces.stream()
-                .flatMap(trace -> Stream.of(
-                        TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
-                                .role(TraceThreadPythonEvaluatorRequest.ROLE_USER)
-                                .content(trace.input())
-                                .build(),
-                        TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
-                                .role(TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT)
-                                .content(trace.output())
-                                .build()))
+                .flatMap(trace -> {
+                    Stream.Builder<TraceThreadPythonEvaluatorRequest.ChatMessage> builder = Stream.builder();
+                    builder.add(chatMessage(TraceThreadPythonEvaluatorRequest.ROLE_USER, trace.input()));
+                    spansByTraceId.getOrDefault(trace.id(), List.of()).stream()
+                            .sorted(BY_SPAN_START_TIME)
+                            .forEach(span -> builder.add(chatMessage(
+                                    TraceThreadPythonEvaluatorRequest.ROLE_SPAN,
+                                    OBJECT_MAPPER.valueToTree(span))));
+                    builder.add(chatMessage(TraceThreadPythonEvaluatorRequest.ROLE_ASSISTANT, trace.output()));
+                    return builder.build();
+                })
                 .toList();
+    }
+
+    private static TraceThreadPythonEvaluatorRequest.ChatMessage chatMessage(String role, JsonNode content) {
+        return TraceThreadPythonEvaluatorRequest.ChatMessage.builder()
+                .role(role)
+                .content(content)
+                .build();
     }
 
     public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {

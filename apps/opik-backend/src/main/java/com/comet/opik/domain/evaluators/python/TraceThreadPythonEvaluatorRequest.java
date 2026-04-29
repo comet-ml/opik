@@ -16,6 +16,7 @@ public record TraceThreadPythonEvaluatorRequest(@NotEmpty String code, @NotNull 
 
     public static final String ROLE_ASSISTANT = "assistant";
     public static final String ROLE_USER = "user";
+    public static final String ROLE_SPAN = "span";
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Builder(toBuilder = true)

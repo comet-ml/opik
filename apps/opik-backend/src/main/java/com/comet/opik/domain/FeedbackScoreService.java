@@ -222,13 +222,20 @@ class FeedbackScoreServiceImpl implements FeedbackScoreService {
                             scoresPerProject.get(projectName)
                                     .stream()
                                     .map(item -> switch (item) {
+                                        // Preserve a caller-provided projectId — e.g. online scoring loads traces
+                                        // from ClickHouse where projectName is null, so name-based resolution would
+                                        // default to "Default" and wrongly overwrite the trace's real projectId.
                                         case FeedbackScoreBatchItem tracingItem -> tracingItem.toBuilder()
-                                                .projectId(project.id()) // set projectId
+                                                .projectId(tracingItem.projectId() != null
+                                                        ? tracingItem.projectId()
+                                                        : project.id())
                                                 .build();
                                         case FeedbackScoreBatchItemThread threadItem -> threadItem.toBuilder()
-                                                .projectId(project.id()) // set projectId
+                                                .projectId(threadItem.projectId() != null
+                                                        ? threadItem.projectId()
+                                                        : project.id())
                                                 .build();
-                                    }) // set projectId
+                                    })
                                     .map(item -> (T) item)
                                     .toList());
                 })

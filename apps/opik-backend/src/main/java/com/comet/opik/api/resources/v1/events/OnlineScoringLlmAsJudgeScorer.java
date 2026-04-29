@@ -1,7 +1,9 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Span;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
@@ -24,6 +26,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -43,6 +46,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
+    private final SpanService spanService;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -51,13 +55,15 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull ChatCompletionService aiProxyService,
             @NonNull TraceService traceService,
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
-            @NonNull LlmProviderFactory llmProviderFactory) {
+            @NonNull LlmProviderFactory llmProviderFactory,
+            @NonNull SpanService spanService) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringLlmAsJudgeScorer.class);
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
+        this.spanService = spanService;
     }
 
     @Override
@@ -94,12 +100,14 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
+            List<Span> spans = fetchSpans(spanService, Set.of(trace.id()), message.workspaceId(), message.userName());
+
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
                 var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
                 scoreRequest = OnlineScoringEngine.prepareLlmRequest(
-                        message.llmAsJudgeCode(), trace, strategy, message.promptType());
+                        message.llmAsJudgeCode(), trace, spans, strategy, message.promptType());
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());
