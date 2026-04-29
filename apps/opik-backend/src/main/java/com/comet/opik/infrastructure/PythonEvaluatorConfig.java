@@ -7,10 +7,13 @@ import io.dropwizard.validation.MinDuration;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.NonNull;
 
 import java.util.concurrent.TimeUnit;
 
 @Data
+@NoArgsConstructor
 public class PythonEvaluatorConfig {
 
     @JsonProperty
@@ -26,4 +29,14 @@ public class PythonEvaluatorConfig {
     @JsonProperty
     @MaxDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration minRetryDelay = Duration.milliseconds(500);
+
+    @JsonProperty
+    @NonNull @MinDuration(value = 10, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+    private Duration readTimeout;
+
+    @JsonProperty
+    @NonNull @MinDuration(value = 10, unit = TimeUnit.MILLISECONDS)
+    @MaxDuration(value = 60, unit = TimeUnit.SECONDS)
+    private Duration connectTimeout;
 }
