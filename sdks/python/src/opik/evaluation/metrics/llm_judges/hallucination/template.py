@@ -79,18 +79,21 @@ def _format_examples(
 ) -> str:
     if not few_shot_examples:
         return ""
-    rendered = "\n\nEXAMPLES:\n\n".join(
-        [
-            f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
-            if include_context
-            else ""
+    rendered_examples = []
+    for example in few_shot_examples:
+        if include_context:
+            header = (
+                f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
+            )
+        else:
+            header = f"<example>\nInput: {example['input']}\n"
+        body = (
             f"Output: {example['output']}\n\n"
             f'{{"score": "{example["score"]}", "reason": "{example["reason"]}"}}\n'
             f"</example>"
-            for example in few_shot_examples
-        ]
-    )
-    return f"\n\n{rendered}"
+        )
+        rendered_examples.append(header + body)
+    return "\n\nEXAMPLES:\n\n" + "\n\n".join(rendered_examples)
 
 
 def build_messages(
