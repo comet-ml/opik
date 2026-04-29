@@ -168,6 +168,7 @@ import static com.comet.opik.api.resources.utils.TestHttpClientUtils.NO_API_KEY_
 import static com.comet.opik.api.resources.utils.TestHttpClientUtils.UNAUTHORIZED_RESPONSE;
 import static com.comet.opik.api.resources.utils.TestUtils.getIdFromLocation;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static com.comet.opik.infrastructure.auth.RequestContext.SESSION_COOKIE;
 import static com.comet.opik.infrastructure.auth.RequestContext.WORKSPACE_HEADER;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
@@ -199,10 +200,6 @@ class ExperimentsResourceTest {
     private static final String ITEMS_PATH = "/items";
 
     private static final String API_KEY = UUID.randomUUID().toString();
-
-    private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
-            "id", "datasetId", "name", "feedbackScores", "assertionScores", "traceCount", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments", "projectName", "datasetItemCount"};
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
