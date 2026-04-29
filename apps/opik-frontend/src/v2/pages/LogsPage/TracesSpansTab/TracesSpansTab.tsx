@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { ExternalLink, RotateCw } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -62,7 +62,6 @@ import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -86,7 +85,7 @@ import ConfigurationVersionCell from "@/shared/DataTableCells/ConfigurationVersi
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -1347,24 +1346,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
                 }
               />
               <Separator orientation="vertical" className="mx-1 h-6" />
-              <TooltipWrapper
-                content={`Refresh ${
+              <RefreshButton
+                tooltip={`Refresh ${
                   type === TRACE_DATA_TYPE.traces ? "traces" : "spans"
                 } list`}
-              >
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => {
-                    refetch();
-                    refetchStatistic();
-                  }}
-                >
-                  <RotateCw className="mr-1.5 size-3.5" />
-                  Refresh
-                </Button>
-              </TooltipWrapper>
+                size="sm"
+                label="Refresh"
+                isFetching={isFetching}
+                onRefresh={() => {
+                  refetch();
+                  refetchStatistic();
+                }}
+              />
             </div>
           </div>
         </PageBodyStickyContainer>

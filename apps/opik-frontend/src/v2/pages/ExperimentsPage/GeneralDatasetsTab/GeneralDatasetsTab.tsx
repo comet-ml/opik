@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ChartLine, RotateCw } from "lucide-react";
+import { ChartLine } from "lucide-react";
 import {
   CellContext,
   ColumnSort,
@@ -57,7 +57,7 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
@@ -699,16 +699,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             }}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
+          <RefreshButton
+            tooltip="Refresh experiments list"
+            isFetching={isFetching}
+            onRefresh={() => refetch()}
+          />
           <ColumnsButton
             columns={availableColumns}
             selectedColumns={selectedColumns}
