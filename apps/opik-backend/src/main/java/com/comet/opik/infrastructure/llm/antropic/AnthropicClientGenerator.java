@@ -65,9 +65,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             builder.baseUrl(config.baseUrl());
         }
 
-        if (AnthropicSamplingParams.supportsSamplingParams(modelParameters.name())) {
-            Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
-        }
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
 
         return builder.build();
     }

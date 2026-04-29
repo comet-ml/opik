@@ -34,9 +34,8 @@ class LlmProviderAnthropic implements LlmProviderService {
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
-        var effectiveRequest = stripSamplingParamsIfUnsupported(request);
         var response = anthropicClient
-                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(effectiveRequest));
+                .createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request));
 
         return LlmProviderAnthropicMapper.INSTANCE.toResponse(response);
     }
@@ -50,28 +49,17 @@ class LlmProviderAnthropic implements LlmProviderService {
             @NonNull Consumer<Throwable> handleError) {
         validateRequest(request);
 
-        var effectiveRequest = stripSamplingParamsIfUnsupported(request);
-
+        // Create a simple summary of the request for logging
         String requestSummary = String.format("model=%s, messages=%d",
-                effectiveRequest.model(),
-                effectiveRequest.messages() != null ? effectiveRequest.messages().size() : 0);
+                request.model(),
+                request.messages() != null ? request.messages().size() : 0);
 
-        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, effectiveRequest.model());
-        var logger = new StreamingResponseLogger(requestSummary, effectiveRequest.model());
+        // Create dependencies following IoC principle
+        var delegate = new ChunkedResponseHandler(handleMessage, handleClose, handleError, request.model());
+        var logger = new StreamingResponseLogger(requestSummary, request.model());
 
-        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(effectiveRequest),
+        anthropicClient.createMessage(LlmProviderAnthropicMapper.INSTANCE.toCreateMessageRequest(request),
                 new LoggingChunkedResponseHandler(delegate, logger));
-    }
-
-    private ChatCompletionRequest stripSamplingParamsIfUnsupported(@NonNull ChatCompletionRequest request) {
-        if (AnthropicSamplingParams.supportsSamplingParams(request.model())) {
-            return request;
-        }
-        return ChatCompletionRequest.builder()
-                .from(request)
-                .temperature(null)
-                .topP(null)
-                .build();
     }
 
     @Override
