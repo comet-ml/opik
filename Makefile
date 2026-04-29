@@ -4,9 +4,15 @@ AI_DIR := .agents
 CURSOR_DIR := .cursor
 CLAUDE_DIR := .claude
 HOOKS_SRC := .hooks
-# Resolve via git-common-dir so `make hooks` works from both the main clone and worktrees.
-# Empty when not in a git repo so the recipes can fail loudly instead of acting on /hooks.
-GIT_COMMON_DIR := $(shell git rev-parse --git-common-dir 2>/dev/null)
+# Anchor hook paths to this Makefile's directory so `make hooks` resolves to the
+# Opik repo regardless of where make was invoked from (subdir, -f from another
+# repo, etc.). Without this, running from a different git repo with its own
+# .hooks/ would silently install that repo's hook into that repo's .git/hooks/.
+MAKEFILE_DIR := $(patsubst %/,%,$(dir $(realpath $(firstword $(MAKEFILE_LIST)))))
+# Resolve git-common-dir from the Makefile's dir so the lookup is independent
+# of make's invocation cwd. Empty when MAKEFILE_DIR is not in a git repo so the
+# recipes fail loudly instead of acting on /hooks.
+GIT_COMMON_DIR := $(shell cd "$(MAKEFILE_DIR)" 2>/dev/null && git rev-parse --git-common-dir 2>/dev/null)
 HOOKS_DEST := $(if $(GIT_COMMON_DIR),$(GIT_COMMON_DIR)/hooks)
 SDK_DIFF_BASE ?= origin/main
 
@@ -140,25 +146,20 @@ clean-agents:
 # Install Git hooks from .hooks/ to .git/hooks/
 hooks:
 	@if [ -z "$(HOOKS_DEST)" ]; then \
-		echo "Error: not in a git repository."; \
+		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
 		exit 1; \
 	fi
-	@if [ ! -d "$(HOOKS_SRC)" ]; then \
-		echo "Error: $(HOOKS_SRC)/ does not exist."; \
-		exit 1; \
-	fi
-	@if [ ! -d "$(HOOKS_DEST)" ]; then \
-		echo "Error: $(HOOKS_DEST)/ does not exist."; \
-		exit 1; \
-	fi
-	@cp $(HOOKS_SRC)/pre-commit $(HOOKS_DEST)/pre-commit
-	@chmod +x $(HOOKS_DEST)/pre-commit
-	@echo "Pre-commit hook installed."
+	@cd "$(MAKEFILE_DIR)" && \
+		if [ ! -d "$(HOOKS_SRC)" ]; then echo "Error: $(MAKEFILE_DIR)/$(HOOKS_SRC)/ does not exist."; exit 1; fi && \
+		if [ ! -d "$(HOOKS_DEST)" ]; then echo "Error: $(HOOKS_DEST)/ does not exist."; exit 1; fi && \
+		cp $(HOOKS_SRC)/pre-commit $(HOOKS_DEST)/pre-commit && \
+		chmod +x $(HOOKS_DEST)/pre-commit && \
+		echo "Pre-commit hook installed."
 
 # Remove Git hooks
 hooks-remove:
 	@if [ -z "$(HOOKS_DEST)" ]; then \
-		echo "Error: not in a git repository."; \
+		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
 		exit 1; \
 	fi
 	@if [ -f "$(HOOKS_DEST)/pre-commit" ]; then \
