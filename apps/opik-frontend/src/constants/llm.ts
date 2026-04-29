@@ -100,9 +100,7 @@ export const ANTHROPIC_THINKING_MODELS = [
 ] as const;
 
 // Models that reject any non-default value for temperature, top_p, top_k.
-// The backend mirrors this list in AnthropicSamplingParams and strips the
-// fields from outbound requests as a safety net. Add a new model id here
-// when its docs say the same.
+// Append a new id here when its docs say the same.
 export const MODELS_WITHOUT_SAMPLING_PARAMS = [
   PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
 ] as const;

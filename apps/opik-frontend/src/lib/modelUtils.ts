@@ -94,17 +94,6 @@ export const supportsAnthropicThinkingEffort = (
   );
 };
 
-/**
- * Some Claude models (Opus 4.7 today) reject any non-default value for
- * temperature, top_p, or top_k. The hardcoded MODELS_WITHOUT_SAMPLING_PARAMS
- * list is the source of truth — add a new model id when its docs say the
- * same. The backend mirrors this list and strips the params from the
- * outbound request as a safety net.
- *
- * UI uses this to hide the corresponding sliders. Config builders use it to
- * skip seeding `temperature` / `topP` defaults so the request payload omits
- * them entirely.
- */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
