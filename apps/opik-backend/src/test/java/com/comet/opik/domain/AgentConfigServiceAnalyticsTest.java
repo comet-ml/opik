@@ -1,352 +1,258 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.AgentConfigCreate;
-import com.comet.opik.api.Project;
-import com.comet.opik.infrastructure.AgentConfigConfiguration;
-import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.api.resources.utils.AuthTestUtils;
+import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
+import com.comet.opik.api.resources.utils.ClientSupportUtils;
+import com.comet.opik.api.resources.utils.MigrationUtils;
+import com.comet.opik.api.resources.utils.MySQLContainerUtils;
+import com.comet.opik.api.resources.utils.RedisContainerUtils;
+import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
+import com.comet.opik.api.resources.utils.WireMockUtils;
+import com.comet.opik.api.resources.utils.resources.AgentConfigsResourceClient;
+import com.comet.opik.extensions.DropwizardAppExtensionProvider;
+import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
-import com.comet.opik.infrastructure.lock.LockService;
-import jakarta.inject.Provider;
-import org.jdbi.v3.core.Handle;
-import org.junit.jupiter.api.BeforeEach;
+import com.redis.testcontainers.RedisContainer;
+import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
-import org.mockito.ArgumentCaptor;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import reactor.core.publisher.Mono;
-import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import org.testcontainers.clickhouse.ClickHouseContainer;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.Network;
+import org.testcontainers.lifecycle.Startables;
+import org.testcontainers.mysql.MySQLContainer;
+import ru.vyarus.dropwizard.guice.test.ClientSupport;
+import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.lenient;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 
-@ExtendWith(MockitoExtension.class)
-@DisplayName("AgentConfigService analytics tracking")
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DisplayName("AgentConfigService analytics BI events")
+@ExtendWith(DropwizardAppExtensionProvider.class)
 class AgentConfigServiceAnalyticsTest {
 
-    private String workspaceId;
-    private String userName;
+    private static final String USER = UUID.randomUUID().toString();
 
-    @Mock
-    private Provider<RequestContext> requestContextProvider;
-    @Mock
-    private RequestContext requestContext;
-    @Mock
-    private IdGenerator idGenerator;
-    @Mock
-    private TransactionTemplate transactionTemplate;
-    @Mock
-    private ProjectService projectService;
-    @Mock
-    private LockService lockService;
-    @Mock
-    private AgentConfigConfiguration agentConfigConfiguration;
-    @Mock
-    private AnalyticsService analyticsService;
-    @Mock
-    private AgentConfigDAO agentConfigDAO;
-    @Mock
-    private Handle handle;
+    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+    private final Network network = Network.newNetwork();
+    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+    private final GenericContainer<?> ZOOKEEPER_CONTAINER = ClickHouseContainerUtils.newZookeeperContainer(false,
+            network);
+    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(false, network,
+            ZOOKEEPER_CONTAINER);
 
-    private AgentConfigService service;
+    private final WireMockUtils.WireMockRuntime wireMock;
 
-    @BeforeEach
-    void setUp() throws Exception {
-        workspaceId = UUID.randomUUID().toString();
-        userName = UUID.randomUUID().toString();
+    @RegisterApp
+    private final TestDropwizardAppExtension app;
 
-        lenient().when(requestContextProvider.get()).thenReturn(requestContext);
-        lenient().when(requestContext.getWorkspaceId()).thenReturn(workspaceId);
-        lenient().when(requestContext.getUserName()).thenReturn(userName);
-        lenient().when(agentConfigConfiguration.getBlueprintLockDuration())
-                .thenReturn(io.dropwizard.util.Duration.milliseconds(100));
+    {
+        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
 
-        // LockService passes through the action directly (both overloads)
-        lenient().when(lockService.executeWithLockCustomExpire(any(), any(), any()))
-                .thenAnswer(inv -> inv.<Mono<?>>getArgument(1));
-        //noinspection unchecked
-        lenient().<Mono<?>>when(lockService.executeWithLock(any(LockService.Lock.class), any(Mono.class)))
-                .thenAnswer(inv -> inv.<Mono<?>>getArgument(1));
+        wireMock = WireMockUtils.startWireMock();
 
-        // TransactionTemplate executes the TxAction with our mock handle
-        lenient().when(handle.attach(AgentConfigDAO.class)).thenReturn(agentConfigDAO);
-        lenient().when(transactionTemplate.inTransaction(any(), any()))
-                .thenAnswer(inv -> {
-                    ru.vyarus.guicey.jdbi3.tx.TxAction<?> action = inv.getArgument(1);
-                    return action.execute(handle);
-                });
+        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
 
-        service = new AgentConfigServiceImpl(
-                requestContextProvider,
-                idGenerator,
-                transactionTemplate,
-                projectService,
-                lockService,
-                agentConfigConfiguration,
-                analyticsService);
+        MigrationUtils.runMysqlDbMigration(MYSQL);
+        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
+        app = newTestDropwizardAppExtension(
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
+                        .build());
+    }
+
+    private AgentConfigsResourceClient agentConfigsClient;
+
+    @BeforeAll
+    void setUpAll(ClientSupport client) {
+        ClientSupportUtils.config(client);
+        agentConfigsClient = new AgentConfigsResourceClient(client);
+    }
+
+    @AfterAll
+    void tearDownAll() {
+        MYSQL.stop();
+        wireMock.server().stop();
+        CLICKHOUSE.stop();
+        ZOOKEEPER_CONTAINER.stop();
+        network.close();
+    }
+
+    private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
     }
 
     static Stream<String> demoProjectNames() {
         return DemoData.PROJECTS.stream();
     }
 
+    private AgentConfigCreate blueprintRequest(UUID projectId, String projectName) {
+        return AgentConfigCreate.builder()
+                .projectId(projectId)
+                .projectName(projectName)
+                .blueprint(AgentBlueprint.builder()
+                        .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                        .description(UUID.randomUUID().toString())
+                        .values(List.of(AgentConfigValue.builder()
+                                .key(UUID.randomUUID().toString())
+                                .value(UUID.randomUUID().toString())
+                                .type(AgentConfigValue.ValueType.STRING)
+                                .build()))
+                        .build())
+                .build();
+    }
+
     @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @DisplayName("createConfig analytics")
     class CreateConfigAnalytics {
 
-        @ParameterizedTest
-        @DisplayName("non-demo project: trackEvent called with full payload for both saved and deployed")
-        @ValueSource(strings = {"my-real-project"})
-        void createConfig_nonDemo_tracksEventWithFullPayload(String projectName) throws Exception {
-            var projectId = UUID.randomUUID();
-            var blueprintId = UUID.randomUUID();
-            var configId = UUID.randomUUID();
-            var blueprintName = UUID.randomUUID().toString();
+        @Test
+        @DisplayName("non-demo project: saved and deployed events are sent")
+        void createConfig_nonDemo_sendsSavedAndDeployedEvents() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
-            stubCreateConfigDaoCalls(projectId, configId, blueprintId, blueprintName, projectName);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            wireMock.server().resetRequests();
 
-            var request = AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .blueprint(AgentBlueprint.builder()
-                            .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                            .description(UUID.randomUUID().toString())
-                            .values(List.of())
-                            .build())
-                    .build();
+            agentConfigsClient.createAgentConfig(
+                    blueprintRequest(null, UUID.randomUUID().toString()),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-            service.createConfig(request).block();
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
 
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, String>> savedProps = ArgumentCaptor.forClass(Map.class);
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, String>> deployedProps = ArgumentCaptor.forClass(Map.class);
-
-            verify(analyticsService).trackEvent(
-                    org.mockito.ArgumentMatchers.eq("opik_agent_config_saved"),
-                    savedProps.capture(),
-                    org.mockito.ArgumentMatchers.eq(userName));
-
-            verify(analyticsService).trackEvent(
-                    org.mockito.ArgumentMatchers.eq("opik_agent_config_deployed"),
-                    deployedProps.capture(),
-                    org.mockito.ArgumentMatchers.eq(userName));
-
-            assertThat(savedProps.getValue())
-                    .containsEntry("workspace_id", workspaceId)
-                    .containsEntry("project_id", projectId.toString())
-                    .containsEntry("blueprint_id", blueprintId.toString())
-                    .containsKey("blueprint_name");
-
-            assertThat(deployedProps.getValue())
-                    .containsEntry("workspace_id", workspaceId)
-                    .containsEntry("project_id", projectId.toString())
-                    .containsEntry("blueprint_id", blueprintId.toString())
-                    .containsKey("blueprint_name")
-                    .containsEntry("environment", "prod")
-                    .containsEntry("deployed_to_prod", "true");
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))));
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id", equalTo(workspaceId)))
+                                .and(matchingJsonPath("$.event_properties.environment", equalTo("prod")))
+                                .and(matchingJsonPath("$.event_properties.deployed_to_prod", equalTo("true")))));
+            });
         }
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.domain.AgentConfigServiceAnalyticsTest#demoProjectNames")
-        @DisplayName("demo project: trackEvent is never called")
-        void createConfig_demoProject_doesNotTrack(String demoProjectName) throws Exception {
-            var projectId = UUID.randomUUID();
-            var blueprintId = UUID.randomUUID();
-            var configId = UUID.randomUUID();
+        @DisplayName("demo project: no analytics events are sent")
+        void createConfig_demoProject_doesNotSendEvents(String demoProjectName) {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
-            stubCreateConfigDaoCalls(projectId, configId, blueprintId, UUID.randomUUID().toString(), demoProjectName);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+            wireMock.server().resetRequests();
 
-            var request = AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .projectName(demoProjectName)
-                    .blueprint(AgentBlueprint.builder()
-                            .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                            .description(UUID.randomUUID().toString())
-                            .values(List.of())
-                            .build())
-                    .build();
+            agentConfigsClient.createAgentConfig(
+                    blueprintRequest(null, demoProjectName),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-            service.createConfig(request).block();
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
 
-            verify(analyticsService, never()).trackEvent(anyString(), any(), anyString());
-        }
-
-        private void stubCreateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId, String blueprintName,
-                String projectName) throws Exception {
-            when(idGenerator.generateId())
-                    .thenReturn(configId)
-                    .thenReturn(blueprintId)
-                    .thenReturn(UUID.randomUUID()); // env id
-
-            when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId)).thenReturn(null);
-            lenient().when(agentConfigDAO.countBlueprints(workspaceId, projectId)).thenReturn(0L);
-            lenient().when(agentConfigDAO.getEnvsByNames(any(), any(), any())).thenReturn(List.of());
-
-            lenient().when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId))
-                    .thenReturn(null)
-                    .thenReturn(AgentConfig.builder().id(configId).build());
-
-            lenient().when(projectService.get(projectId, workspaceId))
-                    .thenReturn(Project.builder().id(projectId).name(projectName).build());
+            Awaitility.await().during(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))));
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))));
+            });
         }
     }
 
     @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @DisplayName("updateConfig analytics")
     class UpdateConfigAnalytics {
 
-        @ParameterizedTest
-        @DisplayName("non-demo project: trackEvent called with full saved payload")
-        @ValueSource(strings = {"another-real-project"})
-        void updateConfig_nonDemo_tracksSavedEvent(String projectName) throws Exception {
-            var projectId = UUID.randomUUID();
-            var configId = UUID.randomUUID();
-            var blueprintId = UUID.randomUUID();
+        @Test
+        @DisplayName("non-demo project: saved event is sent")
+        void updateConfig_nonDemo_sendsSavedEvent() {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
 
-            stubUpdateConfigDaoCalls(projectId, configId, blueprintId, projectName);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var request = AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .projectName(projectName)
-                    .blueprint(AgentBlueprint.builder()
-                            .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                            .description(UUID.randomUUID().toString())
-                            .values(List.of())
-                            .build())
-                    .build();
+            agentConfigsClient.createAgentConfig(
+                    blueprintRequest(null, projectName),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-            service.updateConfig(request).block();
+            wireMock.server().resetRequests();
 
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, String>> savedProps = ArgumentCaptor.forClass(Map.class);
+            agentConfigsClient.updateAgentConfig(
+                    blueprintRequest(null, projectName),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-            verify(analyticsService).trackEvent(
-                    org.mockito.ArgumentMatchers.eq("opik_agent_config_saved"),
-                    savedProps.capture(),
-                    org.mockito.ArgumentMatchers.eq(userName));
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
 
-            assertThat(savedProps.getValue())
-                    .containsEntry("workspace_id", workspaceId)
-                    .containsEntry("project_id", projectId.toString())
-                    .containsEntry("blueprint_id", blueprintId.toString())
-                    .containsKey("blueprint_name");
+            Awaitility.await().atMost(30, TimeUnit.SECONDS)
+                    .untilAsserted(() -> wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))
+                                    .and(matchingJsonPath("$.event_properties.workspace_id",
+                                            equalTo(workspaceId))))));
         }
 
         @ParameterizedTest
         @MethodSource("com.comet.opik.domain.AgentConfigServiceAnalyticsTest#demoProjectNames")
-        @DisplayName("demo project: trackEvent is never called")
-        void updateConfig_demoProject_doesNotTrack(String demoProjectName) throws Exception {
-            var projectId = UUID.randomUUID();
-            var configId = UUID.randomUUID();
-            var blueprintId = UUID.randomUUID();
+        @DisplayName("demo project: no analytics events are sent")
+        void updateConfig_demoProject_doesNotSendEvents(String demoProjectName) {
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceName = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
 
-            stubUpdateConfigDaoCalls(projectId, configId, blueprintId, demoProjectName);
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
 
-            var request = AgentConfigCreate.builder()
-                    .projectId(projectId)
-                    .projectName(demoProjectName)
-                    .blueprint(AgentBlueprint.builder()
-                            .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                            .description(UUID.randomUUID().toString())
-                            .values(List.of())
-                            .build())
-                    .build();
+            agentConfigsClient.createAgentConfig(
+                    blueprintRequest(null, demoProjectName),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-            service.updateConfig(request).block();
+            wireMock.server().resetRequests();
 
-            verify(analyticsService, never()).trackEvent(anyString(), any(), anyString());
-        }
+            agentConfigsClient.updateAgentConfig(
+                    blueprintRequest(null, demoProjectName),
+                    apiKey, workspaceName, HttpStatus.SC_CREATED);
 
-        private void stubUpdateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId, String projectName)
-                throws Exception {
-            when(idGenerator.generateId()).thenReturn(blueprintId);
-            when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId))
-                    .thenReturn(AgentConfig.builder().id(configId).build());
-            lenient().when(agentConfigDAO.countBlueprints(workspaceId, projectId)).thenReturn(1L);
-            lenient().when(projectService.get(projectId, workspaceId))
-                    .thenReturn(Project.builder().id(projectId).name(projectName).build());
-        }
-    }
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
 
-    @Nested
-    @DisplayName("deployed_to_prod flag")
-    class DeployedToProdFlag {
-
-        static Stream<org.junit.jupiter.params.provider.Arguments> envNameToProdFlag() {
-            return Stream.of(
-                    org.junit.jupiter.params.provider.Arguments.of("prod", "true"),
-                    org.junit.jupiter.params.provider.Arguments.of("PROD", "true"),
-                    org.junit.jupiter.params.provider.Arguments.of("Prod", "true"),
-                    org.junit.jupiter.params.provider.Arguments.of("staging", "false"),
-                    org.junit.jupiter.params.provider.Arguments.of("dev", "false"));
-        }
-
-        @ParameterizedTest(name = "envName={0} → deployed_to_prod={1}")
-        @MethodSource("envNameToProdFlag")
-        @DisplayName("deployed_to_prod reflects case-insensitive prod comparison")
-        void deployedToProd_caseInsensitive(String envName, String expectedFlag) throws Exception {
-            var projectId = UUID.randomUUID();
-            var configId = UUID.randomUUID();
-            var blueprintId = UUID.randomUUID();
-            var projectName = UUID.randomUUID().toString();
-            var blueprintName = UUID.randomUUID().toString();
-
-            when(idGenerator.generateId())
-                    .thenReturn(configId)
-                    .thenReturn(blueprintId)
-                    .thenReturn(UUID.randomUUID()); // env id
-            when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId)).thenReturn(null);
-            lenient().when(agentConfigDAO.countBlueprints(workspaceId, projectId)).thenReturn(0L);
-            lenient().when(agentConfigDAO.getEnvsByNames(any(), any(), any())).thenReturn(List.of());
-
-            // createConfig always deploys to "prod" — to test arbitrary env names use a blueprint with
-            // a custom env stub; here we verify the helper directly via createConfig with "prod"
-            // and a separate path via stubbing. Instead, directly test the flag logic:
-            // The flag is String.valueOf("prod".equalsIgnoreCase(envName)), verifiable through createConfig
-            // which hardcodes "prod". For non-prod envs we'd need setEnvByBlueprintName.
-            // We cover the non-prod case by stubbing setEnvByBlueprintName path.
-            var projectObj = Project.builder().id(projectId).name(projectName).build();
-            lenient().when(projectService.get(projectId, workspaceId)).thenReturn(projectObj);
-
-            // Stub for setEnvByBlueprintName path
-            var existingConfig = AgentConfig.builder().id(configId).build();
-            lenient().when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId)).thenReturn(existingConfig);
-            lenient().when(agentConfigDAO.getBlueprintByNameAndType(workspaceId, projectId, blueprintName,
-                    AgentBlueprint.BlueprintType.BLUEPRINT))
-                    .thenReturn(AgentBlueprint.builder()
-                            .id(blueprintId)
-                            .projectId(projectId)
-                            .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                            .name(blueprintName)
-                            .values(List.of())
-                            .build());
-            lenient().when(agentConfigDAO.getEnvsByNames(any(), any(), any())).thenReturn(List.of());
-            lenient().when(idGenerator.generateId()).thenReturn(UUID.randomUUID());
-
-            service.setEnvByBlueprintName(projectId, envName, blueprintName).block();
-
-            @SuppressWarnings("unchecked")
-            ArgumentCaptor<Map<String, String>> deployedProps = ArgumentCaptor.forClass(Map.class);
-            verify(analyticsService).trackEvent(
-                    org.mockito.ArgumentMatchers.eq("opik_agent_config_deployed"),
-                    deployedProps.capture(),
-                    org.mockito.ArgumentMatchers.eq(userName));
-
-            assertThat(deployedProps.getValue()).containsEntry("deployed_to_prod", expectedFlag);
+            Awaitility.await().during(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(
+                    () -> wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                            .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent)))));
         }
     }
 }
