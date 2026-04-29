@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 
 import SliderInputControl from "@/shared/SliderInputControl/SliderInputControl";
 import {
@@ -34,15 +34,21 @@ const AnthropicModelConfigs = ({
   const showThinkingEffort = supportsAnthropicThinkingEffort(model);
   const showSamplingParams = supportsSamplingParams(model);
   const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
-  // Persisted prompts may carry an effort that's not valid for the
-  // current model (e.g. "adaptive" picked under Opus 4.6, then switched
-  // to Opus 4.7). Fall back to "high" so the dropdown always shows a
-  // selection.
-  const effortValue: AnthropicThinkingEffort = thinkingEffortOptions.some(
+  // Persisted prompts may carry an effort that's not valid for the current
+  // model (e.g. "adaptive" picked under Opus 4.6, then switched to Opus 4.7).
+  // Normalize the form state so the outbound request never carries a stale
+  // value the model would reject.
+  const isEffortValid = thinkingEffortOptions.some(
     (o) => o.value === configs.thinkingEffort,
-  )
+  );
+  const effortValue: AnthropicThinkingEffort = isEffortValid
     ? (configs.thinkingEffort as AnthropicThinkingEffort)
     : "high";
+  useEffect(() => {
+    if (showThinkingEffort && !isEffortValid) {
+      onChange({ thinkingEffort: "high" });
+    }
+  }, [showThinkingEffort, isEffortValid, onChange]);
   const hasTemperatureValue = !isNil(configs.temperature);
   const hasTopPValue = !isNil(configs.topP);
   const temperatureDisabled = hasTopPValue && !hasTemperatureValue;
