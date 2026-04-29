@@ -23,7 +23,7 @@ Individual spans show the computed costs (in USD) for each LLM spans of your tra
 
 ### Trace-Level Costs
 
-If you are using one of Opik's integrations, we automatically aggregates costs from all spans within a trace to compute total trace costs:
+If you are using one of Opik's integrations, we automatically aggregate costs from all spans within a trace to compute total trace costs:
 
 <Frame>
   <img src="/img/tracing/cost_tracking_trace_view.png" />
@@ -74,7 +74,7 @@ print(trace.total_estimated_cost)
 
 ## Manually setting the provider and model name
 
-If you are not using one of Opik's integration, Opik can still compute the cost. For you will need to ensure the
+If you are not using one of Opik's integrations, Opik can still compute the cost. To do this, you will need to ensure the
 span type is `llm` and you will need to pass:
 
 1. `provider`: The name of the provider, typically `openai`, `anthropic` or `google_ai` for example (the most recent providers list can be found in `opik.LLMProvider` enum object)
