@@ -81,11 +81,13 @@ There are **three distinct categories** of feedback to collect — missing any o
   - Skip the skill's own auto-posted replies (those carrying the `/address-github-pr-comments` marker)
 
   **Category 3 — PR-level review bodies** (`pulls/{N}/reviews`):
-  - A review is pending when it has a non-empty `body` AND meets one of:
-    - `state=CHANGES_REQUESTED`, AND not later dismissed (no `dismissed_at` or `state=DISMISSED`), AND no superseding review from the same reviewer that supersedes the request (e.g., `APPROVED`)
-    - `state=COMMENTED` with non-empty `body` AND no inline comments attached to that review AND no follow-up addressing it (no later quote-reply on the issue thread carrying the `/address-github-pr-comments` marker that quotes this review body)
+  - **Per-reviewer latest-review selection (required)**: First, sort all reviews by `submitted_at` descending and group by `user.login`. For each reviewer, keep **only the newest review** as the authoritative one — older reviews from the same reviewer are always considered superseded and are never pending, regardless of state. All checks below evaluate against this latest-per-reviewer set only.
+  - **Inline-comment association gate (required for COMMENTED)**: Build a map from `pull_request_review_id` (present on each item in `pulls/{N}/comments`) to the count of inline comments. A `COMMENTED` review whose id has any associated inline comments is **not** Category 3 — its feedback lives in Category 1 (those inline comments) and is handled there. Apply this gate before evaluating pending status, so a review body is never double-counted.
+  - A reviewer's **latest** review is pending when it has a non-empty `body` AND meets one of:
+    - `state=CHANGES_REQUESTED`, AND not later dismissed (no `dismissed_at` or `state=DISMISSED`). Per-reviewer dedup already handles supersession (e.g., a later `APPROVED` from the same reviewer wins because it's the newest).
+    - `state=COMMENTED` with non-empty `body`, AND the inline-comment association gate above shows zero inline comments for this `review.id`, AND no follow-up addressing it (no later quote-reply on the issue thread carrying the `/address-github-pr-comments` marker that quotes this review body — see "Idempotency on re-runs" below)
   - Note: these reviews do **not** appear in GraphQL `reviewThreads`, so they must be sourced from `pulls/{N}/reviews` directly
-  - Idempotency on re-runs: a PR-level review body has been "addressed" if there exists an issue-thread comment carrying the `/address-github-pr-comments` AI marker that quotes the review body (see Step 6, "PR-level review replies")
+  - Idempotency on re-runs: a PR-level review body has been "addressed" if there exists an issue-thread comment carrying the `/address-github-pr-comments` AI marker whose quote block, normalized per the "Quote-body normalization" rule in Step 6, matches the same normalized form of this review body. Both quote generation and the addressed check **must** use the identical normalization function — otherwise a long body's truncated quote on first run won't match the full body on re-run, causing duplicate replies.
 
   **All categories**:
   - **Include AI-posted review comments**: Comments/reviews containing AI markers (e.g., `🤖 *Review posted via /review-github-pr*`) are external review feedback even if posted from the same GitHub account. Never skip them based on the commenter's identity — only skip if the item already has the matching `/address-github-pr-comments` reply marker.
@@ -134,12 +136,29 @@ gh api repos/comet-ml/opik/pulls/{pr_number}/comments \
 
 PR-level review bodies (Category 3) have no thread to attach to (`in_reply_to` is not applicable). Acknowledge them by posting a **quote-reply** on the issue thread. The quoted body provides explicit linkage back to the review and makes the response visible in the conversation timeline; reviewer is notified via the standard PR-comment notification.
 
+##### Quote-body normalization (shared rule)
+
+Both quote generation here AND the addressed-check in Step 3 (Category 3 idempotency) MUST use this exact same `normalize(body)` function — otherwise a long body's truncated quote on first run won't match the full body on a re-run and the skill will post duplicate "Fixed"/"Skipping" replies.
+
+`normalize(body)`:
+1. Trim leading/trailing whitespace from the whole body
+2. Strip any leading `>` quote markers and one optional space (so previously quoted text inside the body doesn't double-prefix on re-quoting)
+3. Collapse runs of internal whitespace to a single space within each line; preserve line breaks between lines
+4. If the resulting string is longer than **280 characters**, truncate at 280 chars and append `…` (single Unicode horizontal ellipsis, U+2026)
+5. Return the normalized string
+
+For the **on-the-wire quote block** in the comment body, prefix each line of the normalized string with `> ` (greater-than + single space). For the **addressed-check**, extract candidate quote blocks from existing issue-thread comments by stripping that same `> ` prefix per line, then compare the resulting string to `normalize(<review body>)` — exact equality.
+
+The 280-char limit is a hard contract, not a heuristic: changing it without updating both call sites silently breaks idempotency for previously-addressed long reviews.
+
+##### Reply template
+
 ```bash
 gh api repos/comet-ml/opik/issues/{pr_number}/comments \
   -f body="$(cat <<'EOF'
 > @<reviewer-login> wrote in their review (<review-state>):
 >
-> <quoted review body — preserve line breaks; truncate with `…` if very long>
+<each line of normalize(<review body>) prefixed with "> ">
 
 <response: "Fixed in <sha> — ..." or "Skipping — ...">
 
@@ -148,7 +167,7 @@ EOF
 )"
 ```
 
-The quoted body is what makes re-runs idempotent: on the next invocation, Step 3's "addressed" check looks for an issue-thread comment carrying the `/address-github-pr-comments` marker that quotes this review's body. Always include the quote — it's the matching key.
+The quoted, normalized body is the idempotency key for re-runs: on the next invocation, Step 3's Category 3 "addressed" check looks for an issue-thread comment carrying the `/address-github-pr-comments` marker whose extracted quote block equals `normalize(<review body>)`. Always include the quote — it's the matching key.
 
 #### AI Marker
 
@@ -174,7 +193,7 @@ For a PR-level review, wrap with the quote prefix shown in "PR-level Review Repl
 
 When the user opts to fix an item, **defer the reply** until the fix is pushed to the remote. This applies to both inline and PR-level items:
 
-1. Track items that need deferred replies. For inline: comment ID + description. For PR-level: reviewer login + review id + review body (for the quote) + description of fix.
+1. Track items that need deferred replies. For inline: comment ID + description. For PR-level: reviewer login + review id + raw review body (the quote is regenerated at post time via `normalize(body)` from the "Quote-body normalization" rule above) + description of fix.
 2. After all fixes are applied, prompt the user to commit and push
 3. Once `git push` completes, capture the commit SHA from the push output
 4. Post deferred replies referencing the commit:
@@ -186,11 +205,11 @@ When the user opts to fix an item, **defer the reply** until the fix is pushed t
    🤖 *Reply posted via /address-github-pr-comments*
    ```
 
-   For PR-level (quote-reply on issue thread, using the format above):
+   For PR-level (quote-reply on issue thread, using the "Quote-body normalization" rule and reply template above):
    ```
    > @<reviewer-login> wrote in their review (<review-state>):
    >
-   > <quoted review body>
+   <each line of normalize(<review body>) prefixed with "> ">
 
    Fixed in <commit_sha> — <brief description of what was changed>
 
