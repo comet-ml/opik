@@ -45,6 +45,7 @@ export class TracesPage {
     }
 
     try {
+      await this.page.getByRole('textbox', { name: 'Search' }).fill('Name')
       await expect(
         this.page.getByRole('button', { name: 'Name' }).getByRole('checkbox')
       ).toBeChecked({ timeout: 2000 });
@@ -53,6 +54,7 @@ export class TracesPage {
     }
 
     await this.page.keyboard.press('Escape');
+    await expect(this.page.locator('th[data-header-id="name"]')).toBeVisible({timeout:3000})
   }
 
   private async resolveNameColumnIndex(): Promise<number> {
