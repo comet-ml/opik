@@ -607,18 +607,20 @@ class AgentConfigsResourceTest {
 
         Stream<Arguments> numericValueTypes() {
             return Stream.of(
-                    arguments(ValueType.FLOAT),
-                    arguments(ValueType.INTEGER));
+                    arguments(ValueType.FLOAT, RandomStringUtils.insecure().nextNumeric(3),
+                            RandomStringUtils.insecure().nextNumeric(4)),
+                    arguments(ValueType.INTEGER, RandomStringUtils.insecure().nextNumeric(3),
+                            RandomStringUtils.insecure().nextNumeric(4)),
+                    arguments(ValueType.BOOLEAN, "true", "false"));
         }
 
         @ParameterizedTest
         @MethodSource("numericValueTypes")
-        @DisplayName("Success: auto-generates description with new value when numeric key is modified")
-        void updateAgentConfig__noDescription__modifiesNumericKey__thenAutoGeneratesDescription(ValueType type) {
+        @DisplayName("Success: auto-generates description with new value when numeric-like key is modified")
+        void updateAgentConfig__noDescription__modifiesNumericKey__thenAutoGeneratesDescription(ValueType type,
+                String oldValue, String newValue) {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
             var key = RandomStringUtils.insecure().nextAlphanumeric(10);
-            var oldValue = RandomStringUtils.insecure().nextNumeric(3);
-            var newValue = RandomStringUtils.insecure().nextNumeric(4);
 
             agentConfigsResourceClient.createAgentConfig(
                     AgentConfigCreate.builder()
@@ -653,7 +655,6 @@ class AgentConfigsResourceTest {
         Stream<Arguments> nonNumericValueTypes() {
             return Stream.of(
                     arguments(ValueType.STRING),
-                    arguments(ValueType.BOOLEAN),
                     arguments(ValueType.PROMPT),
                     arguments(ValueType.PROMPT_COMMIT));
         }

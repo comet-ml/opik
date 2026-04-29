@@ -321,7 +321,8 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 added.add(v.key());
             } else if (!Objects.equals(prev.value(), v.value())) {
                 boolean isNumeric = v.type() == AgentConfigValue.ValueType.INTEGER
-                        || v.type() == AgentConfigValue.ValueType.FLOAT;
+                        || v.type() == AgentConfigValue.ValueType.FLOAT
+                        || v.type() == AgentConfigValue.ValueType.BOOLEAN;
                 if (isNumeric) {
                     modified.add(v.key() + " to " + v.value());
                 } else {
