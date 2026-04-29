@@ -12,7 +12,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { ExternalLink, RotateCw } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isNumber from "lodash/isNumber";
 import get from "lodash/get";
@@ -49,7 +49,6 @@ import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -60,7 +59,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import PrettyCell from "@/shared/DataTableCells/PrettyCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import ThreadDetailsPanel from "@/v2/pages-shared/traces/ThreadDetailsPanel/ThreadDetailsPanel";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -760,19 +759,13 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
                 layout="labeled"
               />
               <Separator orientation="vertical" className="mx-1 h-6" />
-              <TooltipWrapper content="Refresh threads list">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => {
-                    refetch();
-                  }}
-                >
-                  <RotateCw className="mr-1.5 size-3.5" />
-                  Refresh
-                </Button>
-              </TooltipWrapper>
+              <RefreshButton
+                tooltip="Refresh threads list"
+                size="sm"
+                label="Refresh"
+                isFetching={isFetching}
+                onRefresh={() => refetch()}
+              />
             </div>
           </div>
         </PageBodyStickyContainer>
