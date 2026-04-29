@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 import opik
+from opik import exceptions
 from rich.console import Console
 
 from ..migration_manifest import MigrationManifest
@@ -102,7 +103,9 @@ def import_datasets_from_directory(
                 if debug:
                     console.print(f"[blue]Importing dataset: {dataset_name}[/blue]")
 
-                # Get or create dataset (handles case where dataset already exists)
+                # Get or create dataset (handles case where dataset already exists).
+                # Narrow to DatasetNotFound so genuine SDK errors (auth, network,
+                # permissions) bubble up instead of silently triggering create.
                 try:
                     dataset = client.get_dataset(
                         dataset_name, project_name=destination_project
@@ -111,8 +114,7 @@ def import_datasets_from_directory(
                         console.print(
                             f"[blue]Dataset '{dataset_name}' already exists, using existing dataset[/blue]"
                         )
-                except Exception:
-                    # Dataset doesn't exist, create it
+                except exceptions.DatasetNotFound:
                     dataset = client.create_dataset(
                         name=dataset_name, project_name=destination_project
                     )

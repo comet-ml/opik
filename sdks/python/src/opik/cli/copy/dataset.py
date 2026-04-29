@@ -9,9 +9,9 @@ overrides every ``project_name`` it would otherwise infer with
 ``--destination-project``.
 """
 
+import hashlib
 import shutil
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -34,16 +34,58 @@ console = Console()
 COPY_RUNS_DIR = Path.home() / ".opik" / "copy-runs"
 
 
-def _make_run_dir(workspace: str, dataset_name: str) -> Path:
-    """Return a persistent, per-run directory under ~/.opik/copy-runs/.
+def _run_dir_key(
+    workspace: str,
+    dataset_name: str,
+    destination_project: str,
+    source_project: Optional[str],
+    exclude_experiments: bool,
+) -> str:
+    """Stable identifier for a copy job, independent of when it ran.
 
-    Persistent (not /tmp) so an interrupted copy can be resumed by re-running
-    the same command — the ``MigrationManifest`` lives inside.
+    Two invocations with the same arguments produce the same key, so an
+    interrupted run can be resumed by reusing its ``MigrationManifest``.
+    The hash is purely a fingerprint — there are no security implications,
+    so SHA-1 is fine and short.
+    """
+    fingerprint = "|".join(
+        [
+            workspace,
+            dataset_name,
+            destination_project,
+            source_project or "",
+            "no-experiments" if exclude_experiments else "with-experiments",
+        ]
+    )
+    return hashlib.sha1(fingerprint.encode()).hexdigest()[:12]
+
+
+def _make_run_dir(
+    workspace: str,
+    dataset_name: str,
+    destination_project: str,
+    source_project: Optional[str] = None,
+    exclude_experiments: bool = False,
+) -> Path:
+    """Return a persistent, resumable run directory under ``~/.opik/copy-runs/``.
+
+    The directory is keyed off the copy-job fingerprint
+    (``workspace + dataset + destination + source + exclude_experiments``)
+    so re-running the same command finds the prior run dir and its
+    ``MigrationManifest``. Two genuinely different copies (e.g. different
+    destination projects) get distinct directories so their manifests don't
+    collide.
     """
     safe_workspace = "".join(c if c.isalnum() or c in "-_" else "_" for c in workspace)
     safe_dataset = "".join(c if c.isalnum() or c in "-_" else "_" for c in dataset_name)
-    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    run_dir = COPY_RUNS_DIR / f"{safe_workspace}-{safe_dataset}-{timestamp}"
+    key = _run_dir_key(
+        workspace,
+        dataset_name,
+        destination_project,
+        source_project,
+        exclude_experiments,
+    )
+    run_dir = COPY_RUNS_DIR / f"{safe_workspace}-{safe_dataset}-{key}"
     run_dir.mkdir(parents=True, exist_ok=True)
     return run_dir
 
@@ -118,49 +160,84 @@ def _print_preflight_summary(
     console.print(table)
 
 
+def _build_trace_to_project_index(projects_dir: Path) -> Dict[str, str]:
+    """Map every exported ``trace_id`` to the project directory it lives in.
+
+    The trace exporter writes ``projects/<project_name>/trace_<trace_id>.json``,
+    so a single directory walk is enough — no JSON parsing required.
+    """
+    index: Dict[str, str] = {}
+    if not projects_dir.exists():
+        return index
+    for project_dir in projects_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for trace_file in project_dir.glob("trace_*.json"):
+            trace_id = trace_file.stem[len("trace_") :]
+            if trace_id:
+                index[trace_id] = project_dir.name
+    return index
+
+
+def _resolve_experiment_project(
+    experiment_file: Path, trace_to_project: Dict[str, str]
+) -> Optional[str]:
+    """Best-effort project lookup for an exported experiment.
+
+    Order of attempts:
+    1. ``experiment.metadata.project_name`` from the JSON.
+    2. Any item's ``trace_id`` mapped via the trace→project index.
+
+    Returns ``None`` when neither attempt resolves the project — callers must
+    treat this as "unknown" and **not** assume mismatch.
+    """
+    import json
+
+    try:
+        with open(experiment_file) as fh:
+            data = json.load(fh)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    exp_project = (data.get("experiment", {}).get("metadata") or {}).get("project_name")
+    if exp_project:
+        return exp_project
+
+    for item in data.get("items") or []:
+        trace_id = item.get("trace_id")
+        if trace_id and trace_id in trace_to_project:
+            return trace_to_project[trace_id]
+    return None
+
+
 def _filter_experiments_by_source_project(
     workspace_root: Path, source_project: str
 ) -> int:
     """Drop exported experiment + trace artefacts whose project doesn't match.
 
     The export pass pulls every experiment that references the source dataset.
-    When ``--source-project`` is given, prune anything outside that project so
-    the import pass only recreates the matching subset.
+    When ``--source-project`` is given, prune anything that *resolves* to a
+    different project. Experiments whose project we cannot resolve are
+    **kept** — never silently deleted — so users don't lose data when
+    metadata is missing.
 
     Returns the number of experiment files retained.
     """
-    import json
-
     experiments_dir = workspace_root / "experiments"
     projects_dir = workspace_root / "projects"
     retained = 0
 
+    trace_to_project = _build_trace_to_project_index(projects_dir)
+
     if experiments_dir.exists():
         for exp_file in list(experiments_dir.glob("experiment_*.json")):
-            try:
-                with open(exp_file) as fh:
-                    data = json.load(fh)
-                exp_project = (data.get("experiment", {}).get("metadata") or {}).get(
-                    "project_name"
-                )
-                # Fall back to inferring from the trace project dirs if metadata is missing.
-                if exp_project is None and projects_dir.exists():
-                    items = data.get("items") or []
-                    if items:
-                        first_trace_id = items[0].get("trace_id")
-                        if first_trace_id:
-                            for project_dir in projects_dir.iterdir():
-                                if (
-                                    project_dir / f"trace_{first_trace_id}.json"
-                                ).exists():
-                                    exp_project = project_dir.name
-                                    break
-                if exp_project != source_project:
-                    exp_file.unlink()
-                else:
-                    retained += 1
-            except (OSError, json.JSONDecodeError):
-                continue
+            exp_project = _resolve_experiment_project(exp_file, trace_to_project)
+            # Only delete when we resolved the project AND it doesn't match.
+            # An unresolved (None) project is kept defensively.
+            if exp_project is not None and exp_project != source_project:
+                exp_file.unlink()
+            else:
+                retained += 1
 
     # Drop trace project directories that don't belong to the source project.
     if projects_dir.exists():
@@ -178,22 +255,16 @@ def _verify_destination_counts(
     expected: Dict[str, int],
     exclude_experiments: bool,
 ) -> bool:
-    """Best-effort post-copy count diff against the destination.
+    """Post-copy count diff against the destination.
 
-    Returns True when the actual destination counts match what was exported.
-    Logs a warning and returns False on any mismatch — the caller decides
-    whether to exit non-zero.
+    Returns True when the actual destination counts match what was exported,
+    False when any count is short. SDK errors (auth, network, missing
+    permissions, etc.) propagate to the caller unchanged — the previous
+    behaviour of swallowing them into a generic "counts didn't match" exit
+    code obscured the real failure mode.
     """
-    try:
-        dest_dataset = client.get_dataset(
-            dataset_name, project_name=destination_project
-        )
-        actual_items = len(dest_dataset.get_items())
-    except Exception as e:
-        console.print(
-            f"[yellow]Could not verify destination dataset items: {e}[/yellow]"
-        )
-        return False
+    dest_dataset = client.get_dataset(dataset_name, project_name=destination_project)
+    actual_items = len(dest_dataset.get_items())
 
     table = Table(
         title="Post-copy verification",
@@ -217,27 +288,20 @@ def _verify_destination_counts(
     )
 
     if not exclude_experiments:
-        try:
-            actual_experiments = len(
-                client.get_dataset_experiments(
-                    dataset_name=dataset_name,
-                    project_name=destination_project,
-                    max_results=10_000,
-                )
+        actual_experiments = len(
+            client.get_dataset_experiments(
+                dataset_name=dataset_name,
+                project_name=destination_project,
+                max_results=10_000,
             )
-        except Exception as e:
-            console.print(
-                f"[yellow]Could not verify destination experiments: {e}[/yellow]"
-            )
-            actual_experiments = -1
-
+        )
         exp_match = actual_experiments == expected["experiments"]
         matched = matched and exp_match
         table.add_row(
             "Experiments",
             str(expected["experiments"]),
-            str(actual_experiments) if actual_experiments >= 0 else "?",
-            "✓" if exp_match else "?" if actual_experiments < 0 else "✗",
+            str(actual_experiments),
+            "✓" if exp_match else "✗",
         )
 
     console.print(table)
@@ -340,11 +404,16 @@ def copy_dataset_command(
             + "[/red]"
         )
         sys.exit(1)
-    except Exception as e:
-        console.print(f"[red]Could not look up source dataset '{name}': {e}[/red]")
-        sys.exit(1)
+    # Other SDK errors (auth, network, permissions) propagate as themselves —
+    # the original SDK exception type is the most useful signal for the user.
 
-    run_dir = _make_run_dir(workspace, name)
+    run_dir = _make_run_dir(
+        workspace=workspace,
+        dataset_name=name,
+        destination_project=destination_project,
+        source_project=source_project,
+        exclude_experiments=exclude_experiments,
+    )
     workspace_root = run_dir / workspace
 
     if debug:

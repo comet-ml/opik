@@ -9,6 +9,7 @@ from rich.console import Console
 
 import opik
 
+from .._group_helpers import bind_items_format_commands
 from ..migration_manifest import MigrationManifest
 from .all import import_all_command
 from .dataset import import_datasets_from_directory
@@ -272,36 +273,7 @@ def import_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 # Set subcommand metavar to ITEM instead of COMMAND
 import_group.subcommand_metavar = "ITEM [ARGS]..."
 
-
-def format_commands(
-    self: click.Group, ctx: click.Context, formatter: click.HelpFormatter
-) -> None:
-    """Override to change 'Commands' heading to 'Items'."""
-    commands = []
-    for subcommand in self.list_commands(ctx):
-        cmd = self.get_command(ctx, subcommand)
-        if cmd is None or cmd.hidden:
-            continue
-        commands.append((subcommand, cmd))
-
-    if len(commands):
-        limit = formatter.width - 6 - max(len(cmd[0]) for cmd in commands)
-        rows = []
-        for subcommand, cmd in commands:
-            help = cmd.get_short_help_str(limit)
-            rows.append((subcommand, help))
-
-        if rows:
-            with formatter.section("Items"):
-                formatter.write_dl(rows)
-
-
-# Override format_commands method
-setattr(
-    import_group,
-    "format_commands",
-    format_commands.__get__(import_group, type(import_group)),
-)
+bind_items_format_commands(import_group)
 
 # Add the "all" subcommand (defined in all.py, registered here to avoid circular imports)
 import_group.add_command(import_all_command)

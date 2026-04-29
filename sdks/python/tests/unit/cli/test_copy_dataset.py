@@ -204,6 +204,35 @@ class TestDestinationProjectPlumbing:
         client.get_dataset.assert_called_once_with("Foo", project_name=None)
         client.create_dataset.assert_called_once_with(name="Foo", project_name=None)
 
+    def test_import_datasets_does_not_swallow_non_notfound_errors(
+        self, tmp_path: Path
+    ) -> None:
+        """Auth/network/permission failures from get_dataset must NOT silently
+        trigger create_dataset — they're recorded as a per-file error so the
+        outer loop can keep going (matching how the rest of the function handles
+        per-file failures)."""
+
+        class FakeAuthError(Exception):
+            pass
+
+        _write_dataset_export(tmp_path, "Foo", item_count=1)
+        client = Mock()
+        client.get_dataset.side_effect = FakeAuthError("403 forbidden")
+        client.create_dataset.return_value = Mock()
+
+        result = import_datasets_from_directory(
+            client=client,
+            source_dir=tmp_path / "datasets",
+            dry_run=False,
+            name_pattern=None,
+            debug=False,
+        )
+
+        # The dataset must NOT be silently created when get_dataset blew up
+        # for a reason other than "not found".
+        client.create_dataset.assert_not_called()
+        assert result["datasets_errors"] == 1
+
     def test_traces_use_destination_project_when_override_set(
         self, tmp_path: Path
     ) -> None:
@@ -250,14 +279,43 @@ class TestDestinationProjectPlumbing:
 
 
 class TestOrchestratorHelpers:
-    def test_make_run_dir_is_persistent_and_unique(self, tmp_path: Path) -> None:
+    def test_make_run_dir_is_stable_for_same_args(self, tmp_path: Path) -> None:
+        """Re-running the same copy command must hit the same run dir so the
+        ``MigrationManifest`` can resume from where the previous run left off."""
         with patch("opik.cli.copy.dataset.COPY_RUNS_DIR", tmp_path):
-            d1 = _make_run_dir("ws", "MyDataset")
-            d2 = _make_run_dir("ws", "MyDataset")
+            d1 = _make_run_dir(
+                workspace="ws",
+                dataset_name="MyDataset",
+                destination_project="DestProj",
+            )
+            d2 = _make_run_dir(
+                workspace="ws",
+                dataset_name="MyDataset",
+                destination_project="DestProj",
+            )
+            assert d1 == d2
             assert d1.exists()
-            assert d2.exists()
-            # Same prefix, different timestamps → distinct dirs.
-            assert d1.parent == d2.parent == tmp_path
+
+    def test_make_run_dir_distinguishes_different_jobs(self, tmp_path: Path) -> None:
+        """Genuinely different copy jobs (e.g. different destinations or
+        ``--exclude-experiments`` toggled) must get distinct directories so
+        their manifests don't collide."""
+        with patch("opik.cli.copy.dataset.COPY_RUNS_DIR", tmp_path):
+            base_kwargs = dict(workspace="ws", dataset_name="MyDataset")
+            d_dest_a = _make_run_dir(**base_kwargs, destination_project="DestA")
+            d_dest_b = _make_run_dir(**base_kwargs, destination_project="DestB")
+            d_exclude = _make_run_dir(
+                **base_kwargs,
+                destination_project="DestA",
+                exclude_experiments=True,
+            )
+            d_source = _make_run_dir(
+                **base_kwargs,
+                destination_project="DestA",
+                source_project="ProjA",
+            )
+            # All four are distinct.
+            assert len({d_dest_a, d_dest_b, d_exclude, d_source}) == 4
 
     def test_scan_run_dir_counts_all_assets(self, tmp_path: Path) -> None:
         ws_root = tmp_path / "ws"
@@ -291,6 +349,63 @@ class TestOrchestratorHelpers:
         assert not (tmp_path / "experiments" / "experiment_Drop_e2.json").exists()
         assert (tmp_path / "projects" / "ProjA").exists()
         assert not (tmp_path / "projects" / "ProjB").exists()
+
+    def test_filter_experiments_keeps_unresolved_project(self, tmp_path: Path) -> None:
+        """When metadata.project_name is missing AND no item trace_id matches a
+        known project dir, the experiment must be **kept**, not silently dropped."""
+        experiments_dir = tmp_path / "experiments"
+        experiments_dir.mkdir(parents=True, exist_ok=True)
+        with open(experiments_dir / "experiment_Orphan_e1.json", "w") as fh:
+            json.dump(
+                {
+                    "experiment": {
+                        "id": "e1",
+                        "name": "Orphan",
+                        "dataset_name": "Foo",
+                        "metadata": {},
+                    },
+                    "items": [{"trace_id": "trace-not-on-disk"}],
+                },
+                fh,
+            )
+        _write_trace_export(tmp_path, "ProjA", "t1")
+        _write_experiment_export(tmp_path, "Keep", "e2", "ProjA", "Foo")
+
+        retained = _filter_experiments_by_source_project(tmp_path, "ProjA")
+
+        # Both kept: the matching one AND the unresolved one (defensive default).
+        assert retained == 2
+        assert (tmp_path / "experiments" / "experiment_Orphan_e1.json").exists()
+        assert (tmp_path / "experiments" / "experiment_Keep_e2.json").exists()
+
+    def test_filter_experiments_resolves_via_trace_index(self, tmp_path: Path) -> None:
+        """When metadata is missing, the trace→project index must resolve the
+        experiment's project via any matching trace_id, not just the first item."""
+        experiments_dir = tmp_path / "experiments"
+        experiments_dir.mkdir(parents=True, exist_ok=True)
+        _write_trace_export(tmp_path, "ProjB", "trace-b")
+        with open(experiments_dir / "experiment_Drop_e1.json", "w") as fh:
+            json.dump(
+                {
+                    "experiment": {
+                        "id": "e1",
+                        "name": "Drop",
+                        "dataset_name": "Foo",
+                        "metadata": {},
+                    },
+                    "items": [
+                        {"trace_id": "trace-not-on-disk"},
+                        {"trace_id": "trace-b"},
+                    ],
+                },
+                fh,
+            )
+
+        retained = _filter_experiments_by_source_project(tmp_path, "ProjA")
+
+        # Resolved to ProjB → doesn't match ProjA → dropped.
+        assert retained == 0
+        assert not (tmp_path / "experiments" / "experiment_Drop_e1.json").exists()
 
 
 # ---------------------------------------------------------------------------
