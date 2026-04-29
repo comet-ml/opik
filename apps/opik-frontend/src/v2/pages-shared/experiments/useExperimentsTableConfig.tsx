@@ -270,24 +270,6 @@ export const useExperimentsTableConfig = <
                 id: "group-experiments",
                 description: `Some experiments reference a dataset that has been deleted`,
               },
-              getGroupRowLabel: (row: T) => {
-                const evaluationMethod = get(
-                  row,
-                  "evaluation_method",
-                  undefined,
-                ) as EVALUATION_METHOD | undefined;
-                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
-                  return "Test suite";
-                if (evaluationMethod === EVALUATION_METHOD.DATASET)
-                  return "Dataset";
-
-                const datasetId = get(row, `${metaKey}.value`, "") as string;
-                const type = datasetTypeMap?.[datasetId];
-                if (type === DATASET_TYPE.TEST_SUITE) return "Test suite";
-                if (type === DATASET_TYPE.DATASET) return "Dataset";
-                return "";
-              },
-              hideGroupRowLabelColon: true,
             },
           } as ColumnData<T>;
           break;
