@@ -117,7 +117,7 @@ class AgentConfigServiceAnalyticsTest {
             var configId = UUID.randomUUID();
             var blueprintName = UUID.randomUUID().toString();
 
-            stubCreateConfigDaoCalls(projectId, configId, blueprintId, blueprintName);
+            stubCreateConfigDaoCalls(projectId, configId, blueprintId, blueprintName, projectName);
 
             var request = AgentConfigCreate.builder()
                     .projectId(projectId)
@@ -168,7 +168,7 @@ class AgentConfigServiceAnalyticsTest {
             var blueprintId = UUID.randomUUID();
             var configId = UUID.randomUUID();
 
-            stubCreateConfigDaoCalls(projectId, configId, blueprintId, UUID.randomUUID().toString());
+            stubCreateConfigDaoCalls(projectId, configId, blueprintId, UUID.randomUUID().toString(), demoProjectName);
 
             var request = AgentConfigCreate.builder()
                     .projectId(projectId)
@@ -185,8 +185,8 @@ class AgentConfigServiceAnalyticsTest {
             verify(analyticsService, never()).trackEvent(anyString(), any(), anyString());
         }
 
-        private void stubCreateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId, String blueprintName)
-                throws Exception {
+        private void stubCreateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId, String blueprintName,
+                String projectName) throws Exception {
             when(idGenerator.generateId())
                     .thenReturn(configId)
                     .thenReturn(blueprintId)
@@ -199,6 +199,9 @@ class AgentConfigServiceAnalyticsTest {
             lenient().when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId))
                     .thenReturn(null)
                     .thenReturn(AgentConfig.builder().id(configId).build());
+
+            lenient().when(projectService.get(projectId, workspaceId))
+                    .thenReturn(Project.builder().id(projectId).name(projectName).build());
         }
     }
 
@@ -214,7 +217,7 @@ class AgentConfigServiceAnalyticsTest {
             var configId = UUID.randomUUID();
             var blueprintId = UUID.randomUUID();
 
-            stubUpdateConfigDaoCalls(projectId, configId, blueprintId);
+            stubUpdateConfigDaoCalls(projectId, configId, blueprintId, projectName);
 
             var request = AgentConfigCreate.builder()
                     .projectId(projectId)
@@ -251,7 +254,7 @@ class AgentConfigServiceAnalyticsTest {
             var configId = UUID.randomUUID();
             var blueprintId = UUID.randomUUID();
 
-            stubUpdateConfigDaoCalls(projectId, configId, blueprintId);
+            stubUpdateConfigDaoCalls(projectId, configId, blueprintId, demoProjectName);
 
             var request = AgentConfigCreate.builder()
                     .projectId(projectId)
@@ -268,11 +271,14 @@ class AgentConfigServiceAnalyticsTest {
             verify(analyticsService, never()).trackEvent(anyString(), any(), anyString());
         }
 
-        private void stubUpdateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId) throws Exception {
+        private void stubUpdateConfigDaoCalls(UUID projectId, UUID configId, UUID blueprintId, String projectName)
+                throws Exception {
             when(idGenerator.generateId()).thenReturn(blueprintId);
             when(agentConfigDAO.getConfigByProjectId(workspaceId, projectId))
                     .thenReturn(AgentConfig.builder().id(configId).build());
             lenient().when(agentConfigDAO.countBlueprints(workspaceId, projectId)).thenReturn(1L);
+            lenient().when(projectService.get(projectId, workspaceId))
+                    .thenReturn(Project.builder().id(projectId).name(projectName).build());
         }
     }
 

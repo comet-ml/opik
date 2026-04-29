@@ -131,7 +131,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                         })).subscribeOn(Schedulers.boundedElastic()),
                         agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
                         .doOnNext(blueprint -> {
-                            String projectName = WorkspaceUtils.getProjectName(request.projectName());
+                            String projectName = projectService.get(projectId, workspaceId).name();
                             trackAgentConfigSaved(workspaceId, projectId, blueprint, userName, projectName);
                             trackAgentConfigDeployed(workspaceId, projectId,
                                     blueprint.id(), String.valueOf(blueprint.name()), "prod", userName, projectName);
@@ -165,7 +165,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                         })).subscribeOn(Schedulers.boundedElastic()),
                         agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
                         .doOnNext(blueprint -> {
-                            String projectName = WorkspaceUtils.getProjectName(request.projectName());
+                            String projectName = projectService.get(projectId, workspaceId).name();
                             trackAgentConfigSaved(workspaceId, projectId, blueprint, userName, projectName);
                         }));
     }
