@@ -26,7 +26,7 @@ describe("supportsSamplingParams", () => {
     setLatestModelFlags(
       new Map([
         [
-          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+          PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
           {
             reasoning: false,
             structuredOutput: true,
@@ -35,7 +35,7 @@ describe("supportsSamplingParams", () => {
         ],
       ]),
     );
-    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7)).toBe(
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6)).toBe(
       false,
     );
   });
@@ -55,6 +55,33 @@ describe("supportsSamplingParams", () => {
     );
     expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6)).toBe(
       true,
+    );
+  });
+
+  it("returns false from the hardcoded fallback even without BE flags", () => {
+    // Opus 4.7 is in MODELS_WITHOUT_SAMPLING_PARAMS — the hardcoded list
+    // is the source of truth during the hydration window or when the BE
+    // response is missing the field.
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7)).toBe(
+      false,
+    );
+  });
+
+  it("hardcoded list overrides a stale BE flag of true for known-restricted models", () => {
+    setLatestModelFlags(
+      new Map([
+        [
+          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+          {
+            reasoning: false,
+            structuredOutput: true,
+            supportsSamplingParams: true,
+          },
+        ],
+      ]),
+    );
+    expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7)).toBe(
+      false,
     );
   });
 });

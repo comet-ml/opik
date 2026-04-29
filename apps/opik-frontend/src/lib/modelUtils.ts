@@ -1,5 +1,9 @@
 import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
+import {
+  ANTHROPIC_THINKING_MODELS,
+  MODELS_WITHOUT_SAMPLING_PARAMS,
+  REASONING_MODELS,
+} from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
@@ -99,11 +103,22 @@ export const supportsAnthropicThinkingEffort = (
  * UI uses this to hide the corresponding sliders. Config builders use it to
  * skip seeding `temperature` / `topP` defaults so the request payload omits
  * them entirely.
+ *
+ * The hardcoded MODELS_WITHOUT_SAMPLING_PARAMS list is the source of truth
+ * during the hydration window and as a fallback when the BE response is
+ * missing the field (e.g. older backend running against a newer frontend).
  */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
   if (!model) return true;
+  if (
+    (MODELS_WITHOUT_SAMPLING_PARAMS as readonly PROVIDER_MODEL_TYPE[]).includes(
+      model as PROVIDER_MODEL_TYPE,
+    )
+  ) {
+    return false;
+  }
   const flags = getLatestModelFlags(model);
   return flags ? flags.supportsSamplingParams : true;
 };

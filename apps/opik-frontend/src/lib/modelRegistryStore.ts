@@ -27,7 +27,10 @@
  */
 
 import { PROVIDER_MODELS } from "@/constants/providerModels";
-import { REASONING_MODELS } from "@/constants/llm";
+import {
+  MODELS_WITHOUT_SAMPLING_PARAMS,
+  REASONING_MODELS,
+} from "@/constants/llm";
 import {
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
@@ -45,6 +48,9 @@ const buildInitialFlags = (): Map<string, ModelFlags> => {
   const reasoningSet = new Set<string>(
     REASONING_MODELS as readonly PROVIDER_MODEL_TYPE[],
   );
+  const noSamplingSet = new Set<string>(
+    MODELS_WITHOUT_SAMPLING_PARAMS as readonly PROVIDER_MODEL_TYPE[],
+  );
   for (const models of Object.values(PROVIDER_MODELS)) {
     for (const m of models) {
       index.set(m.value, {
@@ -54,9 +60,11 @@ const buildInitialFlags = (): Map<string, ModelFlags> => {
         // so this only governs the first render for models known at
         // release time.
         structuredOutput: false,
-        // Default to true: most models accept sampling params. The hook
-        // overwrites on mount with the BE-sourced flag.
-        supportsSamplingParams: true,
+        // Defaults to true; the curated list pins the few models that
+        // reject sampling params so the hydration window doesn't briefly
+        // render sliders that have no effect. The hook overwrites on
+        // mount with the BE-sourced flag.
+        supportsSamplingParams: !noSamplingSet.has(m.value),
       });
     }
   }

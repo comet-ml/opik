@@ -99,6 +99,14 @@ export const ANTHROPIC_THINKING_MODELS = [
   PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
 ] as const;
 
+// Models that reject any non-default value for temperature, top_p, top_k.
+// Mirrors the BE registry flag (supportsSamplingParams: false). Acts as a
+// hydration-window fallback so the UI hides the sliders before the BE
+// model registry fetch resolves.
+export const MODELS_WITHOUT_SAMPLING_PARAMS = [
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+] as const;
+
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
 // Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
