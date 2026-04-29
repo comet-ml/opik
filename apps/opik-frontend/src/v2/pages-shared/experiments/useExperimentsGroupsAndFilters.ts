@@ -13,6 +13,7 @@ import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStor
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
 import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Filters } from "@/types/filters";
 import { GroupedExperiment } from "@/hooks/useGroupedExperimentsList";
 
@@ -83,6 +84,11 @@ export const useExperimentsGroupsAndFilters = ({
             filters,
           },
         },
+        ...getTagsFilterConfig({
+          projectId: projectId ?? "",
+          entityType: "experiments",
+          promptId,
+        }),
       },
     }),
     [filters, sortedColumns, promptId, projectId],

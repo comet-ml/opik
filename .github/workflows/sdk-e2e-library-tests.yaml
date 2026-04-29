@@ -15,6 +15,7 @@ on:
             - all
             - adk
             - litellm
+            - opentelemetry
     schedule:
       - cron: "0 0 */2 * *"
     pull_request:
@@ -74,7 +75,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-          
+
       - name: Install uv and set the Python version ${{ matrix.python_version }}
         uses: astral-sh/setup-uv@v5
         with:
@@ -136,6 +137,13 @@ jobs:
         with:
           python_version: ${{ matrix.python_version }}
           library_name: litellm
+
+      - name: OpenTelemetry Tests Python ${{ matrix.python_version }}
+        if: contains(fromJSON('["opentelemetry", "all"]'), env.LIBS)
+        uses: ./.github/actions/install_opik_and_run_e2e_lib_integration_tests
+        with:
+          python_version: ${{ matrix.python_version }}
+          library_name: opentelemetry
 
       - name: Stop opik server
         run: |

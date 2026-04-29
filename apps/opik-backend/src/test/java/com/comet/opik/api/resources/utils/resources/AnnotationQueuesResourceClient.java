@@ -176,15 +176,19 @@ public class AnnotationQueuesResourceClient {
 
     public void updateAnnotationQueue(UUID queueId, AnnotationQueueUpdate updateRequest, String apiKey,
             String workspaceName, int expectedStatus) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
+        try (var response = callUpdateAnnotationQueue(queueId, updateRequest, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(expectedStatus);
+        }
+    }
+
+    public Response callUpdateAnnotationQueue(UUID queueId, AnnotationQueueUpdate updateRequest, String apiKey,
+            String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
                 .path(queueId.toString())
                 .request()
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .method("PATCH", Entity.json(updateRequest))) {
-
-            assertThat(response.getStatus()).isEqualTo(expectedStatus);
-        }
+                .method("PATCH", Entity.json(updateRequest));
     }
 
     public AnnotationQueue.AnnotationQueuePage findAnnotationQueues(int page, int size, String name,

@@ -911,4 +911,5 @@ class ChatCompletionsResourceTest {
                     .post(Entity.json(request));
         }
     }
+
 }

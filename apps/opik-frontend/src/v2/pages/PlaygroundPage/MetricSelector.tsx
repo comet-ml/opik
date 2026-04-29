@@ -14,11 +14,11 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { ListAction } from "@/ui/list-action";
 import { Separator } from "@/ui/separator";
 import { Checkbox } from "@/ui/checkbox";
+import { cn, getSelectAllCheckedState } from "@/lib/utils";
 import { EvaluatorsRule } from "@/types/automations";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import toLower from "lodash/toLower";
-import { cn } from "@/lib/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
 const MAX_VISIBLE_TAGS = 3;
@@ -51,9 +51,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     permissions: { canUpdateOnlineEvaluationRules },
   } = usePermissions();
 
-  const isAllSelected =
-    selectedRuleIds === null || selectedRuleIds.length === rules.length;
-
   const selectedRuleIdsSet = useMemo(
     () => new Set(selectedRuleIds ?? []),
     [selectedRuleIds],
@@ -63,6 +60,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     if (!selectedRuleIds) return rules;
     return rules.filter((rule) => selectedRuleIdsSet.has(rule.id));
   }, [rules, selectedRuleIds, selectedRuleIdsSet]);
+
+  const selectedCount = selectedRules.length;
+  const isAllSelected = rules.length > 0 && selectedCount === rules.length;
+  const selectAllCheckedState = getSelectAllCheckedState(
+    selectedCount,
+    rules.length,
+  );
 
   const filteredRules = useMemo(() => {
     if (!search) return rules;
@@ -96,27 +100,9 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     [selectedRuleIds, selectedRuleIdsSet, rules, onSelectionChange],
   );
 
-  const handleSelectAll = useCallback(
-    (checked?: boolean | "indeterminate") => {
-      // Toggle between all selected (null) and none selected ([])
-      if (checked !== undefined && checked !== "indeterminate") {
-        // Called from checkbox onCheckedChange - checked is the NEW desired state
-        // true = check = select all (null), false = uncheck = deselect all ([])
-        onSelectionChange(checked ? null : []);
-      } else {
-        // Called from div onClick or indeterminate state - toggle based on current state
-        const allSelected =
-          selectedRuleIds === null ||
-          (Array.isArray(selectedRuleIds) &&
-            selectedRuleIds.length === rules.length &&
-            rules.length > 0);
-
-        // Toggle: if all selected, deselect; if not all selected, select all
-        onSelectionChange(allSelected ? [] : null);
-      }
-    },
-    [onSelectionChange, selectedRuleIds, rules.length],
-  );
+  const handleSelectAll = useCallback(() => {
+    onSelectionChange(isAllSelected ? [] : null);
+  }, [onSelectionChange, isAllSelected]);
 
   const openChangeHandler = useCallback((newOpen: boolean) => {
     if (deletingRef.current) {
@@ -291,15 +277,17 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
               <Separator className="my-1" />
               <div
                 className="flex h-10 cursor-pointer items-center gap-2 rounded-md px-4 hover:bg-primary-foreground"
-                onClick={() => handleSelectAll()}
+                onClick={handleSelectAll}
               >
                 <Checkbox
-                  checked={isAllSelected}
+                  checked={selectAllCheckedState}
                   className="shrink-0"
-                  onCheckedChange={(checked) => handleSelectAll(checked)}
+                  tabIndex={-1}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="comet-body-s truncate">Select all</div>
+                  <div className="comet-body-s truncate">
+                    {selectedCount} of {rules.length} selected
+                  </div>
                 </div>
               </div>
             </>

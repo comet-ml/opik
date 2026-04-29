@@ -13,6 +13,7 @@ import ExperimentsPageGuard from "@/v2/layout/ExperimentsPageGuard";
 import DashboardsPageGuard from "@/v2/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v2/layout/PlaygroundPageGuard";
 import OptimizationStudioPageGuard from "@/v2/layout/OptimizationStudioPageGuard";
+import OptimizationsPageGuard from "@/v2/layout/OptimizationsPageGuard";
 import DatasetsPageGuard from "@/v2/layout/DatasetsPageGuard";
 import SMEPageLayout from "@/v2/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v2/pages/ExperimentsPage/ExperimentsPage";
@@ -357,6 +358,7 @@ const playgroundIndexRoute = createRoute({
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => projectScopedRoute,
+  component: OptimizationsPageGuard,
   staticData: {
     title: "Optimization studio",
   },

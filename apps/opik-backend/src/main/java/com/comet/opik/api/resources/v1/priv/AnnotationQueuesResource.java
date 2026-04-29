@@ -182,6 +182,7 @@ public class AnnotationQueuesResource {
             @ApiResponse(responseCode = "204", description = "No Content"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))
     })
+    @RequiredPermissions(WorkspaceUserPermission.ANNOTATION_QUEUE_EDIT)
     @RateLimited
     public Response updateAnnotationQueue(
             @PathParam("id") UUID id,

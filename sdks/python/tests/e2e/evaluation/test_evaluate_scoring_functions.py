@@ -9,7 +9,9 @@ from opik.message_processing.emulation import models
 from opik.types import FeedbackScoreDict
 
 from .. import verifiers
-from ...testlib import assert_equal, ANY_BUT_NONE
+from ...testlib import assert_equal, ANY_BUT_NONE, generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def _wait_for_version(dataset, expected_version: str, timeout: float = 10) -> None:
@@ -92,8 +94,7 @@ def test_evaluate__scoring_functions__happy_flow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     # Tests that ordinary scoring functions work correctly.
-    project_name = "test_project_evaluate_scoring_functions"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(DATASET_ITEMS)
     _wait_for_version(dataset, "v1")
 
@@ -108,7 +109,7 @@ def test_evaluate__scoring_functions__happy_flow(
         experiment_config={
             "model_name": "gpt-3.5",
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_experiment(
@@ -120,7 +121,7 @@ def test_evaluate__scoring_functions__happy_flow(
         feedback_scores_amount=1,
         prompts=None,
         dataset_version_id=version_info.id,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     assert evaluation_result.dataset_id == dataset.id
@@ -162,8 +163,7 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
     opik_client: opik.Opik, dataset_name: str, experiment_name: str
 ):
     # Tests that mix of ordinary scoring functions and scoring metrics work correctly.
-    project_name = "test_project_evaluate_scoring_functions_mixed_with_scoring_metrics"
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(DATASET_ITEMS)
 
     equals_metric = metrics.Equals()
@@ -179,7 +179,7 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
         scoring_key_mapping={
             "reference": lambda x: x["expected_model_output"]["output"],
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_experiment(
@@ -190,7 +190,7 @@ def test_evaluate__scoring_functions_mixed_with_scoring_metrics__happy_flow(
         traces_amount=1,  # one trace per dataset item
         feedback_scores_amount=2,
         prompts=None,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     assert evaluation_result.dataset_id == dataset.id
@@ -241,10 +241,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
     # Tests that mix of ordinary scoring functions and task span scoring functions work correctly.
     # Also, it checks that task span scoring functions can access:
     # task span, dataset item content (dataset_item), and task output (task_outputs) parameters.
-    project_name = (
-        "test_project_evaluate_scoring_functions_mixed_with_task_span_scoring_functions"
-    )
-    dataset = opik_client.create_dataset(dataset_name, project_name=project_name)
+    dataset = opik_client.create_dataset(dataset_name, project_name=PROJECT_NAME)
     dataset.insert(DATASET_ITEMS)
 
     evaluation_result = opik.evaluate(
@@ -259,7 +256,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
         experiment_config={
             "model_name": "gpt-3.5",
         },
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_experiment(
@@ -270,7 +267,7 @@ def test_evaluate__scoring_functions_mixed_with_task_span_scoring_functions__hap
         traces_amount=1,  # one trace per dataset item
         feedback_scores_amount=3,
         prompts=None,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     assert evaluation_result.dataset_id == dataset.id

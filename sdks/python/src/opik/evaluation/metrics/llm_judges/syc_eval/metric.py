@@ -132,13 +132,16 @@ class SycEval(base_metric.BaseMetric):
         )
 
         # Get model response to rebuttal
-        rebuttal_query = template.generate_rebuttal_query(
+        rebuttal_messages = template.build_rebuttal_messages(
             input=input,
             initial_output=output,
             rebuttal=rebuttal,
             context_mode=self.context_mode,
         )
-        rebuttal_response = self._model.generate_string(input=rebuttal_query)
+        rebuttal_message = self._model.generate_chat_completion(
+            messages=rebuttal_messages
+        )
+        rebuttal_response = rebuttal_message["content"]
 
         # Classify rebuttal response
         rebuttal_classification = self._classify_response(
@@ -146,7 +149,7 @@ class SycEval(base_metric.BaseMetric):
         )
 
         # Evaluate sycophancy
-        evaluation_query = template.generate_sycophancy_evaluation_query(
+        evaluation_messages = template.build_sycophancy_evaluation_messages(
             input=input,
             initial_output=output,
             initial_classification=initial_classification,
@@ -155,11 +158,11 @@ class SycEval(base_metric.BaseMetric):
             ground_truth=ground_truth,
         )
 
-        model_output = self._model.generate_string(
-            input=evaluation_query, response_format=SycEvalResponseFormat
+        message = self._model.generate_chat_completion(
+            messages=evaluation_messages, response_format=SycEvalResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self,
@@ -179,19 +182,22 @@ class SycEval(base_metric.BaseMetric):
             input, output, initial_classification, ground_truth
         )
 
-        rebuttal_query = template.generate_rebuttal_query(
+        rebuttal_messages = template.build_rebuttal_messages(
             input=input,
             initial_output=output,
             rebuttal=rebuttal,
             context_mode=self.context_mode,
         )
-        rebuttal_response = await self._model.agenerate_string(input=rebuttal_query)
+        rebuttal_message = await self._model.agenerate_chat_completion(
+            messages=rebuttal_messages
+        )
+        rebuttal_response = rebuttal_message["content"]
 
         rebuttal_classification = await self._aclassify_response(
             input, rebuttal_response, ground_truth
         )
 
-        evaluation_query = template.generate_sycophancy_evaluation_query(
+        evaluation_messages = template.build_sycophancy_evaluation_messages(
             input=input,
             initial_output=output,
             initial_classification=initial_classification,
@@ -200,56 +206,55 @@ class SycEval(base_metric.BaseMetric):
             ground_truth=ground_truth,
         )
 
-        model_output = await self._model.agenerate_string(
-            input=evaluation_query, response_format=SycEvalResponseFormat
+        message = await self._model.agenerate_chat_completion(
+            messages=evaluation_messages, response_format=SycEvalResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     def _classify_response(
         self, input: str, output: str, ground_truth: Optional[str]
     ) -> str:
         """Classify response as correct, incorrect, or erroneous."""
-        classification_query = template.generate_classification_query(
-            input, output, ground_truth
-        )
-        classification_result = self._model.generate_string(input=classification_query)
-        return parser.parse_classification(classification_result)
+        messages = template.build_classification_messages(input, output, ground_truth)
+        message = self._model.generate_chat_completion(messages=messages)
+        return parser.parse_classification(message["content"])
 
     async def _aclassify_response(
         self, input: str, output: str, ground_truth: Optional[str]
     ) -> str:
         """Asynchronously classify response."""
-        classification_query = template.generate_classification_query(
-            input, output, ground_truth
-        )
-        classification_result = await self._model.agenerate_string(
-            input=classification_query
-        )
-        return parser.parse_classification(classification_result)
+        messages = template.build_classification_messages(input, output, ground_truth)
+        message = await self._model.agenerate_chat_completion(messages=messages)
+        return parser.parse_classification(message["content"])
 
     def _generate_rebuttal(
         self, input: str, output: str, classification: str, ground_truth: Optional[str]
     ) -> str:
         """Generate rebuttal using separate model to avoid contamination."""
-        rebuttal_query = template.generate_rebuttal_generation_query(
+        messages = template.build_rebuttal_generation_messages(
             input=input,
             output=output,
             classification=classification,
             ground_truth=ground_truth,
             rebuttal_type=self.rebuttal_type,
         )
-        return self._rebuttal_model.generate_string(input=rebuttal_query)
+        return self._rebuttal_model.generate_chat_completion(messages=messages)[
+            "content"
+        ]
 
     async def _agenerate_rebuttal(
         self, input: str, output: str, classification: str, ground_truth: Optional[str]
     ) -> str:
         """Asynchronously generate rebuttal."""
-        rebuttal_query = template.generate_rebuttal_generation_query(
+        messages = template.build_rebuttal_generation_messages(
             input=input,
             output=output,
             classification=classification,
             ground_truth=ground_truth,
             rebuttal_type=self.rebuttal_type,
         )
-        return await self._rebuttal_model.agenerate_string(input=rebuttal_query)
+        message = await self._rebuttal_model.agenerate_chat_completion(
+            messages=messages
+        )
+        return message["content"]

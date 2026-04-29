@@ -86,14 +86,14 @@ class Moderation(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the moderation score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             output=output, few_shot_examples=self.few_shot_examples
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=ModerationResponseFormat
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=ModerationResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self, output: str, **ignored_kwargs: Any
@@ -112,11 +112,11 @@ class Moderation(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with the moderation score and reason.
         """
 
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             output=output, few_shot_examples=self.few_shot_examples
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=ModerationResponseFormat
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=ModerationResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)

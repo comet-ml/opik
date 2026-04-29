@@ -19,8 +19,13 @@ const useGetOrCreateDemoDataset = () => {
     async (
       template: OptimizationTemplate,
       workspaceName: string,
+      projectName?: string,
     ): Promise<Dataset | null> => {
-      const datasetName = template.studio_config?.dataset_name;
+      const baseDatasetName = template.studio_config?.dataset_name;
+      const datasetName =
+        baseDatasetName && projectName
+          ? `${baseDatasetName} (${projectName})`
+          : baseDatasetName;
       const datasetItems = template.dataset_items;
 
       if (!datasetName || !datasetItems?.length) {
@@ -33,7 +38,8 @@ const useGetOrCreateDemoDataset = () => {
         try {
           const { data } = await api.post(DATASETS_REST_ENDPOINT, {
             name: datasetName,
-            type: DATASET_TYPE.TEST_SUITE,
+            type: DATASET_TYPE.DATASET,
+            ...(projectName && { project_name: projectName }),
           });
           newDataset = data;
         } catch {

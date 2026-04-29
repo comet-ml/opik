@@ -60,18 +60,27 @@ const getFilterTypeByField = (
   return column?.type || "string";
 };
 
+const normalizeFieldName = (field: string): string => {
+  if (field === "input_json") return "input";
+  if (field === "output_json") return "output";
+  return field;
+};
+
 export const normalizeFilters = (
   filters: Filter[],
   columns: ColumnData<unknown>[],
 ): Filter[] => {
   if (!filters || filters.length === 0) return [];
 
-  return filters.map((filter) => ({
-    id: filter.id || uniqid(),
-    field: filter.field || "",
-    type: filter.type || getFilterTypeByField(filter.field, columns),
-    operator: filter.operator || "",
-    key: filter.key || "",
-    value: filter.value || "",
-  })) as Filter[];
+  return filters.map((filter) => {
+    const field = normalizeFieldName(filter.field || "");
+    return {
+      id: filter.id || uniqid(),
+      field,
+      type: filter.type || getFilterTypeByField(field, columns),
+      operator: filter.operator || "",
+      key: filter.key || "",
+      value: filter.value || "",
+    };
+  }) as Filter[];
 };

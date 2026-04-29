@@ -52,7 +52,9 @@ const AttachmentThumbnail: React.FC<AttachmentThumbnailProps> = ({
     >
       <div className="absolute inset-x-0 top-0 flex h-8 items-center justify-between gap-2 truncate px-3 py-2">
         <TooltipWrapper content={name}>
-          <span className="comet-body-xs truncate text-[#45575F]">{name}</span>
+          <span className="comet-body-xs truncate text-chart-gray-dark">
+            {name}
+          </span>
         </TooltipWrapper>
         <div className="-mr-1 hidden shrink-0 items-center gap-1 group-hover:flex">
           {isExpandable && (

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 import tenacity
 
-from opik.evaluation.models import models_factory
+from opik.evaluation.models import base_model, models_factory
 from opik.evaluation.metrics import score_result
 from opik.exceptions import LLMJudgeParseError
 
@@ -69,22 +69,24 @@ def _format_value(value: Any) -> str:
     return json.dumps(value, indent=2, default=str)
 
 
-def _generate_prompt(
+def _build_messages(
     input: Any,
     output: Any,
     assertions_text: str,
-) -> str:
-    """Generate the LLM query for evaluating assertions.
+) -> List[base_model.ConversationDict]:
+    """Build a [system, user] message pair for the judge call.
 
-    Combines the system prompt and user template into a single string
-    because the model's generate_string API accepts only one input string.
+    Keeping the system prompt stable across calls lets providers cache it.
     """
     user_content = LLM_JUDGE_USER_TEMPLATE.format(
         input=_format_value(input),
         output=_format_value(output),
         assertions=assertions_text,
     )
-    return LLM_JUDGE_SYSTEM_PROMPT + "\n" + user_content
+    return [
+        {"role": "system", "content": LLM_JUDGE_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
 
 
 class LLMJudge(base.BaseSuiteEvaluator):
@@ -255,15 +257,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
         output: Any,
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
-        llm_query = _generate_prompt(
+        messages = _build_messages(
             input=input,
             output=output,
             assertions_text=schema.format_assertions(),
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.response_format
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.response_format
         )
-        return schema.parse(model_output)
+        return schema.parse(message["content"])
 
     async def ascore(
         self,
@@ -299,15 +301,15 @@ class LLMJudge(base.BaseSuiteEvaluator):
         output: Any,
     ) -> List[score_result.ScoreResult]:
         schema = parsers.ResponseSchema(self._assertions)
-        llm_query = _generate_prompt(
+        messages = _build_messages(
             input=input,
             output=output,
             assertions_text=schema.format_assertions(),
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.response_format
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.response_format
         )
-        return schema.parse(model_output)
+        return schema.parse(message["content"])
 
     def to_config(self) -> llm_judge_config.LLMJudgeConfig:
         """

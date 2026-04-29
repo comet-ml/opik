@@ -13,9 +13,11 @@ import opik
 from opik import id_helpers, datetime_helpers, synchronization
 
 from . import verifiers
-from .conftest import OPIK_E2E_TESTS_PROJECT_NAME
+from ..testlib import generate_project_name
 from ..unit.api_objects.attachment import constants
 from .. import testlib
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 @pytest.fixture(autouse=True)
@@ -46,7 +48,7 @@ def test_extraction__trace_with_end_time__extracts_attachments_from_input(
     opik_client.trace(
         id=trace_id,
         name="test-trace-extraction-input",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={
             "image1": _create_base64_url("image/png", constants.PNG_BASE64),
             "image2": _create_base64_url("image/jpeg", constants.JPEG_BASE64),
@@ -80,7 +82,7 @@ def test_extraction__trace_without_end_time__does_not_extract_attachments(
     opik_client.trace(
         id=trace_id,
         name="test-trace-no-extraction",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={
             "image": _create_base64_url("image/png", constants.PNG_BASE64),
         },
@@ -100,7 +102,7 @@ def test_extraction__trace_without_end_time__does_not_extract_attachments(
     attachments_client = opik_client.get_attachment_client()
 
     attachment_list = attachments_client.get_attachment_list(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_id=trace_id,
         entity_type="trace",
     )
@@ -119,7 +121,7 @@ def test_extraction__trace_with_end_time__extracts_attachments_from_output(
     opik_client.trace(
         id=trace_id,
         name="test-trace-extraction-output",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={"prompt": "generate an image"},
         output={
             "result_image": _create_base64_url("image/png", constants.PNG_BASE64),
@@ -152,7 +154,7 @@ def test_extraction__trace_with_end_time__extracts_attachments_from_metadata(
     opik_client.trace(
         id=trace_id,
         name="test-trace-extraction-metadata",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         metadata={
             "screenshot": _create_base64_url("image/png", constants.PNG_BASE64),
             "version": "1.0",
@@ -181,7 +183,7 @@ def test_extraction__trace_with_end_time__extracts_from_all_fields(
     opik_client.trace(
         id=trace_id,
         name="test-trace-extraction-all-fields",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={
             "input_img": _create_base64_url("image/png", constants.PNG_BASE64),
         },
@@ -221,7 +223,7 @@ def test_extraction__span_with_end_time__extracts_attachments(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-for-span-extraction",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     # Create a span with end_time and attachments
@@ -267,7 +269,7 @@ def test_extraction__span_without_end_time__does_not_extract_attachments(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-for-span-no-extraction",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     # Create a span WITHOUT an end_time set
@@ -292,7 +294,7 @@ def test_extraction__span_without_end_time__does_not_extract_attachments(
     attachments_client = opik_client.get_attachment_client()
 
     attachment_list = attachments_client.get_attachment_list(
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         entity_id=span_id,
         entity_type="span",
     )
@@ -312,7 +314,7 @@ def test_extraction__trace_update__extracts_attachments(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-update-extraction",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={"prompt": "initial input"},
     )
 
@@ -348,7 +350,7 @@ def test_extraction__span_update__extracts_attachments(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-for-span-update",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     # Create an initial span without attachments
@@ -388,7 +390,7 @@ def test_extraction__various_file_types__all_extracted(
     opik_client.trace(
         id=trace_id,
         name="test-trace-various-types",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input={
             "png": _create_base64_url("image/png", constants.PNG_BASE64),
             "jpeg": _create_base64_url("image/jpeg", constants.JPEG_BASE64),
@@ -436,7 +438,7 @@ def test_extraction__backend_reinjects_extracted_attachments(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-backend_reinjects_extracted_attachments",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
         input=trace_input,
         end_time=datetime_helpers.local_timestamp(),
     )
@@ -487,7 +489,7 @@ def test_extraction__backend_reinjects_extracted_attachments(
         trace_id=trace.id,
         name="test-trace-backend_reinjects_extracted_attachments",
         input=trace_input,
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     # Verify span
@@ -498,7 +500,7 @@ def test_extraction__backend_reinjects_extracted_attachments(
         trace_id=trace_id,
         name="test-span--backend_reinjects_extracted_attachments",
         input=span_input,
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -513,7 +515,7 @@ def test_extraction__input_as_top_level_list(
     trace = opik_client.trace(
         id=trace_id,
         name="test-trace-for-attachment-list-extraction",
-        project_name=OPIK_E2E_TESTS_PROJECT_NAME,
+        project_name=PROJECT_NAME,
     )
 
     # Create a span with end_time and a top-level list in the input with attachments
