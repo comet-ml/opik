@@ -85,10 +85,10 @@ def test_default_llm_loaded_from_env(monkeypatch):
     assert config.default_llm == "gpt-4.1-mini"
 
 
-def test_environment_defaults_to_none():
+def test_environment_defaults_to_development():
     config = OpikConfig()
 
-    assert config.environment is None
+    assert config.environment == "development"
 
 
 def test_environment_loaded_from_env(monkeypatch):
@@ -132,4 +132,4 @@ def test_save_to_file_without_environment(mock_expanduser, mock_open_file):
     parsed_config = configparser.ConfigParser()
     parsed_config.read_string(written_content)
 
-    assert "environment" not in parsed_config["opik"]
+    assert parsed_config["opik"]["environment"] == "development"

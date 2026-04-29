@@ -294,7 +294,7 @@ class OpikConfig(pydantic_settings.BaseSettings):
     Env var: OPIK_SUPPRESS_BATCHING_UPDATE_WARNING
     """
 
-    environment: Optional[str] = None
+    environment: Optional[str] = "development"
     """
     The name of the environment (e.g. "production", "staging", "development").
     Stored in the configuration for future use.

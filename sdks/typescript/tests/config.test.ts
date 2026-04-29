@@ -75,7 +75,7 @@ describe("Opik client config", () => {
   it("should load environment from config file", async () => {
     process.env.OPIK_CONFIG_PATH = path.resolve(
       __dirname,
-      "./examples/valid-opik-config-with-environment.ini"
+      "./examples/valid-opik-config.ini"
     );
     process.env.OPIK_API_KEY = undefined;
 
@@ -84,7 +84,7 @@ describe("Opik client config", () => {
     expect(opik.config.environment).toBe("staging");
   });
 
-  it("should default environment to empty string when not set", async () => {
+  it("should default environment to 'development' when not set", async () => {
     process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
     process.env.OPIK_API_KEY = "test";
     process.env.OPIK_WORKSPACE = "test";
@@ -92,7 +92,7 @@ describe("Opik client config", () => {
 
     const opik = new Opik();
 
-    expect(opik.config.environment).toBe("");
+    expect(opik.config.environment).toBe("development");
   });
 
   it("should being able to override config values from the environment variables + explicit config", async () => {

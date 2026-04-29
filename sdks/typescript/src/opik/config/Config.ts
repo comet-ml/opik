@@ -28,7 +28,7 @@ export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions">> = {
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
   workspaceName: "default",
-  environment: "",
+  environment: "development",
   batchDelayMs: 300,
   holdUntilFlush: false,
 };

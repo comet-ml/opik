@@ -518,13 +518,12 @@ class OpikConfigurator:
             return False
 
         user_input_environment = input(
-            "Please enter your environment name (e.g. production, staging) or press Enter to skip: "
+            "Please enter your environment name (press Enter to use 'development'): "
         ).strip()
 
-        if user_input_environment == "":
-            return False
-
-        self.environment = user_input_environment
+        self.environment = (
+            user_input_environment if user_input_environment else "development"
+        )
         return True
 
     def _update_config(self, save_to_file: bool) -> None:

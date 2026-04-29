@@ -2540,13 +2540,13 @@ class TestSetEnvironment:
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     @patch("builtins.input", return_value="")
-    def test_set_environment__interactive_user_skips__returns_false(
+    def test_set_environment__interactive_user_skips__defaults_to_development(
         self, mock_input, mock_is_interactive
     ):
         configurator = OpikConfigurator()
         result = configurator._set_environment()
-        assert result is False
-        assert configurator.environment is None
+        assert result is True
+        assert configurator.environment == "development"
 
     @patch("opik.configurator.configure.is_interactive", return_value=True)
     def test_set_environment__automatic_approvals__skips_prompt(

@@ -1416,6 +1416,6 @@ def test_opik_client__init__environment_forwarded_to_config():
     assert client.config.environment == "production"
 
 
-def test_opik_client__init__environment_defaults_to_none():
+def test_opik_client__init__environment_defaults_to_development():
     client = opik_client.Opik()
-    assert client.config.environment is None
+    assert client.config.environment == "development"

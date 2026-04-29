@@ -723,8 +723,9 @@ export async function getOrAskForProjectData(options?: {
 
     const localEnvironment = await abortIfCancelled(
       clack.text({
-        message: 'Enter your environment name (optional, e.g. production, staging)',
-        placeholder: 'Press Enter to skip',
+        message: 'Enter your environment name (optional)',
+        placeholder: 'development',
+        defaultValue: 'development',
       }),
       'nodejs' as Integration,
     );
@@ -882,8 +883,9 @@ export async function getOrAskForProjectData(options?: {
 
   const environmentInput = await abortIfCancelled(
     clack.text({
-      message: 'Enter your environment name (optional, e.g. production, staging)',
-      placeholder: 'Press Enter to skip',
+      message: 'Enter your environment name (optional)',
+      placeholder: 'development',
+      defaultValue: 'development',
     }),
     'nodejs' as Integration,
   );
