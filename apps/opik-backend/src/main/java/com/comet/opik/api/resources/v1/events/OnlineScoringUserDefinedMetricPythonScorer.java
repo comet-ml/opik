@@ -1,8 +1,10 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
@@ -20,6 +22,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -34,6 +37,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
+    private final SpanService spanService;
     private final Logger userFacingLogger;
 
     @Inject
@@ -42,11 +46,13 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
-            @NonNull PythonEvaluatorService pythonEvaluatorService) {
+            @NonNull PythonEvaluatorService pythonEvaluatorService,
+            @NonNull SpanService spanService) {
         super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
+        this.spanService = spanService;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
 
@@ -73,9 +79,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
+            List<Span> spans = fetchSpans(spanService, Set.of(trace.id()), message.workspaceId(),
+                    message.userName());
+
             Map<String, String> data;
             try {
-                data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
+                data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());

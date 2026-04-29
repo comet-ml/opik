@@ -1,12 +1,14 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.FeedbackScoreItem;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorType;
 import com.comet.opik.api.filter.Operator;
 import com.comet.opik.api.filter.TraceField;
 import com.comet.opik.api.filter.TraceFilter;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -24,6 +26,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -114,6 +117,28 @@ public abstract class OnlineScoringBaseScorer<M> extends BaseRedisSubscriber<M> 
         return scores.stream()
                 .collect(Collectors.groupingBy(FeedbackScoreItem::name,
                         Collectors.mapping(FeedbackScoreItem::value, Collectors.toList())));
+    }
+
+    /**
+     * Fetches every span belonging to the given trace ids in one blocking call.
+     * Returns an empty list on failure so the score path stays runnable without span context.
+     */
+    protected List<Span> fetchSpans(@NonNull SpanService spanService, @NonNull Set<UUID> traceIds,
+            @NonNull String workspaceId, @NonNull String userName) {
+        if (traceIds.isEmpty()) {
+            return List.of();
+        }
+        try {
+            List<Span> spans = spanService.getByTraceIds(traceIds)
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                            .put(RequestContext.USER_NAME, userName))
+                    .collectList()
+                    .block();
+            return spans != null ? spans : List.of();
+        } catch (Exception e) {
+            log.warn("Failed to fetch spans for '{}' traces in workspace '{}'", traceIds.size(), workspaceId, e);
+            return List.of();
+        }
     }
 
     /**

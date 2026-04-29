@@ -37,6 +37,10 @@ import { EVALUATORS_RULE_SCOPE } from "@/types/automations";
 import { updateProviderConfig } from "@/lib/modelUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
+// Reserved at trace scope: backend auto-injects every span of the trace under {{spans}}
+// in OnlineScoringEngine.toReplacements (putIfAbsent), so the user shouldn't have to map it.
+const RESERVED_TRACE_SCOPE_VARIABLES = new Set(["spans"]);
+
 const MESSAGE_TYPE_OPTIONS = [
   {
     label: LLM_MESSAGE_ROLE_NAME_MAP[LLM_MESSAGE_ROLE.system],
@@ -120,6 +124,11 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
+      const currentScope = formInstance.getValues("scope");
+      const reserved =
+        currentScope === EVALUATORS_RULE_SCOPE.trace
+          ? RESERVED_TRACE_SCOPE_VARIABLES
+          : null;
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -137,7 +146,7 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           });
           return acc.concat(allTags);
         }, [])
-        .filter((v) => v !== "")
+        .filter((v) => v !== "" && !reserved?.has(v))
         .forEach((v: string) => (localVariables[v] = variables[v] ?? ""));
 
       formInstance.setValue("llmJudgeDetails.variables", localVariables);
