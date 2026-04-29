@@ -1,5 +1,9 @@
 """
-Unit tests for OpikMessageProcessor handling AddAssertionResultsBatchMessage.
+Unit tests for AssertionResultsMessageProcessor — the migration-period write
+path for OPIK-6054 / OPIK-6048.
+
+Targets the small dedicated class directly so the tests don't depend on the
+larger OpikMessageProcessor / replay / permissions plumbing.
 """
 
 from unittest import mock
@@ -7,8 +11,8 @@ from unittest import mock
 import pytest
 
 from opik.message_processing import messages
-from opik.message_processing.processors.online_message_processor import (
-    OpikMessageProcessor,
+from opik.message_processing.processors.assertion_results_processor import (
+    AssertionResultsMessageProcessor,
 )
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import assertion_result_batch_item, feedback_score_batch_item
@@ -18,21 +22,16 @@ from opik.rest_api.types import assertion_result_batch_item, feedback_score_batc
 def mock_rest_client() -> mock.MagicMock:
     client = mock.MagicMock()
     # MagicMock blocks attributes starting with "assert" as protection against
-    # typoed assertion methods; configure the assertion_results client explicitly.
+    # typoed assertion methods; configure assertion_results explicitly.
     client.assertion_results = mock.MagicMock(unsafe=True)
     return client
 
 
 @pytest.fixture
-def processor(mock_rest_client: mock.MagicMock) -> OpikMessageProcessor:
-    return OpikMessageProcessor(
-        rest_client=mock_rest_client,
-        file_upload_manager=mock.MagicMock(),
-        fallback_replay_manager=mock.MagicMock(),
-        unauthorized_message_types_registry=mock.Mock(
-            is_authorized=mock.Mock(return_value=True)
-        ),
-    )
+def processor(
+    mock_rest_client: mock.MagicMock,
+) -> AssertionResultsMessageProcessor:
+    return AssertionResultsMessageProcessor(rest_client=mock_rest_client)
 
 
 def _build_message(
@@ -62,15 +61,13 @@ def _build_message(
     return msg
 
 
-class TestAssertionResultsHandler:
-    def test_process__assertion_results_batch__forwards_to_rest_client(
+class TestAssertionResultsProcessorHappyPath:
+    def test_process__happy_path__forwards_to_assertion_results_endpoint(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
-        message = _build_message()
-
-        processor.process(message)
+        processor.process(_build_message())
 
         mock_rest_client.assertion_results.store_assertions_batch.assert_called_once()
         call_kwargs = (
@@ -91,9 +88,9 @@ class TestAssertionResultsHandler:
         assert sent_items[1].status == "failed"
         assert sent_items[1].reason is None
 
-    def test_process__assertion_results_batch__does_not_use_feedback_scores_endpoint(
+    def test_process__happy_path__does_not_use_feedback_scores_endpoint(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
         processor.process(_build_message())
@@ -102,17 +99,17 @@ class TestAssertionResultsHandler:
         mock_rest_client.spans.score_batch_of_spans.assert_not_called()
 
 
-class TestAssertionResultsFallback:
+class TestAssertionResultsProcessorFallback:
     """
-    Forward-compat fallback for OPIK-6054 / OPIK-6048: if the dedicated
-    assertion-results endpoint is missing on an older self-hosted backend,
-    write through the legacy feedback-scores piggyback and remember the
-    choice for the rest of the session.
+    Forward-compat fallback: if the dedicated assertion-results endpoint is
+    missing on an older self-hosted backend, write through the legacy
+    feedback-scores piggyback and remember the choice for the rest of the
+    session.
     """
 
     def test_process__bad_endpoint_404__falls_back_to_feedback_scores(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
         mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
@@ -134,11 +131,11 @@ class TestAssertionResultsFallback:
         assert sent[0].value == 1.0
         assert sent[0].source == "sdk"
         assert sent[1].value == 0.0  # status="failed"
-        assert processor._assertion_results_endpoint_unavailable is True
+        assert processor._use_assertion_results_endpoint is False
 
     def test_process__bad_endpoint_405__falls_back_to_feedback_scores(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
         mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
@@ -148,30 +145,26 @@ class TestAssertionResultsFallback:
         processor.process(_build_message())
 
         mock_rest_client.traces.score_batch_of_traces.assert_called_once()
-        assert processor._assertion_results_endpoint_unavailable is True
+        assert processor._use_assertion_results_endpoint is False
 
-    def test_process__non_404_api_error__does_not_set_fallback_or_call_legacy_path(
+    def test_process__non_404_api_error__propagates_and_does_not_set_fallback(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
         mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
             rest_api_core.ApiError(status_code=500, body="Internal Server Error")
         )
 
-        # Public entrypoint: process() catches non-404/405 ApiError, logs,
-        # and lets the replay manager handle the failed message. The
-        # fallback flag must stay False and the legacy feedback-scores
-        # endpoint must not be touched.
-        processor.process(_build_message())
+        with pytest.raises(rest_api_core.ApiError):
+            processor.process(_build_message())
 
-        mock_rest_client.assertion_results.store_assertions_batch.assert_called_once()
         mock_rest_client.traces.score_batch_of_traces.assert_not_called()
-        assert processor._assertion_results_endpoint_unavailable is False
+        assert processor._use_assertion_results_endpoint is True
 
     def test_process__sticky_fallback__second_call_skips_new_endpoint(
         self,
-        processor: OpikMessageProcessor,
+        processor: AssertionResultsMessageProcessor,
         mock_rest_client: mock.MagicMock,
     ):
         mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
@@ -179,11 +172,10 @@ class TestAssertionResultsFallback:
         )
 
         processor.process(_build_message())
-        # First call: tried new endpoint, hit 404, set the sticky flag.
+        # First call: tried new endpoint, hit 404, flipped the flag.
         assert mock_rest_client.assertion_results.store_assertions_batch.call_count == 1
-        assert processor._assertion_results_endpoint_unavailable is True
+        assert processor._use_assertion_results_endpoint is False
 
-        # Reset feedback-scores call_count to isolate the second send.
         mock_rest_client.traces.score_batch_of_traces.reset_mock()
         processor.process(_build_message())
 
