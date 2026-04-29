@@ -83,8 +83,7 @@ def _format_examples(
     for example in few_shot_examples:
         if include_context:
             header = (
-                f"<example>\nInput: {example['input']}\n"
-                f"Context: {example['context']}\n"
+                f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
             )
         else:
             header = f"<example>\nInput: {example['input']}\n"
