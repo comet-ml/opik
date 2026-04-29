@@ -150,7 +150,7 @@ class TestAssertionResultsFallback:
         mock_rest_client.traces.score_batch_of_traces.assert_called_once()
         assert processor._assertion_results_endpoint_unavailable is True
 
-    def test_process__non_404_api_error__propagates_and_does_not_set_fallback(
+    def test_process__non_404_api_error__does_not_set_fallback_or_call_legacy_path(
         self,
         processor: OpikMessageProcessor,
         mock_rest_client: mock.MagicMock,
@@ -159,12 +159,13 @@ class TestAssertionResultsFallback:
             rest_api_core.ApiError(status_code=500, body="Internal Server Error")
         )
 
-        with pytest.raises(rest_api_core.ApiError):
-            # process() catches handler exceptions and routes them to the
-            # replay manager. Bypass that by calling the handler directly so
-            # the test can observe the propagation.
-            processor._process_add_assertion_results_batch_message(_build_message())
+        # Public entrypoint: process() catches non-404/405 ApiError, logs,
+        # and lets the replay manager handle the failed message. The
+        # fallback flag must stay False and the legacy feedback-scores
+        # endpoint must not be touched.
+        processor.process(_build_message())
 
+        mock_rest_client.assertion_results.store_assertions_batch.assert_called_once()
         mock_rest_client.traces.score_batch_of_traces.assert_not_called()
         assert processor._assertion_results_endpoint_unavailable is False
 
