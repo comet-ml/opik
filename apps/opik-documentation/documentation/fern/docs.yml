@@ -16,7 +16,7 @@ metadata:
   twitter:site: "@CometML"
 
 announcement:
-  message: "Subscribe to our Luma calendar to stay updated on upcoming events! <a href=\"https://luma.com/cometml\" rel=\"nofollow\" target=\"_blank\">Subscribe here</a>"
+  message: "New! Write simple unit tests and let Opik debug your agents for you. <a href=\"https://www.comet.com/docs/opik/evaluation/advanced/building-test-suites\" rel=\"nofollow\" target=\"_blank\">Here's how</a>"
 
 title: Opik Documentation
 favicon: img/logo.svg

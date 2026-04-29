@@ -44,7 +44,7 @@ import {
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
 import emptyOptStudioDarkUrl from "/images/empty-optimization-studio-dark.svg";
 import StudioTemplates from "@/v2/pages-shared/optimizations/StudioTemplates";
@@ -172,7 +172,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
   );
 
   const {
-    permissions: { canViewDatasets, canDeleteOptimizationRuns },
+    permissions: {
+      canViewDatasets,
+      canDeleteOptimizationRuns,
+      canUseOptimizationStudio,
+    },
   } = usePermissions();
 
   const [search = "", setSearch] = useQueryParam("search", StringParam, {
@@ -316,7 +320,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
     resetDialogKeyRef.current = resetDialogKeyRef.current + 1;
   }, []);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && optimizations.length === 0)) {
     return <Loader />;
   }
 
@@ -337,13 +341,21 @@ const OptimizationsPage: React.FunctionComponent = () => {
           description={
             "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
           }
-          primaryActionLabel="Create optimization run"
-          onPrimaryAction={handleNewOptimizationClick}
-          docsUrl={buildDocsUrl("/agent_optimization/optimization_studio")}
+          primaryActionLabel={
+            canUseOptimizationStudio ? "Create optimization run" : undefined
+          }
+          onPrimaryAction={
+            canUseOptimizationStudio ? handleNewOptimizationClick : undefined
+          }
+          docsUrl={buildDocsUrl(
+            "/development/optimization-runs/optimization_studio",
+          )}
         />
       ) : (
         <>
-          {isOptimizationStudioEnabled && <StudioTemplates />}
+          {isOptimizationStudioEnabled && canUseOptimizationStudio && (
+            <StudioTemplates />
+          )}
           <div className="pt-4">
             <h2 className="comet-title-s sticky top-0 z-10 truncate break-words bg-soft-background pb-3 pt-2">
               Optimization runs
@@ -405,7 +417,7 @@ const OptimizationsPage: React.FunctionComponent = () => {
               }}
               noData={
                 <DataTableNoData title={noDataText}>
-                  {noData && (
+                  {noData && canUseOptimizationStudio && (
                     <Button variant="link" onClick={handleNewOptimizationClick}>
                       Create optimization
                     </Button>

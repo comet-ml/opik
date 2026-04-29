@@ -1,31 +1,24 @@
 import json
 
 from typing import List, Callable, Any, Dict, TYPE_CHECKING
-import importlib.util
 import logging
 
 if TYPE_CHECKING:
     import pandas as pd
 
 from . import dataset_item
+from . import helpers
 
 ItemConstructor = Callable[[Any], dataset_item.DatasetItem]
 
 
 LOGGER = logging.getLogger(__name__)
-IMPORT_PANDAS_ERROR = "The Python library Pandas is required for this method. You can install it with `pip install pandas`."
-
-
-def _raise_if_pandas_is_unavailable() -> None:
-    module_spec = importlib.util.find_spec("pandas")
-    if module_spec is None:
-        raise ImportError(IMPORT_PANDAS_ERROR)
 
 
 def to_pandas(
     items: List[dataset_item.DatasetItem], keys_mapping: Dict[str, str]
 ) -> "pd.DataFrame":
-    _raise_if_pandas_is_unavailable()
+    helpers.raise_if_pandas_is_unavailable()
 
     import pandas as pd
 
@@ -60,7 +53,7 @@ def from_pandas(
     keys_mapping: Dict[str, str],
     ignore_keys: List[str],
 ) -> List[dataset_item.DatasetItem]:
-    _raise_if_pandas_is_unavailable()
+    helpers.raise_if_pandas_is_unavailable()
 
     result = []
     ignore_keys = [] if ignore_keys is None else ignore_keys

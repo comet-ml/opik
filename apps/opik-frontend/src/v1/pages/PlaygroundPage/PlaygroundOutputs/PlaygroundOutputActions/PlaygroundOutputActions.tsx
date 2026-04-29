@@ -38,7 +38,7 @@ import { hasImagesInContent, hasVideosInContent } from "@/lib/llm";
 import { Dataset, DatasetItem, DatasetItemColumn } from "@/types/datasets";
 import { Filters } from "@/types/filters";
 import { COLUMN_DATA_ID, COLUMN_TYPE } from "@/types/shared";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -155,7 +155,7 @@ const PlaygroundOutputActions = ({
     },
   );
 
-  const rules = rulesData?.content || [];
+  const rules = useMemo(() => rulesData?.content || [], [rulesData?.content]);
 
   const { data: datasetsData, isLoading: isLoadingDatasets } = useDatasetsList(
     {
@@ -380,16 +380,14 @@ const PlaygroundOutputActions = ({
     );
   };
 
-  // Set default to "all selected" when dataset is selected and rules are available
   useEffect(() => {
     if (!datasetId) {
-      // Reset to null when dataset is deselected
       setSelectedRuleIds(null);
+    } else if (selectedRuleIds === null && rules.length > 0) {
+      // Resolve null (="all rules") to actual IDs so the backend can score non-SDK traces
+      setSelectedRuleIds(rules.map((r) => r.id));
     }
-    // Note: We don't automatically normalize [] to null because [] is a valid state
-    // meaning "none selected". Users should be able to explicitly deselect all items.
-    // null = all selected (default), [] = none selected, [id1, id2] = specific rules selected
-  }, [datasetId, setSelectedRuleIds]);
+  }, [datasetId, selectedRuleIds, rules, setSelectedRuleIds]);
 
   useEffect(() => {
     // stop streaming whenever a user leaves a page

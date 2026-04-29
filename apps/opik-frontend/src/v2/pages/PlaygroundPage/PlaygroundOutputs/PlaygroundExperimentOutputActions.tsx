@@ -55,7 +55,7 @@ const PlaygroundExperimentOutputActions = ({
           <PlaygroundProgressIndicator />
         </div>
       ) : (
-        <div className="flex items-center justify-between bg-gray-100 px-4 py-3">
+        <div className="flex items-center justify-between bg-gray-100 py-3 pl-2 pr-4">
           {hasExperiments ? (
             <Button
               variant="ghost"

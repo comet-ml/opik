@@ -48,6 +48,10 @@ class UserFrustrationMetric(ConversationThreadMetric):
             maximal number of historical turns to include in each window when assessing
             the frustration of the current turn in the conversation. Default is 10.
         temperature: The temperature to use for the model. Defaults to 1e-8.
+        reasoning_effort: Optional reasoning effort level for the model. Applies to
+            providers/models that expose a reasoning_effort parameter (e.g. OpenAI
+            gpt-5 family). Supported values typically include "minimal", "low",
+            "medium", "high". Defaults to None (provider default applies — typically "medium" for OpenAI reasoning models). Pass explicitly if you want to cut token spend on reasoning.
 
     Example:
         >>> from opik.evaluation.metrics import UserFrustrationMetric
@@ -75,6 +79,7 @@ class UserFrustrationMetric(ConversationThreadMetric):
         project_name: Optional[str] = None,
         window_size: int = 10,
         temperature: float = 1e-8,
+        reasoning_effort: Optional[str] = None,
     ):
         super().__init__(
             name=name,
@@ -84,16 +89,24 @@ class UserFrustrationMetric(ConversationThreadMetric):
         self._include_reason = include_reason
         self._window_size = window_size
 
-        self._init_model(model, temperature=temperature)
+        self._init_model(
+            model, temperature=temperature, reasoning_effort=reasoning_effort
+        )
 
     def _init_model(
-        self, model: Optional[Union[str, base_model.OpikBaseModel]], temperature: float
+        self,
+        model: Optional[Union[str, base_model.OpikBaseModel]],
+        temperature: float,
+        reasoning_effort: Optional[str],
     ) -> None:
         if isinstance(model, base_model.OpikBaseModel):
             self._model = model
         else:
+            model_kwargs: Dict[str, Any] = {"temperature": temperature}
+            if reasoning_effort is not None:
+                model_kwargs["reasoning_effort"] = reasoning_effort
             self._model = models_factory.get(
-                model_name=model, track=self.track, temperature=temperature
+                model_name=model, track=self.track, **model_kwargs
             )
 
     def score(
@@ -182,27 +195,27 @@ class UserFrustrationMetric(ConversationThreadMetric):
         self,
         conversation_sliding_window: conversation_types.Conversation,
     ) -> schema.EvaluateUserFrustrationResponse:
-        llm_query = templates.evaluate_conversation(
+        messages = templates.build_evaluate_conversation_messages(
             sliding_window=conversation_sliding_window
         )
-        model_output = self._model.generate_string(
-            input=llm_query,
+        message = self._model.generate_chat_completion(
+            messages=messages,
             response_format=schema.EvaluateUserFrustrationResponse,
         )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
     async def _a_evaluate_conversation(
         self,
         conversation_sliding_window: conversation_types.Conversation,
     ) -> schema.EvaluateUserFrustrationResponse:
-        llm_query = templates.evaluate_conversation(
+        messages = templates.build_evaluate_conversation_messages(
             sliding_window=conversation_sliding_window
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query,
+        message = await self._model.agenerate_chat_completion(
+            messages=messages,
             response_format=schema.EvaluateUserFrustrationResponse,
         )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
     def _reason_from_verdicts(
         self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
@@ -211,12 +224,14 @@ class UserFrustrationMetric(ConversationThreadMetric):
             verdicts
         )
 
-        llm_query = templates.generate_reason(score=score, frustrations=frustrations)
-
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        messages = templates.build_generate_reason_messages(
+            score=score, frustrations=frustrations
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
+        )
+        return _generate_reason_from_model_output(model_output=message["content"])
 
     async def _a_reason_from_verdicts(
         self, score: float, verdicts: List[schema.EvaluateUserFrustrationResponse]
@@ -225,12 +240,14 @@ class UserFrustrationMetric(ConversationThreadMetric):
             verdicts
         )
 
-        llm_query = templates.generate_reason(score=score, frustrations=frustrations)
-
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        messages = templates.build_generate_reason_messages(
+            score=score, frustrations=frustrations
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
+        )
+        return _generate_reason_from_model_output(model_output=message["content"])
 
 
 def _evaluate_conversation_from_model_output(

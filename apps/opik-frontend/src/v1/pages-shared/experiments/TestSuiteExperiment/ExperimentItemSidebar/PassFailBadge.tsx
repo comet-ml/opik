@@ -1,27 +1,27 @@
 import React from "react";
 import { Tag } from "@/ui/tag";
-import { ExperimentItemStatus } from "@/types/test-suites";
+import { RunStatus } from "@/types/test-suites";
 
 const STATUS_CONFIG: Record<
-  ExperimentItemStatus,
+  RunStatus,
   { label: string; variant: "green" | "red" | "gray" }
 > = {
-  [ExperimentItemStatus.PASSED]: {
+  [RunStatus.PASSED]: {
     label: "Passed",
     variant: "green",
   },
-  [ExperimentItemStatus.FAILED]: {
+  [RunStatus.FAILED]: {
     label: "Failed",
     variant: "red",
   },
-  [ExperimentItemStatus.SKIPPED]: {
+  [RunStatus.SKIPPED]: {
     label: "Skipped",
     variant: "gray",
   },
 };
 
 type PassFailBadgeProps = {
-  status?: ExperimentItemStatus;
+  status?: RunStatus;
 };
 
 const PassFailBadge: React.FC<PassFailBadgeProps> = ({ status }) => {

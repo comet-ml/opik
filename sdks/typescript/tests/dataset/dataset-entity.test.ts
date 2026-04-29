@@ -365,6 +365,37 @@ describe("Dataset entity operations", () => {
     });
   });
 
+  describe("getRawItems", () => {
+    it("should forward lastRetrievedId to streamDatasetItems", async () => {
+      streamDatasetItemsSpy.mockReturnValueOnce(
+        mockAPIFunctionWithStream("[]")
+      );
+
+      await dataset.getRawItems(5, "cursor-abc");
+
+      expect(streamDatasetItemsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastRetrievedId: "cursor-abc",
+          steamLimit: 5,
+        })
+      );
+    });
+
+    it("should pass undefined lastRetrievedId when not provided", async () => {
+      streamDatasetItemsSpy.mockReturnValueOnce(
+        mockAPIFunctionWithStream("[]")
+      );
+
+      await dataset.getRawItems(5);
+
+      expect(streamDatasetItemsSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lastRetrievedId: undefined,
+        })
+      );
+    });
+  });
+
   describe("insertFromJson", () => {
     it("should insert items from valid JSON string", async () => {
       const jsonString = JSON.stringify([

@@ -435,6 +435,136 @@ describe("TestSuite", () => {
 
       expect(items).toEqual([]);
     });
+
+    it("should forward lastRetrievedId to dataset.getRawItems", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(10, "cursor-xyz");
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(10, "cursor-xyz");
+    });
+
+    it("should pass undefined lastRetrievedId when not provided", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+      vi.spyOn(testDataset, "getVersionInfo").mockResolvedValue({ id: "v1" });
+
+      await suite.getItems(5);
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
+  });
+
+  describe("getRawItems", () => {
+    it("should return raw suite items preserving raw evaluators and item-level executionPolicy", async () => {
+      const rawEvaluators = [
+        {
+          name: "item-judge",
+          type: "llm_judge" as const,
+          config: {
+            schema: [{ name: "is quality", type: "BOOLEAN" }],
+          },
+        },
+      ];
+      const rawItem1 = new DatasetItem({
+        id: "item-1",
+        input: "hello",
+        expected: "world",
+        description: "first item",
+        evaluators: rawEvaluators,
+        executionPolicy: { runsPerItem: 5, passThreshold: 3 },
+      });
+      const rawItem2 = new DatasetItem({
+        id: "item-2",
+        input: "foo",
+        expected: "bar",
+      });
+
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([
+        rawItem1,
+        rawItem2,
+      ]);
+
+      const items = await suite.getRawItems();
+
+      expect(items).toHaveLength(2);
+
+      // Item 1: suite-level view with raw evaluators + raw (un-merged) executionPolicy
+      expect(items[0].id).toBe("item-1");
+      expect(items[0].data).toEqual({
+        input: "hello",
+        expected: "world",
+        description: "first item",
+      });
+      // description is additionally exposed at the top level for convenience
+      expect(items[0].description).toBe("first item");
+      expect(items[0].evaluators).toEqual(rawEvaluators);
+      expect(items[0].executionPolicy).toEqual({
+        runsPerItem: 5,
+        passThreshold: 3,
+      });
+
+      // Item 2: no evaluators, no executionPolicy — raw means NOT merged with suite default
+      expect(items[1].id).toBe("item-2");
+      expect(items[1].data).toEqual({ input: "foo", expected: "bar" });
+      expect(items[1].evaluators).toBeUndefined();
+      expect(items[1].executionPolicy).toBeUndefined();
+    });
+
+    it("should forward nbSamples and lastRetrievedId to dataset.getRawItems", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      await suite.getRawItems(10, "cursor-xyz");
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(10, "cursor-xyz");
+    });
+
+    it("should be callable with no arguments", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      const items = await suite.getRawItems();
+
+      expect(items).toEqual([]);
+      expect(getRawItemsSpy).toHaveBeenCalledWith(undefined, undefined);
+    });
+
+    it("should be callable with only nbSamples", async () => {
+      const getRawItemsSpy = vi
+        .spyOn(testDataset, "getRawItems")
+        .mockResolvedValue([]);
+
+      await suite.getRawItems(5);
+
+      expect(getRawItemsSpy).toHaveBeenCalledWith(5, undefined);
+    });
+
+    it("should not fetch the suite-level execution policy", async () => {
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([]);
+      const getVersionInfoSpy = vi
+        .spyOn(testDataset, "getVersionInfo")
+        .mockResolvedValue({ id: "v1" });
+
+      await suite.getRawItems();
+
+      expect(getVersionInfoSpy).not.toHaveBeenCalled();
+    });
+
+    it("should not return DatasetItem instances — returns plain suite item objects", async () => {
+      const rawItem = new DatasetItem({ id: "item-1", input: "x" });
+      vi.spyOn(testDataset, "getRawItems").mockResolvedValue([rawItem]);
+
+      const items = await suite.getRawItems();
+
+      expect(items[0]).not.toBeInstanceOf(DatasetItem);
+    });
   });
 
   describe("delete", () => {
@@ -786,41 +916,9 @@ describe("TestSuite", () => {
       });
     });
 
-    it("should support partial updateTestSettings with tags only (calls updateDataset, not applyDatasetItemChanges)", async () => {
-      const updateDatasetSpy = vi
-        .spyOn(opikClient.api.datasets, "updateDataset")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      const applyChangesSpy = vi
-        .spyOn(opikClient.api.datasets, "applyDatasetItemChanges")
-        .mockImplementation(
-          () =>
-            ({
-              then: (cb: (v: unknown) => unknown) =>
-                Promise.resolve(cb(undefined)),
-              [Symbol.toStringTag]: "HttpResponsePromise",
-            }) as never
-        );
-
-      await suite.updateTestSettings({ tags: ["ci", "nightly"] });
-
-      expect(updateDatasetSpy).toHaveBeenCalledWith("suite-ds-id", {
-        name: "test-suite",
-        tags: ["ci", "nightly"],
-      });
-      expect(applyChangesSpy).not.toHaveBeenCalled();
-    });
-
-    it("should throw when none of globalAssertions, globalExecutionPolicy, or tags are provided", async () => {
+    it("should throw when none of globalAssertions or globalExecutionPolicy are provided", async () => {
       await expect(suite.updateTestSettings({})).rejects.toThrow(
-        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions' or 'globalExecutionPolicy' must be provided."
       );
     });
 

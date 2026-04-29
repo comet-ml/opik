@@ -41,7 +41,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    */
   constructor(
     { name, description, id, projectName }: DatasetData,
-    private opik: OpikClient
+    private opik: OpikClient,
   ) {
     this.id = id || generateId();
     this.name = name;
@@ -80,12 +80,12 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
         });
         totalInserted += batch.length;
         logger.info(
-          `Inserted ${Math.min(totalInserted, reqItems.length)} of ${reqItems.length} items into dataset ${this.id}`
+          `Inserted ${Math.min(totalInserted, reqItems.length)} of ${reqItems.length} items into dataset ${this.id}`,
         );
       }
     } catch (error) {
       logger.error(
-        `Error inserting items into dataset: ${error instanceof Error ? error.message : String(error)}`
+        `Error inserting items into dataset: ${error instanceof Error ? error.message : String(error)}`,
       );
       throw error;
     }
@@ -218,13 +218,18 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * Retrieve raw DatasetItem objects with full metadata (evaluators, executionPolicy) preserved.
    *
    * @param nbSamples The number of samples to retrieve. If not set - all items are returned
+   * @param lastRetrievedId Optional ID of the last retrieved item for pagination
    * @returns A list of DatasetItem objects
    */
-  public async getRawItems(nbSamples?: number): Promise<DatasetItem<T>[]> {
+  public async getRawItems(
+    nbSamples?: number,
+    lastRetrievedId?: string,
+  ): Promise<DatasetItem<T>[]> {
     return getDatasetItems<T>(this.opik, {
       datasetName: this.name,
       projectName: this.projectName,
       nbSamples,
+      lastRetrievedId,
     });
   }
 
@@ -238,7 +243,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
   public async insertFromJson(
     jsonArray: string,
     keysMapping: Record<string, string> = {},
-    ignoreKeys: string[] = []
+    ignoreKeys: string[] = [],
   ): Promise<void> {
     let parsedItems: unknown;
 
@@ -289,7 +294,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * @returns A JSON string representation of all items in the dataset
    */
   public async toJson(
-    keysMapping: Record<string, string> = {}
+    keysMapping: Record<string, string> = {},
   ): Promise<string> {
     const items = await this.getItems();
 
@@ -415,7 +420,7 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
     try {
       const response = await this.opik.api.datasets.listDatasetVersions(
         this.id,
-        { page: 1, size: 1 }
+        { page: 1, size: 1 },
       );
 
       const versions = response.content ?? [];
@@ -439,13 +444,15 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
    * @returns The DatasetVersionPublic or undefined if not found
    */
   private async findVersionByName(
-    versionName: string
+    versionName: string,
   ): Promise<DatasetVersionPublic | undefined> {
     try {
-      const response =
-        await this.opik.api.datasets.retrieveDatasetVersion(this.id, {
+      const response = await this.opik.api.datasets.retrieveDatasetVersion(
+        this.id,
+        {
           versionName,
-        });
+        },
+      );
       return response;
     } catch (error) {
       if (error instanceof OpikApiError && error.statusCode === 404) {
@@ -454,5 +461,4 @@ export class Dataset<T extends DatasetItemData = DatasetItemData> {
       throw error;
     }
   }
-
 }

@@ -40,6 +40,11 @@ import java.util.UUID;
 @RegisterColumnMapper(DatasetTypeMapper.class)
 public interface DatasetDAO {
 
+    /**
+     * Checks for V1 (workspace-scoped) datasets excluding known demo names.
+     * MySQL utf8mb4_unicode_ci collation makes the NOT IN comparison case-insensitive,
+     * so demo name variants differing only in casing are automatically excluded.
+     */
     @SqlQuery("""
             SELECT EXISTS(
                 SELECT 1 FROM datasets

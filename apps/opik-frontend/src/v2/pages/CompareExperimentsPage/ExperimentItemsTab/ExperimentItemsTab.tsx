@@ -66,7 +66,7 @@ import SectionHeader from "@/shared/DataTableHeaders/SectionHeader";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import useExperimentItemsState from "@/v2/pages-shared/experiments/useExperimentItemsState";
@@ -88,13 +88,11 @@ const STORAGE_PREFIX = "compare-experiments";
 const DYNAMIC_COLUMNS_KEY = "compare-experiments-dynamic-columns";
 const EVAL_SUITE_ECHOED_OUTPUT_KEY = "input";
 
-function getFilterColumns(
-  isTestSuite: boolean,
-): ColumnData<ExperimentsCompare>[] {
+function getFilterColumns(): ColumnData<ExperimentsCompare>[] {
   return [
     {
       id: COLUMN_ID_ID,
-      label: isTestSuite ? "ID (Test suite item)" : "Dataset item ID",
+      label: "Item ID",
       type: COLUMN_TYPE.string,
     },
     {
@@ -250,7 +248,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
     return [
       {
         id: COLUMN_ID_ID,
-        label: "Dataset item ID",
+        label: "Item ID",
         type: COLUMN_TYPE.string,
         cell: IdCell as never,
         verticalAlignment: calculateVerticalAlignment(experimentsCount),
@@ -514,6 +512,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
           minSize: 140,
           customMeta: {
             experimentsIds,
+            experiments,
           },
         }),
       );
@@ -565,7 +564,7 @@ const ExperimentItemsTab: React.FunctionComponent<ExperimentItemsTabProps> = ({
         label: `${label} (Output)`,
         type: COLUMN_TYPE.string,
       })),
-      ...getFilterColumns(!!isTestSuite),
+      ...getFilterColumns(),
     ];
   }, [dynamicDatasetColumns, visibleOutputColumns, isTestSuite]);
 

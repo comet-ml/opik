@@ -133,6 +133,26 @@ def _validate_prompt_project_names(
         )
 
 
+def _all_prompts_synced(config: "Config") -> bool:
+    """Return True only when every BasePrompt field has a non-None commit.
+
+    A None commit means the prompt has not been persisted to the backend yet.
+    Creating a blueprint with an unsynced prompt would store None as the prompt
+    reference, producing a broken config object.
+    """
+    from opik.api_objects.prompt.base_prompt import BasePrompt  # avoid circular import
+
+    for name in type(config).__field_names__:
+        value = object.__getattribute__(config, name)
+        if isinstance(value, BasePrompt) and value.commit is None:
+            logger.debug(
+                "Prompt field %r has no commit — it has not been persisted to the backend yet.",
+                name,
+            )
+            return False
+    return True
+
+
 def _validate_blueprint_schema(cls: typing.Type["Config"], bp: typing.Any) -> None:
     """Raise ConfigMismatch if ``bp`` is missing any field declared on ``cls``."""
     missing_keys = [name for name in cls.__field_names__ if name not in bp.keys()]
@@ -320,8 +340,8 @@ class Config:
         fallback: typing.Optional[T] = None,
         env: typing.Optional[str],
         version: typing.Optional[str],
-        auto_create_if_empty: bool = False,
-        timeout_in_seconds: typing.Optional[int] = None,
+        auto_create_if_empty: bool,
+        timeout_in_seconds: typing.Optional[int],
     ) -> T:
         _require_track_context()
         version, mask_id = _apply_context_overrides(version)
@@ -405,6 +425,7 @@ class Config:
             project_name=project_name,
             mask_id=mask_id,
             field_types=field_types,
+            timeout_in_seconds=timeout_in_seconds,
         )
 
     @classmethod
@@ -415,8 +436,20 @@ class Config:
         project_name: str,
         mask_id: typing.Optional[str],
         field_types: typing.Dict[str, typing.Any],
+        timeout_in_seconds: typing.Optional[int],
     ) -> T:
         _validate_prompt_project_names(fallback, project_name)
+
+        # Before auto-creating from fallback, check that all prompt fields have
+        # been persisted to the backend (non-None commit). An unsynced prompt
+        # has no commit, so storing it would produce a broken blueprint.
+        if not _all_prompts_synced(fallback):
+            logger.debug(
+                "One or more prompt fields in the fallback have not been synced with "
+                "the backend yet. Returning the fallback config without creating a blueprint."
+            )
+            return fallback
+
         fields_with_values = fallback._extract_fields_with_values()
         try:
             bp = manager.create_blueprint(
@@ -427,7 +460,10 @@ class Config:
             if e.status_code != 409:
                 raise
             # Parallel caller created it first — fetch the current latest.
-            bp = manager.get_blueprint(field_types=field_types)
+            bp = manager.get_blueprint(
+                field_types=field_types,
+                timeout_in_seconds=timeout_in_seconds,
+            )
             if bp is None:
                 raise ConfigNotFound(
                     f"Failed to create or fetch config in project {project_name!r}."
@@ -450,6 +486,11 @@ class Config:
         description: typing.Optional[str] = None,
     ) -> str:
         _validate_prompt_project_names(self, manager.project_name)
+        if not _all_prompts_synced(self):
+            raise ConfigMismatch(
+                "One or more prompt fields have not been persisted to the backend yet "
+                "(commit is None). Persist all prompts before calling create_config()."
+            )
         fields_with_values = self._extract_fields_with_values()
         field_types = self._infer_field_types()
 

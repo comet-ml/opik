@@ -154,9 +154,10 @@ experimentConfig: {
 - **Description**: Array of Opik Prompt objects to link to this experiment. Useful for tracking which prompt versions were used.
 
 ```typescript
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "translation-prompt",
   prompt: "Translate to {{language}}: {{text}}",
+  projectName: "my-project",
 });
 
 prompts: [prompt];
@@ -332,14 +333,13 @@ model: claude;
 Track which prompt versions are used in evaluations:
 
 ```typescript
-import { Opik, evaluatePrompt } from "opik";
-
-const client = new Opik();
+import { Opik, Prompt, evaluatePrompt } from "opik";
 
 // Create or get a prompt
-const prompt = await client.createPrompt({
+const prompt = new Prompt({
   name: "customer-support-prompt",
   prompt: "{{system_message}}\n\nUser: {{user_query}}",
+  projectName: "my-project",
 });
 
 // Link the prompt to the evaluation

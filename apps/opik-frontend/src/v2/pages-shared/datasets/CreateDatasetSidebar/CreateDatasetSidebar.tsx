@@ -8,7 +8,8 @@ import { Label } from "@/ui/label";
 import { Separator } from "@/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { Textarea } from "@/ui/textarea";
-import { cn, buildDocsUrl, escapeJsString } from "@/lib/utils";
+import { cn, escapeJsString } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import {
   Accordion,
   AccordionContent,
@@ -251,7 +252,7 @@ const CreateDatasetSidebar: React.FunctionComponent<
           )}
           <Button variant="link" size="sm" className="h-5 px-1" asChild>
             <a
-              href={buildDocsUrl("/evaluation/manage_datasets")}
+              href={buildDocsUrl("/evaluation/advanced/manage_datasets")}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -367,35 +368,23 @@ const CreateDatasetSidebar: React.FunctionComponent<
                   />
                 </div>
               </div>
-              <div className="flex flex-col gap-1 pb-4">
-                <div className="mb-1">
-                  <Label className="comet-body-s-accented">
-                    Global assertions
-                  </Label>
-                  <p className="comet-body-xs text-light-slate">
-                    Define the global conditions all items in this test suite
-                    must pass.
-                  </p>
-                </div>
-                <div className="pt-1.5">
-                  <AssertionsField
-                    editableAssertions={assertions}
-                    onChangeEditable={(index, value) => {
-                      setAssertions((prev) => {
-                        const next = [...prev];
-                        next[index] = value;
-                        return next;
-                      });
-                    }}
-                    onRemoveEditable={(index) => {
-                      setAssertions((prev) =>
-                        prev.filter((_, i) => i !== index),
-                      );
-                    }}
-                    onAdd={() => setAssertions((prev) => [...prev, ""])}
-                    placeholder="e.g. Response should be factually accurate and cite sources"
-                  />
-                </div>
+              <div className="pb-4">
+                <AssertionsField
+                  variant="global"
+                  editableAssertions={assertions}
+                  onChangeEditable={(index, value) => {
+                    setAssertions((prev) => {
+                      const next = [...prev];
+                      next[index] = value;
+                      return next;
+                    });
+                  }}
+                  onRemoveEditable={(index) => {
+                    setAssertions((prev) => prev.filter((_, i) => i !== index));
+                  }}
+                  onAdd={() => setAssertions((prev) => [...prev, ""])}
+                  placeholder="e.g. Response should be factually accurate and cite sources"
+                />
               </div>
             </AccordionContent>
           </AccordionItem>

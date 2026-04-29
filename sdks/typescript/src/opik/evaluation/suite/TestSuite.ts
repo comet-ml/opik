@@ -9,6 +9,7 @@ import type {
   TestSuiteItem,
   UpdateTestSuiteItem,
   ExecutionPolicy,
+  RawTestSuiteItem,
 } from "./types";
 import {
   serializeEvaluators,
@@ -39,7 +40,6 @@ export interface CreateTestSuiteOptions {
 export interface UpdateTestSuiteOptions {
   globalAssertions?: string[];
   globalExecutionPolicy?: ExecutionPolicy;
-  tags?: string[];
 }
 
 function validateSuiteName(name: string): void {
@@ -86,7 +86,7 @@ export class TestSuite {
 
   constructor(
     private readonly _dataset: Dataset,
-    private readonly _client: OpikClient
+    private readonly _client: OpikClient,
   ) {
     this.name = _dataset.name;
     this.description = _dataset.description;
@@ -124,7 +124,11 @@ export class TestSuite {
    * @param name - The name of the test suite to delete.
    * @param projectName - The name of the project containing the test suite.
    */
-  static async delete(client: OpikClient, name: string, projectName?: string): Promise<void> {
+  static async delete(
+    client: OpikClient,
+    name: string,
+    projectName?: string,
+  ): Promise<void> {
     validateSuiteName(name);
     await client.api.datasets.deleteDatasetByName({
       datasetName: name,
@@ -134,14 +138,14 @@ export class TestSuite {
 
   static async create(
     client: OpikClient,
-    options: CreateTestSuiteOptions
+    options: CreateTestSuiteOptions,
   ): Promise<TestSuite> {
     validateSuiteName(options.name);
 
     const resolvedEvaluators = resolveEvaluators(
       options.globalAssertions,
       undefined,
-      "suite-level assertions"
+      "suite-level assertions",
     );
 
     if (options.globalExecutionPolicy) {
@@ -163,16 +167,21 @@ export class TestSuite {
 
     const suite = new TestSuite(
       new Dataset(
-        { id: datasetId, name: options.name, description: options.description, projectName: resolvedProjectName },
-        client
+        {
+          id: datasetId,
+          name: options.name,
+          description: options.description,
+          projectName: resolvedProjectName,
+        },
+        client,
       ),
-      client
+      client,
     );
 
     if (resolvedEvaluators || options.globalExecutionPolicy) {
       await suite.createInitialTestSuiteVersion(
         resolvedEvaluators ?? [],
-        resolveExecutionPolicy(options.globalExecutionPolicy)
+        resolveExecutionPolicy(options.globalExecutionPolicy),
       );
     }
 
@@ -182,7 +191,7 @@ export class TestSuite {
   static async get(
     client: OpikClient,
     name: string,
-    projectName?: string
+    projectName?: string,
   ): Promise<TestSuite> {
     const dataset = await client.getDataset(name, projectName);
     await dataset.syncHashes();
@@ -191,7 +200,7 @@ export class TestSuite {
 
   static async getOrCreate(
     client: OpikClient,
-    options: CreateTestSuiteOptions
+    options: CreateTestSuiteOptions,
   ): Promise<TestSuite> {
     validateSuiteName(options.name);
 
@@ -211,7 +220,7 @@ export class TestSuite {
 
   async insert(items: TestSuiteItem[]): Promise<void> {
     const datasetItems: DatasetItemData[] = items.map((item) =>
-      prepareDatasetItemData(item.data, item)
+      prepareDatasetItemData(item.data, item),
     );
 
     await this.dataset.insert(datasetItems);
@@ -232,7 +241,7 @@ export class TestSuite {
     for (const item of items) {
       if (!item.id || item.id.trim() === "") {
         throw new Error(
-          `Missing id for test suite item to update: ${JSON.stringify(item)}`
+          `Missing id for test suite item to update: ${JSON.stringify(item)}`,
         );
       }
     }
@@ -243,11 +252,14 @@ export class TestSuite {
         assertions: item.assertions,
         description: item.description,
         executionPolicy: item.executionPolicy,
-      }))
+      })),
     );
   }
 
-  async getItems(): Promise<
+  async getItems(
+    nbSamples?: number,
+    lastRetrievedId?: string,
+  ): Promise<
     Array<{
       id: string;
       data: Record<string, unknown>;
@@ -256,7 +268,7 @@ export class TestSuite {
       executionPolicy: Required<ExecutionPolicy>;
     }>
   > {
-    const rawItems = await this.dataset.getRawItems();
+    const rawItems = await this.dataset.getRawItems(nbSamples, lastRetrievedId);
     const suitePolicy = await this.getGlobalExecutionPolicy();
 
     return rawItems.map((item) => {
@@ -268,9 +280,49 @@ export class TestSuite {
         assertions: extractAssertions(item.evaluators),
         executionPolicy: resolveItemExecutionPolicy(
           item.executionPolicy,
-          suitePolicy
+          suitePolicy,
         ),
       };
+    });
+  }
+
+  /**
+   * Retrieve items with full suite-specific metadata preserved verbatim.
+   *
+   * Unlike {@link getItems}, this does NOT:
+   * - Decode `evaluators` into assertion strings (you get raw {@link EvaluatorItemWrite}[])
+   * - Merge the item-level `executionPolicy` with the suite-level default
+   *
+   * `data` mirrors the stored payload (includes `description` if present);
+   * `description` is additionally exposed at the top level for convenience.
+   *
+   * Use this when you need to inspect or forward the stored evaluator
+   * config or per-item execution policy as-is.
+   *
+   * @param nbSamples Max items to retrieve. Omit to return all items.
+   * @param lastRetrievedId Opaque cursor for pagination (last `id` from a previous call).
+   * @returns Array of {@link RawTestSuiteItem} objects.
+   */
+  async getRawItems(
+    nbSamples?: number,
+    lastRetrievedId?: string,
+  ): Promise<RawTestSuiteItem[]> {
+    const rawItems = await this.dataset.getRawItems(
+      nbSamples,
+      lastRetrievedId,
+    );
+
+    return rawItems.map((item) => {
+      const result: RawTestSuiteItem = {
+        id: item.id,
+        data: item.getContent(),
+      };
+      if (item.description !== undefined) result.description = item.description;
+      if (item.evaluators !== undefined) result.evaluators = item.evaluators;
+      if (item.executionPolicy !== undefined) {
+        result.executionPolicy = item.executionPolicy;
+      }
+      return result;
     });
   }
 
@@ -306,7 +358,9 @@ export class TestSuite {
    *
    * @returns The DatasetVersionPublic object or undefined if no versions exist
    */
-  async getVersionInfo(): Promise<Awaited<ReturnType<typeof this.dataset.getVersionInfo>>> {
+  async getVersionInfo(): Promise<
+    Awaited<ReturnType<typeof this.dataset.getVersionInfo>>
+  > {
     return this.dataset.getVersionInfo();
   }
 
@@ -317,38 +371,42 @@ export class TestSuite {
    * @returns A DatasetVersion object for the specified version
    * @throws DatasetVersionNotFoundError if the version doesn't exist
    */
-  async getVersionView(versionName: string): Promise<ReturnType<typeof this.dataset.getVersionView>> {
+  async getVersionView(
+    versionName: string,
+  ): Promise<ReturnType<typeof this.dataset.getVersionView>> {
     return this.dataset.getVersionView(versionName);
   }
 
   async updateTestSettings(options: UpdateTestSuiteOptions): Promise<void> {
     if (options.globalExecutionPolicy) {
-      validateExecutionPolicy(options.globalExecutionPolicy, "suite test settings update");
+      validateExecutionPolicy(
+        options.globalExecutionPolicy,
+        "suite test settings update",
+      );
     }
 
     const resolvedEvaluators = resolveEvaluators(
       options.globalAssertions,
       undefined,
-      "suite-level assertions"
+      "suite-level assertions",
     );
 
     const assertionsProvided = options.globalAssertions !== undefined;
 
-    if (!resolvedEvaluators && !assertionsProvided && !options.globalExecutionPolicy && !options.tags) {
+    if (
+      !resolvedEvaluators &&
+      !assertionsProvided &&
+      !options.globalExecutionPolicy
+    ) {
       throw new Error(
-        "At least one of 'globalAssertions', 'globalExecutionPolicy', or 'tags' must be provided."
+        "At least one of 'globalAssertions' or 'globalExecutionPolicy' must be provided.",
       );
     }
 
-    // Tags are dataset-level, updated separately
-    if (options.tags) {
-      await this.client.api.datasets.updateDataset(this.dataset.id, {
-        name: this.name,
-        tags: options.tags,
-      });
-    }
-
-    const hasVersionUpdates = resolvedEvaluators || assertionsProvided || options.globalExecutionPolicy !== undefined;
+    const hasVersionUpdates =
+      resolvedEvaluators ||
+      assertionsProvided ||
+      options.globalExecutionPolicy !== undefined;
     if (hasVersionUpdates) {
       const versionInfo = await this.dataset.getVersionInfo();
 
@@ -356,7 +414,9 @@ export class TestSuite {
         // No version exists yet — create the initial one using the provided values,
         // falling back to defaults for anything not specified.
         const evaluators = resolvedEvaluators ?? [];
-        const executionPolicy = resolveExecutionPolicy(options.globalExecutionPolicy);
+        const executionPolicy = resolveExecutionPolicy(
+          options.globalExecutionPolicy,
+        );
         await this.createInitialTestSuiteVersion(evaluators, executionPolicy);
         return;
       }
@@ -368,12 +428,16 @@ export class TestSuite {
       const currentPolicy = resolveExecutionPolicy(versionInfo.executionPolicy);
 
       // Partial updates: retain current values for omitted params
-      const evaluators = resolvedEvaluators ??
-        (assertionsProvided ? [] : currentEvaluators);
+      const evaluators =
+        resolvedEvaluators ?? (assertionsProvided ? [] : currentEvaluators);
       const executionPolicy = options.globalExecutionPolicy
         ? {
-            runsPerItem: options.globalExecutionPolicy.runsPerItem ?? currentPolicy.runsPerItem,
-            passThreshold: options.globalExecutionPolicy.passThreshold ?? currentPolicy.passThreshold,
+            runsPerItem:
+              options.globalExecutionPolicy.runsPerItem ??
+              currentPolicy.runsPerItem,
+            passThreshold:
+              options.globalExecutionPolicy.passThreshold ??
+              currentPolicy.passThreshold,
           }
         : currentPolicy;
 
@@ -404,12 +468,14 @@ export class TestSuite {
    */
   private async createInitialTestSuiteVersion(
     evaluators: LLMJudge[],
-    executionPolicy: Required<ExecutionPolicy>
+    executionPolicy: Required<ExecutionPolicy>,
   ): Promise<void> {
     await this.client.api.datasets.applyDatasetItemChanges(this.dataset.id, {
       override: true,
       body: {
-        ...(evaluators.length > 0 && { evaluators: serializeEvaluators(evaluators) }),
+        ...(evaluators.length > 0 && {
+          evaluators: serializeEvaluators(evaluators),
+        }),
         execution_policy: {
           runs_per_item: executionPolicy.runsPerItem,
           pass_threshold: executionPolicy.passThreshold,
@@ -431,38 +497,46 @@ export class TestSuite {
 
   async updateItemAssertions(
     itemId: string,
-    assertions: string[]
+    assertions: string[],
   ): Promise<void> {
     await this.updateItem(itemId, { assertions });
   }
 
   async updateItemExecutionPolicy(
     itemId: string,
-    executionPolicy: ExecutionPolicy
+    executionPolicy: ExecutionPolicy,
   ): Promise<void> {
     await this.updateItem(itemId, { executionPolicy });
   }
 
   async updateItem(
     itemId: string,
-    options: { assertions?: string[]; executionPolicy?: ExecutionPolicy }
+    options: { assertions?: string[]; executionPolicy?: ExecutionPolicy },
   ): Promise<void> {
     this.validateItemId(itemId);
 
-    if (options.assertions === undefined && options.executionPolicy === undefined) {
+    if (
+      options.assertions === undefined &&
+      options.executionPolicy === undefined
+    ) {
       throw new Error(
-        "At least one of 'assertions' or 'executionPolicy' must be provided."
+        "At least one of 'assertions' or 'executionPolicy' must be provided.",
       );
     }
 
     if (options.executionPolicy) {
-      validateExecutionPolicy(options.executionPolicy, "item-level execution policy update");
+      validateExecutionPolicy(
+        options.executionPolicy,
+        "item-level execution policy update",
+      );
     }
 
     const update: DatasetItemUpdate = {};
 
     if (options.assertions !== undefined) {
-      update.evaluators = this.resolveAndSerializeEvaluators(options.assertions);
+      update.evaluators = this.resolveAndSerializeEvaluators(
+        options.assertions,
+      );
     }
 
     if (options.executionPolicy !== undefined) {
@@ -485,11 +559,9 @@ export class TestSuite {
     const resolvedEvaluators = resolveEvaluators(
       assertions,
       undefined,
-      "item-level assertions update"
+      "item-level assertions update",
     );
 
-    return resolvedEvaluators
-      ? serializeEvaluators(resolvedEvaluators)
-      : [];
+    return resolvedEvaluators ? serializeEvaluators(resolvedEvaluators) : [];
   }
 }

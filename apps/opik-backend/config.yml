@@ -132,6 +132,9 @@ redis:
   # Default: redis://:opik@localhost:6379/0
   # Description: single node redis's URL
   singleNodeUrl: ${REDIS_URL:-redis://:opik@localhost:6379/0}
+  #  Default: 1s
+  #  Description: Timeout for the Redis health check ping
+  healthCheckTimeout: ${REDIS_HEALTH_CHECK_TIMEOUT:-1s}
   # AWS IAM authentication configuration (optional)
   # When enabled, takes precedence over singleNodeUrl authentication
   awsIamAuth:
@@ -259,9 +262,18 @@ experimentDenormalization:
   # Default: 300ms
   # Description: The time to wait for the denormalization scan job to acquire the lock before giving up
   jobLockWaitTime: ${OPIK_EXPERIMENT_DENORM_JOB_LOCK_WAIT_TIME:-300ms}
-  # Default: 1m
+  # Default: 10m
   # Description: Maximum duration for the per-experiment aggregation lock held by the stream subscriber
-  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-1m}
+  aggregationLockTime: ${OPIK_EXPERIMENT_DENORM_AGGREGATION_LOCK_TIME:-10m}
+  # Default: 500ms
+  # Description: Time to wait when trying to acquire the per-experiment aggregation lock before skipping (fail-fast). Must be between 100ms and 5s.
+  lockAcquireWait: ${OPIK_EXPERIMENT_DENORM_LOCK_ACQUIRE_WAIT:-500ms}
+  # Default: 3
+  # Description: Maximum automatic re-trigger attempts per (workspace, experiment) when the aggregation lock TTL is exceeded. Must be between 1 and 10.
+  maxLockExpiryRetries: ${OPIK_EXPERIMENT_DENORM_MAX_LOCK_EXPIRY_RETRIES:-3}
+  # Default: 30m
+  # Description: TTL applied to the per-(workspace, experiment) lock-expiry retry counter in Redis (minimum 1m). Prevents stale counters from accumulating when an experiment stops producing events.
+  retryCounterTtl: ${OPIK_EXPERIMENT_DENORM_RETRY_COUNTER_TTL:-30m}
   # Default: 10
   # Description: Claim pending messages every N polling intervals
   claimIntervalRatio: ${OPIK_REDIS_EXPERIMENT_DENORM_CLAIM_INTERVAL_RATIO:-10}
@@ -454,6 +466,9 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment: ${OPIK_ANALYTICS_ENVIRONMENT:-}
+  # Default: 30d
+  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
+  firstTraceCreatedDedupTtl: ${OPIK_ANALYTICS_FIRST_TRACE_CREATED_DEDUP_TTL:-30d}
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -463,6 +478,12 @@ usageReport:
   # Default: https://stats.comet.com/notify/event/
   # Description: URL to send the anonymous usage reports to
   url: ${OPIK_USAGE_REPORT_URL:-https://stats.comet.com/notify/event/}
+  # Default: 5s
+  # Description: HTTP connect timeout for usage report
+  connectTimeout: ${OPIK_USAGE_REPORT_CONNECT_TIMEOUT:-5s}
+  # Default: 10s
+  # Description: HTTP read timeout for usage report
+  readTimeout: ${OPIK_USAGE_REPORT_READ_TIMEOUT:-10s}
   # Description: Configuration for anonymous ID used to identify the installation
   # Default: empty
   anonymousId: ${OPIK_ANONYMOUS_ID:-}
@@ -978,17 +999,21 @@ serviceToggles:
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
   # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
   # Priority: Highest — overrides forceWorkspaceVersion and all other determination logic for listed workspaces.
-  # Use case: gradual V2 rollout — set forceWorkspaceVersion to "version_1" and allowlist specific workspace IDs for V2.
+  # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
-  # Default: version_1
+  # Default: disabled
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
   # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
-  # Operational impact: Set to "version_1" until V2 is ready, then change to "disabled" to enable entity-based determination.
-  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"version_1"}
+  # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
+  forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  defaultPageSize: ${UI_DEFAULT_PAGE_SIZE:-100}
 
 # Local Runner configuration
 localRunner:
@@ -1288,6 +1313,11 @@ datasetVersioningMigration:
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}
   localOverridePath: ${LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH:-}
+  # Remote CDN fetch is opt-in. Self-hosted / OSS deployments stay on the
+  # classpath YAML shipped with the release by default, so no outbound
+  # traffic unless the operator explicitly enables it. Comet SaaS sets
+  # LLM_MODEL_REGISTRY_REMOTE_ENABLED=true + LLM_MODEL_REGISTRY_REMOTE_URL
+  # via its own Helm overrides.
   remoteEnabled: ${LLM_MODEL_REGISTRY_REMOTE_ENABLED:-false}
   remoteUrl: ${LLM_MODEL_REGISTRY_REMOTE_URL:-}
   refreshIntervalSeconds: ${LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS:-300}

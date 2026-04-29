@@ -66,14 +66,13 @@ so you can more easily keep track of your progress.
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
+        import { Prompt } from "opik";
 
         // Prompt text stored in a variable
         const PROMPT_TEXT = "Write a summary of the following text: {{text}}";
 
         // Create a prompt
-        const client = new Opik();
-        const prompt = await client.createPrompt({
+        const prompt = new Prompt({
           name: "prompt-summary",
           prompt: PROMPT_TEXT,
           metadata: { environment: "production" },
@@ -117,14 +116,13 @@ Prompts can also be stored in a file and loaded from it:
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
+        import { Prompt } from "opik";
         import { readFileSync } from "fs";
 
         // Read the prompt from a file
         const promptText = readFileSync("prompt.txt", "utf-8");
 
-        const client = new Opik();
-        const prompt = await client.createPrompt({
+        const prompt = new Prompt({
           name: "prompt-summary",
           prompt: promptText,
           projectName: "my-project",
@@ -187,12 +185,10 @@ You can create a new prompt in the library using both the SDK and the UI:
     </Tab>
     <Tab value="TypeScript SDK" title="TypeScript SDK">
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { Prompt } from "opik";
 
         // Create a new prompt
-        const prompt = await client.createPrompt({
+        const prompt = new Prompt({
           name: "prompt-summary",
           prompt: "Write a summary of the following text: {{text}}",
           metadata: { environment: "development" },
@@ -541,9 +537,7 @@ centralized management in the Opik platform.
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Define chat messages with variables
         const messages = [
@@ -555,7 +549,7 @@ centralized management in the Opik platform.
         ];
 
         // Create a chat prompt
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "educational-assistant",
           messages: messages,
           metadata: { category: "education" },
@@ -627,10 +621,9 @@ Chat prompts work seamlessly with OpenAI's chat completion API:
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
+        import { ChatPrompt } from "opik";
         import OpenAI from "openai";
 
-        const client = new Opik();
         const openai = new OpenAI();
 
         // Define chat messages with variables
@@ -643,7 +636,7 @@ Chat prompts work seamlessly with OpenAI's chat completion API:
         ];
 
         // Create a chat prompt
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "educational-assistant",
           messages: messages,
           metadata: { category: "education" },
@@ -706,9 +699,7 @@ You can create templates for multi-turn conversations:
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Define a multi-turn conversation template
         const messages = [
@@ -725,9 +716,10 @@ You can create templates for multi-turn conversations:
           { role: "user", content: "{{issue_description}}" },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "customer-support-flow",
           messages: messages,
+          projectName: "my-project",
         });
 
         // Format with specific values
@@ -807,9 +799,7 @@ Chat prompts support multimodal content, allowing you to include images and vide
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Chat prompt with image content
         const messages = [
@@ -832,9 +822,10 @@ Chat prompts support multimodal content, allowing you to include images and vide
           },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "image-analyzer",
           messages: messages,
+          projectName: "my-project",
         });
 
         // Format with variables
@@ -898,9 +889,7 @@ Chat prompts can also include video content:
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Chat prompt with video content
         const messages = [
@@ -923,9 +912,10 @@ Chat prompts can also include video content:
           },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "video-analyzer",
           messages: messages,
+          projectName: "my-project",
         });
 
         // Format with variables
@@ -990,9 +980,7 @@ You can combine multiple types of content in a single message:
     <Tab value="TypeScript" title="TypeScript">
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Chat prompt with multiple images and text
         const messages = [
@@ -1014,9 +1002,10 @@ You can combine multiple types of content in a single message:
           },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "image-comparison",
           messages: messages,
+          projectName: "my-project",
         });
 
         const formatted = chatPrompt.format(
@@ -1083,12 +1072,10 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
         ```
     </Tab>
     <Tab value="TypeScript SDK" title="TypeScript SDK">
-        Use `createChatPrompt` to create a chat prompt:
+        Use `ChatPrompt` to create a chat prompt:
 
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt } from "opik";
 
         // Create a new chat prompt
         const messages = [
@@ -1096,7 +1083,7 @@ You can also use the low-level Python SDK to create and manage chat prompts dire
           { role: "user", content: "Hello, {{name}}!" },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "greeting-prompt",
           messages: messages,
           metadata: { environment: "development" },
@@ -1242,18 +1229,17 @@ Chat prompts support two template types for variable substitution.
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
-        import { Opik, PromptType } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt, PromptType } from "opik";
 
         const messages = [
           { role: "user", content: "Hello {{name}}, you live in {{city}}." },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "mustache-example",
           messages: messages,
           type: PromptType.MUSTACHE, // Default
+          projectName: "my-project",
         });
 
         const formatted = chatPrompt.format({ name: "Alice", city: "Paris" });
@@ -1307,9 +1293,7 @@ For more advanced templating with conditionals, loops, and filters:
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
-        import { Opik, PromptType } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt, PromptType } from "opik";
 
         const messages = [
           {
@@ -1324,10 +1308,11 @@ For more advanced templating with conditionals, loops, and filters:
           },
         ];
 
-        const chatPrompt = await client.createChatPrompt({
+        const chatPrompt = new ChatPrompt({
           name: "jinja-example",
           messages: messages,
           type: PromptType.JINJA2,
+          projectName: "my-project",
         });
 
         // With premium user
@@ -1405,9 +1390,7 @@ Chat prompts are automatically versioned when the messages change. Each version 
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
-        import { Opik } from "opik";
-
-        const client = new Opik();
+        import { ChatPrompt, Opik } from "opik";
 
         // Create initial version
         const messagesV1 = [
@@ -1415,9 +1398,10 @@ Chat prompts are automatically versioned when the messages change. Each version 
           { role: "user", content: "Hi!" },
         ];
 
-        const chatPromptV1 = await client.createChatPrompt({
+        const chatPromptV1 = new ChatPrompt({
           name: "assistant-prompt",
           messages: messagesV1,
+          projectName: "my-project",
         });
 
         console.log(`Version 1 commit: ${chatPromptV1.commit}`);
@@ -1429,14 +1413,16 @@ Chat prompts are automatically versioned when the messages change. Each version 
           { role: "assistant", content: "How can I assist you?" },
         ];
 
-        const chatPromptV2 = await client.createChatPrompt({
+        const chatPromptV2 = new ChatPrompt({
           name: "assistant-prompt",
           messages: messagesV2,
+          projectName: "my-project",
         });
 
         console.log(`Version 2 commit: ${chatPromptV2.commit}`);
 
         // Get specific version by commit
+        const client = new Opik();
         const specificVersion = await client.getChatPrompt({
           name: "assistant-prompt",
           commit: chatPromptV1.commit,
@@ -1985,14 +1971,15 @@ The following end-to-end example shows a common workflow: create a new prompt ve
     </Tab>
     <Tab value="TypeScript" title="TypeScript">
         ```typescript
-        import { Opik } from "opik";
+        import { Opik, Prompt } from "opik";
 
         const client = new Opik();
 
         // Create a new version
-        const candidate = await client.createPrompt({
+        const candidate = new Prompt({
           name: "summarizer",
           prompt: "Provide a concise summary of: {{text}}",
+          projectName: "my-project",
         });
 
         // ... run your evaluation logic here ...

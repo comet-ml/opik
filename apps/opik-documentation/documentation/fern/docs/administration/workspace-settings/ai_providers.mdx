@@ -329,6 +329,65 @@ Some custom providers may require additional HTTP headers beyond the API key for
   Custom headers are sent with every request to your custom provider endpoint. Ensure header values are kept secure and not exposed in logs or error messages.
 </Note>
 
+##### Query Parameters
+
+Some gateways require specific query parameters on every request. For example, Azure OpenAI often requires an `api-version` parameter.
+
+You can use the "Query parameters" section to define these key-value pairs, and Opik will automatically append them to every outgoing request.
+
+- Click **"+ Add query parameter"** to add a new pair
+- Enter the parameter name (e.g., `api-version`)
+- Enter the parameter value (e.g., `2024-08-01-preview`)
+- Add as many parameters as needed
+- Use the trash icon to remove parameters
+
+Parameters are automatically URL-encoded and appended with `?` or `&` as appropriate. Leave this section empty for providers that don't require extra query parameters.
+
+##### Auth Header Name and Suppressing the Default Authorization Header
+
+Most OpenAI-compatible providers expect an `Authorization: Bearer <key>` header — Opik sends this automatically. Some gateways instead expect the key in a differently named header (such as `api-key` or a tenant-specific name), sometimes without any `Authorization` header at all.
+
+- **Auth header name** (optional): If set, Opik sends the API key as `{name}: <key>` *in addition to* the `Authorization: Bearer <key>` header. Most gateways ignore the extra `Authorization` header, so this alone is often enough.
+- **Suppress default Authorization header** (toggle, default off): Enable this only if your gateway explicitly rejects requests containing `Authorization: Bearer`. When on, Opik sends only the custom header configured above.
+
+##### URL Templates with `{model}`
+
+When a gateway expects the model or deployment name in the URL path rather than in the request body, you can write the URL once using `{model}` as a placeholder. This avoids creating one provider entry per model:
+
+```
+https://my-gateway.example.com/deployments/{model}
+```
+
+At request time Opik substitutes `{model}` with the name of whichever model the end-user picked from the Models list. The Models field then contains all supported names (e.g. `gpt-4o, gpt-4o-mini, llama-3.1-70b`), and the playground / Online Evaluation dropdown shows each one as a selectable model routed to its own upstream path.
+
+If your URL does not contain `{model}`, the substitution step is skipped and the URL is used verbatim — existing configurations are unaffected.
+
+The model name is interpolated raw (no URL encoding) so it lands as a literal path segment, matching what most gateways expect. Use model names containing only alphanumeric characters and hyphens. Values containing `/` (e.g. HuggingFace-style `mistralai/Mistral-7B-Instruct-v0.3`) will split into extra path segments and Opik will emit a warning in the backend logs at request time.
+
+##### Azure OpenAI via API Management gateway
+
+Many enterprise customers front Azure OpenAI with Azure API Management (APIM). APIM typically requires:
+
+- A deployment-specific URL path (`/openai/deployments/{deployment}/chat/completions`), or an organization-specific variant such as `/za/deployments/{deployment}/chat/completions`.
+- A mandatory `api-version` query parameter.
+- An `api-key` header (or a tenant-specific header name) instead of `Authorization: Bearer`.
+
+Configure it as follows:
+
+1. Select **vLLM / Custom provider**.
+2. **Provider name**: something descriptive (e.g. `azure-apim-prod`).
+3. **URL**: full gateway path, including the deployment placeholder, e.g.
+   `https://my-gateway.azure-api.net/openai/deployments/{model}`.
+4. **API key**: your APIM subscription key (or Azure OpenAI key, depending on gateway configuration).
+5. **Models list**: comma-separated deployment names, e.g. `gpt-4o, gpt-4o-mini-ZA`. These will be substituted into `{model}` at request time.
+6. **Query parameters**: add `api-version` with the value required by your gateway (e.g. `2024-08-01-preview`).
+7. **Auth header name**: set to `api-key` (or your tenant-specific header name).
+8. **Suppress default Authorization header**: turn on *only* if your APIM policy rejects requests that include `Authorization: Bearer`. Most policies ignore the extra header, so leave it off unless you've confirmed it's rejected.
+
+<Note>
+  The plaintext API key is encrypted at rest using the same mechanism used for every other provider — the new auth header name and query parameters are stored as non-sensitive configuration metadata alongside the existing key slot.
+</Note>
+
 ##### Managing Multiple Custom Providers
 
 Once you've configured multiple custom providers, you can:

@@ -1,12 +1,67 @@
 import { WorkspaceVersion } from "@/store/AppStore";
+import { buildFullBaseUrl } from "@/lib/utils";
 
-export const DEFAULT_WORKSPACE_VERSION: WorkspaceVersion = "v1";
+export const DEFAULT_WORKSPACE_VERSION: WorkspaceVersion = "v2";
 
 const OPIK_VERSION_OVERRIDE_KEY = "opik-version-override";
+const OPIK_WORKSPACE_VERSIONS_KEY = "opik-workspace-versions";
+const OPIK_NEW_EXPERIENCE_OPT_IN_KEY = "opik-new-experience-opt-in";
 
 export function getVersionOverride(): WorkspaceVersion | null {
   const override = localStorage.getItem(OPIK_VERSION_OVERRIDE_KEY);
   return override === "v1" || override === "v2" ? override : null;
+}
+
+export function getNewExperienceOptIn(): boolean {
+  try {
+    return localStorage.getItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+export function setNewExperienceOptIn(optIn: boolean): void {
+  try {
+    if (optIn) {
+      localStorage.setItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY, "true");
+    } else {
+      localStorage.removeItem(OPIK_NEW_EXPERIENCE_OPT_IN_KEY);
+    }
+  } catch {
+    // localStorage unavailable (private mode, quota) — silently skip
+  }
+}
+
+function readVersionMap(): Record<string, WorkspaceVersion> {
+  try {
+    const raw = localStorage.getItem(OPIK_WORKSPACE_VERSIONS_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+export function getCachedWorkspaceVersion(
+  workspaceName: string,
+): WorkspaceVersion | null {
+  const v = readVersionMap()[workspaceName];
+  return v === "v1" || v === "v2" ? v : null;
+}
+
+export function setCachedWorkspaceVersion(
+  workspaceName: string,
+  version: WorkspaceVersion,
+): void {
+  try {
+    const map = readVersionMap();
+    if (map[workspaceName] === version) return;
+    map[workspaceName] = version;
+    localStorage.setItem(OPIK_WORKSPACE_VERSIONS_KEY, JSON.stringify(map));
+  } catch {
+    // localStorage unavailable (private mode, quota) — silently skip
+  }
 }
 
 function getRelativePathSegments(): string[] {
@@ -31,11 +86,20 @@ export function getWorkspaceNameFromUrl(): string | null {
   return segments[0] || null;
 }
 
-// Returns null only when the workspace is in the URL but needs an API fetch
-// to resolve its version — the one case that requires a Loader fallback.
-export function resolveSyncWorkspaceVersion(): WorkspaceVersion | null {
+export function navigateToWorkspaceRoot(workspaceName: string): void {
+  const base = buildFullBaseUrl();
+  const normalizedBase = base.endsWith("/") ? base : `${base}/`;
+  window.location.href = normalizedBase + workspaceName;
+}
+
+// Always returns a version synchronously: override > per-workspace cache >
+// default. WorkspaceVersionResolver verifies via API after mount and swaps
+// the App in place if the guess was wrong.
+export function resolveSyncWorkspaceVersion(): WorkspaceVersion {
   const override = getVersionOverride();
   if (override) return override;
-  if (!getWorkspaceNameFromUrl()) return DEFAULT_WORKSPACE_VERSION;
-  return null;
+  if (getNewExperienceOptIn()) return "v2";
+  const workspaceName = getWorkspaceNameFromUrl();
+  if (!workspaceName) return DEFAULT_WORKSPACE_VERSION;
+  return getCachedWorkspaceVersion(workspaceName) ?? DEFAULT_WORKSPACE_VERSION;
 }

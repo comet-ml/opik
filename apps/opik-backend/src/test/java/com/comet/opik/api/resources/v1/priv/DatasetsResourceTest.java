@@ -434,6 +434,72 @@ class DatasetsResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.DATASET_DELETE.getValue()))));
         }
+
+        @Test
+        @DisplayName("Create dataset passes required permissions to auth endpoint")
+        void createDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_CREATE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create dataset returns 403 when permission is denied")
+        void createDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_CREATE.getValue());
+
+            try (var response = datasetResourceClient.callCreateDataset(buildDataset(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update dataset passes required permissions to auth endpoint")
+        void updateDatasetPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = datasetResourceClient.createDataset(buildDataset(), apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            datasetResourceClient.callUpdateDataset(id, factory.manufacturePojo(DatasetUpdate.class), apiKey,
+                    workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.DATASET_EDIT.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update dataset returns 403 when permission is denied")
+        void updateDatasetReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.DATASET_EDIT.getValue());
+
+            try (var response = datasetResourceClient.callUpdateDataset(UUID.randomUUID(),
+                    factory.manufacturePojo(DatasetUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested
@@ -6440,6 +6506,7 @@ class DatasetsResourceTest {
                                             .toList())
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(datasetItem.description())
                                     .build()))
                     .collect(groupingBy(ExperimentItem::datasetItemId));
@@ -6459,6 +6526,7 @@ class DatasetsResourceTest {
                                     .feedbackScores(null)
                                     .usage(null)
                                     .totalEstimatedCost(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(2).description())
                                     .build()))
                     .toList());
@@ -6477,6 +6545,7 @@ class DatasetsResourceTest {
                                     .totalEstimatedCost(null)
                                     .duration(null)
                                     .traceVisibilityMode(null)
+                                    .executionPolicy(ExecutionPolicy.DEFAULT)
                                     .description(expectedDatasetItems.get(3).description())
                                     .build()))
                     .toList());
@@ -6655,6 +6724,7 @@ class DatasetsResourceTest {
                             .datasetItemId(datasetItemBatch.items().get(i).id())
                             .comments(null)
                             .feedbackScores(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i).description())
                             .build())
                     .toList();
@@ -6673,6 +6743,7 @@ class DatasetsResourceTest {
                             .output(null)
                             .input(null)
                             .traceVisibilityMode(null)
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatch.items().get(i + 2).description())
                             .build())
                     .toList();
@@ -6857,6 +6928,7 @@ class DatasetsResourceTest {
                             .duration(DurationUtils.getDurationInMillisWithSubMilliPrecision(
                                     traces.get(i).startTime(), traces.get(i).endTime()))
                             .datasetItemId(datasetItemBatchWithImage.items().get(i).id())
+                            .executionPolicy(ExecutionPolicy.DEFAULT)
                             .description(datasetItemBatchWithImage.items().get(i).description())
                             .build())
                     .toList();
@@ -7157,6 +7229,7 @@ class DatasetsResourceTest {
                     .traceId(trace.id())
                     .input(trace.input())
                     .output(trace.output())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .build();
 
             var experimentItemsBatch = ExperimentItemsBatch.builder()
@@ -7228,6 +7301,7 @@ class DatasetsResourceTest {
                         .input(trace.input())
                         .output(trace.output())
                         .traceVisibilityMode(VisibilityMode.DEFAULT)
+                        .executionPolicy(ExecutionPolicy.DEFAULT)
                         .feedbackScores(score == null
                                 ? null
                                 : Stream.of(score)
@@ -7757,6 +7831,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .build();
 
@@ -7836,6 +7911,7 @@ class DatasetsResourceTest {
                             trace.startTime(), trace.endTime()))
                     .usage(null)
                     .traceVisibilityMode(trace.visibilityMode())
+                    .executionPolicy(ExecutionPolicy.DEFAULT)
                     .description(null)
                     .assertionResults(List.of(expectedAssertionResult))
                     .status(RunStatus.PASSED)

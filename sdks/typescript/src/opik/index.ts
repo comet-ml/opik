@@ -21,6 +21,7 @@ export { DatasetVersionNotFoundError } from "@/errors/dataset/errors";
 export type { DatasetVersionPublic } from "@/rest_api/api/types/DatasetVersionPublic";
 
 export { Prompt, ChatPrompt, PromptType } from "@/prompt";
+export { getGlobalClient, setGlobalClient, resetGlobalClient } from "@/client/globalClient";
 export { OpikQueryLanguage } from "@/query";
 export type { FilterExpression } from "@/query";
 

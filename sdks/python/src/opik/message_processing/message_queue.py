@@ -56,6 +56,11 @@ class MessageQueue(Generic[T]):
     def empty(self) -> bool:
         return len(self._deque) == 0
 
+    def clear(self) -> None:
+        """Drop all pending messages. Intended for fire-and-forget teardowns."""
+        with self._not_empty:
+            self._deque.clear()
+
     def accept_put_without_discarding(self) -> bool:
         if self.max_size is None:
             return True

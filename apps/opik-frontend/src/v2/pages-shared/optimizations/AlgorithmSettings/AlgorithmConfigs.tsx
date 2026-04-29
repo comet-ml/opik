@@ -18,7 +18,7 @@ import GepaOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSetti
 import EvolutionaryOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/EvolutionaryOptimizerConfigs";
 import HierarchicalReflectiveOptimizerConfigs from "@/v2/pages-shared/optimizations/AlgorithmSettings/algorithmConfigs/HierarchicalReflectiveOptimizerConfigs";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 
 interface AlgorithmConfigsProps {
   optimizerType: OPTIMIZER_TYPE;

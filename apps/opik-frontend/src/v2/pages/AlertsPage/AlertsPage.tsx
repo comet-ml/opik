@@ -6,7 +6,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyAlertsLightUrl from "/images/empty-alerts-light.svg";
 import emptyAlertsDarkUrl from "/images/empty-alerts-dark.svg";
 import useProjectAlertsList from "@/api/alerts/useProjectAlertsList";
@@ -46,7 +46,7 @@ import {
 } from "@/shared/DataTable/utils";
 import { Separator } from "@/ui/separator";
 import AlertsActionsPanel from "@/v2/pages/AlertsPage/AlertsActionsPanel";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { usePermissions } from "@/contexts/PermissionsContext";
 
@@ -287,7 +287,7 @@ const AlertsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Alert>(),
+      ...(canUpdateAlerts ? [generateSelectColumDef<Alert>()] : []),
       ...convertColumnDataToColumn<Alert, Alert>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
@@ -329,7 +329,7 @@ const AlertsPage: React.FunctionComponent = () => {
     });
   }, [navigate, workspaceName, activeProjectId]);
 
-  if (isPending) {
+  if (isPending || (isPlaceholderData && alerts.length === 0)) {
     return <Loader />;
   }
 
@@ -354,9 +354,11 @@ const AlertsPage: React.FunctionComponent = () => {
           description={
             "Monitor important events in your project and get notified when something needs your attention."
           }
-          primaryActionLabel="Create your first alert"
-          onPrimaryAction={handleNewAlertClick}
-          docsUrl={buildDocsUrl("/production/alerts")}
+          primaryActionLabel={
+            canUpdateAlerts ? "Create your first alert" : undefined
+          }
+          onPrimaryAction={canUpdateAlerts ? handleNewAlertClick : undefined}
+          docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
       ) : (
         <>
@@ -383,8 +385,12 @@ const AlertsPage: React.FunctionComponent = () => {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <AlertsActionsPanel alerts={selectedRows} />
-                <Separator orientation="vertical" className="mx-2 h-4" />
+                {canUpdateAlerts && (
+                  <>
+                    <AlertsActionsPanel alerts={selectedRows} />
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                  </>
+                )}
                 <ColumnsButton
                   columns={DEFAULT_COLUMNS}
                   selectedColumns={selectedColumns}
@@ -399,10 +405,14 @@ const AlertsPage: React.FunctionComponent = () => {
               data={alerts}
               resizeConfig={resizeConfig}
               sortConfig={sortConfig}
-              selectionConfig={{
-                rowSelection,
-                setRowSelection,
-              }}
+              selectionConfig={
+                canUpdateAlerts
+                  ? {
+                      rowSelection,
+                      setRowSelection,
+                    }
+                  : undefined
+              }
               getRowId={getRowId}
               columnPinning={DEFAULT_COLUMN_PINNING}
               noData={

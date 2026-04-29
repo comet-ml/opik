@@ -38,6 +38,7 @@ import {
 import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { Separator } from "@/ui/separator";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -63,7 +64,7 @@ import { LOGS_TYPE } from "@/constants/traces";
 import useThreadsList from "@/api/traces/useThreadsList";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
 import { generateTracesURL } from "@/lib/annotation-queues";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import useAppStore from "@/store/AppStore";
 import { generateAnnotationQueueIdFilter } from "@/lib/filters";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
@@ -332,9 +333,13 @@ const ThreadQueueItemsTab: React.FunctionComponent<
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({
+          projectId: annotationQueue.project_id ?? "",
+          entityType: "threads",
+        }),
       },
     }),
-    [annotationQueue.feedback_definition_names],
+    [annotationQueue.feedback_definition_names, annotationQueue.project_id],
   );
 
   const dynamicScoresColumns = useMemo(() => {

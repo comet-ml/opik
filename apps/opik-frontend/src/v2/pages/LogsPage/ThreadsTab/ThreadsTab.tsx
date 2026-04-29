@@ -43,7 +43,7 @@ import {
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import { useOpenQuickStartDialog } from "@/v2/pages-shared/onboarding/QuickstartDialog/QuickstartDialog";
 import emptyLogsLightUrl from "/images/empty-logs-light.svg";
 import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
@@ -72,13 +72,14 @@ import ThreadsActionsPanel from "@/v2/pages/LogsPage/ThreadsTab/ThreadsActionsPa
 import SelectionActionBar from "@/v2/components/SelectionActionBar/SelectionActionBar";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
 import FeedbackScoreCell from "@/shared/DataTableCells/FeedbackScoreCell";
 import useThreadsFeedbackScoresNames from "@/api/traces/useThreadsFeedbackScoresNames";
 import ThreadsFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/ThreadsFeedbackScoresSelect";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { useTruncationEnabled } from "@/contexts/server-sync-provider";
@@ -474,6 +475,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
             placeholder: "Select score",
           },
         },
+        ...getTagsFilterConfig({ projectId, entityType: "threads" }),
       },
     }),
     [projectId],
@@ -794,7 +796,7 @@ export const ThreadsTab: React.FC<ThreadsTabProps> = ({
                 Quickstart guide
               </button>
               <a
-                href={buildDocsUrl("/tracing/log_chat_conversations")}
+                href={buildDocsUrl("/tracing/advanced/log_chat_conversations")}
                 target="_blank"
                 rel="noreferrer"
                 className="comet-body-s inline-flex items-center gap-1 underline underline-offset-4 hover:text-primary"

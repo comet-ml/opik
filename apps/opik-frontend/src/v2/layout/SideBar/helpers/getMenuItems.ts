@@ -15,6 +15,7 @@ import {
   GitBranch,
   Workflow,
 } from "lucide-react";
+import OllieOwl from "@/icons/ollie-owl.svg?react";
 import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
@@ -25,12 +26,18 @@ const getMenuItems = ({
   projectId,
   canViewExperiments,
   canViewDatasets,
+  canViewDashboards,
   canUsePlayground,
+  canViewOptimizationRuns,
+  showHome,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
   canViewDatasets: boolean;
+  canViewDashboards: boolean;
   canUsePlayground: boolean;
+  canViewOptimizationRuns: boolean;
+  showHome: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -40,6 +47,23 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
+    ...(showHome
+      ? [
+          {
+            id: "opik_connect_group",
+            items: [
+              {
+                id: "opik_connect",
+                path: projectPath("/home"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: OllieOwl,
+                label: "Opik Connect",
+                disabled: !projectPrefix,
+              },
+            ],
+          },
+        ]
+      : []),
     {
       id: "observability",
       label: "Observability",
@@ -52,20 +76,90 @@ const getMenuItems = ({
           label: "Logs",
           disabled: !projectPrefix,
         },
+        ...(canViewDashboards
+          ? [
+              {
+                id: "dashboards",
+                path: projectPath("/dashboards"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ChartLine,
+                label: "Dashboards",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+      ],
+    },
+    {
+      id: "development",
+      label: "Development",
+      items: [
         {
-          id: "dashboards",
-          path: projectPath("/dashboards"),
+          id: "agent_runner",
+          path: projectPath("/agent-playground"),
           type: MENU_ITEM_TYPE.router,
-          icon: ChartLine,
-          label: "Dashboards",
+          icon: GitBranch,
+          label: "Agent playground",
           disabled: !projectPrefix,
         },
+        ...(canUsePlayground
+          ? [
+              {
+                id: "playground",
+                path: projectPath("/playground"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Blocks,
+                label: "Prompt playground",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
+        {
+          id: "agent_configuration",
+          path: projectPath("/agent-configuration"),
+          type: MENU_ITEM_TYPE.router,
+          icon: Workflow,
+          label: "Agent configuration",
+          disabled: !projectPrefix,
+        },
+        ...(canViewOptimizationRuns
+          ? [
+              {
+                id: "optimizations",
+                path: projectPath("/optimizations"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Sparkles,
+                label: "Optimization runs",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
       ],
     },
     {
       id: "evaluation",
       label: "Evaluation",
       items: [
+        ...(canViewDatasets
+          ? [
+              {
+                id: "test_suites",
+                path: projectPath("/test-suites"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: ListChecks,
+                label: "Test suites",
+                disabled: !projectPrefix,
+              },
+              {
+                id: "datasets",
+                path: projectPath("/datasets"),
+                type: MENU_ITEM_TYPE.router as const,
+                icon: Database,
+                label: "Datasets",
+                disabled: !projectPrefix,
+              },
+            ]
+          : []),
         ...(canViewExperiments
           ? [
               {
@@ -78,80 +172,12 @@ const getMenuItems = ({
               },
             ]
           : []),
-        ...(canViewDatasets
-          ? [
-              {
-                id: "datasets",
-                path: projectPath("/datasets"),
-                type: MENU_ITEM_TYPE.router as const,
-                icon: Database,
-                label: "Datasets",
-                disabled: !projectPrefix,
-              },
-              {
-                id: "test_suites",
-                path: projectPath("/test-suites"),
-                type: MENU_ITEM_TYPE.router as const,
-                icon: ListChecks,
-                label: "Test suites",
-                disabled: !projectPrefix,
-              },
-            ]
-          : []),
         {
           id: "annotation_queues",
           path: projectPath("/annotation-queues"),
           type: MENU_ITEM_TYPE.router,
           icon: UserPen,
           label: "Annotation queues",
-          disabled: !projectPrefix,
-        },
-      ],
-    },
-    {
-      id: "prompt_engineering",
-      label: "Prompt engineering",
-      items: [
-        ...(canUsePlayground
-          ? [
-              {
-                id: "playground",
-                path: projectPath("/playground"),
-                type: MENU_ITEM_TYPE.router as const,
-                icon: Blocks,
-                label: "Playground",
-                disabled: !projectPrefix,
-              },
-            ]
-          : []),
-      ],
-    },
-    {
-      id: "optimization",
-      label: "Optimization",
-      items: [
-        {
-          id: "optimizations",
-          path: projectPath("/optimizations"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Sparkles,
-          label: "Optimization studio",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "agent_configuration",
-          path: projectPath("/agent-configuration"),
-          type: MENU_ITEM_TYPE.router,
-          icon: Workflow,
-          label: "Agent configuration",
-          disabled: !projectPrefix,
-        },
-        {
-          id: "agent_runner",
-          path: projectPath("/agent-runner"),
-          type: MENU_ITEM_TYPE.router,
-          icon: GitBranch,
-          label: "Agent sandbox",
           disabled: !projectPrefix,
         },
       ],
@@ -194,6 +220,7 @@ export const getWorkspaceMenuItems = (): MenuItemGroup[] => {
           icon: LayoutDashboard,
           label: "Workspace",
           muted: true,
+          exact: true,
         },
         {
           id: "configuration",

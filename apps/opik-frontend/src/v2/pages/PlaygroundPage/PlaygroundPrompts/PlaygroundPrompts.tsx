@@ -16,12 +16,16 @@ interface PlaygroundPromptsProps {
   workspaceName: string;
   providerKeys: COMPOSED_PROVIDER_TYPE[];
   isPendingProviderKeys: boolean;
+  runSingle?: (promptId: string) => void;
+  stopSingle?: (promptId: string) => void;
 }
 
 const PlaygroundPrompts = ({
   workspaceName,
   providerKeys,
   isPendingProviderKeys,
+  runSingle,
+  stopSingle,
 }: PlaygroundPromptsProps) => {
   const promptCount = usePromptCount();
   const promptIds = usePromptIds();
@@ -65,6 +69,8 @@ const PlaygroundPrompts = ({
           isPendingProviderKeys={isPendingProviderKeys}
           providerResolver={calculateModelProvider}
           modelResolver={calculateDefaultModel}
+          onRun={runSingle ? () => runSingle(promptId) : undefined}
+          onStop={stopSingle ? () => stopSingle(promptId) : undefined}
         />
       ))}
     </div>

@@ -121,7 +121,14 @@ class TestBridgePollLoopPolling:
 
         api.runners.next_bridge_commands.side_effect = poll_side_effect
 
-        loop = BridgePollLoop(api, "runner-1", {}, shutdown)
+        loop = BridgePollLoop(
+            api,
+            "runner-1",
+            {},
+            shutdown,
+            initial_backoff_seconds=0.001,
+            backoff_cap_seconds=0.01,
+        )
         loop.run()
 
         assert call_count >= 3

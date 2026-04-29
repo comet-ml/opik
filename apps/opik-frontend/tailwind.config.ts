@@ -102,7 +102,6 @@ module.exports = {
         "diff-added-text": "var(--diff-added-text)",
         "upload-icon-bg": "hsl(var(--upload-icon-bg))",
         "code-block": "var(--code-block)",
-        "breadcrumb-last": "hsl(var(--breadcrumb-last))",
         "special-button": "var(--special-button)",
         "thread-active": "var(--thread-active)",
         "selection-bar": "hsl(var(--selection-bar))",
@@ -131,6 +130,8 @@ module.exports = {
         "chart-purple": "var(--chart-purple)",
         "chart-pink": "var(--chart-pink)",
         "chart-orange": "var(--chart-orange)",
+        "chart-gray-light": "var(--chart-gray-light)",
+        "chart-gray-dark": "var(--chart-gray-dark)",
 
         /* Template icon colors */
         "template-icon-metrics": "var(--template-icon-metrics)",
@@ -153,10 +154,25 @@ module.exports = {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
+        "ollie-breathe": {
+          "0%, 100%": { transform: "scale(1)", opacity: "0.95" },
+          "50%": { transform: "scale(1.04)", opacity: "1" },
+        },
+        "ollie-blink": {
+          "0%, 92%, 100%": { transform: "scaleY(1)" },
+          "95%": { transform: "scaleY(0.1)" },
+        },
+        "ollie-text-in": {
+          from: { opacity: "0", transform: "translateY(4px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
+        "ollie-breathe": "ollie-breathe 3.2s ease-in-out infinite",
+        "ollie-blink": "ollie-blink 5.4s ease-in-out infinite",
+        "ollie-text-in": "ollie-text-in 300ms ease-out",
       },
       boxShadow: {
         "action-card": "var(--action-card-shadow)",

@@ -18,13 +18,13 @@ const OpenSMELinkButton: React.FunctionComponent<OpenSMELinkButtonProps> = ({
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
 
   const {
-    permissions: { canWriteComments },
+    permissions: { canAnnotateTraceSpanThread },
   } = usePermissions();
 
   const hasFeedbackDefinitions =
     annotationQueue.feedback_definition_names.length;
 
-  if (!canWriteComments && !hasFeedbackDefinitions) return null;
+  if (!canAnnotateTraceSpanThread && !hasFeedbackDefinitions) return null;
 
   return (
     <TooltipWrapper content="Start annotating">

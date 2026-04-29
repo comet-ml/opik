@@ -7,7 +7,7 @@ import com.comet.opik.api.OptimizationStudioConfig;
 import com.comet.opik.api.OptimizationUpdate;
 import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
-import com.comet.opik.infrastructure.DatabaseUtils;
+import com.comet.opik.infrastructure.FilterUtils;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Function;
@@ -71,7 +71,7 @@ public interface OptimizationDAO {
 
     Flux<OptimizationSummary> findOptimizationSummaryByDatasetIds(Set<UUID> datasetIds);
 
-    Mono<Boolean> hasVersion1Optimizations(String workspaceId);
+    Mono<Boolean> hasVersion1Optimizations(String workspaceId, List<String> demoOptimizationNames);
 }
 
 @Singleton
@@ -82,6 +82,7 @@ class OptimizationDAOImpl implements OptimizationDAO {
     private static final String HAS_VERSION1_OPTIMIZATIONS = """
             SELECT 1 FROM optimizations
             WHERE workspace_id = :workspace_id AND project_id = ''
+            AND name NOT IN :demo_optimization_names
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'""";
 
@@ -873,13 +874,20 @@ class OptimizationDAOImpl implements OptimizationDAO {
         return statement;
     }
 
+    /**
+     * Checks for V1 (workspace-scoped) optimizations excluding known demo names.
+     * ClickHouse string comparison is case-sensitive — every known casing of a demo name
+     * must be listed explicitly in {@link DemoData#OPTIMIZATIONS}.
+     */
     @Override
-    public Mono<Boolean> hasVersion1Optimizations(@NonNull String workspaceId) {
-        var template = DatabaseUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
-                "has_version1_optimizations", workspaceId, "", "");
+    public Mono<Boolean> hasVersion1Optimizations(
+            @NonNull String workspaceId, @NonNull List<String> demoOptimizationNames) {
+        var template = FilterUtils.getSTWithLogComment(HAS_VERSION1_OPTIMIZATIONS,
+                "has_version1_optimizations", workspaceId, "", demoOptimizationNames);
         return Mono.from(connectionFactory.create())
                 .flatMapMany(connection -> Flux.from(connection.createStatement(template.render())
                         .bind("workspace_id", workspaceId)
+                        .bind("demo_optimization_names", demoOptimizationNames.toArray(String[]::new))
                         .execute())
                         .flatMap(result -> Flux.from(result.map((row, metadata) -> true))))
                 .hasElements();

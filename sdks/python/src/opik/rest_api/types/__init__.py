@@ -49,6 +49,9 @@ from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 from .assertion_result import AssertionResult
+from .assertion_result_batch_item import AssertionResultBatchItem
+from .assertion_result_batch_item_source import AssertionResultBatchItemSource
+from .assertion_result_batch_item_status import AssertionResultBatchItemStatus
 from .assertion_result_compare import AssertionResultCompare
 from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
@@ -472,6 +475,7 @@ from .optimization_write import OptimizationWrite
 from .optimization_write_status import OptimizationWriteStatus
 from .page_columns import PageColumns
 from .param import Param
+from .param_presence import ParamPresence
 from .percentage_value_stat_public import PercentageValueStatPublic
 from .percentage_values import PercentageValues
 from .percentage_values_detailed import PercentageValuesDetailed
@@ -715,6 +719,9 @@ __all__ = [
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
     "AssertionResult",
+    "AssertionResultBatchItem",
+    "AssertionResultBatchItemSource",
+    "AssertionResultBatchItemStatus",
     "AssertionResultCompare",
     "AssertionScoreAverage",
     "AssertionScoreAveragePublic",
@@ -1095,6 +1102,7 @@ __all__ = [
     "OptimizationWriteStatus",
     "PageColumns",
     "Param",
+    "ParamPresence",
     "PercentageValueStatPublic",
     "PercentageValues",
     "PercentageValuesDetailed",

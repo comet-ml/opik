@@ -28,9 +28,12 @@ export class ChatPrompt extends BasePrompt {
 
   /**
    * Creates a new ChatPrompt instance.
-   * This should not be created directly, use OpikClient.createChatPrompt() instead.
+   * All operations work seamlessly without requiring manual configuration.
    */
-  constructor(data: ChatPromptData, opik: OpikClient) {
+  constructor(data: ChatPromptData);
+  /** @deprecated Passing an opik client is deprecated. */
+  constructor(data: ChatPromptData, opik: OpikClient);
+  constructor(data: ChatPromptData, opik?: OpikClient) {
     super(
       {
         ...data,
@@ -40,6 +43,23 @@ export class ChatPrompt extends BasePrompt {
     );
     this.messages = data.messages;
     this.chatTemplate = new ChatPromptTemplate(data.messages, this.type);
+
+    if (opik === undefined && !data.synced) {
+      this._pendingSync = this._performSync();
+    }
+  }
+
+  private _performSync(): Promise<void> {
+    return this._syncViaCreate(() =>
+      this.opik.createChatPrompt({
+        name: this._name,
+        messages: structuredClone(this.messages),
+        metadata: this._metadata,
+        type: this.type,
+        description: this._description,
+        tags: this._tags.length ? Array.from(this._tags) : undefined,
+      }),
+    );
   }
 
   /**
@@ -222,23 +242,6 @@ export class ChatPrompt extends BasePrompt {
   }
 
   /**
-   * Get a ChatPrompt with a specific version by commit hash.
-   *
-   * @param commit - Commit hash (8-char short form or full)
-   * @returns ChatPrompt instance representing that version, or null if not found
-   *
-   * @example
-   * ```typescript
-   * const chatPrompt = await client.getChatPrompt({ name: "greeting" });
-   *
-   * // Get a specific version directly as a ChatPrompt
-   * const versionedPrompt = await chatPrompt.getVersion("abc123de");
-   * if (versionedPrompt) {
-   *   const messages = versionedPrompt.format({ name: "Alice" });
-   * }
-   * ```
-   */
-  /**
    * Synchronize the chat prompt with the backend.
    *
    * Creates or updates the chat prompt on the Opik server. If the sync fails,
@@ -260,13 +263,19 @@ export class ChatPrompt extends BasePrompt {
       logger.warn(
         `Failed to sync chat prompt '${this.name}' with the backend. ` +
           "The prompt will work locally but is not persisted on the server. " +
-          "You can retry by calling .syncWithBackend().",
+          "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
         { error },
       );
       return this;
     }
   }
 
+  /**
+   * Get a ChatPrompt with a specific version by commit hash.
+   *
+   * @param commit - Commit hash (8-char short form or full)
+   * @returns ChatPrompt instance representing that version, or null if not found
+   */
   async getVersion(commit: string): Promise<ChatPrompt | null> {
     const response = await this.retrieveVersionByCommit(commit);
     if (!response) {

@@ -51,7 +51,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
-import static com.comet.opik.infrastructure.DatabaseUtils.getSTWithLogComment;
+import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.Segment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.endSegment;
 import static com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils.startSegment;
@@ -225,6 +225,8 @@ public interface DatasetItemVersionDAO {
      * @return Mono emitting the DatasetItem, or empty if not found
      */
     Mono<DatasetItem> getItemById(UUID id);
+
+    Mono<DatasetItem> getItemById(UUID id, UUID datasetVersionId);
 
     /**
      * Gets workspace IDs for stable dataset item IDs (dataset_item_id field from dataset_item_versions).
@@ -1688,6 +1690,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             FROM dataset_item_versions
             WHERE workspace_id = :workspace_id
             AND dataset_item_id = :id
+            <if(dataset_version_id)>AND dataset_version_id = :dataset_version_id<endif>
             ORDER BY last_updated_at DESC
             LIMIT 1
             """;
@@ -3433,11 +3436,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     @Override
     @WithSpan
     public Mono<DatasetItem> getItemById(@NonNull UUID id) {
-        log.debug("Getting item by ID '{}'", id);
+        return getItemById(id, null);
+    }
+
+    @Override
+    @WithSpan
+    public Mono<DatasetItem> getItemById(@NonNull UUID id, UUID datasetVersionId) {
+        log.debug("Getting item by ID '{}', version '{}'", id, datasetVersionId);
+
+        var template = TemplateUtils.newST(SELECT_ITEM_BY_ID);
+        if (datasetVersionId != null) {
+            template.add("dataset_version_id", true);
+        }
+        var query = template.render();
 
         return asyncTemplate.nonTransaction(connection -> {
-            var statement = connection.createStatement(SELECT_ITEM_BY_ID)
+            var statement = connection.createStatement(query)
                     .bind("id", id.toString());
+
+            if (datasetVersionId != null) {
+                statement.bind("dataset_version_id", datasetVersionId.toString());
+            }
 
             Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE, "get_item_by_id");
 
@@ -3450,9 +3469,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         .next()
                         .doOnSuccess(item -> {
                             if (item != null) {
-                                log.debug("Found item by ID '{}'", id);
+                                log.debug("Found item by ID '{}', version '{}'", id, datasetVersionId);
                             } else {
-                                log.debug("Item not found by ID '{}'", id);
+                                log.debug("Item not found by ID '{}', version '{}'", id, datasetVersionId);
                             }
                         })
                         .doFinally(signalType -> endSegment(segment));

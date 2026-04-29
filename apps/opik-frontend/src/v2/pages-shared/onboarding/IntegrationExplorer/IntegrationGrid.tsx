@@ -8,8 +8,8 @@ import RequestIntegrationDialog from "@/v2/pages-shared/onboarding/IntegrationEx
 import IntegrationDetailsDialog from "@/v2/pages-shared/onboarding/IntegrationExplorer/components/IntegrationDetailsDialog";
 import { useIntegrationExplorer } from "@/v2/pages-shared/onboarding/IntegrationExplorer/IntegrationExplorerContext";
 import { getIntegrationsByCategory } from "@/constants/integrations";
-import { buildDocsUrl, cn } from "@/lib/utils";
-
+import { cn } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 type IntegrationGridProps = {
   className?: string;
 };

@@ -1,5 +1,4 @@
 import React, { useCallback } from "react";
-import { usePermissions } from "@/contexts/PermissionsContext";
 import { TraceFeedbackScore } from "@/types/traces";
 import { CommentItem } from "@/types/comment";
 import FeedbackScoreTag from "@/shared/FeedbackScoreTag/FeedbackScoreTag";
@@ -36,10 +35,6 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
   feedbackScores,
   comments,
 }) => {
-  const {
-    permissions: { canAnnotateTraceSpanThread },
-  } = usePermissions();
-
   const hasFeedbackScores = Boolean(feedbackScores.length);
 
   const { mutate: setThreadFeedbackScore } =
@@ -112,10 +107,10 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
       <div className="size-full overflow-y-auto">
         {hasFeedbackScores && (
           <>
-            <div className="comet-body-s-accented truncate px-6 pt-4">
+            <div className="comet-body-s-accented truncate px-4 pt-4">
               Feedback scores
             </div>
-            <div className="flex flex-wrap gap-2 px-6 py-2">
+            <div className="flex flex-wrap gap-2 px-4 py-2">
               {feedbackScores.map((score) => (
                 <FeedbackScoreTag
                   key={score.name}
@@ -131,29 +126,27 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
             </div>
           </>
         )}
-        {canAnnotateTraceSpanThread && (
-          <FeedbackScoresEditor
-            key={threadId}
-            feedbackScores={feedbackScores}
-            onUpdateFeedbackScore={onUpdateFeedbackScore}
-            onDeleteFeedbackScore={onDeleteFeedbackScore}
-            className="mt-4"
-            header={<FeedbackScoresEditor.Header isThread={true} />}
-            footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
-          />
-        )}
+        <FeedbackScoresEditor
+          key={threadId}
+          feedbackScores={feedbackScores}
+          onUpdateFeedbackScore={onUpdateFeedbackScore}
+          onDeleteFeedbackScore={onDeleteFeedbackScore}
+          className="mt-4 px-4"
+          header={<FeedbackScoresEditor.Header isThread={true} />}
+          footer={<FeedbackScoresEditor.Footer entityCopy="threads" />}
+        />
 
-        <Separator className="mx-6 my-4 w-auto" />
+        <Separator className="m-4 w-auto" />
 
-        <div className="comet-body-s-accented truncate px-6">Comments</div>
+        <div className="comet-body-s-accented truncate px-4">Comments</div>
         <CommentsSection
           comments={comments}
           onSubmit={onCommentSubmit}
           onEditSubmit={onCommentEdit}
           onDelete={onCommentDelete}
-          formClassName="mt-2 px-6"
+          formClassName="mt-2 px-4"
           listClassName="mt-3 h-full overflow-auto pb-3"
-          commentClassName="px-6 hover:bg-soft-background"
+          commentClassName="px-4 hover:bg-soft-background"
         />
       </div>
     </DetailsActionSectionLayout>

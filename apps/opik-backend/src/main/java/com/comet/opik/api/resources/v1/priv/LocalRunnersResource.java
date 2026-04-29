@@ -181,6 +181,7 @@ public class LocalRunnersResource {
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID jobId = endpointJobService.createJob(workspaceId, userName, request);
+
         var uri = uriInfo.getAbsolutePathBuilder().path("/{jobId}").build(jobId);
         return Response.created(uri).build();
     }

@@ -5,10 +5,10 @@ import {
 import { BasePrompt } from "@/prompt/BasePrompt";
 import { PromptVersion } from "@/prompt/PromptVersion";
 
-function makePromptLike(commit: string): BasePrompt {
+function makePromptLike(commit: string | undefined): BasePrompt {
   const obj = Object.create(BasePrompt.prototype);
-  obj.commit = commit;
-  obj.versionId = "version-id-123";
+  Object.defineProperty(obj, "commit", { get: () => commit, configurable: true });
+  Object.defineProperty(obj, "versionId", { get: () => "version-id-123", configurable: true });
   return obj;
 }
 
@@ -59,8 +59,7 @@ describe("serializeValue", () => {
   });
 
   it("throws for BasePrompt without commit", () => {
-    const prompt = makePromptLike(undefined as unknown as string);
-    (prompt as { commit: unknown }).commit = undefined;
+    const prompt = makePromptLike(undefined);
     expect(() => serializeValue(prompt)).toThrow("without a commit");
   });
 
@@ -130,8 +129,7 @@ describe("serializeValue — explicit backendType for prompt types", () => {
   });
 
   it('throws when serializing BasePrompt without commit and backendType "prompt"', () => {
-    const prompt = makePromptLike(undefined as unknown as string);
-    (prompt as { commit: unknown }).commit = undefined;
+    const prompt = makePromptLike(undefined);
     expect(() => serializeValue(prompt, "prompt")).toThrow("without a commit");
   });
 

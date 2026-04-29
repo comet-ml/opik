@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Span.SpanBuilder;
 import com.comet.opik.domain.mapping.OpenTelemetryMappingRuleFactory;
+import com.comet.opik.domain.mapping.otel.GeneralMappingRules;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.opentelemetry.proto.common.v1.KeyValue;
@@ -55,14 +56,35 @@ public class OpenTelemetryMapper {
         var otelSpanId = otelSpan.getSpanId();
         var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp);
 
-        var otelParentSpanId = otelSpan.getParentSpanId();
-        var opikParentSpanId = otelParentSpanId.isEmpty()
-                ? null
-                : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
+        // Check for opik.trace_id and opik.parent_span_id override attributes.
+        // When present, these connect the span to an existing OPIK trace/span as-is (no ID conversion).
+        var opikTraceIdOverride = extractOpikTraceId(otelSpan);
+        var opikParentSpanIdOverride = extractOpikParentSpanId(otelSpan);
+
+        UUID effectiveTraceId;
+        UUID opikParentSpanId;
+
+        if (opikTraceIdOverride.isPresent()) {
+            effectiveTraceId = opikTraceIdOverride.get();
+            // When opik.trace_id is set, use opik.parent_span_id if available, otherwise null
+            // (span connects directly to the trace as a root span)
+            opikParentSpanId = opikParentSpanIdOverride.orElse(null);
+        } else {
+            if (opikParentSpanIdOverride.isPresent()) {
+                log.warn("Span '{}' has '{}' without '{}', ignoring parent span ID override",
+                        otelSpan.getName(), GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR,
+                        GeneralMappingRules.OPIK_TRACE_ID_ATTR);
+            }
+            effectiveTraceId = opikTraceId;
+            var otelParentSpanId = otelSpan.getParentSpanId();
+            opikParentSpanId = otelParentSpanId.isEmpty()
+                    ? null
+                    : convertOtelIdToUUIDv7(otelParentSpanId.toByteArray(), traceTimestamp);
+        }
 
         var spanBuilder = com.comet.opik.api.Span.builder()
                 .id(opikSpanId)
-                .traceId(opikTraceId)
+                .traceId(effectiveTraceId)
                 .parentSpanId(opikParentSpanId)
                 .name(otelSpan.getName())
                 .type(SpanType.general)
@@ -236,5 +258,53 @@ public class OpenTelemetryMapper {
      */
     private long extractTimestampFromUUIDv7(UUID uuid) {
         return IdGenerator.extractTimestampFromUUIDv7(uuid).toEpochMilli();
+    }
+
+    /**
+     * Extracts the opik.trace_id attribute from an OTEL span, if present.
+     * This attribute allows connecting an OTEL span to an existing OPIK trace.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK trace UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikTraceId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_TRACE_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_TRACE_ID_ATTR));
+    }
+
+    /**
+     * Extracts the opik.parent_span_id attribute from an OTEL span, if present.
+     * This attribute allows connecting an OTEL span to an existing OPIK span as its parent.
+     * Only meaningful when opik.trace_id is also present.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK parent span UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikParentSpanId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR));
+    }
+
+    private static Optional<String> extractStringAttribute(Span otelSpan, String key) {
+        return otelSpan.getAttributesList().stream()
+                .filter(attr -> key.equals(attr.getKey()))
+                .map(attr -> attr.getValue().getStringValue())
+                .filter(StringUtils::isNotBlank)
+                .findFirst();
+    }
+
+    private static Optional<UUID> parseUUIDv7(String value, String attributeName) {
+        try {
+            var uuid = UUID.fromString(value);
+            if (uuid.version() != 7) {
+                log.warn("Attribute '{}' value '{}' is not a UUIDv7 (version {}), ignoring",
+                        attributeName, value, uuid.version());
+                return Optional.empty();
+            }
+            return Optional.of(uuid);
+        } catch (IllegalArgumentException e) {
+            log.warn("Attribute '{}' value '{}' is not a valid UUIDv7, ignoring", attributeName, value);
+            return Optional.empty();
+        }
     }
 }

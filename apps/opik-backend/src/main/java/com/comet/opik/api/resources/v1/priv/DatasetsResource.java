@@ -16,6 +16,7 @@ import com.comet.opik.api.DatasetItemBatchUpdate;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetType;
 import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.ExperimentItem;
@@ -36,6 +37,7 @@ import com.comet.opik.domain.DatasetItemSearchCriteria;
 import com.comet.opik.domain.DatasetItemService;
 import com.comet.opik.domain.DatasetService;
 import com.comet.opik.domain.DatasetVersionService;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.EntityType;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.Streamer;
@@ -43,6 +45,7 @@ import com.comet.opik.infrastructure.FeatureFlags;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.RequiredPermissions;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.comet.opik.utils.FileNameUtils;
 import com.comet.opik.utils.RetryUtils;
@@ -90,6 +93,7 @@ import reactor.core.publisher.Flux;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -120,6 +124,7 @@ public class DatasetsResource {
     private final @NonNull CsvDatasetItemProcessor csvProcessor;
     private final @NonNull FeatureFlags featureFlags;
     private final @NonNull CsvDatasetExportService csvExportService;
+    private final @NonNull AnalyticsService analyticsService;
 
     @GET
     @Path("/{id}")
@@ -185,6 +190,7 @@ public class DatasetsResource {
                     @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/datasets/{id}", schema = @Schema(implementation = String.class))
             })
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_CREATE)
     @RateLimited
     public Response createDataset(
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
@@ -197,6 +203,14 @@ public class DatasetsResource {
         log.info("Created dataset with name '{}', id '{}', on workspace_id '{}'", savedDataset.name(),
                 savedDataset.id(), workspaceId);
 
+        if (savedDataset.type() == DatasetType.TEST_SUITE
+                && !DemoData.DATASETS.contains(savedDataset.name())) {
+            analyticsService.trackEvent("opik_eval_suite_created", Map.of(
+                    "eval_suite_id", savedDataset.id().toString(),
+                    "eval_suite_name", savedDataset.name(),
+                    "project_id", String.valueOf(savedDataset.projectId())));
+        }
+
         URI uri = uriInfo.getAbsolutePathBuilder().path("/%s".formatted(savedDataset.id().toString())).build();
         return Response.created(uri).build();
     }
@@ -206,6 +220,7 @@ public class DatasetsResource {
     @Operation(operationId = "updateDataset", summary = "Update dataset by id", description = "Update dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response updateDataset(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {

@@ -32,7 +32,7 @@ import {
 } from "@/types/providers";
 import { PROVIDERS } from "@/constants/providers";
 import { MessageContent } from "@/types/llm";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import {
   codeMirrorPromptTheme,
