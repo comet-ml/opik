@@ -67,7 +67,7 @@ type GroupCustomMeta = {
   labelKey: string;
   countAggregationKey?: string;
   explainer?: Explainer;
-  getResource?: (cellData: unknown) => RESOURCE_TYPE | undefined;
+  getResource?: (cellData: unknown) => RESOURCE_TYPE;
 } & CustomMeta;
 
 const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
@@ -112,7 +112,7 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       tableMetadata={context.table.options.meta}
       className="items-center gap-1 overflow-hidden"
     >
-      {id && resolvedResource !== undefined ? (
+      {id ? (
         <ResourceLink
           id={id}
           name={name}
@@ -121,8 +121,6 @@ const GroupResourceCell = <TData,>(context: CellContext<TData, unknown>) => {
           params={params}
           isDeleted={isDeleted}
         />
-      ) : id ? (
-        <span className="comet-body-s truncate">{name ?? "-"}</span>
       ) : (
         <div>-</div>
       )}

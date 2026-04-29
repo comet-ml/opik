@@ -48,10 +48,7 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import {
-  ITEM_SOURCE_LABEL,
-  resolveItemSourceResource,
-} from "@/v2/pages-shared/experiments/ItemSourceCell";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
   DATASET_TYPE,
   EVALUATION_METHOD,
@@ -259,12 +256,12 @@ export const useExperimentsTableConfig = <
                   "evaluation_method",
                   undefined,
                 ) as EVALUATION_METHOD | undefined;
+                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
+                  return RESOURCE_TYPE.testSuite;
                 const datasetId = get(row, `${metaKey}.value`, "") as string;
-                return resolveItemSourceResource(
-                  evaluationMethod,
-                  datasetId,
-                  datasetTypeMap,
-                );
+                if (datasetTypeMap?.[datasetId] === DATASET_TYPE.TEST_SUITE)
+                  return RESOURCE_TYPE.testSuite;
+                return RESOURCE_TYPE.dataset;
               },
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
@@ -279,15 +276,16 @@ export const useExperimentsTableConfig = <
                   "evaluation_method",
                   undefined,
                 ) as EVALUATION_METHOD | undefined;
+                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
+                  return "Test suite";
+                if (evaluationMethod === EVALUATION_METHOD.DATASET)
+                  return "Dataset";
+
                 const datasetId = get(row, `${metaKey}.value`, "") as string;
-                const resource = resolveItemSourceResource(
-                  evaluationMethod,
-                  datasetId,
-                  datasetTypeMap,
-                );
-                if (resource === RESOURCE_TYPE.testSuite) return "Test suite";
-                if (resource === RESOURCE_TYPE.dataset) return "Dataset";
-                return ITEM_SOURCE_LABEL;
+                const type = datasetTypeMap?.[datasetId];
+                if (type === DATASET_TYPE.TEST_SUITE) return "Test suite";
+                if (type === DATASET_TYPE.DATASET) return "Dataset";
+                return "";
               },
               hideGroupRowLabelColon: true,
             },

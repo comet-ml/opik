@@ -8,28 +8,9 @@ import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 import ResourceLink, {
   RESOURCE_TYPE,
 } from "@/shared/ResourceLink/ResourceLink";
-import { DATASET_TYPE, EVALUATION_METHOD } from "@/types/datasets";
+import { EVALUATION_METHOD } from "@/types/datasets";
 
 export const ITEM_SOURCE_LABEL = "Item source";
-
-export const resolveItemSourceResource = (
-  evaluationMethod: EVALUATION_METHOD | undefined,
-  datasetId: string | undefined,
-  datasetTypeMap?: Record<string, DATASET_TYPE>,
-): RESOURCE_TYPE | undefined => {
-  if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE) {
-    return RESOURCE_TYPE.testSuite;
-  }
-  if (evaluationMethod === EVALUATION_METHOD.DATASET) {
-    return RESOURCE_TYPE.dataset;
-  }
-  if (datasetId && datasetTypeMap) {
-    const type = datasetTypeMap[datasetId];
-    if (type === DATASET_TYPE.TEST_SUITE) return RESOURCE_TYPE.testSuite;
-    if (type === DATASET_TYPE.DATASET) return RESOURCE_TYPE.dataset;
-  }
-  return undefined;
-};
 
 type CustomMeta = {
   nameKey?: string;
@@ -51,17 +32,15 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
   const evaluationMethod = get(cellData, "evaluation_method", undefined) as
     | EVALUATION_METHOD
     | undefined;
-  const datasetTypeMap = context.table.options.meta?.datasetTypeMap;
   const isDeleted = isFunction(getIsDeleted)
     ? getIsDeleted(cellData)
     : undefined;
 
-  const resource = resolveItemSourceResource(
-    evaluationMethod,
-    id,
-    datasetTypeMap,
-  );
-  const Icon = resource === RESOURCE_TYPE.testSuite ? ListChecks : Database;
+  const isTestSuite = evaluationMethod === EVALUATION_METHOD.TEST_SUITE;
+  const Icon = isTestSuite ? ListChecks : Database;
+  const resource = isTestSuite
+    ? RESOURCE_TYPE.testSuite
+    : RESOURCE_TYPE.dataset;
 
   return (
     <CellWrapper
@@ -70,15 +49,13 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
       className="items-center gap-2 py-1.5"
     >
       <Icon className="size-4 shrink-0 text-light-slate" />
-      {id && resource ? (
+      {id ? (
         <ResourceLink
           id={id}
           name={name}
           resource={resource}
           isDeleted={isDeleted}
         />
-      ) : id ? (
-        <span className="comet-body-s truncate">{name ?? "-"}</span>
       ) : (
         "-"
       )}
