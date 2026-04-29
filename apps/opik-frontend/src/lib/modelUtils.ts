@@ -1,5 +1,13 @@
-import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
+import {
+  AnthropicThinkingEffort,
+  PROVIDER_MODEL_TYPE,
+  COMPOSED_PROVIDER_TYPE,
+} from "@/types/providers";
+import {
+  ANTHROPIC_MODEL_CAPABILITIES,
+  ANTHROPIC_THINKING_EFFORT_LABELS,
+  REASONING_MODELS,
+} from "@/constants/llm";
 import { PROVIDER_TYPE } from "@/types/providers";
 import { parseComposedProviderType } from "@/lib/provider";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
@@ -72,23 +80,26 @@ export const supportsVertexAIThinkingLevel = (
   );
 };
 
-/**
- * Checks if an Anthropic model supports thinking effort parameter
- * Currently only Claude Opus 4.6 supports adaptive thinking with effort levels
- *
- * @param model - The model type to check
- * @returns true if the model supports thinking effort, false otherwise
- */
+const anthropicCapabilities = (model?: PROVIDER_MODEL_TYPE | "") =>
+  model
+    ? ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    : undefined;
+
+export const supportsSamplingParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => anthropicCapabilities(model)?.supportsSamplingParams ?? true;
+
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return Boolean(
-    model &&
-      (ANTHROPIC_THINKING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
-        model as PROVIDER_MODEL_TYPE,
-      ),
-  );
-};
+): boolean => !!anthropicCapabilities(model)?.thinkingEffortOptions;
+
+export const getAnthropicThinkingEffortOptions = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): Array<{ label: string; value: AnthropicThinkingEffort }> =>
+  (anthropicCapabilities(model)?.thinkingEffortOptions ?? []).map((value) => ({
+    label: ANTHROPIC_THINKING_EFFORT_LABELS[value],
+    value,
+  }));
 
 /**
  * Updates provider config to ensure reasoning models have temperature >= 1.0
