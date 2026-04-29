@@ -44,7 +44,9 @@ public enum WorkspaceUserPermission {
 
     PROMPT_DELETE("prompt_delete"),
 
-    OPTIMIZATION_RUN_DELETE("optimization_run_delete");
+    OPTIMIZATION_RUN_VIEW("optimization_run_view"),
+    OPTIMIZATION_RUN_DELETE("optimization_run_delete"),
+    OPTIMIZATION_STUDIO_USE("optimization_studio_use");
 
     @JsonValue
     private final String value;
