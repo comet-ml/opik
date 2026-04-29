@@ -723,7 +723,7 @@ export type AnthropicThinkingEffort =
   | "max";
 
 export interface LLMAnthropicConfigsType {
-  temperature: number;
+  temperature?: number;
   maxCompletionTokens: number;
   topP?: number;
   seed?: number | null;
