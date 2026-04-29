@@ -10,7 +10,7 @@ import useExperimentBatchDeleteMutation from "@/api/datasets/useExperimentBatchD
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Separator } from "@/ui/separator";
 import AddTagDialog from "@/v2/pages-shared/experiments/AddTagDialog/AddTagDialog";
 

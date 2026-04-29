@@ -73,7 +73,6 @@ export type Explainer = {
   type?: explainerType;
   description: string;
   docLink?: string;
-  docHash?: string;
 };
 
 export type HeaderIconType =
@@ -206,3 +205,15 @@ export type ConfigurationType = Record<string, unknown>;
 export type GoogleColabCardCoreProps = {
   link: string;
 };
+
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonObject
+  | JsonValue[];
+
+export interface JsonObject {
+  [key: string]: JsonValue;
+}

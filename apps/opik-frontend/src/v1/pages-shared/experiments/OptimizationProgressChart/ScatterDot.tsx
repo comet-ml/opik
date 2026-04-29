@@ -34,7 +34,7 @@ type UseScatterDotParams = {
   selectedTrialId?: string;
   onTrialSelect?: (trialId: string) => void;
   onTrialClick?: (candidateId: string) => void;
-  isEvaluationSuite?: boolean;
+  isTestSuite?: boolean;
   setHoveredTrial: React.Dispatch<
     React.SetStateAction<{
       candidateId: string;
@@ -59,7 +59,7 @@ const useScatterDot = ({
   selectedTrialId,
   onTrialSelect,
   onTrialClick,
-  isEvaluationSuite,
+  isTestSuite,
   setHoveredTrial,
 }: UseScatterDotParams) => {
   return useCallback(
@@ -67,7 +67,7 @@ const useScatterDot = ({
       const { cx: rawCx, cy, payload } = props;
       const pxOffset = overlapOffsets.get(payload.candidateId) ?? 0;
       const cx = rawCx + pxOffset;
-      const color = !isEvaluationSuite
+      const color = !isTestSuite
         ? TRIAL_STATUS_COLORS.passed
         : TRIAL_STATUS_COLORS[payload.status];
       const isBest = payload.candidateId === bestCandidateId;
@@ -162,7 +162,7 @@ const useScatterDot = ({
       onTrialSelect,
       onTrialClick,
       overlapOffsets,
-      isEvaluationSuite,
+      isTestSuite,
       dotPositionsRef,
       setHoveredTrial,
     ],

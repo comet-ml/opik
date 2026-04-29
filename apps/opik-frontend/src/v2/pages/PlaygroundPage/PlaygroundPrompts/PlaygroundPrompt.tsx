@@ -5,9 +5,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { CopyPlus, Trash, Save } from "lucide-react";
+import { Trash, Save } from "lucide-react";
 import last from "lodash/last";
-import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
@@ -18,12 +17,13 @@ import {
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 
-import {
-  generateDefaultPrompt,
-  getDefaultConfigByProvider,
-} from "@/lib/playground";
+import { getDefaultConfigByProvider } from "@/lib/playground";
 import { updateProviderConfig } from "@/lib/modelUtils";
-import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import {
+  PLAYGROUND_LAST_PICKED_MODEL,
+  PLAYGROUND_PROMPT_COLORS,
+} from "@/constants/llm";
+import usePromptBadgeColor from "@/v2/pages/PlaygroundPage/PlaygroundPrompts/usePromptBadgeColor";
 import { generateDefaultLLMPromptMessage, getNextMessageType } from "@/lib/llm";
 import LLMPromptMessages from "@/v2/pages-shared/llm/LLMPromptMessages/LLMPromptMessages";
 import PromptModelSelect from "@/v2/pages-shared/llm/PromptModelSelect/PromptModelSelect";
@@ -31,10 +31,11 @@ import { getAlphabetLetter } from "@/lib/utils";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import PromptModelConfigs from "@/v2/pages-shared/llm/PromptModelSettings/PromptModelConfigs";
 import {
-  useAddPrompt,
   useDatasetVariables,
+  useDatasetSampleData,
   useDeletePrompt,
   usePromptById,
+  usePromptCount,
   useUpdateOutput,
   useUpdatePrompt,
   useProviderValidationTrigger,
@@ -44,10 +45,16 @@ import {
   ModelResolver,
   ProviderResolver,
 } from "@/hooks/useLLMProviderModelsData";
-import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
-import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
+import { useActiveProjectId } from "@/store/AppStore";
+import { usePermissions } from "@/contexts/PermissionsContext";
+import BlueprintPromptsSelectBox from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/BlueprintPromptsSelectBox";
+import SaveExistingPromptDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveExistingPromptDialog";
+import SaveAsNewBlueprintFieldDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveAsNewBlueprintFieldDialog";
+import useSavePromptToBlueprint from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/useSavePromptToBlueprint";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
+import useLoadBlueprintPrompt from "@/hooks/useLoadBlueprintPrompt";
+import { BlueprintPromptRef } from "@/types/playground";
+import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptProps {
   workspaceName: string;
@@ -57,7 +64,8 @@ interface PlaygroundPromptProps {
   isPendingProviderKeys: boolean;
   providerResolver: ProviderResolver;
   modelResolver: ModelResolver;
-  scrollToPromptRef: React.MutableRefObject<string>;
+  onRun?: () => void;
+  onStop?: () => void;
 }
 
 const PlaygroundPrompt = ({
@@ -68,13 +76,16 @@ const PlaygroundPrompt = ({
   isPendingProviderKeys,
   providerResolver,
   modelResolver,
-  scrollToPromptRef,
+  onRun,
+  onStop,
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
-  const queryClient = useQueryClient();
+  const activeProjectId = useActiveProjectId();
 
   const prompt = usePromptById(promptId);
+  const promptCount = usePromptCount();
   const datasetVariables = useDatasetVariables();
+  const datasetSampleData = useDatasetSampleData();
   const providerValidationTrigger = useProviderValidationTrigger();
 
   const [, setLastPickedModel] = useLastPickedModel({
@@ -83,37 +94,48 @@ const PlaygroundPrompt = ({
 
   const { model, messages, configs, name } = prompt;
 
-  const addPrompt = useAddPrompt();
   const updatePrompt = useUpdatePrompt();
   const deletePrompt = useDeletePrompt();
   const updateOutput = useUpdateOutput();
 
-  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
+
+  const [showSaveExistingDialog, setShowSaveExistingDialog] = useState(false);
+  const [showSaveAsNewFieldDialog, setShowSaveAsNewFieldDialog] =
     useState(false);
-  const [lastImportedPromptName, setLastImportedPromptName] =
-    useState<string>("");
 
-  // Get the loaded chat prompt ID from the prompt data
-  const selectedChatPromptId = prompt?.loadedChatPromptId;
+  const selectedBlueprintRef = prompt?.loadedBlueprintRef;
 
-  const handleChatPromptMessagesLoaded = useCallback(
-    (newMessages: LLMMessage[], promptName: string) => {
-      setLastImportedPromptName(promptName);
+  const handleBlueprintPromptLoaded = useCallback(
+    (newMessages: LLMMessage[]) => {
       updatePrompt(promptId, { messages: newMessages });
     },
     [promptId, updatePrompt],
   );
 
   const {
-    chatPromptData,
-    loadedChatPromptRef,
-    chatPromptTemplate,
-    hasUnsavedChatPromptChanges,
-  } = useLoadChatPrompt({
-    selectedChatPromptId,
+    prompt: blueprintPromptData,
+    loadedRef: loadedBlueprintRef,
+    template: blueprintPromptTemplate,
+    hasUnsavedChanges: hasUnsavedBlueprintChanges,
+  } = useLoadBlueprintPrompt({
+    selectedRef: selectedBlueprintRef,
     messages,
-    onMessagesLoaded: handleChatPromptMessagesLoaded,
+    onMessagesLoaded: handleBlueprintPromptLoaded,
+    skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
+
+  const { existingFieldNames, saveExistingVersion, saveAsNewField, isSaving } =
+    useSavePromptToBlueprint(activeProjectId!);
+
+  // Clear the one-time flag so it doesn't persist to localStorage
+  useEffect(() => {
+    if (prompt?.skipInitialPromptLoad) {
+      updatePrompt(promptId, { skipInitialPromptLoad: undefined });
+    }
+  }, [prompt?.skipInitialPromptLoad, promptId, updatePrompt]);
 
   const provider = providerResolver(model);
 
@@ -122,30 +144,24 @@ const PlaygroundPrompt = ({
     [datasetVariables],
   );
 
+  const hasMessageContent = messages.some((msg) =>
+    typeof msg.content === "string"
+      ? msg.content.trim()
+      : Array.isArray(msg.content) && msg.content.length > 0,
+  );
+
   const handleAddMessage = useCallback(() => {
     const newMessage = generateDefaultLLMPromptMessage();
     const lastMessage = last(messages);
 
     newMessage.role = lastMessage
-      ? getNextMessageType(lastMessage!)
+      ? getNextMessageType(lastMessage)
       : LLM_MESSAGE_ROLE.system;
 
     updatePrompt(promptId, {
       messages: [...messages, newMessage],
     });
   }, [messages, updatePrompt, promptId]);
-
-  const handleDuplicatePrompt = () => {
-    const newPrompt = generateDefaultPrompt({
-      initPrompt: prompt,
-      setupProviders: providerKeys,
-      providerResolver: providerResolver,
-      modelResolver: modelResolver,
-    });
-
-    addPrompt(newPrompt, index + 1);
-    scrollToPromptRef.current = newPrompt.id;
-  };
 
   const handleUpdateMessage = useCallback(
     (messages: LLMMessage[]) => {
@@ -240,7 +256,7 @@ const PlaygroundPrompt = ({
           configs: getDefaultConfigByProvider(newProvider, newModel),
         });
 
-        updateOutput(promptId, "", { value: "" });
+        updateOutput(promptId, "", { value: null });
       }
     }
   }, [
@@ -254,167 +270,217 @@ const PlaygroundPrompt = ({
     model,
   ]);
 
-  // Handler for importing chat prompt
-  const handleImportChatPrompt = useCallback(
-    (loadedPromptId: string) => {
-      updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
+  const handleImportBlueprintPrompt = useCallback(
+    (ref: BlueprintPromptRef) => {
+      updatePrompt(promptId, { loadedBlueprintRef: ref });
     },
     [promptId, updatePrompt],
   );
 
-  // Handler for saving chat prompt
-  const handleSaveChatPrompt = useCallback(() => {
-    setShowSaveChatPromptDialog(true);
-  }, []);
+  const handleDetachPrompt = useCallback(() => {
+    updatePrompt(promptId, { loadedBlueprintRef: undefined });
+  }, [promptId, updatePrompt]);
 
-  const setRef = useCallback(
-    (element: HTMLDivElement | null) => {
-      if (element && scrollToPromptRef.current === promptId) {
-        element?.scrollIntoView({
-          behavior: "smooth",
-          inline: "start",
-        });
-      }
+  const handleClickSave = useCallback(() => {
+    if (selectedBlueprintRef) {
+      setShowSaveExistingDialog(true);
+    } else {
+      setShowSaveAsNewFieldDialog(true);
+    }
+  }, [selectedBlueprintRef]);
+
+  const handleSaveExistingVersion = useCallback(
+    async (changeDescription: string) => {
+      if (!selectedBlueprintRef || !blueprintPromptData) return;
+      const result = await saveExistingVersion({
+        ref: selectedBlueprintRef,
+        promptName: blueprintPromptData.name,
+        template: blueprintPromptTemplate,
+        changeDescription: changeDescription || undefined,
+      });
+      if (!result) return;
+
+      updatePrompt(promptId, { loadedBlueprintRef: result.newRef });
+      loadedBlueprintRef.current = `${result.newRef.blueprintId}-${result.newRef.key}-${result.newRef.commitId}-${result.version.id}`;
+      setShowSaveExistingDialog(false);
     },
-    [promptId, scrollToPromptRef],
+    [
+      selectedBlueprintRef,
+      blueprintPromptData,
+      blueprintPromptTemplate,
+      saveExistingVersion,
+      updatePrompt,
+      promptId,
+      loadedBlueprintRef,
+    ],
   );
 
-  return (
-    <div
-      className="h-[var(--prompt-height)] w-full min-w-[var(--min-prompt-width)]"
-      style={
-        {
-          "--prompt-height": "calc(100% - 64px)",
-        } as React.CSSProperties
-      }
-      ref={setRef}
-    >
-      <div className="mb-2 flex h-8 items-center justify-between">
-        <p className="comet-body-s-accented">
-          {name} {getAlphabetLetter(index)}
-        </p>
+  const handleSaveAsNewField = useCallback(
+    async (fieldName: string, changeDescription: string) => {
+      const newRef = await saveAsNewField({
+        fieldName,
+        template: blueprintPromptTemplate,
+        changeDescription: changeDescription || undefined,
+      });
+      if (!newRef) return;
 
-        <div className="flex h-full flex-1 items-center justify-end gap-1">
-          <TooltipWrapper content={chatPromptData?.name || "Load chat prompt"}>
-            <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-              <PromptsSelectBox
-                value={selectedChatPromptId}
-                onValueChange={(value) =>
-                  value && handleImportChatPrompt(value)
-                }
-                clearable={false}
-                filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-              />
-            </div>
-          </TooltipWrapper>
-          <TooltipWrapper
-            content={
-              hasUnsavedChatPromptChanges
-                ? "This prompt version hasn't been saved"
-                : "Save as chat prompt"
-            }
-          >
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleSaveChatPrompt}
-              badge={hasUnsavedChatPromptChanges}
+      updatePrompt(promptId, { loadedBlueprintRef: newRef });
+      setShowSaveAsNewFieldDialog(false);
+    },
+    [saveAsNewField, blueprintPromptTemplate, updatePrompt, promptId],
+  );
+
+  const handleImproveAccept = useCallback(
+    (messageId: string, improvedContent: LLMMessage["content"]) => {
+      const updatedMessages = messages.map((msg) =>
+        msg.id === messageId ? { ...msg, content: improvedContent } : msg,
+      );
+      updatePrompt(promptId, { messages: updatedMessages });
+    },
+    [messages, updatePrompt, promptId],
+  );
+
+  const improvePromptConfig = useMemo(
+    () => ({
+      model,
+      provider,
+      configs,
+      workspaceName,
+      onAccept: handleImproveAccept,
+    }),
+    [model, provider, configs, workspaceName, handleImproveAccept],
+  );
+
+  const promptColor =
+    PLAYGROUND_PROMPT_COLORS[index % PLAYGROUND_PROMPT_COLORS.length];
+
+  const badgeColor = usePromptBadgeColor(promptId, promptColor);
+
+  return (
+    <div className="group/prompt flex min-w-[var(--min-prompt-width)] max-w-[var(--max-prompt-width)] flex-1 flex-col overflow-hidden border-r">
+      <div className="flex h-10 items-center justify-between overflow-hidden border-b px-4">
+        <div className="flex min-w-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1 pr-2">
+            <p className="comet-body-xs-accented whitespace-nowrap">{name}</p>
+            <span
+              className="comet-body-xs flex size-5 items-center justify-center rounded-md"
+              style={{
+                backgroundColor: badgeColor.bg,
+                color: badgeColor.text,
+              }}
             >
-              <Save />
-            </Button>
-          </TooltipWrapper>
-          <Separator orientation="vertical" className="h-6" />
-          <div className="h-full w-80">
-            <PromptModelSelect
-              value={model}
-              onChange={handleUpdateModel}
-              provider={provider}
-              workspaceName={workspaceName}
-              onAddProvider={handleAddProvider}
-              onDeleteProvider={handleDeleteProvider}
-              hasError={!model}
-            />
+              {getAlphabetLetter(index)}
+            </span>
           </div>
+          <PromptModelSelect
+            compact
+            value={model}
+            onChange={handleUpdateModel}
+            provider={provider}
+            workspaceName={workspaceName}
+            onAddProvider={handleAddProvider}
+            onDeleteProvider={handleDeleteProvider}
+            hasError={!model}
+          />
           <PromptModelConfigs
             provider={provider}
             model={model}
             configs={configs}
             onChange={handleUpdateConfig}
+            size="icon-xs"
+            variant="ghost"
           />
-          <Separator orientation="vertical" className="h-6" />
-          <TooltipWrapper content="Duplicate a prompt">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleDuplicatePrompt}
-            >
-              <CopyPlus />
-            </Button>
-          </TooltipWrapper>
+        </div>
 
-          <TooltipWrapper content="Delete a prompt">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={() => deletePrompt(promptId)}
-            >
-              <Trash />
-            </Button>
-          </TooltipWrapper>
+        <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
+          <BlueprintPromptsSelectBox
+            projectId={activeProjectId!}
+            value={selectedBlueprintRef}
+            onValueChange={handleImportBlueprintPrompt}
+            onClear={handleDetachPrompt}
+            hasUnsavedChanges={hasUnsavedBlueprintChanges}
+            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+          />
+
+          <div className="flex shrink-0 items-center">
+            {hasMessageContent && (
+              <TooltipWrapper
+                content={
+                  selectedBlueprintRef
+                    ? "Update prompt in agent configuration"
+                    : "Save as new field in agent configuration"
+                }
+              >
+                <Button
+                  variant="minimal"
+                  size="icon-sm"
+                  onClick={handleClickSave}
+                  disabled={!canCreatePrompts || isSaving}
+                >
+                  <Save />
+                </Button>
+              </TooltipWrapper>
+            )}
+
+            {promptCount > 1 && (
+              <>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <TooltipWrapper content="Remove prompt">
+                  <Button
+                    variant="minimal"
+                    size="icon-sm"
+                    onClick={() => deletePrompt(promptId)}
+                  >
+                    <Trash />
+                  </Button>
+                </TooltipWrapper>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
-      <LLMPromptMessages
-        messages={messages}
-        onChange={handleUpdateMessage}
-        onAddMessage={handleAddMessage}
-        promptVariables={promptVariablesArray}
-        hidePromptActions={false}
-        improvePromptConfig={{
-          model,
-          provider,
-          configs,
-          workspaceName,
-          onAccept: (messageId, improvedContent) => {
-            const updatedMessages = messages.map((msg) =>
-              msg.id === messageId ? { ...msg, content: improvedContent } : msg,
-            );
-            updatePrompt(promptId, { messages: updatedMessages });
-          },
-        }}
-      />
+      <div className="flex-1 overflow-y-auto p-4" data-scroll-container>
+        <LLMPromptMessages
+          messages={messages}
+          onChange={handleUpdateMessage}
+          onAddMessage={handleAddMessage}
+          promptVariables={promptVariablesArray}
+          jsonTreeData={datasetSampleData}
+          hidePromptActions={false}
+          improvePromptConfig={improvePromptConfig}
+        />
+      </div>
 
-      <AddNewPromptVersionDialog
-        open={showSaveChatPromptDialog}
-        setOpen={setShowSaveChatPromptDialog}
-        prompt={chatPromptData}
-        template={chatPromptTemplate}
-        templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
-        defaultName={lastImportedPromptName}
-        onSave={(version, promptName, savedPromptId) => {
-          setShowSaveChatPromptDialog(false);
+      {onRun && onStop && (
+        <PlaygroundRunButton
+          promptId={promptId}
+          onRun={onRun}
+          onStop={onStop}
+          className="flex items-center justify-end border-t px-4 py-2"
+        />
+      )}
 
-          // Update the loaded chat prompt ID to the saved prompt
-          if (savedPromptId) {
-            updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
+      {selectedBlueprintRef && blueprintPromptData && (
+        <SaveExistingPromptDialog
+          open={showSaveExistingDialog}
+          onOpenChange={setShowSaveExistingDialog}
+          promptName={blueprintPromptData.name}
+          fieldName={selectedBlueprintRef.key}
+          isSaving={isSaving}
+          onSave={handleSaveExistingVersion}
+        />
+      )}
 
-            // Update the ref to mark this new version as "already loaded"
-            // This prevents the useEffect from re-loading messages when we invalidate queries
-            const newChatPromptKey = `${savedPromptId}-${version.id}`;
-            loadedChatPromptRef.current = newChatPromptKey;
-
-            // Invalidate the prompt queries to refetch the latest data
-            // This ensures the unsaved changes indicator updates correctly
-            // CRITICAL: Query keys must match the format used in the hooks (objects, not strings)
-            queryClient.invalidateQueries({
-              queryKey: ["prompt", { promptId: savedPromptId }],
-            });
-            queryClient.invalidateQueries({
-              queryKey: ["prompt-version", { versionId: version.id }],
-            });
-          }
-        }}
-      />
+      {showSaveAsNewFieldDialog && (
+        <SaveAsNewBlueprintFieldDialog
+          open={showSaveAsNewFieldDialog}
+          onOpenChange={setShowSaveAsNewFieldDialog}
+          existingFieldNames={existingFieldNames}
+          isSaving={isSaving}
+          onSave={handleSaveAsNewField}
+        />
+      )}
     </div>
   );
 };

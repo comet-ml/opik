@@ -2,9 +2,7 @@ import React, { useMemo, useRef, useEffect } from "react";
 
 import useTraceById from "@/api/traces/useTraceById";
 import useRulesList from "@/api/automations/useRulesList";
-import useProjectByName from "@/api/projects/useProjectByName";
-import useAppStore from "@/store/AppStore";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { getScoreNamesFromRule } from "@/lib/rules";
 import PlaygroundOutputScores, { ScoreData } from "./PlaygroundOutputScores";
 
@@ -22,6 +20,7 @@ const PlaygroundOutputScoresContainer: React.FC<
   PlaygroundOutputScoresContainerProps
 > = ({ traceId, selectedRuleIds, stale = false, className }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const pollingStartTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -35,20 +34,15 @@ const PlaygroundOutputScoresContainer: React.FC<
   const hasRulesSelected =
     selectedRuleIds == null || selectedRuleIds.length > 0;
 
-  const { data: playgroundProject } = useProjectByName(
-    { projectName: PLAYGROUND_PROJECT_NAME },
-    { enabled: !!workspaceName && shouldShowMetrics && hasRulesSelected },
-  );
-
   const { data: rulesData } = useRulesList(
     {
       workspaceName,
-      projectId: playgroundProject?.id,
+      projectId: activeProjectId ?? undefined,
       page: 1,
       size: 100,
     },
     {
-      enabled: !!playgroundProject?.id && shouldShowMetrics && hasRulesSelected,
+      enabled: !!activeProjectId && shouldShowMetrics && hasRulesSelected,
     },
   );
 

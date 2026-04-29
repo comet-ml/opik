@@ -15,6 +15,7 @@ type EnvironmentVariablesOverwrite = {
   OPIK_NEW_RELIC_APP_ID: string;
   OPIK_POSTHOG_KEY: string;
   OPIK_POSTHOG_HOST: string;
+  OPIK_ANALYTICS_ENVIRONMENT?: string;
   PRODUCTION: boolean;
   ON_PREMISE: boolean;
 };

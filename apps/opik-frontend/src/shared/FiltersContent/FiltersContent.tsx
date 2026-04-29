@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useRef } from "react";
 import filter from "lodash/filter";
 import uniq from "lodash/uniq";
 import { Filter, FilterRowConfig, Filters } from "@/types/filters";
@@ -21,6 +21,25 @@ const FiltersContent = <TColumnData,>({
   config,
   className,
 }: FiltersContentProps<TColumnData>) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el) return;
+    if (el.scrollHeight <= el.clientHeight) return;
+
+    const atTop = el.scrollTop === 0;
+    const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight;
+    const scrollingDown = e.deltaY > 0;
+    const scrollingUp = e.deltaY < 0;
+
+    if ((atTop && scrollingUp) || (atBottom && scrollingDown)) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+    el.scrollTop += e.deltaY;
+  }, []);
+
   const onRemoveRow = useCallback(
     (id: string) => {
       setFilters((prev) => filter(prev, (f) => f.id !== id));
@@ -76,7 +95,11 @@ const FiltersContent = <TColumnData,>({
   };
 
   return (
-    <div className={cn("overflow-y-auto overflow-x-hidden py-4", className)}>
+    <div
+      ref={scrollRef}
+      className={cn("overflow-y-auto overflow-x-hidden py-4", className)}
+      onWheel={handleWheel}
+    >
       <table className="table-auto">
         <tbody>{renderFilters()}</tbody>
       </table>

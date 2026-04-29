@@ -3,6 +3,7 @@ import sys
 import pytest
 import opik.jsonable_encoder
 from opik.config import OPIK_PROJECT_DEFAULT_NAME
+from ... import llm_constants
 from ...testlib import (
     ANY,
     ANY_DICT,
@@ -24,7 +25,7 @@ def enable_haystack_content_tracing():
         yield
 
 
-MODEL_NAME = "gpt-4o"
+MODEL_NAME = llm_constants.OPENAI_GPT_NANO
 
 
 @pytest.mark.parametrize(
@@ -52,7 +53,15 @@ def test_haystack__happyflow(
     pipe = Pipeline()
     pipe.add_component("tracer", opik_connector)  # not necessary to add
     pipe.add_component("prompt_builder", ChatPromptBuilder())
-    pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
+    pipe.add_component(
+        "llm",
+        OpenAIChatGenerator(
+            model=MODEL_NAME,
+            generation_kwargs={
+                "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+            },
+        ),
+    )
 
     pipe.connect("prompt_builder.prompt", "llm.messages")
 
@@ -105,6 +114,7 @@ def test_haystack__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -116,6 +126,7 @@ def test_haystack__happyflow(
                 start_time=ANY_BUT_NONE,
                 end_time=ANY_BUT_NONE,
                 project_name=expected_project_name,
+                source="sdk",
             ),
             SpanModel(
                 id=ANY_BUT_NONE,
@@ -144,8 +155,10 @@ def test_haystack__happyflow(
                 },
                 model=ANY_STRING.starting_with(MODEL_NAME),
                 provider="openai",
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert len(fake_backend.trace_trees) == 1
@@ -168,7 +181,15 @@ def test_haystack__context_aware_tracing(fake_backend):
         pipe = Pipeline()
         pipe.add_component("tracer", opik_connector)
         pipe.add_component("prompt_builder", ChatPromptBuilder())
-        pipe.add_component("llm", OpenAIChatGenerator(model=MODEL_NAME))
+        pipe.add_component(
+            "llm",
+            OpenAIChatGenerator(
+                model=MODEL_NAME,
+                generation_kwargs={
+                    "reasoning_effort": llm_constants.OPENAI_REASONING_EFFORT,
+                },
+            ),
+        )
 
         pipe.connect("prompt_builder.prompt", "llm.messages")
 
@@ -233,6 +254,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 metadata=ANY_DICT,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -243,6 +265,7 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 start_time=ANY_BUT_NONE,
                                 end_time=ANY_BUT_NONE,
                                 metadata=ANY_DICT,
+                                source="sdk",
                             ),
                             SpanModel(
                                 id=ANY_BUT_NONE,
@@ -256,12 +279,16 @@ def test_haystack__context_aware_tracing(fake_backend):
                                 usage=ANY_DICT,
                                 model=ANY_STRING,
                                 provider="openai",
+                                source="sdk",
                             ),
                         ],
+                        source="sdk",
                     ),
                 ],
+                source="sdk",
             ),
         ],
+        source="sdk",
     )
 
     assert_equal(EXPECTED_TRACE_TREE, fake_backend.trace_trees[0])

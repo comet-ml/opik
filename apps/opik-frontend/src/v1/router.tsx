@@ -12,9 +12,14 @@ import WorkspaceGuard from "@/v1/layout/WorkspaceGuard/WorkspaceGuard";
 import ExperimentsPageGuard from "@/v1/layout/ExperimentsPageGuard";
 import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
+import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
+import OptimizationStudioPageGuard from "@/v1/layout/OptimizationStudioPageGuard";
+import OptimizationsPageGuard from "@/v1/layout/OptimizationsPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
-import CompareExperimentsPage from "@/v1/pages/CompareExperimentsPage/CompareExperimentsPage";
+const CompareExperimentsPage = lazy(
+  () => import("@/v1/pages/CompareExperimentsPage/CompareExperimentsPage"),
+);
 import HomePage from "@/v1/pages/HomePage/HomePage";
 import OldHomePage from "@/v1/pages/HomePage/OldHomePage";
 import PartialPageLayout from "@/v1/layout/PartialPageLayout/PartialPageLayout";
@@ -24,10 +29,12 @@ import ProjectsPage from "@/v1/pages/ProjectsPage/ProjectsPage";
 import TracesPage from "@/v1/pages/TracesPage/TracesPage";
 import WorkspacePage from "@/v1/pages/WorkspacePage/WorkspacePage";
 import PromptsPage from "@/v1/pages/PromptsPage/PromptsPage";
-import PromptPage from "@/v1/pages/PromptPage/PromptPage";
+const PromptPage = lazy(() => import("@/v1/pages/PromptPage/PromptPage"));
 import RedirectProjects from "@/v1/redirect/RedirectProjects";
 import RedirectDatasets from "@/v1/redirect/RedirectDatasets";
-import PlaygroundPage from "@/v1/pages/PlaygroundPage/PlaygroundPage";
+const PlaygroundPage = lazy(
+  () => import("@/v1/pages/PlaygroundPage/PlaygroundPage"),
+);
 import useAppStore from "@/store/AppStore";
 import ConfigurationPage from "@/v1/pages/ConfigurationPage/ConfigurationPage";
 import GetStartedPage from "@/v1/pages/GetStartedPage/GetStartedPage";
@@ -40,13 +47,17 @@ import OptimizationsNewPage from "@/v1/pages/OptimizationsPage/OptimizationsNewP
 import OptimizationPage from "@/v1/pages/OptimizationPage/OptimizationPage";
 import OptimizationCompareRedirect from "@/v1/pages/OptimizationPage/OptimizationCompareRedirect";
 import TrialPage from "@/v1/pages/TrialPage/TrialPage";
-import AlertsRouteWrapper from "@/v1/pages/AlertsPage/AlertsRouteWrapper";
+const AlertsRouteWrapper = lazy(
+  () => import("@/v1/pages/AlertsPage/AlertsRouteWrapper"),
+);
 import AlertEditPageGuard from "@/v1/layout/AlertEditPageGuard/AlertEditPageGuard";
 import DashboardPage from "@/v1/pages/DashboardPage/DashboardPage";
 import DashboardsPage from "@/v1/pages/DashboardsPage/DashboardsPage";
-import EvaluationSuitesPage from "@/v1/pages/EvaluationSuitesPage/EvaluationSuitesPage";
-import EvaluationSuitePage from "@/v1/pages/EvaluationSuitePage/EvaluationSuitePage";
-import EvaluationSuiteItemsPage from "@/v1/pages/EvaluationSuiteItemsPage/EvaluationSuiteItemsPage";
+import TestSuitesPage from "@/v1/pages/TestSuitesPage/TestSuitesPage";
+import TestSuitePage from "@/v1/pages/TestSuitePage/TestSuitePage";
+import TestSuiteItemsPage from "@/v1/pages/TestSuiteItemsPage/TestSuiteItemsPage";
+import PairV1Page from "@/v1/pages/PairV1Page/PairV1Page";
+import PairRouteVersionGuard from "@/shared/WorkspaceVersionResolver/PairRouteVersionGuard";
 
 const TanStackRouterDevtools =
   process.env.NODE_ENV === "production"
@@ -90,6 +101,33 @@ const workspaceGuardEmptyLayoutRoute = createRoute({
   id: "workspaceGuardEmptyLayout",
   getParentRoute: () => rootRoute,
   component: () => <WorkspaceGuard Layout={EmptyPageLayout} />,
+});
+
+// ----------- pairing (root-level, no layout — V1 shows upgrade-required screen)
+// TanStack strips the router basepath before matching, so the canonical
+// route is basepath-relative: "/pair/v1" covers cloud (basepath "/opik"
+// → URL "/opik/pair/v1" strips to "/pair/v1").
+//
+// The legacy "/opik/pair/v1" alias below is an OSS-only fallback: the
+// Python SDK hardcodes "{origin}/opik/pair/v1" regardless of deployment
+// (see sdks/python/src/opik/cli/pairing.py), so on OSS (basepath "/") the
+// "/opik/" prefix isn't stripped and the router sees "/opik/pair/v1".
+// TODO: make the Python SDK build basepath-aware pairing URLs and drop
+// this alias once shipped CLI versions roll over.
+const PairRouteComponent = () => (
+  <PairRouteVersionGuard>
+    <PairV1Page />
+  </PairRouteVersionGuard>
+);
+const pairingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/pair/v1",
+  component: PairRouteComponent,
+});
+const pairingRouteOssAlias = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/opik/pair/v1",
+  component: PairRouteComponent,
 });
 
 const baseRoute = createRoute({
@@ -236,6 +274,7 @@ const compareExperimentsRoute = createRoute({
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => workspaceRoute,
+  component: OptimizationsPageGuard,
   staticData: {
     title: "Optimization studio",
   },
@@ -250,11 +289,17 @@ const optimizationsListRoute = createRoute({
 const optimizationsNewRoute = createRoute({
   path: "/new",
   getParentRoute: () => optimizationsRoute,
-  component: OptimizationsNewPage,
+  component: OptimizationStudioPageGuard,
   staticData: {
     param: "optimizationsNew",
     paramValue: "new",
   },
+});
+
+const optimizationsNewIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => optimizationsNewRoute,
+  component: OptimizationsNewPage,
 });
 
 const optimizationCompareRedirectRoute = createRoute({
@@ -287,34 +332,34 @@ const trialRoute = createRoute({
   },
 });
 
-// ----------- evaluation suites
-const evaluationSuitesRoute = createRoute({
-  path: "/evaluation-suites",
+// ----------- test suites
+const testSuitesRoute = createRoute({
+  path: "/test-suites",
   getParentRoute: () => workspaceRoute,
   staticData: {
     title: "Datasets",
   },
 });
 
-const evaluationSuitesListRoute = createRoute({
+const testSuitesListRoute = createRoute({
   path: "/",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitesPage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitesPage,
 });
 
-const evaluationSuiteRoute = createRoute({
+const testSuiteRoute = createRoute({
   path: "/$suiteId",
-  getParentRoute: () => evaluationSuitesRoute,
-  component: EvaluationSuitePage,
+  getParentRoute: () => testSuitesRoute,
+  component: TestSuitePage,
   staticData: {
     param: "suiteId",
   },
 });
 
-const evaluationSuiteItemsRoute = createRoute({
+const testSuiteItemsRoute = createRoute({
   path: "/items",
-  getParentRoute: () => evaluationSuiteRoute,
-  component: EvaluationSuiteItemsPage,
+  getParentRoute: () => testSuiteRoute,
+  component: TestSuiteItemsPage,
 });
 
 // ----------- datasets (legacy redirects)
@@ -329,7 +374,7 @@ const datasetsListRoute = createRoute({
   getParentRoute: () => datasetsRoute,
   component: () => (
     <Navigate
-      to="/$workspaceName/evaluation-suites"
+      to="/$workspaceName/test-suites"
       params={{ workspaceName: useAppStore.getState().activeWorkspaceName }}
     />
   ),
@@ -347,7 +392,7 @@ const datasetRedirectRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId"
+        to="/$workspaceName/test-suites/$suiteId"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -364,7 +409,7 @@ const datasetItemsRoute = createRoute({
     const { datasetId } = datasetRoute.useParams();
     return (
       <Navigate
-        to="/$workspaceName/evaluation-suites/$suiteId/items"
+        to="/$workspaceName/test-suites/$suiteId/items"
         params={{
           workspaceName: useAppStore.getState().activeWorkspaceName,
           suiteId: datasetId,
@@ -437,6 +482,12 @@ const playgroundRoute = createRoute({
   staticData: {
     title: "Playground",
   },
+  component: PlaygroundPageGuard,
+});
+
+const playgroundIndexRoute = createRoute({
+  path: "/",
+  getParentRoute: () => playgroundRoute,
   component: PlaygroundPage,
 });
 
@@ -521,6 +572,8 @@ const automationLogsRoute = createRoute({
 });
 
 const routeTree = rootRoute.addChildren([
+  pairingRoute,
+  pairingRouteOssAlias,
   workspaceGuardEmptyLayoutRoute.addChildren([automationLogsRoute]),
   workspaceGuardPartialLayoutRoute.addChildren([
     quickstartRoute,
@@ -541,13 +594,13 @@ const routeTree = rootRoute.addChildren([
         experimentsListRoute,
         compareExperimentsRoute,
       ]),
-      evaluationSuitesRoute.addChildren([
-        evaluationSuitesListRoute,
-        evaluationSuiteRoute.addChildren([evaluationSuiteItemsRoute]),
+      testSuitesRoute.addChildren([
+        testSuitesListRoute,
+        testSuiteRoute.addChildren([testSuiteItemsRoute]),
       ]),
       optimizationsRoute.addChildren([
         optimizationsListRoute,
-        optimizationsNewRoute,
+        optimizationsNewRoute.addChildren([optimizationsNewIndexRoute]),
         optimizationCompareRedirectRoute,
         optimizationBaseRoute.addChildren([optimizationRoute, trialRoute]),
       ]),
@@ -561,7 +614,7 @@ const routeTree = rootRoute.addChildren([
         redirectProjectsRoute,
         redirectDatasetsRoute,
       ]),
-      playgroundRoute,
+      playgroundRoute.addChildren([playgroundIndexRoute]),
       configurationRoute,
       alertsRoute.addChildren([alertNewRoute, alertEditRoute]),
       onlineEvaluationRoute,

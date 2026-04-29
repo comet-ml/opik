@@ -3,6 +3,7 @@ import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryParam, StringParam } from "use-query-params";
 import useAppStore from "@/store/AppStore";
+import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import useGetOrCreateDemoDataset from "@/api/datasets/useGetOrCreateDemoDataset";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
 import {
@@ -21,6 +22,13 @@ const OptimizationsNewPage: React.FC = () => {
   const { getOrCreateDataset } = useGetOrCreateDemoDataset();
   const datasetCreationRef = useRef<string | null>(null);
   const [isPreparingDataset, setIsPreparingDataset] = useState(false);
+
+  useEffect(() => {
+    trackEvent(OpikEvent.OPTIMIZATION_WIZARD_STARTED, {
+      from_template: Boolean(templateId),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const templateData = useMemo(
     () => OPTIMIZATION_DEMO_TEMPLATES.find((t) => t.id === templateId) ?? null,

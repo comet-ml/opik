@@ -11,6 +11,10 @@ on:
         "apps/opik-documentation/documentation/fern/img/**.png",
         "apps/opik-documentation/documentation/fern/img/**.webp",
       ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 jobs:
   build:
     # Only run on non-draft PRs within the same repository.

@@ -29,4 +29,4 @@ def evaluate_llm_conversation_context(
 
         trace_data.init_end_time()
 
-        client.trace(**trace_data.as_parameters)
+        client.__internal_api__trace__(**trace_data.as_parameters)

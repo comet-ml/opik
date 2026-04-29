@@ -24,6 +24,7 @@ import GroupsAccordionSection, {
 } from "@/shared/GroupsAccordionSection/GroupsAccordionSection";
 import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/DatasetSelectBox";
 import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/ExperimentsPathsAutocomplete/ExperimentsPathsAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import ExperimentFilterSelectBox from "./ExperimentFilterSelectBox";
 import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 
@@ -61,7 +62,7 @@ const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
 const EXPERIMENT_GROUP_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Evaluation suite",
+    label: "Test suite",
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -86,6 +87,7 @@ interface ExperimentWidgetDataSectionProps<T extends FieldValues> {
   groups?: Groups;
   onFiltersChange?: (filters: Filters) => void;
   onGroupsChange?: (groups: Groups) => void;
+  projectId?: string | null;
   className?: string;
 }
 
@@ -97,6 +99,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
   groups,
   onFiltersChange,
   onGroupsChange,
+  projectId,
   className = "",
 }: ExperimentWidgetDataSectionProps<T>) => {
   const { field: filtersField } = useController({
@@ -133,6 +136,7 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
           },
           keyComponentProps: {
             className: "w-full min-w-72",
+            ...(projectId && { projectId }),
           },
           defaultOperator: "=" as FilterOperator,
           operators: [{ label: "=", value: "=" as FilterOperator }],
@@ -150,9 +154,13 @@ const ExperimentWidgetDataSection = <T extends FieldValues>({
             excludeRoot: true,
           },
         },
+        ...getTagsFilterConfig({
+          projectId: projectId ?? "",
+          entityType: "experiments",
+        }),
       },
     }),
-    [],
+    [projectId],
   );
 
   const setFilters = useCallback(

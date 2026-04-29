@@ -3,7 +3,6 @@ import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import { OpikBaseModel } from "@/evaluation/models/OpikBaseModel";
 import type { LLMJudgeConfig } from "@/evaluation/suite_evaluators/llmJudgeConfig";
 
-// Mock model for testing
 class MockModel extends OpikBaseModel {
   public lastMessages: unknown[] = [];
   public lastOptions: Record<string, unknown> = {};
@@ -34,13 +33,12 @@ class MockModel extends OpikBaseModel {
   }
 }
 
-// Mock resolveModel so LLMJudge doesn't need real API keys
 vi.mock("@/evaluation/models/modelsFactory", () => ({
   resolveModel: vi.fn(
     (_model?: unknown) =>
       new MockModel(
         JSON.stringify({
-          "assertion-a": {
+          assertion_1: {
             score: true,
             reason: "Looks good",
             confidence: 0.95,
@@ -72,6 +70,14 @@ describe("LLMJudge", () => {
       expect(judge.modelName).toBe("gpt-5-nano");
     });
 
+    it("should default reasoningEffort to 'low'", () => {
+      const judge = new LLMJudge({
+        assertions: ["Is correct"],
+        track: false,
+      });
+      expect(judge.reasoningEffort).toBe("low");
+    });
+
     it("should accept custom name", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
@@ -99,6 +105,15 @@ describe("LLMJudge", () => {
       });
       expect(judge.seed).toBe(42);
       expect(judge.temperature).toBe(0.5);
+    });
+
+    it("should store custom reasoningEffort", () => {
+      const judge = new LLMJudge({
+        assertions: ["Is correct"],
+        reasoningEffort: "high",
+        track: false,
+      });
+      expect(judge.reasoningEffort).toBe("high");
     });
 
     it("should store projectName", () => {
@@ -149,10 +164,10 @@ describe("LLMJudge", () => {
           name: "gpt-4o",
           temperature: 0.3,
           seed: 42,
+          customParameters: { reasoning_effort: "low" },
         },
       });
 
-      // Check messages
       expect(config.messages).toBeInstanceOf(Array);
       const messages = config.messages as Array<{
         role: string;
@@ -162,7 +177,6 @@ describe("LLMJudge", () => {
       expect(messages[0].role).toBe("SYSTEM");
       expect(messages[1].role).toBe("USER");
 
-      // Check schema
       expect(config.schema).toBeInstanceOf(Array);
       const schema = config.schema as Array<{
         name: string;
@@ -182,7 +196,7 @@ describe("LLMJudge", () => {
       });
     });
 
-    it("should include variables with input, output, and assertions", () => {
+    it("should include variables with input and output paths", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
         track: false,
@@ -191,12 +205,10 @@ describe("LLMJudge", () => {
       const config = judge.toConfig();
       const variables = config.variables as Record<string, string>;
 
-      expect(variables).toHaveProperty("input");
-      expect(variables).toHaveProperty("output");
-      expect(variables).toHaveProperty("assertions");
+      expect(variables).toEqual({ input: "input", output: "output" });
     });
 
-    it("should omit undefined temperature and seed from model config", () => {
+    it("should omit undefined temperature and seed from model config but include customParameters", () => {
       const judge = new LLMJudge({
         assertions: ["Is correct"],
         track: false,
@@ -207,6 +219,37 @@ describe("LLMJudge", () => {
 
       expect(model.temperature).toBeUndefined();
       expect(model.seed).toBeUndefined();
+      expect(model.customParameters).toEqual({ reasoning_effort: "low" });
+    });
+
+    it("should use indexed keys in user prompt assertions", () => {
+      const judge = new LLMJudge({
+        assertions: ["Output is relevant", "Output is concise"],
+        track: false,
+      });
+
+      const config = judge.toConfig();
+      const messages = config.messages as Array<{ content: string }>;
+      const userContent = messages[1].content;
+
+      expect(userContent).toContain("`assertion_1`: Output is relevant");
+      expect(userContent).toContain("`assertion_2`: Output is concise");
+    });
+
+    it("should include BEGIN/END delimiters in user prompt", () => {
+      const judge = new LLMJudge({
+        assertions: ["Is correct"],
+        track: false,
+      });
+
+      const config = judge.toConfig();
+      const messages = config.messages as Array<{ content: string }>;
+      const userContent = messages[1].content;
+
+      expect(userContent).toContain("---BEGIN INPUT---");
+      expect(userContent).toContain("---END INPUT---");
+      expect(userContent).toContain("---BEGIN OUTPUT---");
+      expect(userContent).toContain("---END OUTPUT---");
     });
   });
 
@@ -219,12 +262,13 @@ describe("LLMJudge", () => {
           name: "gpt-4o",
           temperature: 0.5,
           seed: 123,
+          customParameters: { reasoning_effort: "high" },
         },
         messages: [
           { role: "SYSTEM", content: "system prompt" },
           { role: "USER", content: "user prompt" },
         ],
-        variables: { input: "string", output: "string", assertions: "string" },
+        variables: { input: "input", output: "output" },
         schema: [
           {
             name: "Output is relevant",
@@ -245,10 +289,31 @@ describe("LLMJudge", () => {
       expect(judge.modelName).toBe("gpt-4o");
       expect(judge.temperature).toBe(0.5);
       expect(judge.seed).toBe(123);
+      expect(judge.reasoningEffort).toBe("high");
       expect(judge.assertions).toEqual([
         "Output is relevant",
         "Output is concise",
       ]);
+    });
+
+    it("should default reasoningEffort to 'low' when not in config", () => {
+      const config: LLMJudgeConfig = {
+        version: "1.0.0",
+        name: "judge",
+        model: { name: "gpt-5-nano" },
+        messages: [
+          { role: "SYSTEM", content: "sys" },
+          { role: "USER", content: "usr" },
+        ],
+        variables: {},
+        schema: [
+          { name: "Is correct", type: "BOOLEAN", description: "Is correct" },
+        ],
+      };
+
+      const judge = LLMJudge.fromConfig(config);
+
+      expect(judge.reasoningEffort).toBe("low");
     });
 
     it("should support model override via options", () => {
@@ -270,6 +335,55 @@ describe("LLMJudge", () => {
 
       expect(judge.modelName).toBe("gpt-4o");
     });
+
+    it("should prefer description over name for assertions (UI-created configs)", () => {
+      const config: LLMJudgeConfig = {
+        version: "1.0.0",
+        name: "ui_judge",
+        model: { name: "gpt-5-nano" },
+        messages: [
+          { role: "SYSTEM", content: "sys" },
+          { role: "USER", content: "usr" },
+        ],
+        variables: {},
+        schema: [
+          {
+            name: "Correctness",
+            type: "BOOLEAN",
+            description: "Whether the output is factually correct",
+          },
+          {
+            name: "Helpfulness",
+            type: "BOOLEAN",
+            description: "Whether the output is helpful to the user",
+          },
+        ],
+      };
+
+      const judge = LLMJudge.fromConfig(config);
+
+      expect(judge.assertions).toEqual([
+        "Whether the output is factually correct",
+        "Whether the output is helpful to the user",
+      ]);
+    });
+
+    it("should fall back to name when description is missing", () => {
+      const config = {
+        version: "1.0.0",
+        name: "legacy_judge",
+        model: { name: "gpt-5-nano" },
+        messages: [],
+        variables: {},
+        schema: [
+          { name: "Is correct", type: "BOOLEAN" },
+        ],
+      } as unknown as LLMJudgeConfig;
+
+      const judge = LLMJudge.fromConfig(config);
+
+      expect(judge.assertions).toEqual(["Is correct"]);
+    });
   });
 
   describe("round-trip (toConfig -> fromConfig)", () => {
@@ -280,19 +394,20 @@ describe("LLMJudge", () => {
         model: "gpt-4o",
         temperature: 0.7,
         seed: 99,
+        reasoningEffort: "medium",
         track: false,
       });
 
       const config = original.toConfig();
-      const restored = LLMJudge.fromConfig(
-        config as LLMJudgeConfig,
-        { track: false }
-      );
+      const restored = LLMJudge.fromConfig(config as LLMJudgeConfig, {
+        track: false,
+      });
 
       expect(restored.name).toBe(original.name);
       expect(restored.modelName).toBe(original.modelName);
       expect(restored.temperature).toBe(original.temperature);
       expect(restored.seed).toBe(original.seed);
+      expect(restored.reasoningEffort).toBe(original.reasoningEffort);
       expect(restored.assertions).toEqual(original.assertions);
     });
   });
@@ -301,12 +416,12 @@ describe("LLMJudge", () => {
     it("should return ScoreResult[] with one entry per assertion", async () => {
       const mockModel = new MockModel(
         JSON.stringify({
-          "Output is relevant": {
+          assertion_1: {
             score: true,
             reason: "Relevant",
             confidence: 0.9,
           },
-          "Output is concise": {
+          assertion_2: {
             score: false,
             reason: "Too long",
             confidence: 0.8,
@@ -314,10 +429,7 @@ describe("LLMJudge", () => {
         })
       );
 
-      // Need to re-mock resolveModel for this specific test
-      const modelsFactory = await import(
-        "@/evaluation/models/modelsFactory"
-      );
+      const modelsFactory = await import("@/evaluation/models/modelsFactory");
       vi.mocked(modelsFactory.resolveModel).mockReturnValue(mockModel);
 
       const judge = new LLMJudge({
@@ -351,9 +463,7 @@ describe("LLMJudge", () => {
         throw new Error("LLM API error");
       };
 
-      const modelsFactory = await import(
-        "@/evaluation/models/modelsFactory"
-      );
+      const modelsFactory = await import("@/evaluation/models/modelsFactory");
       vi.mocked(modelsFactory.resolveModel).mockReturnValue(failingModel);
 
       const judge = new LLMJudge({

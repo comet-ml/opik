@@ -59,7 +59,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
         name: `test-prompt-explicit-${Date.now()}`,
         prompt: "Answer: {{question}}",
       });
-      createdPromptIds.push(prompt.id);
+      createdPromptIds.push(prompt.id!);
 
       // Run evaluation WITH explicit client and projectName
       const result = await evaluate({
@@ -125,7 +125,7 @@ describe.skipIf(!shouldRunApiTests)("Project Context Integration", () => {
           name: `test-prompt-fallback-${Date.now()}`,
           prompt: "Answer: {{question}}",
         });
-        createdPromptIds.push(prompt.id);
+        createdPromptIds.push(prompt.id!);
 
         const dataset = await client.getOrCreateDataset(
           `test-dataset-fallback-${Date.now()}`

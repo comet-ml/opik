@@ -43,6 +43,7 @@ const usePromptUpdateMutation = () => {
       queryClient.invalidateQueries({
         queryKey: ["prompt", { promptId: variables.prompt.id }],
       });
+      queryClient.invalidateQueries({ queryKey: ["project-prompts"] });
       return queryClient.invalidateQueries({ queryKey: ["prompts"] });
     },
   });

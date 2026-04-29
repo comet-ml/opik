@@ -2,7 +2,7 @@
 
 A Helm chart for Comet Opik
 
-![Version: 1.10.42](https://img.shields.io/badge/Version-1.10.42-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 1.10.42](https://img.shields.io/badge/AppVersion-1.10.42-informational?style=flat-square)
+![Version: 2.0.15](https://img.shields.io/badge/Version-2.0.15-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.15](https://img.shields.io/badge/AppVersion-2.0.15-informational?style=flat-square)
 [![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/opik)](https://artifacthub.io/packages/search?repo=opik)
 
 # Run Comet Opik with Helm
@@ -228,6 +228,11 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.ANALYTICS_DB_PROTOCOL | string | `"HTTP"` |  |
 | component.backend.env.ANALYTICS_DB_USERNAME | string | `"opik"` |  |
 | component.backend.env.JAVA_OPTS | string | `"-Dliquibase.propertySubstitutionEnabled=true -XX:+UseG1GC -XX:MaxRAMPercentage=80.0 -XX:MinRAMPercentage=75"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_DEFAULT_RESOURCE | string | `"llm-models-default.yaml"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_LOCAL_OVERRIDE_PATH | string | `""` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REFRESH_INTERVAL_SECONDS | string | `"300"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REMOTE_ENABLED | string | `"false"` |  |
+| component.backend.env.LLM_MODEL_REGISTRY_REMOTE_URL | string | `""` |  |
 | component.backend.env.OPIK_OTEL_SDK_ENABLED | bool | `false` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_EXPORTER_OTLP_RETRY_ENABLED | bool | `true` |  |
 | component.backend.env.OTEL_EXPERIMENTAL_RESOURCE_DISABLED_KEYS | string | `"process.command_args"` |  |
@@ -242,6 +247,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.env.STATE_DB_PROTOCOL | string | `"jdbc:mysql://"` |  |
 | component.backend.env.STATE_DB_URL | string | `"opik-mysql:3306/opik?rewriteBatchedStatements=true"` |  |
 | component.backend.env.STATE_DB_USER | string | `"opik"` |  |
+| component.backend.env.UI_DEFAULT_PAGE_SIZE | string | `"100"` |  |
 | component.backend.envFrom[0].configMapRef.name | string | `"opik-backend"` |  |
 | component.backend.image.pullPolicy | string | `"IfNotPresent"` |  |
 | component.backend.image.repository | string | `"opik-backend"` |  |
@@ -266,6 +272,7 @@ Call opik api on http://localhost:5173/api
 | component.backend.replicaCount | int | `1` |  |
 | component.backend.resources.requests.ephemeral-storage | string | `"10Gi"` |  |
 | component.backend.run_migration | bool | `true` |  |
+| component.backend.run_migration_resources | object | `{}` |  |
 | component.backend.service.ports[0].name | string | `"http"` |  |
 | component.backend.service.ports[0].port | int | `8080` |  |
 | component.backend.service.ports[0].protocol | string | `"TCP"` |  |
@@ -283,12 +290,14 @@ Call opik api on http://localhost:5173/api
 | component.backend.waitForClickhouse.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForClickhouse.image.repository | string | `"curlimages/curl"` |  |
 | component.backend.waitForClickhouse.image.tag | string | `"8.12.1"` |  |
+| component.backend.waitForClickhouse.resources | object | `{}` |  |
 | component.backend.waitForMysql.enabled | bool | `false` |  |
 | component.backend.waitForMysql.image.registry | string | `"docker.io"` |  |
 | component.backend.waitForMysql.image.repository | string | `"busybox"` |  |
 | component.backend.waitForMysql.image.tag | float | `1.36` |  |
 | component.backend.waitForMysql.mysql.host | string | `"opik-mysql"` |  |
 | component.backend.waitForMysql.mysql.port | int | `3306` |  |
+| component.backend.waitForMysql.resources | object | `{}` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].periodSeconds | int | `60` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].type | string | `"Percent"` |  |
 | component.frontend.autoscaling.behavior.scaleDown.policies[0].value | int | `50` |  |
@@ -313,6 +322,7 @@ Call opik api on http://localhost:5173/api
 | component.frontend.cacheControl[4].value | string | `"no-cache, must-revalidate"` |  |
 | component.frontend.contentSecurityPolicy.base-uri[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.child-src[0] | string | `"'self'"` |  |
+| component.frontend.contentSecurityPolicy.child-src[1] | string | `"https://cdn.comet.com"` |  |
 | component.frontend.contentSecurityPolicy.connect-src[0] | string | `"'self'"` |  |
 | component.frontend.contentSecurityPolicy.connect-src[1] | string | `"ws:"` |  |
 | component.frontend.contentSecurityPolicy.connect-src[2] | string | `"wss:"` |  |

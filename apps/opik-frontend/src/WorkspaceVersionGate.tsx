@@ -8,67 +8,36 @@
  * We break the circle with two levels of checks:
  *
  * Level 1 — WorkspaceVersionGate (this component, BEFORE the router):
- *   1. Check localStorage override ("opik-version-override") → use immediately
- *   2. Try to parse workspace name from window.location.pathname
- *   3. If found → fetch version from API with per-request Comet-Workspace header
- *   4. If not found (e.g. root "/") → default to v1 optimistically
- *   5. Render the correct App (V1App or V2App) based on resolved version
+ *   resolveSyncWorkspaceVersion() always returns a version synchronously
+ *   from: override > per-workspace cache > DEFAULT_WORKSPACE_VERSION.
+ *   First paint renders the chosen App immediately — no Loader, no API
+ *   call at this stage.
  *
  * Level 2 — WorkspaceVersionResolver (INSIDE the router, after WorkspacePreloader):
  *   1. Workspace is now fully resolved (auth, access, header set)
  *   2. Fetch version via React Query (reuses existing providers)
- *   3. If version matches what the gate picked → continue
- *   4. If mismatch → hard reload (URL now contains workspace → Level 1 gets it right)
+ *   3. Write the resolved version to the localStorage cache
+ *   4. If it disagrees with what the gate picked → hard reload so the next
+ *      module load picks the correct App synchronously from the cache.
  *
- * This ensures the correct router loads on first paint when workspace is in
- * the URL, and self-corrects via reload in the rare optimistic-default case.
+ * Reload is required because each App instantiates its own TanStack Router
+ * at module scope. Swapping apps in place leaves the inactive router's URL
+ * state stale and causes the two WorkspacePreloaders to disagree on the
+ * active workspace. A full reload re-evaluates modules with the current
+ * browser URL and resets both routers to a consistent initial state.
  */
-import React, { Suspense, useEffect } from "react";
+import React, { Suspense } from "react";
 import useAppStore, { useWorkspaceVersion } from "@/store/AppStore";
-import { fetchWorkspaceVersion } from "@/api/workspaces/useWorkspaceVersion";
-import {
-  DEFAULT_WORKSPACE_VERSION,
-  getVersionOverride,
-  getWorkspaceNameFromPath,
-} from "@/lib/workspaceVersion";
+import { resolveSyncWorkspaceVersion } from "@/lib/workspaceVersion";
 import Loader from "@/shared/Loader/Loader";
 
 const V1App = React.lazy(() => import("@/v1/App"));
 const V2App = React.lazy(() => import("@/v2/App"));
 
+useAppStore.getState().setWorkspaceVersion(resolveSyncWorkspaceVersion());
+
 const WorkspaceVersionGate = () => {
   const version = useWorkspaceVersion();
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function resolve() {
-      const override = getVersionOverride();
-      if (override) {
-        useAppStore.getState().setWorkspaceVersion(override);
-        return;
-      }
-
-      const workspaceName = getWorkspaceNameFromPath();
-      if (workspaceName) {
-        const resolved = await fetchWorkspaceVersion({ workspaceName });
-        if (!cancelled) {
-          useAppStore.getState().setWorkspaceVersion(resolved);
-        }
-      } else {
-        useAppStore.getState().setWorkspaceVersion(DEFAULT_WORKSPACE_VERSION);
-      }
-    }
-    resolve();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!version) {
-    return <Loader />;
-  }
 
   return (
     <Suspense fallback={<Loader />}>

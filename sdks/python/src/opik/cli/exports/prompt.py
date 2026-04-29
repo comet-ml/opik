@@ -7,11 +7,11 @@ from pathlib import Path
 from typing import Any, List, Optional, Union
 
 import click
-from rich.console import Console
 
 import opik
 from opik.api_objects.prompt import Prompt, ChatPrompt
 from .utils import (
+    console,
     debug_print,
     prompt_to_csv_rows,
     should_skip_file,
@@ -19,8 +19,6 @@ from .utils import (
     write_json_data,
     print_export_summary,
 )
-
-console = Console()
 
 
 def _get_prompt_content(prompt: Any) -> Any:
@@ -104,10 +102,21 @@ def export_single_prompt(
 
         # Get prompt history - use appropriate method based on prompt type
         prompt_history: List[Union[Prompt, ChatPrompt]]
-        if isinstance(prompt, ChatPrompt):
-            prompt_history = list(client.get_chat_prompt_history(prompt.name))
-        else:
-            prompt_history = list(client.get_prompt_history(prompt.name))
+        try:
+            if isinstance(prompt, ChatPrompt):
+                prompt_history = list(client.get_chat_prompt_history(prompt.name))
+            else:
+                prompt_history = list(client.get_prompt_history(prompt.name))
+        except (ValueError, Exception):
+            # History lookup may fail if the prompt is not associated with the
+            # default project (get_prompt_history filters by project_id internally).
+            # Fall back to empty history so the current version is still exported.
+            if debug:
+                debug_print(
+                    f"Could not fetch history for prompt '{prompt.name}', exporting current version only",
+                    debug,
+                )
+            prompt_history = []
 
         # Create prompt data structure
         prompt_data = {
@@ -452,10 +461,15 @@ def export_related_prompts_by_name(
 
                 # Get prompt history - use appropriate method based on prompt type
                 prompt_history: List[Union[Prompt, ChatPrompt]]
-                if isinstance(prompt, ChatPrompt):
-                    prompt_history = list(client.get_chat_prompt_history(prompt.name))
-                else:
-                    prompt_history = list(client.get_prompt_history(prompt.name))
+                try:
+                    if isinstance(prompt, ChatPrompt):
+                        prompt_history = list(
+                            client.get_chat_prompt_history(prompt.name)
+                        )
+                    else:
+                        prompt_history = list(client.get_prompt_history(prompt.name))
+                except (ValueError, Exception):
+                    prompt_history = []
 
                 # Create prompt data structure
                 prompt_data = {

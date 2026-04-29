@@ -28,11 +28,12 @@ import {
 import TextDiff from "@/shared/CodeDiff/TextDiff";
 import MediaTagsList from "@/v2/pages-shared/llm/PromptMessageMediaTags/MediaTagsList";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
+import { useActiveProjectId } from "@/store/AppStore";
 import useCreatePromptVersionMutation from "@/api/prompts/useCreatePromptVersionMutation";
 import { useBooleanTimeoutState } from "@/hooks/useBooleanTimeoutState";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { isValidJsonObject, safelyParseJSON } from "@/lib/utils";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Description } from "@/ui/description";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { useMessageContent } from "@/hooks/useMessageContent";
@@ -75,6 +76,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
   type: promptType,
   onSetActiveVersionId,
 }) => {
+  const activeProjectId = useActiveProjectId();
   const isChatPrompt = templateStructure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
 
   const [previewMode, setPreviewMode] = useState<PROMPT_PREVIEW_MODE>(
@@ -150,6 +152,7 @@ const EditPromptVersionDialog: React.FC<EditPromptVersionDialogProps> = ({
       ...(metadata && { metadata: safelyParseJSON(metadata) }),
       ...(templateStructure && { templateStructure }),
       ...(promptType && { type: promptType }),
+      projectId: activeProjectId ?? undefined,
       onSuccess: (data) => {
         onSetActiveVersionId(data.id);
       },

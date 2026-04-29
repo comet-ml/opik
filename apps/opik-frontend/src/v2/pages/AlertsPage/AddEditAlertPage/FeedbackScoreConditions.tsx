@@ -20,6 +20,7 @@ type FeedbackScoreConditionsProps = {
   form: UseFormReturn<AlertFormType>;
   triggerIndex: number;
   eventType: ALERT_EVENT_TYPE;
+  projectId: string;
 };
 
 export const DEFAULT_FEEDBACK_SCORE_CONDITION: FeedbackScoreConditionType = {
@@ -51,6 +52,7 @@ const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
   form,
   triggerIndex,
   eventType,
+  projectId,
 }) => {
   const conditionsFieldArray = useFieldArray({
     control: form.control,
@@ -141,6 +143,7 @@ const FeedbackScoreConditions: React.FC<FeedbackScoreConditionsProps> = ({
                             value={field.value as string}
                             onChange={field.onChange}
                             scoreSource={scoreSource}
+                            entityIds={[projectId]}
                             multiselect={false}
                             className={cn("h-8 rounded-r-none", {
                               "border-destructive": Boolean(

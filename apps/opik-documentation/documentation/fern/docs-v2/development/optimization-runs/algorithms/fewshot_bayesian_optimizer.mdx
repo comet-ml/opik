@@ -1,0 +1,134 @@
+---
+description: Learn how to use the Few-Shot Bayesian Optimizer to find optimal few-shot
+  examples for your chat-based prompts using Bayesian optimization techniques.
+headline: Few-Shot Bayesian | Opik Documentation
+og:description: Learn to optimize prompt examples using FewShotBayesianOptimizer for
+  enhanced chat model performance with Bayesian techniques.
+og:site_name: Opik Documentation
+og:title: Few-Shot Bayesian Optimization Techniques - Opik
+subtitle: Optimize few-shot examples for chat prompts with Bayesian techniques.
+title: Few-Shot Bayesian Optimizer
+---
+
+The FewShotBayesianOptimizer is a sophisticated prompt optimization tool adds relevant examples from
+your sample questions to the system prompt using Bayesian optimization techniques.
+
+<Note>
+  The `FewShotBayesianOptimizer` is a strong choice when your primary goal is to find the optimal number and
+  combination of few-shot examples (demonstrations) to accompany your main instruction prompt,
+  particularly for **chat models**. If your task performance heavily relies on the quality and relevance of in-context examples, this optimizer is ideal.
+</Note>
+
+## How It Works
+
+The `FewShotBayesianOptimizer` uses Bayesian optimization to find the optimal set and number of
+few-shot examples to include with your base instruction prompt for chat models. It Uses
+[Optuna](https://optuna.org/), a hyperparameter optimization framework, to guide the search for the
+optimal set and number of few-shot examples.
+
+<Frame>
+  <img src="/img/agent_optimization/fewshot_bayesian_optimizer.png" alt="FewShot Bayesian Optimizer" />
+</Frame>
+
+## Quickstart
+
+You can use the `FewShotBayesianOptimizer` to optimize a prompt by following these steps:
+
+```python maxLines=1000
+from opik_optimizer import FewShotBayesianOptimizer
+from opik.evaluation.metrics import LevenshteinRatio
+from opik_optimizer import datasets, ChatPrompt
+
+# Initialize optimizer
+optimizer = FewShotBayesianOptimizer(
+    model="openai/gpt-4",
+    model_parameters={
+        "temperature": 0.1,
+        "max_tokens": 5000
+    },
+)
+
+# Prepare dataset
+dataset = datasets.hotpot(count=300)
+
+# Define metric and prompt (see docs for more options)
+def levenshtein_ratio(dataset_item, llm_output):
+    return LevenshteinRatio().score(reference=dataset_item["answer"], output=llm_output)
+
+prompt = ChatPrompt(
+    messages=[
+        {"role": "system", "content": "Provide an answer to the question."},
+        {"role": "user", "content": "{question}"}
+    ]
+)
+
+# Run optimization
+results = optimizer.optimize_prompt(
+    prompt=prompt,
+    dataset=dataset,
+    metric=levenshtein_ratio,
+    n_samples=100
+)
+
+# Access results
+results.display()
+```
+
+## Configuration Options
+
+### Optimizer parameters
+
+The optimizer has the following parameters:
+
+<ParamField path="model" type="str" optional={true} default="openai/gpt-5-nano">LiteLLM model name for optimizer's internal reasoning (generating few-shot templates)</ParamField>
+<ParamField path="model_parameters" type="dict[str, typing.Any] | None" optional={true}>Optional dict of LiteLLM parameters for optimizer's internal LLM calls. Common params: temperature, max_tokens, max_completion_tokens, top_p.</ParamField>
+<ParamField path="min_examples" type="int" optional={true} default="2">Minimum number of examples to include in the prompt</ParamField>
+<ParamField path="max_examples" type="int" optional={true} default="8">Maximum number of examples to include in the prompt</ParamField>
+<ParamField path="n_threads" type="int" optional={true} default="8">Number of threads for parallel evaluation</ParamField>
+<ParamField path="verbose" type="int" optional={true} default="1">Controls internal logging/progress bars (0=off, 1=on)</ParamField>
+<ParamField path="seed" type="int" optional={true} default="42">Random seed for reproducibility</ParamField>
+
+### `optimize_prompt` parameters
+
+The `optimize_prompt` method has the following parameters:
+
+<ParamField path="prompt" type="ChatPrompt">The prompt to optimize</ParamField>
+<ParamField path="dataset" type="Dataset">Opik Dataset to optimize on</ParamField>
+<ParamField path="metric" type="Callable">Metric function to evaluate on</ParamField>
+<ParamField path="experiment_config" type="dict | None" optional={true}>Optional configuration for the experiment, useful to log additional metadata</ParamField>
+<ParamField path="n_samples" type="int | float | str | None" optional={true}>Number of dataset items to use per evaluation. Use counts (e.g., `50`), fractions (e.g., `0.1`), percentages (e.g., "10%"), or "all"/"full"/None for the full dataset.</ParamField>
+<ParamField path="n_samples_minibatch" type="int | None" optional={true}>Optional number of samples for inner-loop minibatches (defaults to n_samples).</ParamField>
+<ParamField path="n_samples_strategy" type="str | None" optional={true}>Sampling strategy for subsampling (default: "random_sorted").</ParamField>
+<ParamField path="auto_continue" type="bool" optional={true} default="False">Whether to auto-continue optimization</ParamField>
+<ParamField path="agent_class" type="type[opik_optimizer.optimizable_agent.OptimizableAgent] | None" optional={true}>Optional agent class to use</ParamField>
+<ParamField path="project_name" type="str" optional={true} default="Optimization">Opik project name for logging traces (default: "Optimization")</ParamField>
+<ParamField path="max_trials" type="int" optional={true} default="10">Number of trials for Bayesian Optimization (default: 10)</ParamField>
+<ParamField path="args" type="Any" />
+<ParamField path="kwargs" type="Any" />
+
+
+### Model Support
+
+There are two models to consider when using the `FewShotBayesianOptimizer`:
+- `FewShotBayesianOptimizer.model`: The model used to generate the few-shot template and placeholder.
+- `ChatPrompt.model`: The model used to evaluate the prompt.
+
+The `model` parameter accepts any LiteLLM-supported model string (e.g., `"gpt-4o"`, `"azure/gpt-4"`,
+`"anthropic/claude-3-opus"`, `"gemini/gemini-1.5-pro"`). You can also pass in extra model parameters
+using the `model_parameters` parameter:
+
+```python
+optimizer = FewShotBayesianOptimizer(
+    model="anthropic/claude-3-opus-20240229",
+    model_parameters={
+        "temperature": 0.7,
+        "max_tokens": 4096
+    }
+)
+```
+
+## Next Steps
+
+1. Explore specific [Optimizers](/development/optimization-runs/algorithms/overview) for algorithm details.
+2. Refer to the [FAQ](/development/optimization-runs/faq) for common questions and troubleshooting.
+3. Refer to the [API Reference](/development/optimization-runs/advanced/api_reference) for detailed configuration options.

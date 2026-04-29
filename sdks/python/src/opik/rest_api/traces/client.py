@@ -23,9 +23,12 @@ from ..types.trace_thread_filter import TraceThreadFilter
 from ..types.trace_thread_page import TraceThreadPage
 from ..types.trace_thread_update import TraceThreadUpdate
 from ..types.trace_update import TraceUpdate
+from ..types.trace_update_source import TraceUpdateSource
 from ..types.trace_write import TraceWrite
+from ..types.trace_write_source import TraceWriteSource
 from ..types.value_entry import ValueEntry
 from .raw_client import AsyncRawTracesClient, RawTracesClient
+from .types.trace_search_stream_request_public_exclude_item import TraceSearchStreamRequestPublicExcludeItem
 
 # this is used as the default value for optional parameters
 OMIT = typing.cast(typing.Any, ...)
@@ -475,6 +478,7 @@ class TracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        source: typing.Optional[TraceWriteSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -510,6 +514,8 @@ class TracesClient:
 
         thread_id : typing.Optional[str]
 
+        source : typing.Optional[TraceWriteSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -538,6 +544,7 @@ class TracesClient:
             last_updated_at=last_updated_at,
             ttft=ttft,
             thread_id=thread_id,
+            source=source,
             request_options=request_options,
         )
         return _response.data
@@ -618,6 +625,7 @@ class TracesClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
+        source: typing.Optional[TraceUpdateSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -658,6 +666,8 @@ class TracesClient:
 
         ttft : typing.Optional[float]
 
+        source : typing.Optional[TraceUpdateSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -686,6 +696,7 @@ class TracesClient:
             error_info=error_info,
             thread_id=thread_id,
             ttft=ttft,
+            source=source,
             request_options=request_options,
         )
         return _response.data
@@ -1406,6 +1417,7 @@ class TracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -1431,6 +1443,9 @@ class TracesClient:
 
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        exclude : typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter traces created from this time (ISO-8601 format).
@@ -1460,6 +1475,7 @@ class TracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            exclude=exclude,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,
@@ -2091,6 +2107,7 @@ class AsyncTracesClient:
         last_updated_at: typing.Optional[dt.datetime] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
+        source: typing.Optional[TraceWriteSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2126,6 +2143,8 @@ class AsyncTracesClient:
 
         thread_id : typing.Optional[str]
 
+        source : typing.Optional[TraceWriteSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2157,6 +2176,7 @@ class AsyncTracesClient:
             last_updated_at=last_updated_at,
             ttft=ttft,
             thread_id=thread_id,
+            source=source,
             request_options=request_options,
         )
         return _response.data
@@ -2243,6 +2263,7 @@ class AsyncTracesClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
+        source: typing.Optional[TraceUpdateSource] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2283,6 +2304,8 @@ class AsyncTracesClient:
 
         ttft : typing.Optional[float]
 
+        source : typing.Optional[TraceUpdateSource]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2314,6 +2337,7 @@ class AsyncTracesClient:
             error_info=error_info,
             thread_id=thread_id,
             ttft=ttft,
+            source=source,
             request_options=request_options,
         )
         return _response.data
@@ -3091,6 +3115,7 @@ class AsyncTracesClient:
         limit: typing.Optional[int] = OMIT,
         truncate: typing.Optional[bool] = OMIT,
         strip_attachments: typing.Optional[bool] = OMIT,
+        exclude: typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]] = OMIT,
         from_time: typing.Optional[dt.datetime] = OMIT,
         to_time: typing.Optional[dt.datetime] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -3116,6 +3141,9 @@ class AsyncTracesClient:
 
         strip_attachments : typing.Optional[bool]
             If true, returns attachment references like [file.png]; if false, downloads and reinjects stripped attachments
+
+        exclude : typing.Optional[typing.Sequence[TraceSearchStreamRequestPublicExcludeItem]]
+            Fields to exclude from the response
 
         from_time : typing.Optional[dt.datetime]
             Filter traces created from this time (ISO-8601 format).
@@ -3148,6 +3176,7 @@ class AsyncTracesClient:
             limit=limit,
             truncate=truncate,
             strip_attachments=strip_attachments,
+            exclude=exclude,
             from_time=from_time,
             to_time=to_time,
             request_options=request_options,

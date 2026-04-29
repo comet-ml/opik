@@ -1,12 +1,25 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonSetter;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Data;
+import org.apache.commons.lang3.StringUtils;
+
+import java.util.Arrays;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Data
 public class ServiceTogglesConfig {
+
+    public static final String FORCE_WORKSPACE_VERSION_DISABLED = "disabled";
+
     @Valid @JsonProperty
     @NotNull boolean pythonEvaluatorEnabled;
     @JsonProperty
@@ -52,4 +65,22 @@ public class ServiceTogglesConfig {
     @NotNull boolean ollamaProviderEnabled;
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
+
+    @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
+
+    @JsonSetter
+    public void setV2WorkspaceAllowlist(String v2WorkspaceAllowlist) {
+        this.v2WorkspaceAllowlistIds = Optional.ofNullable(v2WorkspaceAllowlist)
+                .filter(StringUtils::isNotBlank)
+                .map(commaSeparated -> Arrays.stream(commaSeparated.split(","))
+                        .map(String::strip)
+                        .filter(StringUtils::isNotBlank)
+                        .collect(Collectors.toUnmodifiableSet()))
+                .orElse(Set.of());
+    }
+
+    @NotBlank String forceWorkspaceVersion = FORCE_WORKSPACE_VERSION_DISABLED;
+
+    @JsonProperty
+    @Min(5) @Max(100) int defaultPageSize;
 }

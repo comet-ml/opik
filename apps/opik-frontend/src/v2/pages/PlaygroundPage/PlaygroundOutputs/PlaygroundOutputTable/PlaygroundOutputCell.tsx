@@ -9,15 +9,21 @@ import {
   useOutputValueByPromptDatasetItemId,
   useSelectedRuleIdsByPromptDatasetItemId,
   useTraceIdByPromptDatasetItemId,
+  useDatasetType,
+  useExperimentIdByPromptId,
 } from "@/store/PlaygroundStore";
+import { DATASET_TYPE } from "@/types/datasets";
 import MarkdownPreview from "@/shared/MarkdownPreview/MarkdownPreview";
 import PlaygroundOutputLoader from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputLoader/PlaygroundOutputLoader";
 import PlaygroundOutputScoresContainer from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputScoresContainer";
-import { cn } from "@/lib/utils";
+import PlaygroundOutputAssertionStatus from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundOutputAssertionStatus";
+import PlaygroundTestSuiteLastRunOutput from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputScores/PlaygroundTestSuiteLastRunOutput";
+import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
+import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import { PLAYGROUND_PROMPT_COLORS } from "@/constants/llm";
+import PlaygroundNoRunsYet from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundNoRunsYet";
 import { generateTracesURL } from "@/lib/annotation-queues";
-import useAppStore from "@/store/AppStore";
-import useProjectByName from "@/api/projects/useProjectByName";
-import { PLAYGROUND_PROJECT_NAME } from "@/constants/shared";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 
@@ -27,13 +33,14 @@ interface PlaygroundOutputCellData {
 
 interface CustomMeta {
   promptId: string;
+  promptIndex: number;
 }
 
 const PlaygroundOutputCell: React.FunctionComponent<
   CellContext<PlaygroundOutputCellData, unknown>
 > = (context) => {
   const { custom } = context.column.columnDef.meta ?? {};
-  const { promptId } = (custom ?? {}) as CustomMeta;
+  const { promptId, promptIndex } = (custom ?? {}) as CustomMeta;
   const originalRow = context.row.original;
 
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -63,21 +70,22 @@ const PlaygroundOutputCell: React.FunctionComponent<
     originalRow.dataItemId,
   );
 
-  const { data: playgroundProject } = useProjectByName(
-    {
-      projectName: PLAYGROUND_PROJECT_NAME,
-    },
-    {
-      enabled: !!traceId && !!workspaceName,
-    },
-  );
+  const datasetType = useDatasetType();
+  const experimentId = useExperimentIdByPromptId(promptId);
+  const { datasetId: versionedDatasetId } = usePlaygroundDataset();
+  const plainDatasetId =
+    parseDatasetVersionKey(versionedDatasetId)?.datasetId || versionedDatasetId;
+
+  const isTestSuite = datasetType === DATASET_TYPE.TEST_SUITE;
+
+  const activeProjectId = useActiveProjectId();
 
   const handleTraceLinkClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
-    if (traceId && playgroundProject?.id) {
+    if (traceId && activeProjectId) {
       const url = generateTracesURL(
         workspaceName,
-        playgroundProject.id,
+        activeProjectId,
         "traces",
         traceId,
       );
@@ -85,20 +93,20 @@ const PlaygroundOutputCell: React.FunctionComponent<
     }
   };
 
+  const hasOutput =
+    !stale && (value !== null || isLoading || (isTestSuite && !!experimentId));
+  const promptColor =
+    PLAYGROUND_PROMPT_COLORS[
+      (promptIndex ?? 0) % PLAYGROUND_PROMPT_COLORS.length
+    ];
+  const noRunsColor = isTestSuite ? "var(--click-blue)" : promptColor.bg;
+
   const renderContent = () => {
     if (isLoading && !value) {
       return <PlaygroundOutputLoader />;
     }
 
-    return (
-      <MarkdownPreview
-        className={cn({
-          "text-muted-gray dark:text-foreground": stale,
-        })}
-      >
-        {value}
-      </MarkdownPreview>
-    );
+    return <MarkdownPreview>{value}</MarkdownPreview>;
   };
 
   return (
@@ -107,28 +115,50 @@ const PlaygroundOutputCell: React.FunctionComponent<
       tableMetadata={context.table.options.meta}
       className="flex pt-5"
     >
-      <div className="group relative flex size-full flex-col">
-        {traceId && playgroundProject?.id && (
-          <TooltipWrapper content="Click to open original trace">
-            <Button
-              size="icon-xs"
-              variant="outline"
-              onClick={handleTraceLinkClick}
-              className="absolute right-1 top-1 hidden group-hover:flex"
-            >
-              <ListTree />
-            </Button>
-          </TooltipWrapper>
-        )}
-        <div className="mb-2 min-h-[var(--cell-top-height)]">
-          <PlaygroundOutputScoresContainer
-            traceId={traceId}
-            selectedRuleIds={selectedRuleIds}
-            stale={stale}
-          />
+      {hasOutput ? (
+        <div className="group relative flex size-full flex-col">
+          {traceId && activeProjectId && (
+            <TooltipWrapper content="Click to open original trace">
+              <Button
+                size="icon-xs"
+                variant="outline"
+                onClick={handleTraceLinkClick}
+                className="absolute right-1 top-1 z-10 hidden group-hover:flex"
+              >
+                <ListTree />
+              </Button>
+            </TooltipWrapper>
+          )}
+          <div className="mb-2 min-h-[var(--cell-top-height)]">
+            {isTestSuite ? (
+              <PlaygroundOutputAssertionStatus
+                experimentId={experimentId}
+                datasetItemId={originalRow.dataItemId}
+                datasetId={plainDatasetId || ""}
+              />
+            ) : (
+              <PlaygroundOutputScoresContainer
+                traceId={traceId}
+                selectedRuleIds={selectedRuleIds}
+                stale={stale}
+              />
+            )}
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {isTestSuite ? (
+              <PlaygroundTestSuiteLastRunOutput
+                experimentId={experimentId}
+                datasetItemId={originalRow.dataItemId}
+                datasetId={plainDatasetId || ""}
+              />
+            ) : (
+              renderContent()
+            )}
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto">{renderContent()}</div>
-      </div>
+      ) : (
+        <PlaygroundNoRunsYet color={noRunsColor} />
+      )}
     </CellWrapper>
   );
 };

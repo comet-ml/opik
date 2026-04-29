@@ -21,12 +21,20 @@ class BatchManager:
     def start(self) -> None:
         self._flushing_thread.start()
 
-    def stop(self) -> None:
+    def stop(self, flush: bool = True) -> None:
+        """Stop the background flushing thread.
+
+        Args:
+            flush: If True (default), also flush any pending batches to the
+                downstream queue before the thread exits — the historical
+                behaviour. Set False to skip the final flush; pending batches
+                are dropped. Only useful for fire-and-forget teardowns in
+                tests that no longer care about pending data.
+        """
         with self._lock:
-            # stop the flushing thread
             self._flushing_thread.close()
-            # force flush all pending messages
-            self.flush()
+            if flush:
+                self.flush()
 
     def message_supports_batching(self, message: messages.BaseMessage) -> bool:
         if message is None:

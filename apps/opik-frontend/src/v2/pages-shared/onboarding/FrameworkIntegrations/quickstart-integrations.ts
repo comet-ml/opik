@@ -1,4 +1,4 @@
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v2/lib/utils";
 import pythonLogoUrl from "/images/integrations/python.png";
 import langChainLogoUrl from "/images/integrations/langchain.png";
 import liteLLMLogoUrl from "/images/integrations/litellm.png";
@@ -49,7 +49,7 @@ export const QUICKSTART_INTEGRATIONS: FrameworkIntegration[] = [
     colab:
       "https://colab.research.google.com/github/comet-ml/opik/blob/main/apps/opik-documentation/documentation/docs/cookbook/quickstart_notebook.ipynb",
     documentation: buildDocsUrl(
-      "/tracing/log_traces",
+      "/tracing/advanced/log_traces",
       "#using-function-decorators",
     ),
     code: functionDecoratorsCode,

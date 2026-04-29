@@ -3,8 +3,8 @@ package com.comet.opik.api.filter;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
-@RequiredArgsConstructor
 @Getter
+@RequiredArgsConstructor
 public enum TraceThreadField implements Field {
     ID(ID_QUERY_PARAM, FieldType.STRING_EXACT),
     FIRST_MESSAGE(FIRST_MESSAGE_QUERY_PARAM, FieldType.STRING),
@@ -19,6 +19,7 @@ public enum TraceThreadField implements Field {
     STATUS(STATUS_QUERY_PARAM, FieldType.ENUM),
     TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ANNOTATION_QUEUE_IDS(ANNOTATION_QUEUE_IDS_QUERY_PARAM, FieldType.LIST),
+    SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY),
     ;
 
     private final String queryParamField;

@@ -4,6 +4,7 @@ import useAppStore from "@/store/AppStore";
 import { Span, Trace } from "@/types/traces";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import { usePermissions } from "@/contexts/PermissionsContext";
+import { TagProps } from "@/ui/tag";
 
 type TagListProps = {
   tags: string[];
@@ -12,6 +13,7 @@ type TagListProps = {
   traceId: string;
   spanId?: string;
   className?: string;
+  tagVariant?: TagProps["variant"];
 };
 
 const TagList: React.FunctionComponent<TagListProps> = ({
@@ -20,6 +22,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
   projectId,
   traceId,
   spanId,
+  tagVariant,
   className,
 }) => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -84,6 +87,7 @@ const TagList: React.FunctionComponent<TagListProps> = ({
       size="sm"
       className={className}
       canAdd={isMutable}
+      tagVariant={tagVariant}
     />
   );
 };

@@ -40,7 +40,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
 import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
@@ -209,7 +209,7 @@ const PromptsPage: React.FunctionComponent = () => {
   });
 
   const {
-    permissions: { canDeletePrompts },
+    permissions: { canCreatePrompts, canDeletePrompts },
   } = usePermissions();
 
   const [sortedColumns, setSortedColumns] = useQueryParamAndLocalStorageState<
@@ -373,9 +373,11 @@ const PromptsPage: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           />
-          <Button variant="default" size="sm" onClick={handleNewPromptClick}>
-            Create new prompt
-          </Button>
+          {canCreatePrompts && (
+            <Button variant="default" size="sm" onClick={handleNewPromptClick}>
+              Create new prompt
+            </Button>
+          )}
         </div>
       </div>
       <DataTable
@@ -392,7 +394,7 @@ const PromptsPage: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            {noData && (
+            {noData && canCreatePrompts && (
               <Button variant="link" onClick={handleNewPromptClick}>
                 Create new prompt
               </Button>

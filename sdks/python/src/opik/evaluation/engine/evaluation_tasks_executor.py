@@ -1,11 +1,15 @@
+import logging
 import threading
+import time
 from collections import defaultdict
 from concurrent import futures
 from typing import Any, Dict, List, Optional, TypeVar, Generic
 
+from opik.api_objects import opik_client
 from ..metrics.score_result import ScoreResult
-
 from .types import EvaluationTask
+
+LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -25,6 +29,7 @@ class StreamingExecutor(Generic[T]):
         self,
         workers: int,
         verbose: int,
+        client: "opik_client.Opik",
         desc: str = "Evaluation",
         total: Optional[int] = None,
         show_score_postfix: bool = True,
@@ -34,6 +39,7 @@ class StreamingExecutor(Generic[T]):
         self._desc = desc
         self._total = total
         self._show_score_postfix = show_score_postfix
+        self._client = client
         self._task_count = 0
         self._pool: futures.ThreadPoolExecutor
         self._submitted_futures: List[futures.Future[T]] = []
@@ -88,7 +94,14 @@ class StreamingExecutor(Generic[T]):
                 via ``set_group_size()`` before submitting grouped tasks.
         """
         self._task_count += 1
-        future = self._pool.submit(task)
+        original_task = task
+        client = self._client
+
+        def task_with_client() -> T:
+            opik_client.set_global_client(client, context_wise=True)
+            return original_task()
+
+        future = self._pool.submit(task_with_client)
         self._submitted_futures.append(future)
 
         if group_id is not None:
@@ -98,7 +111,15 @@ class StreamingExecutor(Generic[T]):
 
     def _on_future_done(self, future: futures.Future[T]) -> None:
         """Callback fired by worker thread when a task completes."""
-        if future.exception() is not None:
+        exc = future.exception()
+        if exc is not None:
+            group_id = self._future_to_group.get(future)
+            LOGGER.warning(
+                "Evaluation task failed (group=%s): %s: %s",
+                group_id,
+                type(exc).__name__,
+                exc,
+            )
             return
 
         result = future.result()
@@ -160,7 +181,18 @@ class StreamingExecutor(Generic[T]):
                 self._progress_bar.total = self._task_count
 
         # Wait for all futures to complete
+        LOGGER.debug(
+            "[executor] Waiting for %d futures to complete...",
+            len(self._submitted_futures),
+        )
+        wait_start = time.monotonic()
         futures.wait(self._submitted_futures)
+        elapsed = time.monotonic() - wait_start
+        LOGGER.debug(
+            "[executor] All %d futures completed in %.1fs",
+            len(self._submitted_futures),
+            elapsed,
+        )
 
         # Re-raise first exception if any task failed
         for future in self._submitted_futures:
@@ -174,11 +206,13 @@ def execute(
     evaluation_tasks: List[EvaluationTask[T]],
     workers: int,
     verbose: int,
+    client: "opik_client.Opik",
     desc: str = "Evaluation",
 ) -> List[T]:
     if workers == 1:
         from opik.environment import get_tqdm_for_current_environment
 
+        opik_client.set_global_client(client, context_wise=True)
         _tqdm = get_tqdm_for_current_environment()
         test_results = [
             evaluation_task()
@@ -193,7 +227,11 @@ def execute(
         return test_results
 
     with StreamingExecutor[T](
-        workers=workers, verbose=verbose, desc=desc, total=len(evaluation_tasks)
+        workers=workers,
+        verbose=verbose,
+        client=client,
+        desc=desc,
+        total=len(evaluation_tasks),
     ) as executor:
         for evaluation_task in evaluation_tasks:
             executor.submit(evaluation_task)

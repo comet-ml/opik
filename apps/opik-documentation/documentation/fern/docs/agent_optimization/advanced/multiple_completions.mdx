@@ -12,7 +12,7 @@ When optimizing prompts, single-sample evaluation can be noisy - a good prompt m
 
 ## How It Works
 
-When you set `n > 1` in your prompt's `model_parameters`, the optimizer requests N completions per evaluation, scores each candidate, selects the best one, and logs all scores to the trace. The full explanation of how the `n` parameter works is maintained in [Sampling controls](/agent_optimization/advanced/n_samples#multiple-completions-per-example-n-parameter).
+When you set `n > 1` in your prompt's `model_parameters`, the optimizer requests N completions per evaluation, scores each candidate, selects the best one, and logs all scores to the trace. The full explanation of how the `n` parameter works is maintained in [Sampling controls](/v1/agent_optimization/advanced/n_samples#multiple-completions-per-example-n-parameter).
 
 ```mermaid
 sequenceDiagram
@@ -261,7 +261,7 @@ print(f"Best prompt score: {result.score}")
 
 ## Related
 
-- [Optimize prompts](/agent_optimization/optimization/optimize_prompts) - Core optimization guide
-- [Define metrics](/agent_optimization/optimization/define_metrics) - Create custom metrics
-- [Custom metrics](/agent_optimization/advanced/custom_metrics) - Advanced metric patterns
-- [API Reference](/agent_optimization/advanced/api_reference) - Full parameter documentation
+- [Optimize prompts](/v1/agent_optimization/optimization/optimize_prompts) - Core optimization guide
+- [Define metrics](/v1/agent_optimization/optimization/define_metrics) - Create custom metrics
+- [Custom metrics](/v1/agent_optimization/advanced/custom_metrics) - Advanced metric patterns
+- [API Reference](/v1/agent_optimization/advanced/api_reference) - Full parameter documentation

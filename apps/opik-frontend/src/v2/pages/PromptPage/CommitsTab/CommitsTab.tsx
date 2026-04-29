@@ -29,7 +29,7 @@ import {
 } from "@/lib/table";
 import { generateSelectColumDef } from "@/shared/DataTable/utils";
 import CommitsActionsPanel from "@/v2/pages/PromptPage/CommitsTab/CommitsActionsPanel";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
@@ -224,11 +224,13 @@ const CommitsTab = ({ prompt }: CommitsTabInterface) => {
     (row: PromptVersion) => {
       const promptResource = RESOURCE_MAP[RESOURCE_TYPE.prompt];
       const workspaceName = useAppStore.getState().activeWorkspaceName;
+      const projectId = useAppStore.getState().activeProjectId;
       navigate({
-        to: promptResource.url,
+        to: promptResource.projectUrl,
         params: {
           [promptResource.param]: row.prompt_id,
           workspaceName,
+          projectId: projectId!,
         },
         search: {
           activeVersionId: row.id,

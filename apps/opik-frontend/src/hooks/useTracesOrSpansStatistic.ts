@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { Filters } from "@/types/filters";
 import { ColumnsStatistic } from "@/types/shared";
+import { LOGS_SOURCE } from "@/types/traces";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import useTracesStatistic from "@/api/traces/useTracesStatistic";
 import useSpansStatistic from "@/api/traces/useSpansStatistic";
@@ -17,6 +18,7 @@ type UseTracesOrSpansStatisticParams = {
   search?: string;
   fromTime?: string;
   toTime?: string;
+  logsSource?: LOGS_SOURCE;
 };
 
 type UseTracesOrSpansStatisticResponse = {

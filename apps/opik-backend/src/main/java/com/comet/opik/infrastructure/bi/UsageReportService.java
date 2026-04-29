@@ -26,7 +26,7 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
 @ImplementedBy(UsageReportServiceImpl.class)
-interface UsageReportService {
+public interface UsageReportService {
 
     record UserCount(long allTimes, long daily) {
     }
@@ -61,9 +61,16 @@ class UsageReportServiceImpl implements UsageReportService {
     private final @NonNull MetadataAnalyticsDAO metadataAnalyticsDAO;
     private final @NonNull CacheManager cacheManager;
 
+    private volatile String cachedAnonymousId;
+
     public Optional<String> getAnonymousId() {
-        return template.inTransaction(READ_ONLY,
+        if (cachedAnonymousId != null) {
+            return Optional.of(cachedAnonymousId);
+        }
+        var anonymousId = template.inTransaction(READ_ONLY,
                 handle -> handle.attach(MetadataDAO.class).getMetadataKey(Metadata.ANONYMOUS_ID.getValue()));
+        anonymousId.ifPresent(presentAnonymousId -> cachedAnonymousId = presentAnonymousId);
+        return anonymousId;
     }
 
     public void saveAnonymousId(@NonNull String id) {
@@ -71,6 +78,7 @@ class UsageReportServiceImpl implements UsageReportService {
             handle.attach(MetadataDAO.class).saveMetadataKey(Metadata.ANONYMOUS_ID.getValue(), id);
             return null;
         });
+        cachedAnonymousId = id;
     }
 
     @Override

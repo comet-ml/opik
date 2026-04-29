@@ -12,6 +12,7 @@ import InsightsViewSelector from "@/v1/pages/TracesPage/InsightsTab/InsightsView
 import ShareDashboardButton from "@/v1/pages-shared/dashboards/ShareDashboardButton/ShareDashboardButton";
 import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import { useDashboardLifecycle } from "@/v1/pages-shared/dashboards/hooks/useDashboardLifecycle";
+import { DASHBOARD_SCOPE } from "@/types/dashboard";
 import {
   useDashboardStore,
   selectSetRuntimeConfig,
@@ -66,6 +67,7 @@ const InsightsTab: React.FunctionComponent<InsightsTabProps> = ({
   const { dashboard, isPending, saveStatus } = useDashboardLifecycle({
     dashboardId: dashboardId || null,
     enabled: Boolean(dashboardId),
+    scope: DASHBOARD_SCOPE.INSIGHTS,
   });
 
   const setRuntimeConfig = useDashboardStore(selectSetRuntimeConfig);

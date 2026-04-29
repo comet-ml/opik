@@ -40,6 +40,15 @@ spec:
           type: AverageValue
           averageValue: {{ $value.autoscaling.targetMemoryAverageValue }}
     {{- end }}
+    {{- range $value.autoscaling.podMetrics }}
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .name }}
+        target:
+          type: AverageValue
+          averageValue: "{{ .averageValue }}"
+    {{- end }}
   {{- with $value.autoscaling.behavior }}
   behavior:
     {{- toYaml . | nindent 4 }}

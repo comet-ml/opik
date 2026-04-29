@@ -9,14 +9,18 @@ subtitle: Step by step guide to logging evaluation results using Python SDK and 
 title: Manually logging experiments
 ---
 
+<Note>
+  In Opik 2.0, datasets and experiments are project-scoped. Make sure to specify a `project_name` when creating datasets and running experiments so they are associated with the correct project.
+</Note>
+
 Evaluating your LLM application allows you to have confidence in the performance of your LLM
 application. In this guide, we will walk through manually creating experiments using data you have
 already computed.
 
 <Tip>
   This guide focuses on logging pre-computed evaluation results. If you're looking to run evaluations with Opik
-  computing the metrics, refer to the [Evaluate your agent](/evaluation/evaluate_your_llm) and [Evaluate single
-  prompts](/evaluation/evaluate_prompt) guides.
+  computing the metrics, refer to the [Evaluate your agent](/v1/evaluation/evaluate_your_llm) and [Evaluate single
+  prompts](/v1/evaluation/evaluate_prompt) guides.
 </Tip>
 
 The process involves these key steps:
@@ -83,7 +87,7 @@ your experiments.
 
   # Get or create a dataset
   client = Opik()
-  dataset = client.get_or_create_dataset(name="geography-questions")
+  dataset = client.get_or_create_dataset(name="geography-questions", project_name="my-project")
 
   # Add dataset items
   dataset.insert(dataset_items)
@@ -506,7 +510,7 @@ opik.configure()
 
 # Step 1: Create dataset
 client = Opik()
-dataset = client.get_or_create_dataset(name="geography-questions")
+dataset = client.get_or_create_dataset(name="geography-questions", project_name="my-project")
 
 dataset_items = [
     {

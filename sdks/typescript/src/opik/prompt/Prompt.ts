@@ -5,6 +5,7 @@ import type * as OpikApi from "@/rest_api/api";
 import { formatPromptTemplate } from "./formatting";
 import { PromptVersion } from "./PromptVersion";
 import { BasePrompt, type BasePromptData } from "./BasePrompt";
+import { logger } from "@/utils/logger";
 
 export interface PromptData extends BasePromptData {
   prompt: string;
@@ -20,9 +21,12 @@ export class Prompt extends BasePrompt {
 
   /**
    * Creates a new Prompt instance.
-   * This should not be created directly, use OpikClient.createPrompt() instead.
+   * All operations work seamlessly without requiring manual configuration.
    */
-  constructor(data: PromptData, opik: OpikClient) {
+  constructor(data: PromptData);
+  /** @deprecated Passing an opik client is deprecated. */
+  constructor(data: PromptData, opik: OpikClient);
+  constructor(data: PromptData, opik?: OpikClient) {
     super(
       {
         ...data,
@@ -31,6 +35,23 @@ export class Prompt extends BasePrompt {
       opik,
     );
     this.prompt = data.prompt;
+
+    if (opik === undefined && !data.synced) {
+      this._pendingSync = this._performSync();
+    }
+  }
+
+  private _performSync(): Promise<void> {
+    return this._syncViaCreate(() =>
+      this.opik.createPrompt({
+        name: this._name,
+        prompt: this.prompt,
+        metadata: this._metadata,
+        type: this.type,
+        description: this._description,
+        tags: this._tags.length ? Array.from(this._tags) : undefined,
+      }),
+    );
   }
 
   /**
@@ -84,6 +105,7 @@ export class Prompt extends BasePrompt {
     promptData: OpikApi.PromptPublic,
     apiResponse: OpikApi.PromptVersionDetail,
     opik: OpikClient,
+    projectName?: string,
   ): Prompt {
     // Validate required fields
     if (!apiResponse.template) {
@@ -132,6 +154,8 @@ export class Prompt extends BasePrompt {
         changeDescription: apiResponse.changeDescription,
         description: promptData.description,
         tags: promptData.tags,
+        synced: true,
+        projectName,
       },
       opik,
     );
@@ -181,21 +205,39 @@ export class Prompt extends BasePrompt {
   }
 
   /**
+   * Synchronize the prompt with the backend.
+   *
+   * Creates or updates the prompt on the Opik server. If the sync fails,
+   * a warning is logged and the same (unsynced) instance is returned.
+   *
+   * @returns Promise resolving to a new synced Prompt instance, or this instance if sync fails
+   */
+  async syncWithBackend(): Promise<Prompt> {
+    try {
+      return await this.opik.createPrompt({
+        name: this.name,
+        prompt: this.prompt,
+        metadata: this.metadata,
+        type: this.type,
+        description: this.description,
+        tags: this.tags ? Array.from(this.tags) : undefined,
+      });
+    } catch (error) {
+      logger.warn(
+        `Failed to sync prompt '${this.name}' with the backend. ` +
+          "The prompt will work locally but is not persisted on the server. " +
+          "Await prompt.ready(), then retry by calling .syncWithBackend() if prompt.synced is still false.",
+        { error },
+      );
+      return this;
+    }
+  }
+
+  /**
    * Get a Prompt with a specific version by commit hash.
    *
    * @param commit - Commit hash (8-char short form or full)
    * @returns Prompt instance representing that version, or null if not found
-   *
-   * @example
-   * ```typescript
-   * const prompt = await client.getPrompt({ name: "greeting" });
-   *
-   * // Get a specific version directly as a Prompt
-   * const versionedPrompt = await prompt.getVersion("abc123de");
-   * if (versionedPrompt) {
-   *   const text = versionedPrompt.format({ name: "Alice" });
-   * }
-   * ```
    */
   async getVersion(commit: string): Promise<Prompt | null> {
     const response = await this.retrieveVersionByCommit(commit);

@@ -1,10 +1,13 @@
 package com.comet.opik.api.events;
 
+import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Trace;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import jakarta.annotation.Nullable;
 import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
+import java.util.Map;
 import java.util.UUID;
 
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorLlmAsJudge.LlmAsJudgeCode;
@@ -17,5 +20,9 @@ public record TraceToScoreLlmAsJudge(
         @NotNull String ruleName,
         @NotNull LlmAsJudgeCode llmAsJudgeCode,
         @NotNull String workspaceId,
-        @NotNull String userName) {
+        @NotNull String userName,
+        String categoryName,
+        @NotNull Map<String, String> scoreNameMapping,
+        @NotNull PromptType promptType,
+        @Nullable UUID experimentId) {
 }

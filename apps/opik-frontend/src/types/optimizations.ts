@@ -137,6 +137,7 @@ export interface OptimizationStudioConfig {
 export interface Optimization {
   id: string;
   name: string;
+  project_id?: string;
   dataset_id: string;
   dataset_name: string;
   metadata?: object;

@@ -16,6 +16,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.BinaryOperatorUtils;
 import com.comet.opik.utils.ErrorUtils;
@@ -143,6 +144,7 @@ class ProjectServiceImpl implements ProjectService {
     private final @NonNull TransactionTemplateAsync transactionTemplateAsync;
     private final @NonNull SortingFactoryProjects sortingFactory;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
+    private final @NonNull AnalyticsService analyticsService;
 
     private NotFoundException createNotFoundError() {
         String message = "Project not found";
@@ -178,6 +180,13 @@ class ProjectServiceImpl implements ProjectService {
 
                 return newProject;
             });
+
+            analyticsService.trackEvent("project_created", Map.of(
+                    "project_id", newProject.id().toString(),
+                    "project_name", newProject.name(),
+                    "workspace_id", workspaceId,
+                    "user_name", userName,
+                    "date", Instant.now().toString()));
 
             return get(newProject.id(), workspaceId);
         } catch (UnableToExecuteStatementException e) {
@@ -287,7 +296,7 @@ class ProjectServiceImpl implements ProjectService {
                 .map(Project::id)
                 .toList();
 
-        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId);
+        Map<UUID, Map<String, Object>> projectStats = getProjectStats(projectIds, workspaceId, criteria);
 
         return ProjectStatsSummary.builder()
                 .content(
@@ -397,8 +406,9 @@ class ProjectServiceImpl implements ProjectService {
                 sortingFactory.getSortableFields());
     }
 
-    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId) {
-        return traceDAO.getStatsByProjectIds(projectIds, workspaceId)
+    private Map<UUID, Map<String, Object>> getProjectStats(List<UUID> projectIds, String workspaceId,
+            ProjectCriteria criteria) {
+        return traceDAO.getStatsByProjectIds(projectIds, workspaceId, criteria.filters())
                 .map(stats -> stats.entrySet().stream()
                         .map(entry -> {
                             Map<String, Object> statsMap = entry.getValue().stats()
@@ -620,6 +630,7 @@ class ProjectServiceImpl implements ProjectService {
         });
 
         return projects
+                .flatMap(project -> verifyVisibility(project, requestContext.get().getVisibility()))
                 .map(project -> {
                     Map<UUID, Instant> projectLastUpdatedTraceAtMap = transactionTemplateAsync
                             .nonTransaction(connection -> {
@@ -628,7 +639,7 @@ class ProjectServiceImpl implements ProjectService {
                             }).block();
 
                     Map<UUID, Map<String, Object>> projectStats = getProjectStats(List.of(project.id()),
-                            workspaceId);
+                            workspaceId, ProjectCriteria.builder().build());
 
                     return project.toBuilder()
                             .lastUpdatedTraceAt(projectLastUpdatedTraceAtMap.get(project.id()))

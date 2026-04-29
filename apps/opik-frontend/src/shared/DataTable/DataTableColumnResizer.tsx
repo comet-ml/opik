@@ -1,7 +1,8 @@
 import React from "react";
 import { Header } from "@tanstack/react-table";
-import last from "lodash/last";
 import { cn } from "@/lib/utils";
+
+const EDGE_MARGIN = 5;
 
 type DataTableColumnResizerProps<TData> = {
   header: Header<TData, unknown>;
@@ -16,23 +17,52 @@ const DataTableColumnResizer = <TData,>({
   )
     return null;
 
-  const hasStatistic = Boolean(
-    header.getContext().table.options.meta?.columnsStatistic,
-  );
+  const resizeHandler = header.getResizeHandler();
 
-  const isMultiRow = header.column.depth > 0;
-  const isLastInGroup =
-    last(header.column.parent?.columns ?? [])?.id === header.column.id;
+  const handleMouseDown = (e: React.MouseEvent) => {
+    resizeHandler(e);
+
+    const scrollContainer = (e.target as HTMLElement).closest(
+      "[data-table-scroll-container]",
+    ) as HTMLElement | null;
+    const headerEl = (e.target as HTMLElement).closest("th") as HTMLElement;
+    if (!scrollContainer || !headerEl) return;
+
+    const columnId = header.column.id;
+    const table = header.getContext().table;
+
+    const onMouseMove = () => {
+      const containerRight = scrollContainer.getBoundingClientRect().right;
+      const headerLeft = headerEl.getBoundingClientRect().left;
+      const maxWidth = containerRight - headerLeft - EDGE_MARGIN;
+
+      if (header.column.getSize() > maxWidth) {
+        table.setColumnSizing((prev) => ({
+          ...prev,
+          [columnId]: Math.max(
+            header.column.columnDef.minSize ?? 0,
+            Math.floor(maxWidth),
+          ),
+        }));
+      }
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("mousemove", onMouseMove);
+      document.removeEventListener("mouseup", cleanup);
+    };
+
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", cleanup);
+  };
 
   return (
     <div
-      {...{
-        onMouseDown: header.getResizeHandler(),
-        onTouchStart: header.getResizeHandler(),
-        style: {
-          userSelect: "none",
-          touchAction: "none",
-        },
+      onMouseDown={handleMouseDown}
+      onTouchStart={resizeHandler}
+      style={{
+        userSelect: "none",
+        touchAction: "none",
       }}
       className={cn(
         "group absolute top-0 h-[var(--data-table-height,56px)] z-[5] flex cursor-ew-resize items-stretch transition-all",
@@ -41,15 +71,6 @@ const DataTableColumnResizer = <TData,>({
           : "-right-1 w-[9px] justify-center",
       )}
     >
-      <div
-        className={cn(
-          "absolute top-2 h-7 w-px bg-border",
-          isMultiRow && "top-3 h-6",
-          hasStatistic && "h-10",
-          isLastInGroup && "-top-2 h-11",
-          isLastInGroup && hasStatistic && "h-14",
-        )}
-      ></div>
       <div className="absolute inset-y-0 w-px bg-transparent transition-colors group-hover:bg-gray-600 group-active:bg-blue-600"></div>
     </div>
   );

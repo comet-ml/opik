@@ -3,8 +3,7 @@ import { SheetClose } from "@/ui/sheet";
 import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { Link } from "@tanstack/react-router";
 import evaluationGifUrl from "/images/playground_evaluation.gif";
-import { buildDocsUrl } from "@/lib/utils";
-
+import { buildDocsUrl } from "@/v2/lib/utils";
 const UsingPlaygroundTab = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
   const activeProjectId = useActiveProjectId();
@@ -14,8 +13,8 @@ const UsingPlaygroundTab = () => {
       <div className="comet-body-s">
         <div className="pt-1">
           You can run prompt evaluations from the Opik platform using the
-          Playground. This allows you to test different prompts on any
-          evaluation suites available in the platform.
+          Playground. This allows you to test different prompts on any test
+          suites available in the platform.
         </div>
 
         <img className="my-5 block" src={evaluationGifUrl} />
@@ -30,7 +29,7 @@ const UsingPlaygroundTab = () => {
           >
             <a
               href={buildDocsUrl(
-                "/prompt_engineering/playground#running-experiments-in-the-playground",
+                "/development/playground#running-experiments-in-the-playground",
               )}
               target="_blank"
               rel="noreferrer"
@@ -58,7 +57,7 @@ const UsingPlaygroundTab = () => {
           </SheetClose>{" "}
           From there, you can add prompts with variables in the format{" "}
           <span className="text-emerald-500">{`{{ variable_name }}`}</span> and
-          evaluate them against your Opik evaluation suites.
+          evaluate them against your Opik test suites.
         </div>
       </div>
     </div>

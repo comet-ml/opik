@@ -1,0 +1,65 @@
+---
+headline: Evaluation Concepts | Opik Documentation
+og:description: Understand the two evaluation approaches in Opik — Test Suites
+  with assertions and Datasets with metrics
+og:site_name: Opik Documentation
+og:title: Evaluation Concepts — Opik
+title: Evaluation Concepts
+---
+
+Opik provides two complementary approaches to evaluating your LLM application. Understanding when to use each will help you build a robust evaluation strategy.
+
+## Test Suites — assertion-based testing
+
+Test Suites let you define expected behaviors as natural-language assertions. An LLM judge checks each assertion against your agent's output and reports pass/fail results.
+
+**Best for:**
+- Testing specific behaviors (e.g., "the response does not hallucinate")
+- Pass/fail validation of agent outputs
+- Iterating on prompts and comparing versions
+- Catching regressions after changes
+
+A Test Suite has three main components:
+
+1. **Test items**: Input data for your agent (e.g., questions with context, user scenarios)
+2. **Assertions**: Natural-language descriptions of expected behavior, checked by an LLM judge (e.g., "The response is concise")
+3. **Execution policy**: Controls how many times each item is run and how many runs must pass
+
+Assertions can be defined at two levels:
+- **Suite-level assertions** apply to every test item
+- **Item-level assertions** apply only to a specific test item, in addition to suite-level ones
+
+### Pass/fail logic
+
+- A **run** passes if all its assertions pass
+- An **item** passes if the number of passed runs meets the `pass_threshold`
+- The **pass rate** is the ratio of passed items to total items
+
+## Datasets & Metrics — quantitative scoring
+
+Dataset-based evaluation scores your agent's outputs using quantitative metrics. You define a dataset of test cases, run your agent against them, and score the results using pre-built or custom metrics.
+
+**Best for:**
+- Measuring quality across many traces with a common metric (hallucination, relevance, coherence)
+- Comparing model or prompt versions with numeric scores
+- Evaluating RAG pipelines with context precision/recall metrics
+- Building leaderboards across experiments
+
+A dataset-based evaluation has three main components:
+
+1. **Dataset**: A collection of test cases with inputs and optional expected outputs
+2. **Task**: A function that takes a dataset item and returns your agent's output
+3. **Metrics**: Scoring functions that evaluate the output (e.g., `Hallucination`, `AnswerRelevance`, custom metrics)
+
+Each evaluation run creates an **Experiment** — a record of every dataset item, your agent's output, and the metric scores. Experiments are stored in Opik so you can compare them side-by-side.
+
+## Choosing between the two
+
+| | Test Suites | Datasets & Metrics |
+|---|---|---|
+| **Output** | Pass/fail per assertion | Numeric scores per metric |
+| **Evaluation method** | LLM judge checks natural-language assertions | Scoring functions (LLM-based or heuristic) |
+| **Best for** | Behavioral testing, regression checks | Quality measurement, benchmarking |
+| **Iteration style** | Update assertions, re-run suite | Update dataset or metrics, re-run experiment |
+
+You can use both approaches together. For example, use Test Suites during development to validate specific behaviors, and Datasets & Metrics in CI to track quality scores over time.

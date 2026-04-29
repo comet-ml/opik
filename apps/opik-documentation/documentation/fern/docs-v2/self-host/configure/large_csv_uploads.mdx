@@ -1,0 +1,197 @@
+---
+headline: Large CSV uploads | Opik Documentation
+og:description: Configure Opik to accept CSV uploads up to 2GB, enabling efficient
+  dataset creation and asynchronous processing.
+og:site_name: Opik Documentation
+og:title: Enable Large CSV Uploads with Opik
+subtitle: Configure Opik to support large CSV file uploads for datasets
+title: Large CSV uploads
+---
+
+# Enabling Large CSV Uploads
+
+By default, Opik supports CSV file uploads up to 20MB for dataset creation. For self-hosted deployments that need to process larger CSV files (up to 2GB), you can enable the large CSV upload feature with additional configuration.
+
+## Overview
+
+When enabled, this feature allows:
+- **CSV files up to 2GB** in size
+- **Asynchronous processing** - files are processed in the background after upload
+
+## Configuration Steps
+
+### 1. Enable the Feature Toggle
+
+Set the following environment variable for the Opik backend service:
+
+```bash
+TOGGLE_CSV_UPLOAD_ENABLED: true
+```
+
+### 2. Increase Idle Timeout
+
+Large file uploads require more time to transfer. Increase the server idle timeout:
+
+```bash
+SERVER_IDLE_TIMEOUT: 10m
+```
+
+The default timeout is 30 seconds, which is insufficient for large file uploads. We recommend setting it to 10 minutes for files up to 2GB.
+
+### 3. Configure Nginx (Kubernetes/Helm Deployments)
+
+If you're using the Helm chart deployment, add the following configuration to your `values.yaml`:
+
+```yaml
+component:
+  frontend:
+    # Increase client body size limit to 2GB
+    clientMaxBodySize: "2g"
+    
+    # Increase proxy timeouts for large file uploads
+    upstreamConfig:
+      proxy_read_timeout: 600s
+      proxy_connect_timeout: 600s
+      proxy_send_timeout: 600s
+      client_max_body_size: 2g
+```
+
+### 4. Ensure Adequate Disk Space
+
+The backend service temporarily buffers uploaded CSV files to disk before processing them. Ensure your backend pods/containers have:
+
+- **Minimum 50GB of disk space** available
+- **Sufficient IOPS** for concurrent file operations
+
+### 5. Optional: Adjust Batch Size
+
+You can optionally configure the batch size for CSV processing:
+
+```bash
+BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE: 1000
+```
+
+The default batch size is 1000 rows per batch. Adjust this based on your:
+- Available memory
+- Row complexity (number of columns, data size)
+- Desired processing speed
+
+## Docker Compose Deployments
+
+For Docker Compose deployments, the configuration is slightly different:
+
+### 1. Update docker-compose.yml
+
+Add the environment variables to the backend service:
+
+```yaml
+services:
+  backend:
+    environment:
+      - TOGGLE_CSV_UPLOAD_ENABLED=true
+      - SERVER_IDLE_TIMEOUT=10m
+      - BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE=1000
+```
+
+### 2. Update Nginx Configuration
+
+The nginx configuration files already include the 2GB limit for local deployments. No additional changes are needed for `nginx_default_local.conf` or `nginx_local_be_local.conf`.
+
+## Kubernetes/Helm Deployment Example
+
+Here's a complete example for Helm chart deployments:
+
+```yaml
+# values.yaml
+component:
+  backend:
+    env:
+      TOGGLE_CSV_UPLOAD_ENABLED: "true"
+      SERVER_IDLE_TIMEOUT: "10m"
+      BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE: "1000"
+    
+    # Ensure adequate disk space
+    persistence:
+      enabled: true
+      size: 100Gi  # Adjust based on your needs
+  
+  frontend:
+    clientMaxBodySize: "2g"
+    
+    upstreamConfig:
+      proxy_read_timeout: 600s
+      proxy_connect_timeout: 600s
+      proxy_send_timeout: 600s
+      client_max_body_size: 2g
+```
+
+Then upgrade your Helm release:
+
+```bash
+helm upgrade opik opik/opik -n opik -f values.yaml
+```
+
+## Verification
+
+After applying the configuration:
+
+1. **Restart services** to apply the changes
+2. **Test with a small CSV** first (< 100MB) to verify the feature works
+3. **Monitor logs** during upload to ensure proper processing:
+
+```bash
+# Kubernetes
+kubectl logs -n opik deployment/opik-backend -f | grep CSV
+
+# Docker Compose
+docker-compose logs -f backend | grep CSV
+```
+
+You should see log messages like:
+```
+CSV upload request for dataset 'xxx' on workspaceId 'xxx'
+CSV upload accepted for dataset 'xxx' on workspaceId 'xxx', processing asynchronously
+Starting asynchronous CSV processing for dataset 'xxx' on workspaceId 'xxx'
+CSV processing completed for dataset 'xxx', total items: 'xxx'
+```
+
+## Troubleshooting
+
+### Upload Fails with 413 Error
+
+**Problem**: HTTP 413 Request Entity Too Large
+
+**Solution**: Verify nginx configuration includes `client_max_body_size: 2g` at the server level, not just in location blocks.
+
+### Upload Succeeds but Processing Fails
+
+**Problem**: File uploads successfully but items don't appear in the dataset
+
+**Solution**: 
+1. Check backend logs for processing errors
+2. Verify adequate disk space is available
+3. Check memory limits - large CSV files require sufficient memory for processing
+
+### Timeout Errors
+
+**Problem**: Upload times out before completing
+
+**Solution**:
+1. Increase `SERVER_IDLE_TIMEOUT` further (e.g., to 15m or 20m)
+2. Increase nginx proxy timeouts in `upstreamConfig`
+3. Check network bandwidth between client and server
+
+### Out of Memory Errors
+
+**Problem**: Backend service crashes or restarts during processing
+
+**Solution**:
+1. Reduce `BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE` to process smaller batches
+2. Increase backend service memory limits
+3. Process smaller CSV files or split large files into multiple uploads
+
+## Additional Resources
+
+- [Scaling Opik](/self-host/scaling) - General scaling guidelines
+- [Kubernetes Deployment](/self-host/kubernetes) - Helm chart documentation
+- [Troubleshooting](/self-host/troubleshooting) - Common issues and solutions

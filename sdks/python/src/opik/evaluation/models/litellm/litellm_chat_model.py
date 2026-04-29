@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from litellm.types.utils import ModelResponse
 
 import opik.semantic_version as semantic_version
-import opik.integrations.litellm as litellm_integration
 import opik.config as opik_config
 
 from .. import base_model
@@ -152,6 +151,8 @@ class LiteLLMChatModel(base_model.OpikBaseModel):
         enable_tracking = track and config.enable_litellm_models_monitoring
 
         if enable_tracking:
+            import opik.integrations.litellm as litellm_integration
+
             self._litellm_completion = litellm_integration.track_completion()(
                 litellm.completion
             )

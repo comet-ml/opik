@@ -1,7 +1,5 @@
-export {
-  BaseLLMJudgeMetric,
-  LLMJudgeModelSettings,
-} from "./BaseLLMJudgeMetric";
+export { BaseLLMJudgeMetric } from "./BaseLLMJudgeMetric";
+export type { LLMJudgeModelSettings } from "./BaseLLMJudgeMetric";
 export { Moderation } from "./moderation";
 export { Usefulness } from "./usefulness";
 export { Hallucination } from "./hallucination";

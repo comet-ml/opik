@@ -3,13 +3,10 @@ package com.comet.opik.api.resources.utils.resources;
 import com.comet.opik.api.Dashboard;
 import com.comet.opik.api.Dashboard.DashboardPage;
 import com.comet.opik.api.DashboardScope;
-import com.comet.opik.api.DashboardType;
 import com.comet.opik.api.DashboardUpdate;
 import com.comet.opik.api.filter.DashboardFilter;
 import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.sorting.SortingField;
-import com.comet.opik.utils.JsonUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
@@ -204,80 +201,24 @@ public class DashboardResourceClient {
     }
 
     public void batchDelete(Set<UUID> ids, String apiKey, String workspaceName, int expectedStatus) {
-        var batchDelete = com.comet.opik.api.BatchDelete.builder()
-                .ids(ids)
-                .build();
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("delete-batch")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(batchDelete))) {
+        try (var response = callBatchDelete(ids, apiKey, workspaceName)) {
             assertThat(response.getStatus()).isEqualTo(expectedStatus);
         }
     }
 
+    public Response callBatchDelete(Set<UUID> ids, String apiKey, String workspaceName) {
+        var batchDelete = com.comet.opik.api.BatchDelete.builder()
+                .ids(ids)
+                .build();
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("delete-batch")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(batchDelete));
+    }
+
     public Dashboard.DashboardBuilder createPartialDashboard() {
-        return Dashboard.builder()
-                .name(UUID.randomUUID().toString())
-                .description("Test dashboard description")
-                .type(DashboardType.MULTI_PROJECT)
-                .scope(DashboardScope.WORKSPACE)
-                .config(createValidConfig());
-    }
-
-    public JsonNode createValidConfig() {
-        String configJson = """
-                {
-                    "version": 1,
-                    "layout": {
-                        "type": "grid",
-                        "columns": 24,
-                        "rowHeight": 10
-                    },
-                    "filters": {
-                        "dateRange": {
-                            "preset": "last_7_days"
-                        }
-                    },
-                    "widgets": [
-                        {
-                            "id": "widget-1",
-                            "type": "chart",
-                            "title": "Latency p95",
-                            "position": {"x": 0, "y": 0, "w": 6, "h": 8},
-                            "data": {
-                                "source": "traces",
-                                "aggregation": {"metric": "latency_ms", "op": "p95"}
-                            }
-                        }
-                    ]
-                }
-                """;
-        return JsonUtils.getJsonNodeFromString(configJson);
-    }
-
-    public JsonNode createInvalidConfigTooLarge() {
-        // Create a config that exceeds 256KB
-        StringBuilder largeConfig = new StringBuilder("{\"version\":1,\"data\":\"");
-        for (int i = 0; i < 300000; i++) {
-            largeConfig.append("x");
-        }
-        largeConfig.append("\"}");
-        return JsonUtils.getJsonNodeFromString(largeConfig.toString());
-    }
-
-    public JsonNode createInvalidConfigTooManyWidgets() {
-        StringBuilder config = new StringBuilder("{\"version\":1,\"widgets\":[");
-        for (int i = 0; i < 101; i++) {
-            if (i > 0) {
-                config.append(",");
-            }
-            config.append(String.format(
-                    "{\"id\":\"widget-%d\",\"type\":\"chart\",\"position\":{\"x\":0,\"y\":0,\"w\":1,\"h\":1}}",
-                    i));
-        }
-        config.append("]}");
-        return JsonUtils.getJsonNodeFromString(config.toString());
+        return DashboardTestDataFactory.createPartialDashboard(DashboardScope.WORKSPACE);
     }
 }

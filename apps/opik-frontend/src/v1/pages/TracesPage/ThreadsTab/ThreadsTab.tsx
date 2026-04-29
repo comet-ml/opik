@@ -66,7 +66,7 @@ import TimeCell from "@/shared/DataTableCells/TimeCell";
 import ThreadsActionsPanel from "@/v1/pages/TracesPage/ThreadsTab/ThreadsActionsPanel";
 import useThreadList from "@/api/traces/useThreadsList";
 import useThreadsStatistic from "@/api/traces/useThreadsStatistic";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
@@ -124,7 +124,6 @@ const SHARED_COLUMNS: ColumnData<Thread>[] = [
     id: "tags",
     label: "Tags",
     type: COLUMN_TYPE.list,
-    iconType: "tags",
     cell: ListCell as never,
   },
   {

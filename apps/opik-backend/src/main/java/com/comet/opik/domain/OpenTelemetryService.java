@@ -25,8 +25,10 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Duration;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -105,12 +107,19 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
     private Mono<Long> doStoreSpans(List<Span> otelSpans, Map<String, UUID> traceIdMapper, String projectName,
             String integrationName) {
 
+        // Track trace IDs that came from opik.trace_id attribute overrides.
+        // These spans connect to existing OPIK traces, so we must not create new traces for them.
+        Set<UUID> overriddenTraceIds = new HashSet<>();
+
         // converts otel spans into opik spans, using the mapped opik trace id
         var opikSpans = otelSpans.stream()
                 .map(otelSpan -> {
                     var otelTraceIdBase64 = base64OtelId(otelSpan.getTraceId());
 
                     var opikTraceId = traceIdMapper.get(otelTraceIdBase64);
+
+                    OpenTelemetryMapper.extractOpikTraceId(otelSpan)
+                            .ifPresent(overriddenTraceIds::add);
 
                     return OpenTelemetryMapper.toOpikSpan(otelSpan, opikTraceId, integrationName);
                 })
@@ -141,7 +150,10 @@ class OpenTelemetryServiceImpl implements OpenTelemetryService {
                         .toList();
 
         // check if there spans without parentId: we will use them as a Trace too
-        return Flux.fromStream(dedupedSpans.stream().filter(span -> span.parentSpanId() == null))
+        // Skip spans with opik.trace_id override as they connect to existing traces
+        return Flux.fromStream(dedupedSpans.stream()
+                .filter(span -> span.parentSpanId() == null)
+                .filter(span -> !overriddenTraceIds.contains(span.traceId())))
                 .flatMap(rootSpan -> {
                     // Extract thread_id from root span metadata if present
                     String threadId = null;

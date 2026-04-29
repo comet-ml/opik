@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.ExperimentStatus;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
+import com.comet.opik.api.TraceUpdate;
 import com.comet.opik.api.events.CommentsCreated;
 import com.comet.opik.api.events.CommentsDeleted;
 import com.comet.opik.api.events.CommentsUpdated;
@@ -18,8 +19,10 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesDeleted;
 import com.comet.opik.api.events.TracesUpdated;
 import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.ExperimentItemRef;
 import com.comet.opik.domain.ExperimentItemService;
 import com.comet.opik.domain.ExperimentTraceRef;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.podam.PodamFactoryUtils;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import reactor.core.publisher.Flux;
@@ -65,8 +69,12 @@ class ExperimentAggregateEventListenerTest {
     private ExperimentAggregationPublisher publisher;
 
     @Mock
+    private ExperimentAggregatesService experimentAggregatesService;
+
+    @Mock
     private ExperimentDenormalizationConfig config;
 
+    @InjectMocks
     private ExperimentAggregateEventListener listener;
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
@@ -74,7 +82,6 @@ class ExperimentAggregateEventListenerTest {
     @BeforeEach
     void setUp() {
         lenient().when(publisher.publish(any(), anyString(), anyString())).thenReturn(Mono.empty());
-        listener = new ExperimentAggregateEventListener(experimentItemService, publisher, config);
     }
 
     @Nested
@@ -173,11 +180,15 @@ class ExperimentAggregateEventListenerTest {
         void publishWhenFinishedExperimentsFound() {
             when(config.isEnabled()).thenReturn(true);
             var experimentId = UUID.randomUUID();
+            var itemId = UUID.randomUUID();
             when(experimentItemService.filterExperimentIdsByStatus(eq(Set.of(experimentId)), any()))
                     .thenReturn(Flux.just(experimentId));
+            when(experimentAggregatesService.deleteItemAggregatesByItemIds(eq(experimentId), eq(Set.of(itemId))))
+                    .thenReturn(Mono.just(0L));
 
             listener.onExperimentItemsDeleted(
-                    new ExperimentItemsDeleted(Set.of(experimentId), WORKSPACE_ID, USER_NAME));
+                    new ExperimentItemsDeleted(Set.of(new ExperimentItemRef(experimentId, itemId)),
+                            WORKSPACE_ID, USER_NAME));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME));
@@ -249,7 +260,8 @@ class ExperimentAggregateEventListenerTest {
                     .thenReturn(Flux.just(new ExperimentTraceRef(experimentId, traceId)));
 
             listener.onTracesUpdated(
-                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME));
+                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(traceId), WORKSPACE_ID, USER_NAME,
+                            TraceUpdate.builder().build()));
 
             await().atMost(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                     .untilAsserted(() -> verify(publisher).publish(Set.of(experimentId), WORKSPACE_ID, USER_NAME));
@@ -258,7 +270,8 @@ class ExperimentAggregateEventListenerTest {
         @Test
         void doesNotCallServiceWhenTraceIdsEmpty() {
             listener.onTracesUpdated(
-                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(), WORKSPACE_ID, USER_NAME));
+                    new TracesUpdated(Set.of(UUID.randomUUID()), Set.of(), WORKSPACE_ID, USER_NAME,
+                            TraceUpdate.builder().build()));
 
             verify(experimentItemService, never()).getExperimentRefsByTraceIds(any(), any());
             verify(publisher, never()).publish(any(), anyString(), anyString());

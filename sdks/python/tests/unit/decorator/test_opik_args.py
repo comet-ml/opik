@@ -153,13 +153,16 @@ class TestOpikArgsWithTrackDecorator:
                             end_time=ANY_BUT_NONE,
                             project_name="Default Project",
                             last_updated_at=ANY_BUT_NONE,
+                            source="sdk",
                         )
                     ],
                     last_updated_at=ANY_BUT_NONE,
+                    source="sdk",
                 )
             ],
             thread_id="conversation-2",
             last_updated_at=ANY_BUT_NONE,
+            source="sdk",
         )
 
     @staticmethod
@@ -197,13 +200,16 @@ class TestOpikArgsWithTrackDecorator:
                             end_time=ANY_BUT_NONE,
                             project_name="Default Project",
                             last_updated_at=ANY_BUT_NONE,
+                            source="sdk",
                         )
                     ],
                     last_updated_at=ANY_BUT_NONE,
+                    source="sdk",
                 )
             ],
             thread_id="conversation-2",
             last_updated_at=ANY_BUT_NONE,
+            source="sdk",
         )
 
 

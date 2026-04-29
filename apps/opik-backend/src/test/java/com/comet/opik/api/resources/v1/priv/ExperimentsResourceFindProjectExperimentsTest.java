@@ -819,6 +819,129 @@ class ExperimentsResourceFindProjectExperimentsTest {
     }
 
     @ParameterizedTest
+    @MethodSource("metadataEmptyOperators")
+    @DisplayName("when filtering by metadata with IS_EMPTY/IS_NOT_EMPTY, then return correct experiments")
+    void findByFilterMetadataEmpty(Operator operator) {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = factory.manufacturePojo(Project.class);
+        var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+        var experimentWithConfig = experimentResourceClient.createPartialExperiment()
+                .projectName(project.name())
+                .projectId(projectId)
+                .metadata(JsonUtils.getJsonNodeFromString("{\"config\":{\"name\":\"simulated\"}}"))
+                .build();
+        // metadata is null — config.name key is not present at all
+        var experimentWithoutConfig = experimentResourceClient.createPartialExperiment()
+                .projectName(project.name())
+                .projectId(projectId)
+                .metadata(null)
+                .build();
+
+        experimentResourceClient.create(experimentWithConfig, apiKey, workspaceName);
+        experimentResourceClient.create(experimentWithoutConfig, apiKey, workspaceName);
+
+        var filters = List.of(ExperimentFilter.builder()
+                .field(ExperimentField.METADATA)
+                .operator(operator)
+                .key("$.config.name")
+                .value("")
+                .build());
+
+        var actualPage = experimentResourceClient.getProjectExperiments(projectId, 1, 10, null, null, null, false,
+                null, filters, false, apiKey, workspaceName, SC_OK);
+
+        List<Experiment> expectedExperiments;
+        List<Experiment> unexpectedExperiments;
+        if (operator == Operator.IS_NOT_EMPTY) {
+            expectedExperiments = List.of(experimentWithConfig);
+            unexpectedExperiments = List.of(experimentWithoutConfig);
+        } else {
+            expectedExperiments = List.of(experimentWithoutConfig);
+            unexpectedExperiments = List.of(experimentWithConfig);
+        }
+
+        assertThat(actualPage.total()).isEqualTo(1);
+        assertExperiments(null, expectedExperiments, unexpectedExperiments, Map.of(), actualPage.content());
+    }
+
+    private Stream<Arguments> metadataEmptyOperators() {
+        return Stream.of(
+                Arguments.of(Operator.IS_NOT_EMPTY),
+                Arguments.of(Operator.IS_EMPTY));
+    }
+
+    @ParameterizedTest
+    @MethodSource("metadataEmptyNullAndBlankValueOperators")
+    @DisplayName("when filtering metadata with IS_EMPTY/IS_NOT_EMPTY and key has null or blank value, then return correct experiments")
+    void findByFilterMetadataEmptyWithNullAndBlankValues(Operator operator) {
+        var workspaceName = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = factory.manufacturePojo(Project.class);
+        var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+        // Key present with an actual value — not empty
+        var experimentWithValue = experimentResourceClient.createPartialExperiment()
+                .projectName(project.name())
+                .projectId(projectId)
+                .metadata(JsonUtils.getJsonNodeFromString("{\"config\":{\"name\":\"simulated\"}}"))
+                .build();
+        // Key present but JSON null value — should count as empty
+        var experimentWithNullValue = experimentResourceClient.createPartialExperiment()
+                .projectName(project.name())
+                .projectId(projectId)
+                .metadata(JsonUtils.getJsonNodeFromString("{\"config\":{\"name\":null}}"))
+                .build();
+        // Key present but empty string value — should count as empty
+        var experimentWithEmptyValue = experimentResourceClient.createPartialExperiment()
+                .projectName(project.name())
+                .projectId(projectId)
+                .metadata(JsonUtils.getJsonNodeFromString("{\"config\":{\"name\":\"\"}}"))
+                .build();
+
+        experimentResourceClient.create(experimentWithValue, apiKey, workspaceName);
+        experimentResourceClient.create(experimentWithNullValue, apiKey, workspaceName);
+        experimentResourceClient.create(experimentWithEmptyValue, apiKey, workspaceName);
+
+        var filters = List.of(ExperimentFilter.builder()
+                .field(ExperimentField.METADATA)
+                .operator(operator)
+                .key("$.config.name")
+                .value("")
+                .build());
+
+        var actualPage = experimentResourceClient.getProjectExperiments(projectId, 1, 10, null, null, null, false,
+                null, filters, false, apiKey, workspaceName, SC_OK);
+
+        // Experiments are returned newest-first; creation order is: value, nullValue, emptyValue
+        List<Experiment> expectedExperiments;
+        List<Experiment> unexpectedExperiments;
+        if (operator == Operator.IS_NOT_EMPTY) {
+            expectedExperiments = List.of(experimentWithValue);
+            unexpectedExperiments = List.of(experimentWithNullValue, experimentWithEmptyValue);
+        } else {
+            expectedExperiments = List.of(experimentWithEmptyValue, experimentWithNullValue);
+            unexpectedExperiments = List.of(experimentWithValue);
+        }
+
+        assertThat(actualPage.total()).isEqualTo(expectedExperiments.size());
+        assertExperiments(null, expectedExperiments, unexpectedExperiments, Map.of(), actualPage.content());
+    }
+
+    private Stream<Arguments> metadataEmptyNullAndBlankValueOperators() {
+        return Stream.of(
+                Arguments.of(Operator.IS_NOT_EMPTY),
+                Arguments.of(Operator.IS_EMPTY));
+    }
+
+    @ParameterizedTest
     @MethodSource("findByFilterTags")
     @DisplayName("when filtering by tags, then return matching experiments")
     void findByFilterTags(Operator operator, String value) {

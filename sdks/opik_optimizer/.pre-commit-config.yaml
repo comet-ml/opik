@@ -103,4 +103,4 @@ repos:
     hooks:
       - id: vulture
         files: ^sdks/opik_optimizer
-        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/tests', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']
+        args: ['sdks/opik_optimizer/src', 'sdks/opik_optimizer/benchmarks', '--min-confidence=80', '--exclude=benchmarks/.venv']

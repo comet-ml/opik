@@ -7,7 +7,7 @@ import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import { generateBlueprintDescription } from "@/utils/agent-configurations";
+
 import AgentConfigTagList from "./AgentConfigTagList";
 
 type AgentConfigurationHistoryTimelineProps = {
@@ -91,18 +91,16 @@ const AgentConfigurationHistoryTimeline: React.FC<
                 </span>
                 <AgentConfigTagList tags={item.tags} size="sm" maxWidth={200} />
               </div>
-              {(() => {
-                const desc =
-                  item.description || generateBlueprintDescription(item.values);
-                return (
-                  <p className="comet-body-xs mt-1.5 flex min-w-0 items-center gap-1 text-light-slate">
-                    <FilePen className="size-3 shrink-0" />
-                    <TooltipWrapper content={desc}>
-                      <span className="w-fit max-w-full truncate">{desc}</span>
-                    </TooltipWrapper>
-                  </p>
-                );
-              })()}
+              {item.description && (
+                <p className="comet-body-xs mt-1.5 flex min-w-0 items-center gap-1 text-light-slate">
+                  <FilePen className="size-3 shrink-0" />
+                  <TooltipWrapper content={item.description}>
+                    <span className="w-fit max-w-full truncate">
+                      {item.description}
+                    </span>
+                  </TooltipWrapper>
+                </p>
+              )}
               <div className="comet-body-xs mt-1.5 flex items-center gap-3 text-light-slate">
                 <TooltipWrapper
                   content={`${formatDate(item.created_at, {

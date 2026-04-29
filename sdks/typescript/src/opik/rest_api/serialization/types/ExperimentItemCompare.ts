@@ -5,6 +5,7 @@ import * as core from "../../core/index.js";
 import type * as serializers from "../index.js";
 import { AssertionResultCompare } from "./AssertionResultCompare.js";
 import { CommentCompare } from "./CommentCompare.js";
+import { ExecutionPolicyCompare } from "./ExecutionPolicyCompare.js";
 import { ExperimentItemCompareStatus } from "./ExperimentItemCompareStatus.js";
 import { ExperimentItemCompareTraceVisibilityMode } from "./ExperimentItemCompareTraceVisibilityMode.js";
 import { FeedbackScoreCompare } from "./FeedbackScoreCompare.js";
@@ -38,6 +39,7 @@ export const ExperimentItemCompare: core.serialization.ObjectSchema<
         ExperimentItemCompareTraceVisibilityMode.optional(),
     ),
     description: core.serialization.string().optional(),
+    executionPolicy: core.serialization.property("execution_policy", ExecutionPolicyCompare.optional()),
     assertionResults: core.serialization.property(
         "assertion_results",
         core.serialization.list(AssertionResultCompare).optional(),
@@ -65,6 +67,7 @@ export declare namespace ExperimentItemCompare {
         last_updated_by?: string | null;
         trace_visibility_mode?: ExperimentItemCompareTraceVisibilityMode.Raw | null;
         description?: string | null;
+        execution_policy?: ExecutionPolicyCompare.Raw | null;
         assertion_results?: AssertionResultCompare.Raw[] | null;
         status?: ExperimentItemCompareStatus.Raw | null;
     }

@@ -38,6 +38,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
+import { COLUMN_TYPE } from "@/types/shared";
 import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
@@ -47,7 +48,6 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import PythonCodeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/PythonCodeRuleDetails";
 import LLMJudgeRuleDetails from "@/v2/pages-shared/automations/AddEditRuleDialog/LLMJudgeRuleDetails";
-import ProjectsSelectBox from "@/v2/pages-shared/automations/ProjectsSelectBox";
 import RuleFilteringSection, {
   TRACE_FILTER_COLUMNS,
   THREAD_FILTER_COLUMNS,
@@ -71,7 +71,7 @@ import {
 } from "@/constants/llm";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { Description } from "@/ui/description";
 import { ToastAction } from "@/ui/toast";
 import { useToast } from "@/ui/use-toast";
@@ -138,9 +138,8 @@ const DEFAULT_PYTHON_CODE_DATA: Record<
 type AddEditRuleDialogProps = {
   open: boolean;
   setOpen: (open: boolean) => void;
-  projectId?: string;
+  projectId: string;
   rule?: EvaluatorsRule;
-  projectName?: string; // Optional: project name for pre-selected projects
   datasetColumnNames?: string[]; // Optional: dataset column names from playground
   hideScopeSelector?: boolean; // Optional: hide scope selector (e.g., for contexts that only support one scope)
   defaultScope?: EVALUATORS_RULE_SCOPE; // Optional: default scope for new rules
@@ -152,7 +151,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
   setOpen,
   projectId,
   rule: defaultRule,
-  projectName,
   datasetColumnNames,
   hideScopeSelector = false,
   defaultScope,
@@ -264,9 +262,7 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
       // For clone mode, reset the form with cloned rule data and append " (Copy)" to name
       const cloneFormData = {
         ruleName: `${defaultRule.name} (Copy)`,
-        projectIds:
-          defaultRule.projects?.map((p) => p.project_id) ||
-          (projectId ? [projectId] : []),
+        projectIds: projectId ? [projectId] : [],
         samplingRate: defaultRule.sampling_rate ?? 1,
         uiType: formUIRuleType,
         scope: formScope,
@@ -407,8 +403,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    // Filter out empty/incomplete filters using the existing utility
-    const validFilters = formData.filters.filter(isFilterValid);
+    const validFilters = formData.filters
+      .filter((f) =>
+        isFilterValid(
+          (f.field === "input" || f.field === "output") && !f.key
+            ? { ...f, type: COLUMN_TYPE.string }
+            : f,
+        ),
+      )
+      .map((f) => {
+        if ((f.field === "input" || f.field === "output") && f.key) {
+          return { ...f, field: `${f.field}_json` };
+        }
+        return f;
+      });
 
     const ruleData = {
       name: formData.ruleName,
@@ -527,37 +535,6 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   }}
                 />
                 <div className="flex gap-4">
-                  <FormField
-                    control={form.control}
-                    name="projectIds"
-                    render={({ field, formState }) => {
-                      const validationErrors = get(formState.errors, [
-                        "projectIds",
-                      ]);
-
-                      return (
-                        <FormItem className="min-w-0 flex-1">
-                          <Label>Projects</Label>
-                          <FormControl>
-                            <ProjectsSelectBox
-                              align="start"
-                              value={field.value}
-                              onValueChange={field.onChange}
-                              className={cn({
-                                "border-destructive": Boolean(
-                                  validationErrors?.message,
-                                ),
-                              })}
-                              multiselect
-                              showSelectAll
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      );
-                    }}
-                  />
-
                   {!hideScopeSelector && (
                     <FormField
                       control={form.control}
@@ -705,13 +682,11 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
                   <LLMJudgeRuleDetails
                     workspaceName={workspaceName}
                     form={form}
-                    projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
                   />
                 ) : (
                   <PythonCodeRuleDetails
                     form={form}
-                    projectName={projectName}
                     datasetColumnNames={datasetColumnNames}
                   />
                 )}

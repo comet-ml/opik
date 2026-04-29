@@ -16,6 +16,7 @@ import useOptimizationsList from "@/api/optimizations/useOptimizationsList";
 import Loader from "@/shared/Loader/Loader";
 import AddOptimizationDialog from "@/v1/pages/OptimizationsPage/AddOptimizationDialog/AddOptimizationDialog";
 import { Button } from "@/ui/button";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import useAppStore from "@/store/AppStore";
 import { COLUMN_NAME_ID, COLUMN_SELECT_ID, COLUMN_TYPE } from "@/types/shared";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
@@ -28,7 +29,7 @@ import {
   getOptimizerLabel,
   getBestOptimizationScore,
 } from "@/lib/optimizations";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v1/constants/explainers";
 
 const COLUMNS_WIDTH_KEY = "home-optimizations-columns-width";
 
@@ -51,7 +52,7 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
     },
     {
       id: "dataset",
-      label: "Evaluation suite",
+      label: "Test suite",
       type: COLUMN_TYPE.string,
       cell: ResourceCell as never,
       customMeta: {
@@ -107,13 +108,16 @@ export const COLUMNS = convertColumnDataToColumn<Optimization, Optimization>(
 );
 
 export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
-  left: [COLUMN_SELECT_ID, COLUMN_NAME_ID],
+  left: [COLUMN_SELECT_ID],
   right: [],
 };
 
 const OptimizationRunsSection: React.FunctionComponent = () => {
   const navigate = useNavigate();
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const {
+    permissions: { canUseOptimizationStudio },
+  } = usePermissions();
 
   const resetDialogKeyRef = useRef(0);
   const [openDialog, setOpenDialog] = useState<boolean>(false);
@@ -182,9 +186,11 @@ const OptimizationRunsSection: React.FunctionComponent = () => {
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
           <DataTableNoData title={noDataText}>
-            <Button variant="link" onClick={handleNewOptimizationClick}>
-              Create new optimization
-            </Button>
+            {canUseOptimizationStudio && (
+              <Button variant="link" onClick={handleNewOptimizationClick}>
+                Create new optimization
+              </Button>
+            )}
           </DataTableNoData>
         }
       />

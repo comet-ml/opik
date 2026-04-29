@@ -56,7 +56,7 @@ const OptimizationHeader: React.FC<OptimizationHeaderProps> = ({
     <div className="mb-4 flex min-h-8 flex-nowrap items-center justify-between gap-2">
       <div className="flex flex-col gap-1">
         <div className="flex items-center gap-2">
-          <h1 className="comet-title-l truncate break-words">
+          <h1 className="comet-title-xs truncate break-words">
             {optimization?.dataset_name || optimizationId}
           </h1>
           {optimization?.created_at && (

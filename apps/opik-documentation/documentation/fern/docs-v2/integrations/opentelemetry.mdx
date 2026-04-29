@@ -1,0 +1,126 @@
+---
+headline: OpenTelemetry | Opik Documentation
+og:description: Integrate OpenTelemetry SDKs with Opik to enhance your ML/AI apps
+  with distributed tracing and streamline monitoring.
+og:site_name: Opik Documentation
+og:title: Get Started with OpenTelemetry - Opik
+subtitle: Describes how to send data to Opik using OpenTelemetry
+title: OpenTelemetry
+toc_max_heading_level: 4
+---
+
+# Get Started with OpenTelemetry
+
+Opik provides native support for OpenTelemetry (OTel), allowing you to instrument
+your ML/AI applications with distributed tracing. This guide will show you how
+to directly integrate OpenTelemetry SDKs with Opik.
+
+<Note>
+  OpenTelemetry integration in Opik currently supports HTTP transport. We're actively working on expanding the feature
+  set - stay tuned for updates!
+</Note>
+
+## OpenTelemetry Endpoint Configuration
+
+### Base Endpoint
+
+To start sending traces to Opik, configure your OpenTelemetry exporter with one of these endpoints:
+
+<Tabs>
+<Tab title="Opik Cloud">
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://www.comet.com/opik/api/v1/private/otel"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,projectName=<your-project-name>,Comet-Workspace=<your-workspace-name>"
+```
+
+</Tab>
+<Tab title="Self-hosted deployment">
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT="http://localhost:5173/api/v1/private/otel"
+```
+
+</Tab>
+<Tab title="Enterprise deployment">
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_ENDPOINT="https://<comet deployment url>/opik/api/v1/private/otel"
+export OTEL_EXPORTER_OTLP_HEADERS="Authorization=<your-api-key>,projectName=<your-project-name>,Comet-Workspace=<your-workspace-name>"
+```
+
+</Tab>
+</Tabs>
+
+### Signal-Specific Endpoint
+
+If your OpenTelemetry setup requires signal-specific configuration, you can use
+the traces endpoint. This is particularly useful when different signals (traces,
+metrics, logs) need to be sent to different endpoints:
+
+```bash wordWrap
+export OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://<YOUR-OPIK-INSTANCE>/api/v1/private/otel/v1/traces"
+```
+
+## Custom via OpenTelemetry SDKs
+
+You can use any OpenTelemetry SDK to send traces directly to Opik. OpenTelemetry
+provides SDKs for many languages (C++, .NET, Erlang/Elixir, Go, Java, JavaScript,
+PHP, Python, Ruby, Rust, Swift). This extends Opik's language support beyond the
+official SDKs (Python and TypeScript). For more instructions, visit the
+[OpenTelemetry documentation](https://opentelemetry.io/docs/languages/).
+
+Here's a Python example showing how to set up OpenTelemetry with Opik:
+
+```python wordWrap
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+    OTLPSpanExporter
+)
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+# For Comet-hosted installations
+OPIK_ENDPOINT = "https://<COMET-SERVER>/api/v1/private/otel/v1/traces"
+API_KEY = "<your-api-key>"
+PROJECT_NAME = "<your-project-name>"
+WORKSPACE_NAME = "<your-workspace-name>"
+
+# Initialize the trace provider
+provider = TracerProvider()
+processor = BatchSpanProcessor(
+    OTLPSpanExporter(
+        endpoint=OPIK_ENDPOINT,
+        headers={
+            "Authorization": API_KEY,
+            "projectName": PROJECT_NAME,
+            "Comet-Workspace": WORKSPACE_NAME
+        }
+    )
+)
+provider.add_span_processor(processor)
+trace.set_tracer_provider(provider)
+```
+
+<Tip>
+In order to track OpenAI calls, you need to use the OpenTelemetry instrumentations
+for OpenAI:
+
+```bash wordWrap
+pip install opentelemetry-instrumentation-openai
+```
+
+And then instrument your OpenAI client:
+
+```python wordWrap
+from opentelemetry.instrumentation.openai import OpenAIInstrumentor
+
+OpenAIInstrumentor().instrument()
+```
+
+</Tip>
+
+<Warning>
+  Make sure to import the `http` trace exporter (`opentelemetry.exporter.otlp.proto.http.trace_exporter`), if you use
+  the GRPC exporter you will face errors.
+</Warning>

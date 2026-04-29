@@ -15,11 +15,11 @@ class TestStructuredOutputComplianceTemplate:
 
         assert output in query
         assert "You are an expert in structured data validation" in query
-        assert "EXPECTED STRUCTURE" in query
-        assert "OUTPUT:" in query
+        assert "<schema>" in query and "</schema>" in query
+        assert "<output>" in query and "</output>" in query
         assert "Respond in the following JSON format:" in query
-        assert "(No schema provided — assume valid JSON)" in query
-        assert "EXAMPLES:" not in query
+        assert "(No schema provided — assume valid JSON.)" in query
+        assert "Examples:" not in query
 
     def test_generate_query_with_schema(self):
         """Test query generation with schema."""
@@ -30,7 +30,7 @@ class TestStructuredOutputComplianceTemplate:
 
         assert output in query
         assert schema in query
-        assert "(No schema provided — assume valid JSON)" not in query
+        assert "(No schema provided — assume valid JSON.)" not in query
 
     def test_generate_query_with_few_shot_examples(self):
         """Test query generation with few-shot examples."""
@@ -57,7 +57,7 @@ class TestStructuredOutputComplianceTemplate:
         )
 
         assert output in query
-        assert "EXAMPLES:" in query
+        assert "Examples:" in query
         assert "Valid JSON" in query
         assert "Invalid JSON" in query
         assert "Alice" in query
@@ -68,6 +68,8 @@ class TestStructuredOutputComplianceTemplate:
         assert "Missing quotes around age key" in query
         assert "<example>" in query
         assert "</example>" in query
+        assert "<title>Valid JSON</title>" in query
+        assert "<verdict>" in query and "</verdict>" in query
 
     def test_generate_query_with_schema_and_examples(self):
         """Test query generation with both schema and few-shot examples."""
@@ -89,7 +91,7 @@ class TestStructuredOutputComplianceTemplate:
 
         assert output in query
         assert schema in query
-        assert "EXAMPLES:" in query
+        assert "Examples:" in query
         assert "Valid Example" in query
 
     def test_generate_query_empty_examples_list(self):
@@ -102,7 +104,7 @@ class TestStructuredOutputComplianceTemplate:
         )
 
         assert output in query
-        assert "EXAMPLES:" not in query
+        assert "Examples:" not in query
 
     def test_generate_query_example_without_schema(self):
         """Test query generation with examples that don't have schema."""
@@ -120,7 +122,7 @@ class TestStructuredOutputComplianceTemplate:
             output=output, few_shot_examples=few_shot_examples
         )
 
-        assert "Expected Schema: None" in query
+        assert "<schema>None</schema>" in query
         assert "Valid JSON" in query
         assert "true" in query
 
@@ -132,16 +134,17 @@ class TestStructuredOutputComplianceTemplate:
 
         assert "You are an expert in structured data validation" in query
         assert "Guidelines:" in query
-        assert "1. OUTPUT must be a valid JSON object" in query
+        assert "1. The OUTPUT must be a valid JSON object" in query
         assert "2. If a schema is provided" in query
         assert "3. If no schema is provided" in query
         assert "4. Common formatting issues" in query
         assert "5. Partial compliance is considered non-compliant" in query
         assert "6. Respond only in the specified JSON format" in query
         assert (
-            "7. Score should be true if output fully complies, false otherwise" in query
+            "7. Score should be true if the OUTPUT fully complies, false otherwise"
+            in query
         )
-        assert "EXPECTED STRUCTURE (optional):" in query
-        assert "OUTPUT:" in query
+        assert "<schema>" in query and "</schema>" in query
+        assert "<output>" in query and "</output>" in query
         assert '"score": <true or false>' in query
         assert '"reason": ["list of reasons' in query

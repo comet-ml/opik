@@ -16,13 +16,11 @@ import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 
 type PythonCodeRuleDetailsProps = {
   form: UseFormReturn<EvaluationRuleFormType>;
-  projectName?: string;
   datasetColumnNames?: string[];
 };
 
 const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
   form,
-  projectName,
   datasetColumnNames,
 }) => {
   const theme = useCodemirrorTheme({
@@ -114,7 +112,6 @@ const PythonCodeRuleDetails: React.FC<PythonCodeRuleDetailsProps> = ({
                 onChange={field.onChange}
                 description="All variables are automatically added based on the code snippet. They are extracted from the `score` method and are required."
                 errorText="Code parsing error. The variables cannot be extracted."
-                projectName={projectName}
                 datasetColumnNames={datasetColumnNames}
                 type={autocompleteType}
                 includeIntermediateNodes

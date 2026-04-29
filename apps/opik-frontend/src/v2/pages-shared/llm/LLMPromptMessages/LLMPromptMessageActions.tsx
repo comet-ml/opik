@@ -5,22 +5,20 @@ import React, {
   useRef,
   useState,
 } from "react";
-import useLocalStorageState from "use-local-storage-state";
-import { Copy, RotateCcw, Save, Wand2 } from "lucide-react";
-import isUndefined from "lodash/isUndefined";
+import { Save, Sparkles, Wand2 } from "lucide-react";
 import isEqual from "fast-deep-equal";
 
 import { OnChangeFn } from "@/types/shared";
 import { LLMMessage, MessageContent } from "@/types/llm";
-import { PromptVersion, PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import { PLAYGROUND_SELECTED_DATASET_VERSION_KEY } from "@/constants/llm";
-import { Separator } from "@/ui/separator";
+import { BlueprintPromptRef } from "@/types/playground";
+import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
 import { Button } from "@/ui/button";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
-import usePromptById from "@/api/prompts/usePromptById";
-import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
+import { useActiveProjectId } from "@/store/AppStore";
+import BlueprintPromptsSelectBox from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/BlueprintPromptsSelectBox";
+import SaveExistingPromptDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveExistingPromptDialog";
+import SaveAsNewBlueprintFieldDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveAsNewBlueprintFieldDialog";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import PromptImprovementDialog from "@/v2/pages-shared/llm/PromptImprovementDialog/PromptImprovementDialog";
 import {
   LLMPromptConfigsType,
@@ -29,12 +27,11 @@ import {
 import { useToast } from "@/ui/use-toast";
 import {
   getTextFromMessageContent,
-  convertMessageToMessagesJson,
   parsePromptVersionContent,
-  parseChatTemplateToLLMMessages,
 } from "@/lib/llm";
-
-type ConfirmType = "load" | "reset" | "save";
+import usePromptByCommit from "@/api/prompts/usePromptByCommit";
+import useSavePromptToBlueprint from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/useSavePromptToBlueprint";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 export interface ImprovePromptConfig {
   model: string;
@@ -47,382 +44,281 @@ export interface ImprovePromptConfig {
 type LLMPromptLibraryActionsProps = {
   message: LLMMessage;
   onChangeMessage: (changes: Partial<LLMMessage>) => void;
-  onReplaceWithChatPrompt?: (
-    messages: LLMMessage[],
-    promptId: string,
-    promptVersionId: string,
-  ) => void;
-  onClearOtherPromptLinks?: () => void;
   setIsLoading: OnChangeFn<boolean>;
   setIsHoldActionsVisible: OnChangeFn<boolean>;
   improvePromptConfig?: ImprovePromptConfig;
-  disabled?: boolean;
 };
 
 const LLMPromptMessageActions: React.FC<LLMPromptLibraryActionsProps> = ({
   message,
   onChangeMessage,
-  onReplaceWithChatPrompt,
-  onClearOtherPromptLinks,
   setIsLoading,
   setIsHoldActionsVisible,
   improvePromptConfig,
-  disabled = false,
 }) => {
-  const resetKeyRef = useRef(0);
-  const [open, setOpen] = useState<boolean | ConfirmType>(false);
-  const selectedPromptIdRef = useRef<string | undefined>();
-  const tempPromptIdRef = useRef<string | undefined>();
-  const isPromptSelectBoxOpenedRef = useRef<boolean>(false);
-  const isPromptSaveWarningRef = useRef<boolean>(false);
-  const [showImproveWizard, setShowImproveWizard] = useState(false);
-
+  const activeProjectId = useActiveProjectId();
   const { toast } = useToast();
+  const {
+    permissions: { canCreatePrompts },
+  } = usePermissions();
 
-  const [datasetId] = useLocalStorageState<string | null>(
-    PLAYGROUND_SELECTED_DATASET_VERSION_KEY,
-    {
-      defaultValue: null,
-    },
+  const resetKeyRef = useRef(0);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [showSaveExisting, setShowSaveExisting] = useState(false);
+  const [showSaveNew, setShowSaveNew] = useState(false);
+  const [showImproveWizard, setShowImproveWizard] = useState(false);
+  const pendingRefRef = useRef<BlueprintPromptRef | undefined>();
+  const loadedCommitRef = useRef<string | null>(null);
+
+  const { content, blueprintRef } = message;
+
+  // Resolve the loaded blueprint commit
+  const { data: commitData } = usePromptByCommit(
+    { commitId: blueprintRef?.commitId ?? "" },
+    { enabled: !!blueprintRef?.commitId },
   );
 
-  const { promptId, content } = message;
-  const { data: promptData } = usePromptById(
-    { promptId: promptId! },
-    { enabled: !!promptId },
+  const { existingFieldNames, saveExistingVersion, saveAsNewField, isSaving } =
+    useSavePromptToBlueprint(activeProjectId!);
+
+  // Content checks
+  const hasContent = useMemo(
+    () => Boolean(getTextFromMessageContent(content).trim()),
+    [content],
   );
 
-  // Check if content has meaningful text
-  const hasContent = useMemo(() => {
-    return Boolean(getTextFromMessageContent(content).trim());
-  }, [content]);
-  const showGenerateButton = improvePromptConfig && !hasContent;
-  const showImproveButton = improvePromptConfig && hasContent;
-  const hasModel = Boolean(improvePromptConfig?.model?.trim());
-  const isPromptButtonDisabled = !hasModel;
-  const promptButtonTooltip = !hasModel
-    ? "Configure model first"
-    : hasContent
-      ? "Improve prompt with AI"
-      : "Generate prompt with AI";
+  const loadedVersion = commitData?.requested_version;
+  const loadedVersionForParse = useMemo(
+    () =>
+      loadedVersion
+        ? {
+            template: loadedVersion.template,
+            metadata: loadedVersion.metadata ?? undefined,
+          }
+        : undefined,
+    [loadedVersion],
+  );
 
-  const handleOpenWizard = useCallback(() => {
-    setShowImproveWizard(true);
-  }, []);
+  const hasUnsavedChanges = useMemo(() => {
+    if (!blueprintRef || !loadedVersionForParse) return false;
+    return !isEqual(content, parsePromptVersionContent(loadedVersionForParse));
+  }, [blueprintRef, loadedVersionForParse, content]);
 
-  // Auto-open improvement wizard when message autoImprove flag is set
+  // Populate message content when a blueprint prompt is loaded
+  useEffect(() => {
+    if (!blueprintRef || !commitData) return;
+    if (loadedCommitRef.current === blueprintRef.commitId) return;
+    loadedCommitRef.current = blueprintRef.commitId;
+
+    if (commitData.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT) {
+      setIsLoading(false);
+      return;
+    }
+
+    const loadedContent = parsePromptVersionContent(loadedVersionForParse);
+    onChangeMessage({ content: loadedContent });
+    setIsLoading(false);
+  }, [
+    blueprintRef,
+    commitData,
+    loadedVersionForParse,
+    onChangeMessage,
+    setIsLoading,
+  ]);
+
+  // Auto-open improvement wizard
   useEffect(() => {
     if (
       message.autoImprove &&
       improvePromptConfig &&
-      promptId && // Only trigger for message loaded from prompt library
-      hasContent // Only trigger if there's content to improve
+      blueprintRef &&
+      hasContent
     ) {
-      // Use a small delay to ensure the component is fully mounted and model is loaded
       const timeoutId = setTimeout(() => {
-        // Clear the flag first to prevent other instances from triggering
         onChangeMessage({ autoImprove: false });
-
-        // Validate model and provider are configured
-        if (!hasModel) {
+        if (!improvePromptConfig.model?.trim()) {
           toast({
             title: "Model configuration required",
             description:
-              "Please configure a model and provider before improving the prompt. Select a model from the dropdown above.",
+              "Please configure a model and provider before improving the prompt.",
           });
           return;
         }
-
         setShowImproveWizard(true);
       }, 300);
-
       return () => clearTimeout(timeoutId);
     }
   }, [
     message.autoImprove,
     improvePromptConfig,
-    promptId,
+    blueprintRef,
     hasContent,
-    hasModel,
     onChangeMessage,
     toast,
   ]);
 
-  const handleUpdateExternalPromptId = useCallback(
-    (selectedPromptId?: string) => {
-      if (selectedPromptId) {
-        selectedPromptIdRef.current = selectedPromptId;
+  const handleSelectRef = useCallback(
+    (ref: BlueprintPromptRef) => {
+      if (hasContent) {
+        pendingRefRef.current = ref;
+        resetKeyRef.current++;
+        setConfirmOpen(true);
+      } else {
         setIsLoading(true);
+        onChangeMessage({ blueprintRef: ref });
       }
-
-      onChangeMessage({
-        promptId: selectedPromptId,
-      });
     },
-    [onChangeMessage, setIsLoading],
+    [hasContent, onChangeMessage, setIsLoading],
   );
 
-  const resetHandler = useCallback(() => {
-    onChangeMessage({
-      content: parsePromptVersionContent(promptData!.latest_version),
-      promptVersionId: promptData!.latest_version?.id,
-    });
-  }, [onChangeMessage, promptData]);
+  const handleConfirmLoad = useCallback(() => {
+    setIsLoading(true);
+    onChangeMessage({ blueprintRef: pendingRefRef.current });
+    pendingRefRef.current = undefined;
+  }, [onChangeMessage, setIsLoading]);
 
-  const onSaveHandler = useCallback(
-    (version: PromptVersion) => {
-      onChangeMessage({
-        promptId: version.prompt_id,
-        content: parsePromptVersionContent(version),
-        promptVersionId: version.id,
-      });
-    },
-    [onChangeMessage],
-  );
-
-  const handleCopyJson = useCallback(async () => {
-    try {
-      const jsonString = convertMessageToMessagesJson(message);
-      await navigator.clipboard.writeText(jsonString);
-      toast({
-        title: "Copied to clipboard",
-        description: "Prompt copied successfully",
-      });
-    } catch (error) {
-      toast({
-        title: "Failed to copy",
-        description: "Could not copy to clipboard",
-        variant: "destructive",
-      });
-    }
-  }, [message, toast]);
-
-  const resetDisabled =
-    !promptId ||
-    promptData?.id !== promptId ||
-    (promptData?.id === promptId &&
-      isEqual(
-        message.content,
-        parsePromptVersionContent(promptData?.latest_version),
-      ));
-
-  const saveDisabled = message.content === "";
-  const saveWarning = Boolean(
-    !saveDisabled &&
-      promptId &&
-      promptData?.id === promptId &&
-      !isEqual(
-        message.content,
-        parsePromptVersionContent(promptData?.latest_version),
-      ),
-  );
-  isPromptSaveWarningRef.current = saveWarning;
-  const saveTooltip = saveWarning
-    ? !datasetId
-      ? "This prompt version hasn't been saved"
-      : "This prompt version hasn't been saved. Save it to link it to the experiment and make comparisons easier."
-    : "Save changes";
+  const handleDetach = useCallback(() => {
+    onChangeMessage({ blueprintRef: undefined });
+    loadedCommitRef.current = null;
+  }, [onChangeMessage]);
 
   const onPromptSelectBoxOpenChange = useCallback(
-    (open: boolean) => {
-      isPromptSelectBoxOpenedRef.current = open;
-      setIsHoldActionsVisible(
-        isPromptSelectBoxOpenedRef.current || isPromptSaveWarningRef.current,
-      );
-    },
+    (open: boolean) => setIsHoldActionsVisible(open),
     [setIsHoldActionsVisible],
   );
 
-  const confirmConfig = useMemo(() => {
-    const isReset = open === "reset";
+  // Improve prompt buttons
+  const hasModel = Boolean(improvePromptConfig?.model?.trim());
+  const isPromptButtonDisabled = !hasModel;
+  const promptButtonTooltip = !hasModel
+    ? "Configure model first"
+    : hasContent
+      ? "Improve prompt"
+      : "Generate prompt";
 
-    return {
-      onConfirm: () => {
-        isReset
-          ? resetHandler()
-          : handleUpdateExternalPromptId(tempPromptIdRef.current);
-      },
-      title: isReset ? "Reset prompt" : "Load prompt",
-      description: isReset
-        ? "Resetting the prompt will discard all unsaved changes. This action can’t be undone. Are you sure you want to continue?"
-        : "You have unsaved changes in your message field. Loading a new prompt will overwrite them with the prompt’s content. This action cannot be undone.",
-      confirmText: isReset ? "Reset prompt" : "Load prompt",
-    };
-  }, [handleUpdateExternalPromptId, open, resetHandler]);
+  const handleOpenWizard = useCallback(() => setShowImproveWizard(true), []);
 
-  // This effect is used to set the visibility of hold actions
-  // based on the prompt select box state and save warning
-  useEffect(() => {
-    setIsHoldActionsVisible(isPromptSelectBoxOpenedRef.current || saveWarning);
-  }, [saveWarning, setIsHoldActionsVisible]);
-
-  // This effect is used to set the template and promptVersionId after it is loaded,
-  // after it was set in handleUpdateExternalPromptId function
-  useEffect(() => {
-    if (
-      selectedPromptIdRef.current &&
-      selectedPromptIdRef.current === promptId &&
-      selectedPromptIdRef.current === promptData?.id
-    ) {
-      selectedPromptIdRef.current = undefined;
-
-      const template = promptData.latest_version?.template ?? "";
-      const versionId = promptData.latest_version?.id;
-      const isChatPrompt =
-        promptData.template_structure === PROMPT_TEMPLATE_STRUCTURE.CHAT;
-
-      // If it's a chat prompt and we have the callback, replace all messages
-      if (isChatPrompt && onReplaceWithChatPrompt && template) {
-        const newMessages = parseChatTemplateToLLMMessages(template, {
-          promptId: promptData.id,
-          promptVersionId: versionId,
-          useTimestamp: true,
-        });
-
-        if (newMessages.length > 0) {
-          onReplaceWithChatPrompt(newMessages, promptData.id, versionId || "");
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      // For string prompts or if chat prompt parsing failed, update just this message
-      // and clear prompt links from other messages
-      if (onClearOtherPromptLinks) {
-        onClearOtherPromptLinks();
-      }
-      onChangeMessage({
-        content: parsePromptVersionContent(promptData.latest_version),
-        promptVersionId: promptData.latest_version?.id,
-        promptId: promptData.id,
-      });
-      setIsLoading(false);
+  // Save handlers
+  const handleClickSave = useCallback(() => {
+    if (blueprintRef) {
+      setShowSaveExisting(true);
+    } else {
+      setShowSaveNew(true);
     }
-  }, [
-    onChangeMessage,
-    promptData,
-    promptId,
-    setIsLoading,
-    onReplaceWithChatPrompt,
-    onClearOtherPromptLinks,
-  ]);
+  }, [blueprintRef]);
+
+  const handleSaveExisting = useCallback(
+    async (changeDescription: string) => {
+      if (!blueprintRef || !commitData) return;
+      const result = await saveExistingVersion({
+        ref: blueprintRef,
+        promptName: commitData.name,
+        template: getTextFromMessageContent(content),
+        templateStructure: PROMPT_TEMPLATE_STRUCTURE.TEXT,
+        changeDescription: changeDescription || undefined,
+      });
+      if (!result) return;
+      onChangeMessage({ blueprintRef: result.newRef });
+      loadedCommitRef.current = result.newRef.commitId;
+      setShowSaveExisting(false);
+    },
+    [blueprintRef, commitData, content, saveExistingVersion, onChangeMessage],
+  );
+
+  const handleSaveNewField = useCallback(
+    async (fieldName: string, changeDescription: string) => {
+      const newRef = await saveAsNewField({
+        fieldName,
+        template: getTextFromMessageContent(content),
+        templateStructure: PROMPT_TEMPLATE_STRUCTURE.TEXT,
+        changeDescription: changeDescription || undefined,
+      });
+      if (!newRef) return;
+      onChangeMessage({ blueprintRef: newRef });
+      loadedCommitRef.current = newRef.commitId;
+      setShowSaveNew(false);
+    },
+    [content, saveAsNewField, onChangeMessage],
+  );
+
+  const saveTooltip = blueprintRef
+    ? "Update prompt in agent configuration"
+    : "Save as new field in agent configuration";
 
   return (
     <>
-      <div className="flex h-full flex-1 cursor-default flex-nowrap items-center justify-start gap-2">
-        {showGenerateButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <span>
+      <div className="flex min-w-0 cursor-default flex-nowrap items-center">
+        {improvePromptConfig && (
+          <div className="shrink-0">
+            <TooltipWrapper content={promptButtonTooltip}>
               <Button
-                variant="outline"
-                size="sm"
+                variant="minimal"
+                size="icon-sm"
                 onClick={handleOpenWizard}
                 type="button"
-                disabled={disabled || isPromptButtonDisabled}
+                disabled={isPromptButtonDisabled}
               >
-                <Wand2 className="mr-2 size-4" />
-                Generate prompt
+                {hasContent ? <Wand2 /> : <Sparkles />}
               </Button>
-            </span>
-          </TooltipWrapper>
+            </TooltipWrapper>
+          </div>
         )}
-        {showImproveButton && (
-          <TooltipWrapper content={promptButtonTooltip}>
-            <span>
+
+        <BlueprintPromptsSelectBox
+          projectId={activeProjectId!}
+          value={blueprintRef}
+          onValueChange={handleSelectRef}
+          onClear={handleDetach}
+          onOpenChange={onPromptSelectBoxOpenChange}
+          hasUnsavedChanges={hasUnsavedChanges}
+          filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
+        />
+
+        {hasContent && (
+          <div className="shrink-0">
+            <TooltipWrapper content={saveTooltip}>
               <Button
-                variant="outline"
-                size="sm"
-                onClick={handleOpenWizard}
-                type="button"
-                disabled={disabled || isPromptButtonDisabled}
+                variant="minimal"
+                size="icon-sm"
+                onClick={handleClickSave}
+                disabled={!canCreatePrompts || isSaving}
               >
-                <Wand2 className="mr-2 size-4" />
-                Improve prompt
+                <Save />
               </Button>
-            </span>
-          </TooltipWrapper>
+            </TooltipWrapper>
+          </div>
         )}
-        <div className="flex h-full min-w-40 max-w-60 flex-auto flex-nowrap">
-          <PromptsSelectBox
-            value={promptId}
-            onValueChange={(id) => {
-              if (id !== promptId) {
-                if (content === "" || isUndefined(id)) {
-                  handleUpdateExternalPromptId(id);
-                } else {
-                  setOpen("load");
-                  resetKeyRef.current = resetKeyRef.current + 1;
-                  tempPromptIdRef.current = id;
-                }
-              }
-            }}
-            onOpenChange={onPromptSelectBoxOpenChange}
-            filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.TEXT}
-            refetchOnMount
-            disabled={disabled}
-          />
-        </div>
-        <TooltipWrapper content="Discard changes">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || resetDisabled}
-            onClick={() => {
-              resetKeyRef.current = resetKeyRef.current + 1;
-              setOpen("reset");
-            }}
-          >
-            <RotateCcw />
-          </Button>
-        </TooltipWrapper>
-
-        <TooltipWrapper content={saveTooltip}>
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || saveDisabled}
-            badge={saveWarning}
-            onClick={() => {
-              resetKeyRef.current = resetKeyRef.current + 1;
-              setOpen("save");
-            }}
-          >
-            <Save />
-          </Button>
-        </TooltipWrapper>
-
-        <TooltipWrapper content="Copy prompt">
-          <Button
-            variant="outline"
-            size="icon-sm"
-            disabled={disabled || saveDisabled}
-            onClick={handleCopyJson}
-            type="button"
-          >
-            <Copy />
-          </Button>
-        </TooltipWrapper>
-
-        <Separator orientation="vertical" className="ml-1 mr-2 h-6" />
 
         <ConfirmDialog
           key={`confirm-${resetKeyRef.current}`}
-          open={open === "load" || open === "reset"}
-          setOpen={setOpen}
-          {...confirmConfig}
+          open={confirmOpen}
+          setOpen={setConfirmOpen}
+          onConfirm={handleConfirmLoad}
+          title="Load prompt"
+          description="You have unsaved changes in your message field. Loading a new prompt will overwrite them. This action cannot be undone."
+          confirmText="Load prompt"
         />
-        <AddNewPromptVersionDialog
-          key={`save-${resetKeyRef.current}`}
-          open={open === "save"}
-          setOpen={setOpen}
-          prompt={promptData}
-          template={convertMessageToMessagesJson(message)}
-          metadata={{
-            created_from: "opik_ui",
-            type: "messages_json",
-          }}
-          onSave={onSaveHandler}
-        />
+
+        {blueprintRef && commitData && (
+          <SaveExistingPromptDialog
+            open={showSaveExisting}
+            onOpenChange={setShowSaveExisting}
+            promptName={commitData.name}
+            fieldName={blueprintRef.key}
+            isSaving={isSaving}
+            onSave={handleSaveExisting}
+          />
+        )}
+
+        {showSaveNew && (
+          <SaveAsNewBlueprintFieldDialog
+            open={showSaveNew}
+            onOpenChange={setShowSaveNew}
+            existingFieldNames={existingFieldNames}
+            isSaving={isSaving}
+            onSave={handleSaveNewField}
+          />
+        )}
       </div>
       {improvePromptConfig && (
         <PromptImprovementDialog

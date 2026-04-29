@@ -13,6 +13,8 @@ import com.comet.opik.api.sorting.SortingFactoryAlerts;
 import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.AlertService;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.auth.RequiredPermissions;
+import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
 import com.fasterxml.jackson.annotation.JsonView;
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,8 +52,6 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static com.comet.opik.api.AlertType.GENERAL;
-import static com.comet.opik.infrastructure.EncryptionUtils.decrypt;
-import static com.comet.opik.infrastructure.EncryptionUtils.maskApiKey;
 
 @Path("/v1/private/alerts")
 @Produces(MediaType.APPLICATION_JSON)
@@ -76,6 +76,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response createAlert(
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert,
             @Context UriInfo uriInfo) {
@@ -110,6 +111,7 @@ public class AlertResource {
             @ApiResponse(responseCode = "409", description = "Conflict", content = @Content(schema = @Schema(implementation = io.dropwizard.jersey.errors.ErrorMessage.class)))
     })
     @RateLimited
+    @RequiredPermissions(WorkspaceUserPermission.ALERT_UPDATE)
     public Response updateAlert(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = Alert.class))) @JsonView(Alert.View.Write.class) @Valid @NotNull Alert alert) {
 
@@ -153,11 +155,7 @@ public class AlertResource {
 
         log.info("Got alerts on workspace_id '{}', count '{}'", workspaceId, alertPage.size());
 
-        return Response.ok(alertPage.toBuilder()
-                .content(alertPage.content().stream()
-                        .map(this::maskSecretToken)
-                        .toList())
-                .build()).build();
+        return Response.ok(alertPage).build();
     }
 
     @GET
@@ -177,7 +175,7 @@ public class AlertResource {
 
         log.info("Found Alert by id '{}' on workspaceId '{}'", id, workspaceId);
 
-        return Response.ok().entity(maskSecretToken(alert)).build();
+        return Response.ok().entity(alert).build();
     }
 
     @POST
@@ -240,11 +238,4 @@ public class AlertResource {
         return Response.ok().entity(examples).build();
     }
 
-    private Alert maskSecretToken(Alert alert) {
-        return alert.toBuilder().webhook(alert.webhook().toBuilder()
-                .secretToken(alert.webhook().secretToken() != null
-                        ? maskApiKey(decrypt(alert.webhook().secretToken()))
-                        : null)
-                .build()).build();
-    }
 }

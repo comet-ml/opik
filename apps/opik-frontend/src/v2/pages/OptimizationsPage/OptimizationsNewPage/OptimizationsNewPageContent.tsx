@@ -8,6 +8,7 @@ const OptimizationsNewPageContent: React.FC = () => {
   const {
     form,
     isSubmitting,
+    activeProjectId,
     optimizerType,
     metricType,
     model,
@@ -25,6 +26,15 @@ const OptimizationsNewPageContent: React.FC = () => {
     handleCancel,
     handleNameChange,
     getFirstMetricParamsError,
+    blueprintRef,
+    blueprintPromptName,
+    blueprintFieldNames,
+    isSavingBlueprint,
+    hasUnsavedBlueprintChanges,
+    handleBlueprintRefChange,
+    handleBlueprintRefClear,
+    handleSaveBlueprintExisting,
+    handleSaveBlueprintNewField,
   } = useOptimizationsNewFormHandlers();
 
   return (
@@ -39,16 +49,27 @@ const OptimizationsNewPageContent: React.FC = () => {
       <div className="flex gap-6">
         <OptimizationsNewPromptSection
           form={form}
+          projectId={activeProjectId!}
           model={model}
           config={config}
           datasetVariables={datasetVariables}
           onNameChange={handleNameChange}
           onModelChange={handleModelChange}
           onModelConfigChange={handleModelConfigChange}
+          blueprintRef={blueprintRef}
+          blueprintPromptName={blueprintPromptName}
+          blueprintFieldNames={blueprintFieldNames}
+          isSavingBlueprint={isSavingBlueprint}
+          hasUnsavedBlueprintChanges={hasUnsavedBlueprintChanges}
+          onBlueprintRefChange={handleBlueprintRefChange}
+          onBlueprintRefClear={handleBlueprintRefClear}
+          onSaveBlueprintExisting={handleSaveBlueprintExisting}
+          onSaveBlueprintNewField={handleSaveBlueprintNewField}
         />
 
         <OptimizationsNewConfigSidebar
           form={form}
+          projectId={activeProjectId}
           optimizerType={optimizerType}
           metricType={metricType}
           datasetSample={datasetSample}

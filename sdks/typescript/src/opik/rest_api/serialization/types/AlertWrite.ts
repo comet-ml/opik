@@ -16,6 +16,7 @@ export const AlertWrite: core.serialization.ObjectSchema<serializers.AlertWrite.
         metadata: core.serialization.record(core.serialization.string(), core.serialization.string()).optional(),
         webhook: WebhookWrite,
         triggers: core.serialization.list(AlertTriggerWrite).optional(),
+        projectId: core.serialization.property("project_id", core.serialization.string().optional()),
     });
 
 export declare namespace AlertWrite {
@@ -27,5 +28,6 @@ export declare namespace AlertWrite {
         metadata?: Record<string, string> | null;
         webhook: WebhookWrite.Raw;
         triggers?: AlertTriggerWrite.Raw[] | null;
+        project_id?: string | null;
     }
 }

@@ -18,6 +18,7 @@ from typing import (
 
 from typing_extensions import override
 
+from opik import context_storage
 from opik.api_objects import span
 from opik.decorator import arguments_helpers, base_track_decorator
 from opik.decorator import inspect_helpers
@@ -73,7 +74,9 @@ class OperationsGetTrackDecorator(base_track_decorator.BaseTrackDecorator):
         if output is not None and output.done and output.response:
             video_save_decorator.patch_videos_save(
                 output,
-                project_name=self._project_name,
+                project_name=context_storage.resolve_project_name(
+                    self._project_name, "OperationsGetTrackDecorator"
+                ),
                 tags=current_span_data.tags,
                 metadata=current_span_data.metadata,
                 upload_video=self._upload_videos,

@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import useLocalStorageState from "use-local-storage-state";
 import capitalize from "lodash/capitalize";
+import { Plus } from "lucide-react";
 
 import useFeedbackDefinitionsList from "@/api/feedback-definitions/useFeedbackDefinitionsList";
 import AddEditFeedbackDefinitionDialog from "@/v2/pages-shared/datasets/AddEditFeedbackDefinitionDialog/AddEditFeedbackDefinitionDialog";
@@ -9,11 +10,11 @@ import FeedbackDefinitionsValueCell from "@/shared/DataTableCells/FeedbackDefini
 import FeedbackDefinitionsRowActionsCell from "@/v2/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsRowActionsCell";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
 import TagCell from "@/shared/DataTableCells/TagCell";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import Loader from "@/shared/Loader/Loader";
-import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
 import useAppStore from "@/store/AppStore";
@@ -36,7 +37,6 @@ import {
 import { Separator } from "@/ui/separator";
 import FeedbackDefinitionsActionsPanel from "@/v2/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsActionsPanel";
 import FeedbackScoreNameCell from "@/shared/DataTableCells/FeedbackScoreNameCell";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
 
 export const getRowId = (f: FeedbackDefinition) => f.id;
 
@@ -146,9 +146,6 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
   );
   const total = data?.total ?? 0;
   const noData = !search;
-  const noDataText = noData
-    ? "There are no feedback definitions yet"
-    : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
     SELECTED_COLUMNS_KEY_V2,
@@ -215,10 +212,17 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
 
   return (
     <div>
-      <ExplainerCallout
-        className="mb-4"
-        {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_feedback_definitions]}
-      />
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="comet-title-xs">Feedback definitions</h2>
+        <Button
+          variant="default"
+          size="xs"
+          onClick={handleNewFeedbackDefinitionClick}
+        >
+          <Plus className="mr-1 size-4" />
+          Create feedback definition
+        </Button>
+      </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
           searchText={search}
@@ -238,13 +242,6 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
           ></ColumnsButton>
-          <Button
-            variant="default"
-            size="sm"
-            onClick={handleNewFeedbackDefinitionClick}
-          >
-            Create new feedback definition
-          </Button>
         </div>
       </div>
       <DataTable
@@ -258,13 +255,21 @@ const FeedbackDefinitionsTab: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          <DataTableNoData title={noDataText}>
-            {noData && (
-              <Button variant="link" onClick={handleNewFeedbackDefinitionClick}>
-                Create new feedback definition
-              </Button>
-            )}
-          </DataTableNoData>
+          noData ? (
+            <DataTableEmptyContent
+              title="No feedback definitions yet"
+              description="Create a feedback definition to start evaluating your agent."
+            >
+              <button
+                onClick={handleNewFeedbackDefinitionClick}
+                className="comet-body-s underline underline-offset-4 hover:text-primary"
+              >
+                Add feedback definition
+              </button>
+            </DataTableEmptyContent>
+          ) : (
+            <DataTableNoMatchingData />
+          )
         }
         showLoadingOverlay={isPlaceholderData && isFetching}
       />

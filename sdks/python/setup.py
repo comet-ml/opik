@@ -48,7 +48,9 @@ setup(
         # - Exclude versions 1.77.5-1.79.1: remove trace_id/parent_span_id passthrough, fixed in 1.79.2+
         #   See: https://github.com/BerriAI/litellm/pull/15529
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
-        "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1",
+        # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
+        #   See: https://docs.litellm.ai/blog/security-update-march-2026
+        "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1,!=1.82.7,!=1.82.8",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
@@ -59,6 +61,29 @@ setup(
         "tqdm",
         "uuid6",
         "jinja2",
+        "watchfiles>=1.0.0,<2.0.0",
+        # tree-sitter is used for JS/TS syntax checking in bridge handlers.
+        # Pre-built wheels are missing for musllinux_aarch64 (Alpine on ARM64),
+        # and PEP 508 has no marker to distinguish musl from glibc, so we
+        # exclude all Linux aarch64 to avoid a source-build failure on Alpine.
+        # Affected glibc aarch64 users can manually:
+        #   pip install tree-sitter tree-sitter-javascript \
+        #     tree-sitter-typescript
+        (
+            "tree-sitter>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
+        (
+            "tree-sitter-javascript>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
+        (
+            "tree-sitter-typescript>=0.23,<1.0;"
+            " platform_machine != 'aarch64'"
+            " or sys_platform != 'linux'"
+        ),
     ],
     extras_require={
         "proxy": [

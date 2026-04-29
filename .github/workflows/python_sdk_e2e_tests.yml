@@ -18,29 +18,45 @@ on:
           - 'sdks/python/**'
           - 'apps/opik-backend/**'
           - '.github/workflows/python_sdk_e2e_tests.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   OPIK_ENABLE_LITELLM_MODELS_MONITORING: False
   OPIK_SENTRY_ENABLE: False
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
   OPENAI_ORG_ID: ${{ secrets.OPENAI_ORG_ID }}
   OPIK_URL_OVERRIDE: http://localhost:8080
-  OPIK_GUARDRAILS_URL_OVERRIDE: http://localhost:5000
-  OPIK_CONSOLE_LOGGING_LEVEL: DEBUG
+  OPIK_CONSOLE_LOGGING_LEVEL: INFO
 jobs:
+    select-matrix:
+        name: Select Python version matrix
+        runs-on: ubuntu-latest
+        timeout-minutes: 2
+        outputs:
+            python_versions: ${{ steps.pick.outputs.versions }}
+        steps:
+            - uses: actions/checkout@v6
+              with:
+                  sparse-checkout: .github/actions/select-e2e-matrix
+                  sparse-checkout-cone-mode: false
+            - uses: ./.github/actions/select-e2e-matrix
+              id: pick
+              with:
+                  all-versions: ${{ vars.PYTHON_VERSIONS }}
+                  match-regex: '^sdks/python/|^\.github/workflows/python_sdk_e2e_tests\.yml$'
+                  github-token: ${{ secrets.GITHUB_TOKEN }}
+
     run-e2e:
+        needs: select-matrix
         name: Python SDK E2E Tests ${{matrix.python_version}}
-        runs-on: ubuntu-latest-m
-        timeout-minutes: 30   
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
         strategy:
             fail-fast: false
             matrix:
-                python_version: [
-                  "3.10",
-                  "3.11",
-                  "3.12",
-                  "3.13",
-                  "3.14",
-                ]
+                python_version: ${{ fromJSON(needs.select-matrix.outputs.python_versions) }}
 
         steps:
         - name: Checkout
@@ -88,9 +104,18 @@ jobs:
             pip list
 
         - name: Run tests
+          # -n 3 + --dist=loadfile distributes whole test files across three
+          # worker processes (one file per worker). Past ~3 the gains
+          # flatten — we become tail-bound on the slowest single file and
+          # the docker-compose backend on the same runner starts to thrash.
+          # E2E isolation hinges on --dist=loadfile: the per-module project
+          # name (generate_project_name("e2e", __name__)) is only collision-
+          # free if a single file is not split across workers.
+          # -p no:benchmark silences pytest-benchmark's auto-disable warning
+          # under xdist.
           run: |
             cd ${{ github.workspace }}/sdks/python
-            pytest tests/e2e -vv --durations=20 --ignore=tests/e2e/test_guardrails.py --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
+            pytest tests/e2e --ignore=tests/e2e/test_guardrails.py --ignore=tests/e2e/compatibility_v1 -vv -n 3 --dist=loadfile -p no:benchmark --durations=20 --junitxml=${{ github.workspace }}/test_results_${{matrix.python_version}}.xml
 
         - name: Publish Test Report
           uses: EnricoMi/publish-unit-test-result-action/linux@v2

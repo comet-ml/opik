@@ -3,7 +3,7 @@ import { Book, ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import noData from "/images/no-data-annotation-queue.png";
 import { Button } from "@/ui/button";
-import { buildDocsUrl } from "@/lib/utils";
+import { buildDocsUrl } from "@/v1/lib/utils";
 import {
   ANNOTATION_QUEUE_SCOPE,
   AnnotationQueue,

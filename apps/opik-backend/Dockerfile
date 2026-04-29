@@ -6,21 +6,13 @@ WORKDIR /opt/opik-backend
 COPY pom.xml spotless.xml ./
 RUN mvn dependency:go-offline
 
-# Copy telemetry extension POM and download its dependencies
-COPY opik-telemetry-extension/pom.xml opik-telemetry-extension/pom.xml
-RUN cd opik-telemetry-extension && mvn dependency:go-offline
-
 # Copy source code
 COPY src ./src
-COPY opik-telemetry-extension ./opik-telemetry-extension
 
-# Build both artifacts
+# Build artifact
 ARG OPIK_VERSION
 ENV MAVEN_OPTS="-Xmx1G -XX:MaxMetaspaceSize=265m"
 RUN mvn versions:set -DnewVersion=${OPIK_VERSION} && \
-    mvn clean package -DskipTests && \
-    cd opik-telemetry-extension && \
-    mvn versions:set -DnewVersion=${OPIK_VERSION} && \
     mvn clean package -DskipTests
 
 ###############################
@@ -54,7 +46,7 @@ RUN yum update -y && \
 WORKDIR /opt/opik
 
 # Copy application files
-COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh ./
+COPY --chown=1001:1001 config.yml lombok.config entrypoint.sh run_db_migrations.sh opik-otel-views.yaml ./
 COPY --chown=1001:1001 redoc/ redoc/
 
 # Prepare shell scripts
@@ -63,7 +55,6 @@ RUN dos2unix ./*.sh && chmod +x ./*.sh
 # Copy built artifacts from build stage
 COPY --from=build --chown=1001:1001 /opt/opik-backend/target/openapi.yaml redoc/
 COPY --from=build --chown=1001:1001 /opt/opik-backend/target/*.jar ./
-COPY --from=build --chown=1001:1001 /opt/opik-backend/opik-telemetry-extension/target/opik-telemetry-extension-*.jar ./opik-telemetry-extension.jar
 
 # Set environment variables
 ARG OPIK_VERSION

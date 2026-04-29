@@ -71,6 +71,7 @@ class SpanData(ObservationData):
             error_info=error_info,
             total_cost=total_cost,
             attachments=attachments,
+            source=self.source,
         )
 
     @property
@@ -81,6 +82,7 @@ class SpanData(ObservationData):
             "start_time": self.start_time,
             "project_name": self.project_name,
             "trace_id": self.trace_id,
+            "source": self.source,
         }
 
         if self.parent_span_id is not None:
@@ -119,6 +121,7 @@ class SpanData(ObservationData):
             "error_info": self.error_info,
             "total_cost": self.total_cost,
             "attachments": self.attachments,
+            "source": self.source,
         }
 
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:

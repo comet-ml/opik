@@ -4,6 +4,7 @@ import type * as OpikApi from "../../../../../api/index.js";
 import * as core from "../../../../../core/index.js";
 import type * as serializers from "../../../../index.js";
 import { SpanFilterPublic } from "../../../../types/SpanFilterPublic.js";
+import { SpanSearchStreamRequestPublicExcludeItem } from "../../types/SpanSearchStreamRequestPublicExcludeItem.js";
 import { SpanSearchStreamRequestPublicType } from "../../types/SpanSearchStreamRequestPublicType.js";
 
 export const SpanSearchStreamRequestPublic: core.serialization.Schema<
@@ -18,6 +19,7 @@ export const SpanSearchStreamRequestPublic: core.serialization.Schema<
     limit: core.serialization.number().optional(),
     lastRetrievedId: core.serialization.property("last_retrieved_id", core.serialization.string().optional()),
     truncate: core.serialization.boolean().optional(),
+    exclude: core.serialization.list(SpanSearchStreamRequestPublicExcludeItem).optional(),
     fromTime: core.serialization.property("from_time", core.serialization.date().optional()),
     toTime: core.serialization.property("to_time", core.serialization.date().optional()),
 });
@@ -32,6 +34,7 @@ export declare namespace SpanSearchStreamRequestPublic {
         limit?: number | null;
         last_retrieved_id?: string | null;
         truncate?: boolean | null;
+        exclude?: SpanSearchStreamRequestPublicExcludeItem.Raw[] | null;
         from_time?: string | null;
         to_time?: string | null;
     }

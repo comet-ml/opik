@@ -22,7 +22,7 @@ import { Alert, AlertDescription } from "@/ui/alert";
 import { cn } from "@/lib/utils";
 import AddEditAnnotationQueueDialog from "@/v2/pages-shared/annotation-queues/AddEditAnnotationQueueDialog";
 import ExplainerDescription from "@/shared/ExplainerDescription/ExplainerDescription";
-import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/constants/explainers";
+import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import { createFilter } from "@/lib/filters";
 import { getAnnotationQueueItemId } from "@/lib/annotation-queues";
 import { isObjectThread } from "@/lib/traces";
@@ -241,15 +241,15 @@ const AddToQueueDialog: React.FunctionComponent<AddToQueueDialogProps> = ({
               {canCreateAnnotationQueues && (
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="xs"
                   onClick={() => {
                     setOpen(false);
                     setOpenDialog(true);
                   }}
                   disabled={noValidRows}
                 >
-                  <Plus className="mr-2 size-4" />
-                  Create new annotation queue
+                  <Plus className="mr-1 size-4" />
+                  Create annotation queue
                 </Button>
               )}
             </div>

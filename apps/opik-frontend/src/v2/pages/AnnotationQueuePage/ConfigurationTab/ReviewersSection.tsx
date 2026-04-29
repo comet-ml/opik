@@ -52,7 +52,7 @@ const ReviewersSection: React.FunctionComponent<ReviewersSectionProps> = ({
   }
 
   return (
-    <div className="pt-6">
+    <div className="pt-4">
       <h2 className="comet-title-s truncate break-words bg-soft-background pb-3 pt-2">
         Reviewers ({annotationQueue.reviewers.length})
       </h2>

@@ -10,6 +10,7 @@ import com.comet.opik.api.DatasetItemBatch;
 import com.comet.opik.api.DatasetItemChanges;
 import com.comet.opik.api.DatasetItemStreamRequest;
 import com.comet.opik.api.DatasetItemsDelete;
+import com.comet.opik.api.DatasetUpdate;
 import com.comet.opik.api.DatasetVersion;
 import com.comet.opik.api.DatasetVersionDiff;
 import com.comet.opik.api.DatasetVersionRetrieveRequest;
@@ -90,6 +91,16 @@ public class DatasetResourceClient {
                 .header(HttpHeaders.AUTHORIZATION, apiKey)
                 .header(WORKSPACE_HEADER, workspaceName)
                 .post(Entity.json(dataset));
+    }
+
+    public Response callUpdateDataset(UUID datasetId, DatasetUpdate update, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path(datasetId.toString())
+                .request()
+                .accept(MediaType.APPLICATION_JSON_TYPE)
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .put(Entity.json(update));
     }
 
     public UUID createDataset(Dataset dataset, String apiKey, String workspaceName) {
@@ -882,14 +893,7 @@ public class DatasetResourceClient {
 
     public List<DatasetItem> streamDatasetItems(DatasetItemStreamRequest request, String apiKey,
             String workspaceName) {
-        try (var response = client.target(RESOURCE_PATH.formatted(baseURI))
-                .path("items")
-                .path("stream")
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(WORKSPACE_HEADER, workspaceName)
-                .post(Entity.json(request))) {
-
+        try (var response = callStreamDatasetItems(request, apiKey, workspaceName)) {
             assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(HttpStatus.SC_OK);
 
             // Read the chunked output as a string and parse each line as a DatasetItem
@@ -903,5 +907,15 @@ public class DatasetResourceClient {
                     .map(line -> JsonUtils.readValue(line, DatasetItem.class))
                     .toList();
         }
+    }
+
+    public Response callStreamDatasetItems(DatasetItemStreamRequest request, String apiKey, String workspaceName) {
+        return client.target(RESOURCE_PATH.formatted(baseURI))
+                .path("items")
+                .path("stream")
+                .request()
+                .header(HttpHeaders.AUTHORIZATION, apiKey)
+                .header(WORKSPACE_HEADER, workspaceName)
+                .post(Entity.json(request));
     }
 }

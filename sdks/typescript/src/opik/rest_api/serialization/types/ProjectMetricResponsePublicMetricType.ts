@@ -21,6 +21,13 @@ export const ProjectMetricResponsePublicMetricType: core.serialization.Schema<
     "SPAN_COUNT",
     "SPAN_DURATION",
     "SPAN_TOKEN_USAGE",
+    "TRACE_AVERAGE_DURATION",
+    "TRACE_ERROR_RATE",
+    "SPAN_AVERAGE_DURATION",
+    "SPAN_COST",
+    "SPAN_ERROR_RATE",
+    "THREAD_AVERAGE_DURATION",
+    "THREAD_COST",
 ]);
 
 export declare namespace ProjectMetricResponsePublicMetricType {
@@ -37,5 +44,12 @@ export declare namespace ProjectMetricResponsePublicMetricType {
         | "SPAN_FEEDBACK_SCORES"
         | "SPAN_COUNT"
         | "SPAN_DURATION"
-        | "SPAN_TOKEN_USAGE";
+        | "SPAN_TOKEN_USAGE"
+        | "TRACE_AVERAGE_DURATION"
+        | "TRACE_ERROR_RATE"
+        | "SPAN_AVERAGE_DURATION"
+        | "SPAN_COST"
+        | "SPAN_ERROR_RATE"
+        | "THREAD_AVERAGE_DURATION"
+        | "THREAD_COST";
 }

@@ -5,7 +5,6 @@ import haystack
 from haystack import tracing
 
 from opik import tracing_runtime_config
-from opik.api_objects import opik_client
 from . import opik_tracer
 
 LOGGER = logging.getLogger(__name__)
@@ -22,7 +21,7 @@ class OpikConnector:
 
     In order to configure Opik, you will need to call first install the Opik SDK using `pip install opik` and then
     run `opik configure` from the command line. Alternatively you can configure Opik using environment variables,
-    you can find more information about how to configure Opik [here](https://www.comet.com/docs/opik/tracing/sdk_configuration).
+    you can find more information about how to configure Opik [here](https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration).
 
     In addition, you need to set the `HAYSTACK_CONTENT_TRACING_ENABLED` environment variable to `true` in order to
     enable Haystack tracing in your pipeline.
@@ -104,10 +103,9 @@ class OpikConnector:
         self, name: str, project_name: Optional[str]
     ) -> opik_tracer.OpikTracer:
         """Create and configure the OpikTracer instance."""
-        opik_client_ = opik_client.get_client_cached()
-
         return opik_tracer.OpikTracer(
-            opik_client=opik_client_, name=name, project_name=project_name
+            name=name,
+            project_name=project_name,
         )
 
     @haystack.component.output_types(name=str, trace_id=Optional[str], project_url=str)
