@@ -1,6 +1,6 @@
 import importlib.util
 import logging
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, cast, Dict, List, Optional, Type
 
 import pydantic
 import tenacity
@@ -65,18 +65,28 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         response_format: Optional[Type[pydantic.BaseModel]] = None,
         **kwargs: Any,
     ) -> str:
-        request = [{"content": input, "role": "user"}]
+        message = self.generate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
 
+    def generate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
         if response_format is not None:
             kwargs["response_format"] = response_format
 
         with base_model.get_provider_response(
             model_provider=self,
-            messages=request,
+            messages=cast(List[Dict[str, Any]], list(messages)),
             **kwargs,
         ) as response:
-            content = response_parser.extract_text_content(response)
-            return base_model.check_model_output_string(content)
+            return response_parser.parse_assistant_message(response)
 
     def generate_provider_response(
         self,
@@ -110,16 +120,28 @@ class AnthropicChatModel(base_model.OpikBaseModel):
         response_format: Optional[Type[pydantic.BaseModel]] = None,
         **kwargs: Any,
     ) -> str:
-        request = [{"content": input, "role": "user"}]
+        message = await self.agenerate_chat_completion(
+            messages=[{"role": "user", "content": input}],
+            response_format=response_format,
+            **kwargs,
+        )
+        return message["content"]
 
+    async def agenerate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
         if response_format is not None:
             kwargs["response_format"] = response_format
 
         async with base_model.aget_provider_response(
-            model_provider=self, messages=request, **kwargs
+            model_provider=self,
+            messages=cast(List[Dict[str, Any]], list(messages)),
+            **kwargs,
         ) as response:
-            content = response_parser.extract_text_content(response)
-            return base_model.check_model_output_string(content)
+            return response_parser.parse_assistant_message(response)
 
     async def agenerate_provider_response(
         self,

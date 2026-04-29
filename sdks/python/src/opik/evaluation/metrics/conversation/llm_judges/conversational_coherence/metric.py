@@ -198,11 +198,13 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
             verdicts
         )
-        llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        messages = templates.build_reason_messages(
+            score=score, irrelevancies=irrelevancies
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
+        )
+        return _generate_reason_from_model_output(model_output=message["content"])
 
     async def _a_reason_from_verdicts(
         self, score: float, verdicts: List[schema.EvaluateConversationCoherenceResponse]
@@ -210,37 +212,39 @@ class ConversationalCoherenceMetric(ConversationThreadMetric):
         irrelevancies: List[Dict[str, str]] = _extract_irrelevancies_from_verdicts(
             verdicts
         )
-        llm_query = templates.generate_reason(score=score, irrelevancies=irrelevancies)
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=schema.ScoreReasonResponse
+        messages = templates.build_reason_messages(
+            score=score, irrelevancies=irrelevancies
         )
-        return _generate_reason_from_model_output(model_output=model_output)
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=schema.ScoreReasonResponse
+        )
+        return _generate_reason_from_model_output(model_output=message["content"])
 
     def _evaluate_conversation(
         self, conversation_sliding_window: conversation_types.Conversation
     ) -> schema.EvaluateConversationCoherenceResponse:
-        llm_query = templates.evaluate_conversation(
+        messages = templates.build_evaluate_conversation_messages(
             sliding_window=conversation_sliding_window
         )
 
-        model_output = self._model.generate_string(
-            input=llm_query,
+        message = self._model.generate_chat_completion(
+            messages=messages,
             response_format=schema.EvaluateConversationCoherenceResponse,
         )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
     async def _a_evaluate_conversation(
         self, conversation_sliding_window: conversation_types.Conversation
     ) -> schema.EvaluateConversationCoherenceResponse:
-        llm_query = templates.evaluate_conversation(
+        messages = templates.build_evaluate_conversation_messages(
             sliding_window=conversation_sliding_window
         )
 
-        model_output = await self._model.agenerate_string(
-            input=llm_query,
+        message = await self._model.agenerate_chat_completion(
+            messages=messages,
             response_format=schema.EvaluateConversationCoherenceResponse,
         )
-        return _evaluate_conversation_from_model_output(model_output=model_output)
+        return _evaluate_conversation_from_model_output(model_output=message["content"])
 
 
 def _generate_reason_from_model_output(model_output: str) -> str:

@@ -19,12 +19,12 @@ class TestStructuredOutputComplianceMetric:
     def mock_model(self):
         """Create a mock model for testing."""
         mock = Mock(spec=base_model.OpikBaseModel)
-        mock.generate_string.return_value = (
-            '{"score": true, "reason": ["Valid JSON format", "Correct structure"]}'
-        )
-        mock.agenerate_string.return_value = (
-            '{"score": true, "reason": ["Valid JSON format", "Correct structure"]}'
-        )
+        assistant_response = {
+            "role": "assistant",
+            "content": '{"score": true, "reason": ["Valid JSON format", "Correct structure"]}',
+        }
+        mock.generate_chat_completion.return_value = assistant_response
+        mock.agenerate_chat_completion.return_value = assistant_response
         return mock
 
     @pytest.fixture
@@ -40,14 +40,16 @@ class TestStructuredOutputComplianceMetric:
         result = structured_output_metric.score(output=output)
 
         # Verify model was called
-        mock_model.generate_string.assert_called_once()
-        call_args = mock_model.generate_string.call_args
+        mock_model.generate_chat_completion.assert_called_once()
+        call_args = mock_model.generate_chat_completion.call_args
 
-        # Check the prompt contains key elements
-        prompt = call_args[1]["input"]
-        assert output in prompt
-        assert "You are an expert in structured data validation" in prompt
-        assert "<output>" in prompt and "</output>" in prompt
+        # Check the messages contain key elements
+        messages = call_args[1]["messages"]
+        system_content = messages[0]["content"]
+        user_content = messages[1]["content"]
+        assert output in user_content
+        assert "You are an expert in structured data validation" in system_content
+        assert "<output>" in user_content and "</output>" in user_content
 
         # Check result
         assert isinstance(result, score_result.ScoreResult)
@@ -63,12 +65,12 @@ class TestStructuredOutputComplianceMetric:
         result = structured_output_metric.score(output=output, schema=schema)
 
         # Verify model was called
-        mock_model.generate_string.assert_called_once()
-        call_args = mock_model.generate_string.call_args
+        mock_model.generate_chat_completion.assert_called_once()
+        call_args = mock_model.generate_chat_completion.call_args
 
-        # Check the prompt contains schema
-        prompt = call_args[1]["input"]
-        assert schema in prompt
+        # Check the messages contain schema in the user message
+        messages = call_args[1]["messages"]
+        assert schema in messages[1]["content"]
 
         # Check result
         assert isinstance(result, score_result.ScoreResult)
@@ -93,13 +95,14 @@ class TestStructuredOutputComplianceMetric:
         result = metric.score(output='{"name": "John", "age": 30}')
 
         # Verify model was called
-        mock_model.generate_string.assert_called_once()
-        call_args = mock_model.generate_string.call_args
+        mock_model.generate_chat_completion.assert_called_once()
+        call_args = mock_model.generate_chat_completion.call_args
 
-        # Check the prompt contains examples
-        prompt = call_args[1]["input"]
-        assert "Examples:" in prompt
-        assert "Valid Example" in prompt
+        # Check the system prompt contains examples
+        messages = call_args[1]["messages"]
+        system_content = messages[0]["content"]
+        assert "Examples:" in system_content
+        assert "Valid Example" in system_content
 
         # Check result
         assert isinstance(result, score_result.ScoreResult)
@@ -107,7 +110,7 @@ class TestStructuredOutputComplianceMetric:
 
     def test_score_model_error_handling(self, structured_output_metric, mock_model):
         """Test error handling when model fails."""
-        mock_model.generate_string.side_effect = Exception("Model failed")
+        mock_model.generate_chat_completion.side_effect = Exception("Model failed")
 
         # Should raise MetricComputationError when model fails
         with pytest.raises(
@@ -135,13 +138,15 @@ class TestStructuredOutputComplianceMetric:
         result = await structured_output_metric.ascore(output=output)
 
         # Verify model was called
-        mock_model.agenerate_string.assert_called_once()
-        call_args = mock_model.agenerate_string.call_args
+        mock_model.agenerate_chat_completion.assert_called_once()
+        call_args = mock_model.agenerate_chat_completion.call_args
 
-        # Check the prompt contains key elements
-        prompt = call_args[1]["input"]
-        assert output in prompt
-        assert "You are an expert in structured data validation" in prompt
+        # Check the messages contain key elements
+        messages = call_args[1]["messages"]
+        system_content = messages[0]["content"]
+        user_content = messages[1]["content"]
+        assert output in user_content
+        assert "You are an expert in structured data validation" in system_content
 
         # Check result
         assert isinstance(result, score_result.ScoreResult)
@@ -160,6 +165,9 @@ class TestStructuredOutputComplianceMetric:
         # Test that the model was initialized correctly by testing behavior
         assert metric is not None
         # We can test the public interface works correctly
-        mock_model.generate_string.return_value = '{"score": true, "reason": ["test"]}'
+        mock_model.generate_chat_completion.return_value = {
+            "role": "assistant",
+            "content": '{"score": true, "reason": ["test"]}',
+        }
         result = metric.score(output='{"test": "data"}')
         assert isinstance(result, score_result.ScoreResult)
