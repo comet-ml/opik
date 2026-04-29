@@ -20,7 +20,7 @@ const AssistantDebugInfo = () => {
       }}
     >
       <span className="comet-body-xs-accented flex items-center gap-1 truncate">
-        <OllieOwl className="size-4 text-[#F46E41]" />
+        <OllieOwl className="size-4 text-[var(--color-ollie)]" />
         OLLIE VERSION {meta.version}
       </span>
       <Copy className="size-3 shrink-0" />
