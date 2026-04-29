@@ -43,6 +43,7 @@ import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
+import OptimizationsEmptyState from "@/v2/pages/OptimizationsPage/OptimizationsEmptyState";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
@@ -330,27 +331,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-1 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
-          Optimization Studio
+          Optimization runs
         </h1>
       </div>
       {isEmpty ? (
-        <PageEmptyState
-          lightImageUrl={emptyOptStudioLightUrl}
-          darkImageUrl={emptyOptStudioDarkUrl}
-          title="No optimization runs yet"
-          description={
-            "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
-          }
-          primaryActionLabel={
-            canUseOptimizationStudio ? "Create optimization run" : undefined
-          }
-          onPrimaryAction={
-            canUseOptimizationStudio ? handleNewOptimizationClick : undefined
-          }
-          docsUrl={buildDocsUrl(
-            "/development/optimization-runs/optimization_studio",
-          )}
-        />
+        isOptimizationStudioEnabled && canUseOptimizationStudio ? (
+          <OptimizationsEmptyState
+            onOptimizeClick={handleNewOptimizationClick}
+          />
+        ) : (
+          <PageEmptyState
+            lightImageUrl={emptyOptStudioLightUrl}
+            darkImageUrl={emptyOptStudioDarkUrl}
+            title="No optimization runs yet"
+            description="Try different prompt versions and see what performs best. Optimization runs help you improve accuracy, consistency, and user experience."
+            docsUrl={buildDocsUrl(
+              "/development/optimization-runs/optimization_studio",
+            )}
+          />
+        )
       ) : (
         <>
           {isOptimizationStudioEnabled && canUseOptimizationStudio && (
