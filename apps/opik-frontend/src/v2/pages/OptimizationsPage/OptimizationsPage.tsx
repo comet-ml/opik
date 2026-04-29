@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import { RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
@@ -36,7 +35,7 @@ import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/Dat
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
@@ -385,16 +384,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
                     <Separator orientation="vertical" className="mx-2 h-4" />
                   </>
                 )}
-                <TooltipWrapper content="Refresh optimizations list">
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    className="shrink-0"
-                    onClick={() => refetch()}
-                  >
-                    <RotateCw />
-                  </Button>
-                </TooltipWrapper>
+                <RefreshButton
+                  tooltip="Refresh optimizations list"
+                  isFetching={isFetching}
+                  onRefresh={() => refetch()}
+                />
                 <ColumnsButton
                   columns={visibleColumns}
                   selectedColumns={selectedColumns}
