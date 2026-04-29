@@ -4,11 +4,12 @@ import { Groups } from "@/types/groups";
 import { COLUMN_DATASET_ID, COLUMN_METADATA_ID } from "@/types/shared";
 import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
 import { DEFAULT_MAX_EXPERIMENTS } from "@/lib/dashboard/utils";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 
 const DEFAULT_TITLE = "Experiment metrics";
 
 const GROUP_FIELD_LABELS: Record<string, string> = {
-  [COLUMN_DATASET_ID]: "Test suite",
+  [COLUMN_DATASET_ID]: ITEM_SOURCE_LABEL,
   [COLUMN_METADATA_ID]: "Configuration",
 };
 

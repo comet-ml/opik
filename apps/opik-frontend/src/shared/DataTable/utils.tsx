@@ -412,6 +412,14 @@ export const generateGroupedRowCellDef = <TData, TValue>(
 ) => {
   const columDataFields = mapColumnDataFields(columnData);
   const { label } = columnData;
+  const customMeta = columnData.customMeta as
+    | {
+        getGroupRowLabel?: (row: TData) => string;
+        hideGroupRowLabelColon?: boolean;
+      }
+    | undefined;
+  const getGroupRowLabel = customMeta?.getGroupRowLabel;
+  const hideGroupRowLabelColon = customMeta?.hideGroupRowLabelColon;
   return {
     ...columDataFields,
     header: () => "",
@@ -420,6 +428,9 @@ export const generateGroupedRowCellDef = <TData, TValue>(
       const rowHeight =
         context.table.options.meta?.rowHeight ?? ROW_HEIGHT.small;
       const textClass = CELL_TEXT_CLASS_MAP[rowHeight];
+      const resolvedLabel = getGroupRowLabel
+        ? getGroupRowLabel(row.original) || label
+        : label;
       return (
         <CellWrapper
           metadata={context.column.columnDef.meta}
@@ -456,12 +467,12 @@ export const generateGroupedRowCellDef = <TData, TValue>(
               ) : (
                 <ChevronDown className="mr-1 size-4 shrink-0" />
               )}
-              {label && (
+              {resolvedLabel && (
                 <>
-                  <TooltipWrapper content={label}>
-                    <span className="max-w-56 truncate">{label}</span>
+                  <TooltipWrapper content={resolvedLabel}>
+                    <span className="max-w-56 truncate">{resolvedLabel}</span>
                   </TooltipWrapper>
-                  :
+                  {!hideGroupRowLabelColon && ":"}
                 </>
               )}
             </Button>
