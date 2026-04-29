@@ -111,13 +111,18 @@ export const LoadableSelectBox = ({
     return multiselect && isArray(value) ? value : [];
   }, [multiselect, value]);
 
+  const selectedValuesSet = useMemo(
+    () => new Set(selectedValues),
+    [selectedValues],
+  );
+
   const isSelected = useCallback(
     (optionValue: string) => {
       return multiselect
-        ? selectedValues.includes(optionValue)
+        ? selectedValuesSet.has(optionValue)
         : value === optionValue;
     },
-    [multiselect, selectedValues, value],
+    [multiselect, selectedValuesSet, value],
   );
 
   const selectedOptions = useMemo(
@@ -168,7 +173,7 @@ export const LoadableSelectBox = ({
   }, [options, search]);
 
   const filteredSelectedCount = multiselect
-    ? filteredOptions.filter((option) => selectedValues.includes(option.value))
+    ? filteredOptions.filter((option) => selectedValuesSet.has(option.value))
         .length
     : 0;
 
@@ -185,9 +190,9 @@ export const LoadableSelectBox = ({
     if (!multiselect) return;
 
     if (allFilteredSelected) {
-      const filteredValues = filteredOptions.map((o) => o.value);
+      const filteredValuesSet = new Set(filteredOptions.map((o) => o.value));
       const newSelectedValues = selectedValues.filter(
-        (v) => !filteredValues.includes(v),
+        (v) => !filteredValuesSet.has(v),
       );
       onChange && (onChange as (value: string[]) => void)(newSelectedValues);
     } else {

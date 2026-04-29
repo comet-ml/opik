@@ -51,19 +51,6 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     permissions: { canUpdateOnlineEvaluationRules },
   } = usePermissions();
 
-  const isAllSelected =
-    rules.length > 0 &&
-    (selectedRuleIds === null || selectedRuleIds.length === rules.length);
-
-  const selectedCount = isAllSelected
-    ? rules.length
-    : selectedRuleIds?.length ?? 0;
-
-  const selectAllCheckedState = getSelectAllCheckedState(
-    selectedCount,
-    rules.length,
-  );
-
   const selectedRuleIdsSet = useMemo(
     () => new Set(selectedRuleIds ?? []),
     [selectedRuleIds],
@@ -73,6 +60,13 @@ const MetricSelector: React.FC<MetricSelectorProps> = ({
     if (!selectedRuleIds) return rules;
     return rules.filter((rule) => selectedRuleIdsSet.has(rule.id));
   }, [rules, selectedRuleIds, selectedRuleIdsSet]);
+
+  const selectedCount = selectedRules.length;
+  const isAllSelected = rules.length > 0 && selectedCount === rules.length;
+  const selectAllCheckedState = getSelectAllCheckedState(
+    selectedCount,
+    rules.length,
+  );
 
   const filteredRules = useMemo(() => {
     if (!search) return rules;
