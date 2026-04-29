@@ -10,7 +10,7 @@ import { Button, ButtonProps } from "@/ui/button";
 import { Spinner } from "@/ui/spinner";
 import { Separator } from "@/ui/separator";
 import { Checkbox } from "@/ui/checkbox";
-import { cn } from "@/lib/utils";
+import { cn, getSelectAllCheckedState } from "@/lib/utils";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import { DropdownOption } from "@/types/shared";
 import NoOptions from "./NoOptions";
@@ -167,12 +167,19 @@ export const LoadableSelectBox = ({
     return options.filter((o) => toLower(o.label).includes(toLower(search)));
   }, [options, search]);
 
-  const allFilteredSelected = useMemo(() => {
-    if (!multiselect || !filteredOptions.length) return false;
-    return filteredOptions.every((option) =>
-      selectedValues.includes(option.value),
-    );
-  }, [multiselect, filteredOptions, selectedValues]);
+  const filteredSelectedCount = multiselect
+    ? filteredOptions.filter((option) => selectedValues.includes(option.value))
+        .length
+    : 0;
+
+  const allFilteredSelected =
+    filteredOptions.length > 0 &&
+    filteredSelectedCount === filteredOptions.length;
+
+  const selectAllCheckedState = getSelectAllCheckedState(
+    filteredSelectedCount,
+    filteredOptions.length,
+  );
 
   const handleSelectAll = useCallback(() => {
     if (!multiselect) return;
@@ -425,11 +432,15 @@ export const LoadableSelectBox = ({
                   onClick={handleSelectAll}
                 >
                   <Checkbox
-                    checked={allFilteredSelected}
+                    checked={selectAllCheckedState}
                     className="shrink-0"
+                    tabIndex={-1}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="comet-body-s truncate">Select all</div>
+                    <div className="comet-body-s truncate">
+                      {filteredSelectedCount} of {filteredOptions.length}{" "}
+                      selected
+                    </div>
                   </div>
                 </div>
               </>
