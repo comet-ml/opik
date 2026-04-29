@@ -2,6 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { MockInstance } from "vitest";
 import { Opik } from "opik";
 import { AssertionResultsBatchQueue } from "@/client/AssertionResultsBatchQueue";
+import type { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
+import { OpikApiError } from "@/rest_api/errors/OpikApiError";
+import { logger } from "@/utils/logger";
 
 describe("OpikClient.traceAssertionResultsBatchQueue wiring", () => {
   let client: Opik;
@@ -40,7 +43,7 @@ describe("AssertionResultsBatchQueue.createEntities", () => {
       requestOptions: { headers: { "x-test": "1" } },
     };
     queue = new AssertionResultsBatchQueue(
-      api as unknown as ConstructorParameters<typeof AssertionResultsBatchQueue>[0],
+      api as unknown as OpikApiClientTemp,
       0,
       "TRACE"
     );
@@ -96,5 +99,40 @@ describe("AssertionResultsBatchQueue.createEntities", () => {
   it("should not call the API when nothing has been queued", async () => {
     await queue.flush();
     expect(storeAssertionsBatch).not.toHaveBeenCalled();
+  });
+
+  it("should warn once on 404 from an unsupported backend, not per batch", async () => {
+    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+    storeAssertionsBatch.mockRejectedValue(
+      new OpikApiError({
+        statusCode: 404,
+        body: "Not Found",
+        rawResponse: new Response(null, { status: 404 }),
+      })
+    );
+
+    queue.create({
+      entityId: "trace-1",
+      projectName: "test-project",
+      name: "First",
+      status: "passed",
+      source: "sdk",
+    });
+    await queue.flush();
+
+    queue.create({
+      entityId: "trace-2",
+      projectName: "test-project",
+      name: "Second",
+      status: "failed",
+      source: "sdk",
+    });
+    await queue.flush();
+
+    expect(storeAssertionsBatch).toHaveBeenCalledTimes(2);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0][0]).toMatch(/OPIK-6048/);
+
+    warnSpy.mockRestore();
   });
 });

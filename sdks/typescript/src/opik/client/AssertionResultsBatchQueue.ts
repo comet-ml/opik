@@ -1,6 +1,8 @@
 import type { AssertionResultBatchEntityType } from "@/rest_api/api/resources/assertionResults/types/AssertionResultBatchEntityType";
 import type { AssertionResultBatchItem } from "@/rest_api/api/types/AssertionResultBatchItem";
 import { OpikApiClientTemp } from "@/client/OpikApiClientTemp";
+import { OpikApiError } from "@/rest_api/errors/OpikApiError";
+import { logger } from "@/utils/logger";
 import { BatchQueue } from "./BatchQueue";
 
 type AssertionResultId = {
@@ -12,12 +14,12 @@ export class AssertionResultsBatchQueue extends BatchQueue<
   AssertionResultBatchItem,
   AssertionResultId
 > {
-  private readonly entityType: AssertionResultBatchEntityType;
+  private unsupportedEndpointWarned = false;
 
   constructor(
     private readonly api: OpikApiClientTemp,
     delay?: number,
-    entityType: AssertionResultBatchEntityType = "TRACE"
+    private readonly entityType: AssertionResultBatchEntityType = "TRACE"
   ) {
     super({
       delay,
@@ -26,7 +28,6 @@ export class AssertionResultsBatchQueue extends BatchQueue<
       enableDeleteBatch: false,
       name: `AssertionResultsBatchQueue:${entityType}`,
     });
-    this.entityType = entityType;
   }
 
   protected getId(entity: AssertionResultBatchItem) {
@@ -34,10 +35,23 @@ export class AssertionResultsBatchQueue extends BatchQueue<
   }
 
   protected async createEntities(assertionResults: AssertionResultBatchItem[]) {
-    await this.api.assertionResults.storeAssertionsBatch(
-      { entityType: this.entityType, assertionResults },
-      this.api.requestOptions
-    );
+    try {
+      await this.api.assertionResults.storeAssertionsBatch(
+        { entityType: this.entityType, assertionResults },
+        this.api.requestOptions
+      );
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 404) {
+        if (!this.unsupportedEndpointWarned) {
+          this.unsupportedEndpointWarned = true;
+          logger.warn(
+            "Opik backend does not support PUT /v1/private/assertion-results — suite assertion results will not be persisted. Upgrade your self-hosted Opik backend to a version that includes OPIK-6048."
+          );
+        }
+        return;
+      }
+      throw error;
+    }
   }
 
   protected async getEntity(): Promise<AssertionResultBatchItem | undefined> {

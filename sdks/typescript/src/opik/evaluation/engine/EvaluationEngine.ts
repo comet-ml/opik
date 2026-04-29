@@ -435,18 +435,25 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       })
     );
 
-    const assertionProjectName =
-      trace.data.projectName ?? this.client.config.projectName;
-    assertionResults.forEach((result) =>
+    const assertionProjectName = this.client.resolveProjectName(
+      trace.data.projectName
+    );
+    assertionResults.forEach((result) => {
+      if (result.value !== 0 && result.value !== 1) {
+        logger.warn(
+          `Suite evaluator "${result.name}" returned non-binary value ${result.value}; coercing to "failed". BaseSuiteEvaluator.score() must return 0 or 1.`
+        );
+      }
       this.client.traceAssertionResultsBatchQueue.create({
         entityId: trace.data.id,
         projectName: assertionProjectName,
         name: result.name,
+        // TODO(OPIK-6256): switch to typed AssertionStatus once the SDK type lands.
         status: result.value === 1 ? "passed" : "failed",
         reason: result.reason,
         source: "sdk",
-      })
-    );
+      });
+    });
 
     return {
       testCase,
