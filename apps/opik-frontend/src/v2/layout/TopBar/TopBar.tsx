@@ -32,7 +32,7 @@ const TopBar: React.FC<TopBarProps> = ({
           <Button
             size="icon-sm"
             variant="outline"
-            className="text-[#F46E41]"
+            className="text-[var(--color-ollie)]"
             onClick={onOpenAssistant}
           >
             <OllieOwl />
