@@ -7,6 +7,7 @@ import click
 
 from . import configure
 from . import connect
+from . import copy
 from . import endpoint
 from . import exports
 from . import harbor
@@ -47,6 +48,7 @@ cli.add_command(proxy.proxy)
 cli.add_command(healthcheck.healthcheck)
 cli.add_command(exports.export_group)
 cli.add_command(imports.import_group)
+cli.add_command(copy.copy_group)
 cli.add_command(usage_report.usage_report)
 cli.add_command(harbor.harbor)
 cli.add_command(connect.connect)
