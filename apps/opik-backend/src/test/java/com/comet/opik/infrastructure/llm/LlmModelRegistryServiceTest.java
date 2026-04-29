@@ -100,7 +100,7 @@ class LlmModelRegistryServiceTest {
         assertThat(registry.get("gemini").get(0).id()).isEqualTo("gemini-custom");
 
         // Anthropic unchanged from defaults
-        assertThat(registry.get("anthropic")).hasSize(3);
+        assertThat(registry.get("anthropic")).hasSize(1);
     }
 
     @Test
@@ -318,45 +318,6 @@ class LlmModelRegistryServiceTest {
         assertThat(service.getRegistry()).containsKeys("openai", "anthropic", "vertex-ai");
         assertThat(service.getRegistry().get("openai")).hasSize(3);
         org.mockito.Mockito.verifyNoInteractions(client);
-    }
-
-    @Test
-    void supportsSamplingParamsDefaultsToTrueWhenAbsent() {
-        var config = new LlmModelRegistryConfig();
-        config.setDefaultResource("llm-models-test.yaml");
-
-        var service = new LlmModelRegistryService(config);
-        var anthropic = service.getRegistry().get("anthropic");
-
-        var sonnet46 = anthropic.stream()
-                .filter(m -> "claude-sonnet-4-6".equals(m.id())).findFirst().orElseThrow();
-        var opus47 = anthropic.stream()
-                .filter(m -> "claude-opus-4-7".equals(m.id())).findFirst().orElseThrow();
-        var opus46 = anthropic.stream()
-                .filter(m -> "claude-opus-4-6".equals(m.id())).findFirst().orElseThrow();
-
-        assertThat(sonnet46.supportsSamplingParams()).isNull();
-        assertThat(sonnet46.supportsSamplingParamsOrDefault()).isTrue();
-
-        assertThat(opus47.supportsSamplingParams()).isFalse();
-        assertThat(opus47.supportsSamplingParamsOrDefault()).isFalse();
-
-        assertThat(opus46.supportsSamplingParams()).isTrue();
-        assertThat(opus46.supportsSamplingParamsOrDefault()).isTrue();
-    }
-
-    @Test
-    void supportsSamplingParamsHelperReflectsRegistryFlag() {
-        var config = new LlmModelRegistryConfig();
-        config.setDefaultResource("llm-models-test.yaml");
-
-        var service = new LlmModelRegistryService(config);
-
-        assertThat(service.supportsSamplingParams("claude-opus-4-7")).isFalse();
-        assertThat(service.supportsSamplingParams("claude-opus-4-6")).isTrue();
-        assertThat(service.supportsSamplingParams("claude-sonnet-4-6")).isTrue();
-        assertThat(service.supportsSamplingParams("model-not-in-registry")).isTrue();
-        assertThat(service.supportsSamplingParams(null)).isTrue();
     }
 
     private static Client mockHttpClient(int statusCode, String responseBody) {

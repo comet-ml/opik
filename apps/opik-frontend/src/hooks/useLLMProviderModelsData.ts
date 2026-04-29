@@ -88,7 +88,6 @@ const buildFlagsIndex = (
       const flags: ModelFlags = {
         reasoning: m.reasoning,
         structuredOutput: m.structuredOutput,
-        supportsSamplingParams: m.supportsSamplingParams ?? true,
       };
       index.set(m.id, flags);
       if (m.qualifiedName) {

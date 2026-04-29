@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from "vitest";
+import { describe, it, expect } from "vitest";
 import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
@@ -9,10 +9,6 @@ import {
   EXPERIMENT_TYPE,
   EVALUATION_METHOD,
 } from "@/types/datasets";
-import {
-  resetModelRegistryStoreForTesting,
-  setLatestModelFlags,
-} from "@/lib/modelRegistryStore";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -376,24 +372,7 @@ describe("convertOptimizationVariableFormat", () => {
 });
 
 describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
-  afterEach(() => {
-    resetModelRegistryStoreForTesting();
-  });
-
-  it("seeds temperature when the model accepts sampling params", () => {
-    setLatestModelFlags(
-      new Map([
-        [
-          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-          {
-            reasoning: false,
-            structuredOutput: true,
-            supportsSamplingParams: true,
-          },
-        ],
-      ]),
-    );
-
+  it("seeds temperature for models that accept sampling params", () => {
     const config = getOptimizationDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
@@ -402,20 +381,7 @@ describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
     expect(config.temperature).toBe(0);
   });
 
-  it("omits temperature when the model rejects sampling params", () => {
-    setLatestModelFlags(
-      new Map([
-        [
-          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-          {
-            reasoning: false,
-            structuredOutput: true,
-            supportsSamplingParams: false,
-          },
-        ],
-      ]),
-    );
-
+  it("omits temperature for Claude Opus 4.7", () => {
     const config = getOptimizationDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,

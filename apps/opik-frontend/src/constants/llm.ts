@@ -100,9 +100,9 @@ export const ANTHROPIC_THINKING_MODELS = [
 ] as const;
 
 // Models that reject any non-default value for temperature, top_p, top_k.
-// Mirrors the BE registry flag (supportsSamplingParams: false). Acts as a
-// hydration-window fallback so the UI hides the sliders before the BE
-// model registry fetch resolves.
+// The backend mirrors this list in AnthropicSamplingParams and strips the
+// fields from outbound requests as a safety net. Add a new model id here
+// when its docs say the same.
 export const MODELS_WITHOUT_SAMPLING_PARAMS = [
   PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
 ] as const;

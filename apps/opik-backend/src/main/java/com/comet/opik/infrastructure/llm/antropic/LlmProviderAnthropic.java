@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.ChunkedResponseHandler;
 import com.comet.opik.domain.llm.LlmProviderService;
-import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LoggingChunkedResponseHandler;
 import com.comet.opik.infrastructure.llm.StreamingResponseLogger;
 import dev.langchain4j.exception.AuthenticationException;
@@ -32,7 +31,6 @@ import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETIO
 class LlmProviderAnthropic implements LlmProviderService {
 
     private final @NonNull AnthropicClient anthropicClient;
-    private final @NonNull LlmModelRegistryService registryService;
 
     @Override
     public ChatCompletionResponse generate(@NonNull ChatCompletionRequest request, @NonNull String workspaceId) {
@@ -66,7 +64,7 @@ class LlmProviderAnthropic implements LlmProviderService {
     }
 
     private ChatCompletionRequest stripSamplingParamsIfUnsupported(@NonNull ChatCompletionRequest request) {
-        if (registryService.supportsSamplingParams(request.model())) {
+        if (AnthropicSamplingParams.supportsSamplingParams(request.model())) {
             return request;
         }
         return ChatCompletionRequest.builder()

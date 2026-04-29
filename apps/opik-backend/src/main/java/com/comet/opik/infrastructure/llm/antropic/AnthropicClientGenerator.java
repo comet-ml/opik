@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.api.evaluators.LlmAsJudgeModelParameters;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmProviderClientApiConfig;
 import com.comet.opik.infrastructure.llm.LlmProviderClientGenerator;
 import dev.langchain4j.model.anthropic.AnthropicChatModel;
@@ -18,7 +17,6 @@ import java.util.Optional;
 public class AnthropicClientGenerator implements LlmProviderClientGenerator<AnthropicClient> {
 
     private final @NonNull LlmProviderClientConfig llmProviderClientConfig;
-    private final @NonNull LlmModelRegistryService registryService;
 
     private AnthropicClient newAnthropicClient(@NonNull LlmProviderClientApiConfig config) {
         var anthropicClientBuilder = AnthropicClient.builder();
@@ -67,7 +65,7 @@ public class AnthropicClientGenerator implements LlmProviderClientGenerator<Anth
             builder.baseUrl(config.baseUrl());
         }
 
-        if (registryService.supportsSamplingParams(modelParameters.name())) {
+        if (AnthropicSamplingParams.supportsSamplingParams(modelParameters.name())) {
             Optional.ofNullable(modelParameters.temperature()).ifPresent(builder::temperature);
         }
 

@@ -95,32 +95,23 @@ export const supportsAnthropicThinkingEffort = (
 };
 
 /**
- * Some models (e.g. Claude Opus 4.7) reject any non-default value for
- * temperature, top_p, or top_k. The backend YAML flags those models with
- * `supportsSamplingParams: false`; everywhere else the flag is absent and we
- * default to `true`.
+ * Some Claude models (Opus 4.7 today) reject any non-default value for
+ * temperature, top_p, or top_k. The hardcoded MODELS_WITHOUT_SAMPLING_PARAMS
+ * list is the source of truth — add a new model id when its docs say the
+ * same. The backend mirrors this list and strips the params from the
+ * outbound request as a safety net.
  *
  * UI uses this to hide the corresponding sliders. Config builders use it to
  * skip seeding `temperature` / `topP` defaults so the request payload omits
  * them entirely.
- *
- * The hardcoded MODELS_WITHOUT_SAMPLING_PARAMS list is the source of truth
- * during the hydration window and as a fallback when the BE response is
- * missing the field (e.g. older backend running against a newer frontend).
  */
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): boolean => {
   if (!model) return true;
-  if (
-    (MODELS_WITHOUT_SAMPLING_PARAMS as readonly PROVIDER_MODEL_TYPE[]).includes(
-      model as PROVIDER_MODEL_TYPE,
-    )
-  ) {
-    return false;
-  }
-  const flags = getLatestModelFlags(model);
-  return flags ? flags.supportsSamplingParams : true;
+  return !(
+    MODELS_WITHOUT_SAMPLING_PARAMS as readonly PROVIDER_MODEL_TYPE[]
+  ).includes(model as PROVIDER_MODEL_TYPE);
 };
 
 /**

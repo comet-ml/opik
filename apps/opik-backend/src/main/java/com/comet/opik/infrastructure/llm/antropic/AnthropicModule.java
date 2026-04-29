@@ -2,7 +2,6 @@ package com.comet.opik.infrastructure.llm.antropic;
 
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.LlmProviderClientConfig;
-import com.comet.opik.infrastructure.llm.LlmModelRegistryService;
 import com.comet.opik.infrastructure.llm.LlmServiceProvider;
 import com.google.inject.AbstractModule;
 import com.google.inject.Provides;
@@ -16,18 +15,16 @@ public class AnthropicModule extends AbstractModule {
     @Provides
     @Singleton
     public AnthropicClientGenerator clientGenerator(
-            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config,
-            @NonNull LlmModelRegistryService registryService) {
-        return new AnthropicClientGenerator(config, registryService);
+            @NonNull @Config("llmProviderClient") LlmProviderClientConfig config) {
+        return new AnthropicClientGenerator(config);
     }
 
     @Provides
     @Singleton
     @Named("anthropic")
     public LlmServiceProvider llmServiceProvider(@NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull AnthropicClientGenerator clientGenerator,
-            @NonNull LlmModelRegistryService registryService) {
-        return new AnthropicLlmServiceProvider(clientGenerator, llmProviderFactory, registryService);
+            @NonNull AnthropicClientGenerator clientGenerator) {
+        return new AnthropicLlmServiceProvider(clientGenerator, llmProviderFactory);
     }
 
 }

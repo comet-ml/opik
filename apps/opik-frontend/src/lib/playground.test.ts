@@ -1,8 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
-import {
-  resetModelRegistryStoreForTesting,
-  setLatestModelFlags,
-} from "@/lib/modelRegistryStore";
+import { describe, expect, it } from "vitest";
 import { getDefaultConfigByProvider } from "@/lib/playground";
 import {
   COMPOSED_PROVIDER_TYPE,
@@ -12,24 +8,7 @@ import {
 } from "@/types/providers";
 
 describe("getDefaultConfigByProvider — Anthropic", () => {
-  afterEach(() => {
-    resetModelRegistryStoreForTesting();
-  });
-
-  it("seeds temperature default when the model accepts sampling params", () => {
-    setLatestModelFlags(
-      new Map([
-        [
-          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-          {
-            reasoning: false,
-            structuredOutput: true,
-            supportsSamplingParams: true,
-          },
-        ],
-      ]),
-    );
-
+  it("seeds temperature default for models that accept sampling params", () => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
@@ -38,20 +17,7 @@ describe("getDefaultConfigByProvider — Anthropic", () => {
     expect(config.temperature).toBe(0);
   });
 
-  it("omits temperature and topP when the model rejects sampling params", () => {
-    setLatestModelFlags(
-      new Map([
-        [
-          PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-          {
-            reasoning: false,
-            structuredOutput: true,
-            supportsSamplingParams: false,
-          },
-        ],
-      ]),
-    );
-
+  it("omits temperature and topP for Claude Opus 4.7", () => {
     const config = getDefaultConfigByProvider(
       PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
