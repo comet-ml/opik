@@ -38,18 +38,15 @@ const RefreshButton: React.FC<RefreshButtonProps> = ({
         }}
         disabled={isSpinning}
       >
-        <span
+        <RotateCw
           className={cn(
-            "inline-flex shrink-0",
-            label && "mr-1.5",
+            label && "mr-1.5 size-3.5",
             isSpinning && "animate-spin",
           )}
           onAnimationIteration={() => {
             if (!isFetching) setSpin(false);
           }}
-        >
-          <RotateCw className="size-3.5" />
-        </span>
+        />
         {label}
       </Button>
     </TooltipWrapper>
