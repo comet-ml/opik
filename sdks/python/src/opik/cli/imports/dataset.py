@@ -20,8 +20,15 @@ def import_datasets_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> Dict[str, int]:
     """Import datasets from a directory.
+
+    Args:
+        destination_project: When provided, datasets are created in this project
+            on the destination workspace, overriding any project info in the
+            source JSON. Used by ``opik copy dataset``. When ``None`` (the
+            default), behavior is identical to a plain ``opik import``.
 
     Returns:
         Dictionary with keys: 'datasets', 'datasets_skipped', 'datasets_errors'
@@ -97,14 +104,18 @@ def import_datasets_from_directory(
 
                 # Get or create dataset (handles case where dataset already exists)
                 try:
-                    dataset = client.get_dataset(dataset_name)
+                    dataset = client.get_dataset(
+                        dataset_name, project_name=destination_project
+                    )
                     if debug:
                         console.print(
                             f"[blue]Dataset '{dataset_name}' already exists, using existing dataset[/blue]"
                         )
                 except Exception:
                     # Dataset doesn't exist, create it
-                    dataset = client.create_dataset(name=dataset_name)
+                    dataset = client.create_dataset(
+                        name=dataset_name, project_name=destination_project
+                    )
                     if debug:
                         console.print(
                             f"[blue]Created new dataset: {dataset_name}[/blue]"
