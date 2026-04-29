@@ -274,12 +274,78 @@ class AgentConfigServiceImpl implements AgentConfigService {
         String name = blueprint.type() == AgentBlueprint.BlueprintType.MASK
                 ? ""
                 : generateNextBlueprintName(dao, workspaceId, projectId);
+
+        String description = blueprint.description();
+        if ((description == null || description.isBlank()) && blueprint.type() != AgentBlueprint.BlueprintType.MASK) {
+            description = generateUpdateDescription(dao, workspaceId, projectId, blueprint.values());
+        }
+
+        blueprint = blueprint.toBuilder().description(description).build();
         UUID blueprintId = createBlueprintSnapshot(dao, workspaceId, projectId, configId, name, blueprint);
 
         return blueprint.toBuilder()
                 .id(blueprintId)
                 .name(name)
                 .build();
+    }
+
+    private String generateUpdateDescription(
+            AgentConfigDAO dao,
+            String workspaceId,
+            UUID projectId,
+            List<AgentConfigValue> newValues) {
+
+        if (newValues == null || newValues.isEmpty()) {
+            return null;
+        }
+
+        AgentBlueprint previous = dao.getLatestBlueprint(workspaceId, projectId,
+                AgentBlueprint.BlueprintType.BLUEPRINT);
+        Map<String, AgentConfigValue> previousByKey = previous != null && previous.values() != null
+                ? previous.values().stream().collect(Collectors.toMap(AgentConfigValue::key, v -> v))
+                : Map.of();
+
+        Set<String> newKeys = newValues.stream().map(AgentConfigValue::key).collect(Collectors.toSet());
+
+        List<String> removed = previousByKey.keySet().stream()
+                .filter(k -> !newKeys.contains(k))
+                .sorted()
+                .toList();
+
+        List<String> added = new ArrayList<>();
+        List<String> modified = new ArrayList<>();
+
+        for (AgentConfigValue v : newValues) {
+            AgentConfigValue prev = previousByKey.get(v.key());
+            if (prev == null) {
+                added.add(v.key());
+            } else if (!Objects.equals(prev.value(), v.value())) {
+                boolean isNumeric = v.type() == AgentConfigValue.ValueType.INTEGER
+                        || v.type() == AgentConfigValue.ValueType.FLOAT;
+                if (isNumeric) {
+                    modified.add(v.key() + " to " + v.value());
+                } else {
+                    modified.add(v.key());
+                }
+            }
+        }
+
+        if (added.isEmpty() && modified.isEmpty() && removed.isEmpty()) {
+            return null;
+        }
+
+        List<String> parts = new ArrayList<>();
+        if (!added.isEmpty()) {
+            parts.add("Added " + String.join(", ", added));
+        }
+        if (!modified.isEmpty()) {
+            parts.add("Modified " + String.join(", ", modified));
+        }
+        if (!removed.isEmpty()) {
+            parts.add("Removed " + String.join(", ", removed));
+        }
+
+        return String.join(". ", parts);
     }
 
     private UUID createBlueprintSnapshot(
