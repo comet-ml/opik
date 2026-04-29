@@ -162,12 +162,13 @@ hooks-remove:
 		echo "Error: $(MAKEFILE_DIR) is not in a git repository."; \
 		exit 1; \
 	fi
-	@if [ -f "$(HOOKS_DEST)/pre-commit" ]; then \
-		rm -f $(HOOKS_DEST)/pre-commit; \
-		echo "Pre-commit hook removed."; \
-	else \
-		echo "No pre-commit hook found."; \
-	fi
+	@cd "$(MAKEFILE_DIR)" && \
+		if [ -f "$(HOOKS_DEST)/pre-commit" ]; then \
+			rm -f $(HOOKS_DEST)/pre-commit; \
+			echo "Pre-commit hook removed."; \
+		else \
+			echo "No pre-commit hook found."; \
+		fi
 
 # Run SDK pre-commit style checks (changed files only / explicit script checks)
 precommit-sdks:
