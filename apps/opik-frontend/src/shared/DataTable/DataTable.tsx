@@ -39,6 +39,7 @@ import {
   OnChangeFn,
   ROW_HEIGHT,
 } from "@/types/shared";
+import { DATASET_TYPE } from "@/types/datasets";
 import {
   calculateHeightStyle,
   computePinnedColumnIds,
@@ -62,6 +63,7 @@ declare module "@tanstack/react-table" {
     rowHeightStyle: React.CSSProperties;
     onCommentsReply?: (row: TData, idx?: number) => void;
     aggregationMap?: Record<string, unknown>;
+    datasetTypeMap?: Record<string, DATASET_TYPE>;
     enableUserFeedbackEditing?: boolean;
     projectId?: string;
     projectName?: string;
