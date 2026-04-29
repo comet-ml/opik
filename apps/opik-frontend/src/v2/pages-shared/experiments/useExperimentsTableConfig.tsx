@@ -48,10 +48,12 @@ import {
   getSharedShiftCheckboxClickHandler,
 } from "@/shared/DataTable/utils";
 import { DELETED_ENTITY_LABEL, GROUPING_KEY } from "@/constants/groups";
-import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
+import {
+  createItemSourceGroupCell,
+  ITEM_SOURCE_LABEL,
+} from "@/v2/pages-shared/experiments/ItemSourceCell";
 import {
   DATASET_TYPE,
-  EVALUATION_METHOD,
   Experiment,
   ExperimentsAggregations,
 } from "@/types/datasets";
@@ -245,24 +247,10 @@ export const useExperimentsTableConfig = <
           groupCellDef = {
             ...groupCellDef,
             type: COLUMN_TYPE.string,
-            cell: ResourceCell.Group as never,
             customMeta: {
               nameKey: `${metaKey}.label`,
               idKey: `${metaKey}.value`,
-              resource: RESOURCE_TYPE.dataset,
-              getResource: (row: unknown) => {
-                const evaluationMethod = get(
-                  row,
-                  "evaluation_method",
-                  undefined,
-                ) as EVALUATION_METHOD | undefined;
-                if (evaluationMethod === EVALUATION_METHOD.TEST_SUITE)
-                  return RESOURCE_TYPE.testSuite;
-                const datasetId = get(row, `${metaKey}.value`, "") as string;
-                if (datasetTypeMap?.[datasetId] === DATASET_TYPE.TEST_SUITE)
-                  return RESOURCE_TYPE.testSuite;
-                return RESOURCE_TYPE.dataset;
-              },
+              datasetTypeMap,
               getIsDeleted: (row: T) =>
                 get(row, `${metaKey}.label`, "") === DELETED_ENTITY_LABEL,
               countAggregationKey: "experiment_count",
@@ -305,6 +293,9 @@ export const useExperimentsTableConfig = <
           groupCellDef,
           checkboxClickHandler,
         ),
+        ...(group.field === COLUMN_DATASET_ID && {
+          cell: createItemSourceGroupCell<T>(checkboxClickHandler),
+        }),
         enableHiding: true,
       };
     });
