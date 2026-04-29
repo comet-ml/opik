@@ -1,5 +1,7 @@
 from typing import List, TypedDict, Optional
 
+from opik.evaluation.models import base_model
+
 
 class FewShotExampleHallucination(TypedDict):
     title: str
@@ -10,7 +12,7 @@ class FewShotExampleHallucination(TypedDict):
     reason: str
 
 
-context_hallucination_template = """You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
+_CONTEXT_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating the faithfulness of an AI-generated answer to the given context. Analyze the provided INPUT, CONTEXT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
 Guidelines:
 1. The OUTPUT must not introduce new information beyond what's provided in the CONTEXT.
@@ -26,26 +28,14 @@ Analyze the text thoroughly and assign a hallucination score between 0 and 1, wh
 - 0.0: The OUTPUT is entirely faithful to the CONTEXT
 - 1.0: The OUTPUT is entirely unfaithful to the CONTEXT
 
-{examples_str}
-
-INPUT (for context only, not to be used for faithfulness evaluation):
-{input}
-
-CONTEXT:
-{context}
-
-OUTPUT:
-{output}
-
 It is crucial that you provide your answer in the following JSON format:
 {{
     "score": <your score between 0.0 and 1.0>,
     "reason": ["reason 1", "reason 2"]
 }}
-Reasons amount is not restricted. Output must be JSON format only.
-"""
+Reasons amount is not restricted. Output must be JSON format only.{examples_block}"""
 
-output_hallucination_template = """You are an expert judge tasked with evaluating the factual accuracy and reliability of an AI-generated answer. Analyze the provided INPUT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
+_OUTPUT_SYSTEM_PROMPT = """You are an expert judge tasked with evaluating the factual accuracy and reliability of an AI-generated answer. Analyze the provided INPUT, and OUTPUT to determine if the OUTPUT contains any hallucinations or unfaithful information.
 
 Guidelines:
 1. Evaluate the OUTPUT based on generally accepted facts and reliable information.
@@ -60,53 +50,77 @@ Analyze the text thoroughly and assign a hallucination score between 0 and 1, wh
 - 0.0: The OUTPUT is entirely faithful
 - 1.0: The OUTPUT is entirely unfaithful
 
-{examples_str}
-
-INPUT (for context only, not to be used for faithfulness evaluation):
-{input}
-
-OUTPUT:
-{output}
-
 It is crucial that you provide your answer in the following JSON format:
 {{
     "score": <your score between 0.0 and 1.0>,
     "reason": ["some reason 1", "some reason 2"]
 }}
-Reasons amount is not restricted. Output must be JSON format only.
-"""
+Reasons amount is not restricted. Output must be JSON format only.{examples_block}"""
+
+_CONTEXT_USER_TEMPLATE = """INPUT (for context only, not to be used for faithfulness evaluation):
+{input}
+
+CONTEXT:
+{context}
+
+OUTPUT:
+{output}"""
+
+_OUTPUT_USER_TEMPLATE = """INPUT (for context only, not to be used for faithfulness evaluation):
+{input}
+
+OUTPUT:
+{output}"""
 
 
-def generate_query(
+def _format_examples(
+    few_shot_examples: Optional[List[FewShotExampleHallucination]],
+    include_context: bool,
+) -> str:
+    if not few_shot_examples:
+        return ""
+    rendered = "\n\nEXAMPLES:\n\n".join(
+        [
+            f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
+            if include_context
+            else ""
+            f"Output: {example['output']}\n\n"
+            f'{{"score": "{example["score"]}", "reason": "{example["reason"]}"}}\n'
+            f"</example>"
+            for example in few_shot_examples
+        ]
+    )
+    return f"\n\n{rendered}"
+
+
+def build_messages(
     input: str,
     output: str,
     context: Optional[List[str]] = None,
     few_shot_examples: Optional[List[FewShotExampleHallucination]] = None,
-) -> str:
-    if few_shot_examples is None:
-        examples_str = ""
-    else:
-        examples_str = "\n\nEXAMPLES:\n\n".join(
-            [
-                f"<example>\nInput: {example['input']}\nContext: {example['context']}\n"
-                if context is not None
-                else ""
-                f"Output: {example['output']}\n\n"
-                f'{{"score": "{example["score"]}", "reason": "{example["reason"]}"}}\n'
-                f"</example>"
-                for i, example in enumerate(few_shot_examples)
-            ]
-        )
+) -> List[base_model.ConversationDict]:
+    """Build the [system, user] message pair for a hallucination judgment.
 
-    if context is not None:
-        return context_hallucination_template.format(
-            examples_str=examples_str,
-            input=input,
-            context=context,
-            output=output,
-        )
-    return output_hallucination_template.format(
-        examples_str=examples_str,
-        input=input,
-        output=output,
+    Static instructions, the JSON output spec, and the few-shot examples (which
+    only depend on metric configuration) live in the system message so providers
+    can cache the prefix across calls. The per-call ``input``/``context``/``output``
+    go in the user message.
+    """
+    include_context = context is not None
+    examples_block = _format_examples(
+        few_shot_examples, include_context=include_context
     )
+
+    if include_context:
+        system_content = _CONTEXT_SYSTEM_PROMPT.format(examples_block=examples_block)
+        user_content = _CONTEXT_USER_TEMPLATE.format(
+            input=input, context=context, output=output
+        )
+    else:
+        system_content = _OUTPUT_SYSTEM_PROMPT.format(examples_block=examples_block)
+        user_content = _OUTPUT_USER_TEMPLATE.format(input=input, output=output)
+
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]

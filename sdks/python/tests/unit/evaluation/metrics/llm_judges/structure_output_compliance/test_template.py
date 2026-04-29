@@ -4,36 +4,46 @@ from opik.evaluation.metrics.llm_judges.structure_output_compliance.schema impor
 )
 
 
+def _system_user(messages):
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    return messages[0]["content"], messages[1]["content"]
+
+
 class TestStructuredOutputComplianceTemplate:
     """Test suite for StructuredOutputCompliance template functions."""
 
-    def test_generate_query_basic(self):
-        """Test basic query generation without schema or examples."""
+    def test_build_messages__no_schema_no_examples__placeholder_note_in_user_content(
+        self,
+    ):
+        """Without schema/examples, the user prompt embeds the no-schema placeholder."""
         output = '{"name": "John", "age": 30}'
 
-        query = template.generate_query(output=output)
+        messages = template.build_messages(output=output)
+        system_content, user_content = _system_user(messages)
 
-        assert output in query
-        assert "You are an expert in structured data validation" in query
-        assert "<schema>" in query and "</schema>" in query
-        assert "<output>" in query and "</output>" in query
-        assert "Respond in the following JSON format:" in query
-        assert "(No schema provided — assume valid JSON.)" in query
-        assert "Examples:" not in query
+        assert output in user_content
+        assert "You are an expert in structured data validation" in system_content
+        assert "<schema>" in user_content and "</schema>" in user_content
+        assert "<output>" in user_content and "</output>" in user_content
+        assert "Respond in the following JSON format:" in system_content
+        assert "(No schema provided — assume valid JSON.)" in user_content
+        assert "Examples:" not in system_content
 
-    def test_generate_query_with_schema(self):
-        """Test query generation with schema."""
+    def test_build_messages__schema_provided__schema_appears_in_user_content(self):
         output = '{"name": "John", "age": 30}'
         schema = "User(name: str, age: int)"
 
-        query = template.generate_query(output=output, schema=schema)
+        messages = template.build_messages(output=output, schema=schema)
+        system_content, user_content = _system_user(messages)
 
-        assert output in query
-        assert schema in query
-        assert "(No schema provided — assume valid JSON.)" not in query
+        assert output in user_content
+        assert schema in user_content
+        assert "(No schema provided — assume valid JSON.)" not in user_content
 
-    def test_generate_query_with_few_shot_examples(self):
-        """Test query generation with few-shot examples."""
+    def test_build_messages__few_shot_examples_provided__examples_appear_in_system_content(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
             FewShotExampleStructuredOutputCompliance(
@@ -52,27 +62,29 @@ class TestStructuredOutputComplianceTemplate:
             ),
         ]
 
-        query = template.generate_query(
+        messages = template.build_messages(
             output=output, few_shot_examples=few_shot_examples
         )
+        system_content, user_content = _system_user(messages)
 
-        assert output in query
-        assert "Examples:" in query
-        assert "Valid JSON" in query
-        assert "Invalid JSON" in query
-        assert "Alice" in query
-        assert "Bob" in query
-        assert "true" in query
-        assert "false" in query
-        assert "Valid JSON format" in query
-        assert "Missing quotes around age key" in query
-        assert "<example>" in query
-        assert "</example>" in query
-        assert "<title>Valid JSON</title>" in query
-        assert "<verdict>" in query and "</verdict>" in query
+        assert output in user_content
+        assert "Examples:" in system_content
+        assert "Valid JSON" in system_content
+        assert "Invalid JSON" in system_content
+        assert "Alice" in system_content
+        assert "Bob" in system_content
+        assert "true" in system_content
+        assert "false" in system_content
+        assert "Valid JSON format" in system_content
+        assert "Missing quotes around age key" in system_content
+        assert "<example>" in system_content
+        assert "</example>" in system_content
+        assert "<title>Valid JSON</title>" in system_content
+        assert "<verdict>" in system_content and "</verdict>" in system_content
 
-    def test_generate_query_with_schema_and_examples(self):
-        """Test query generation with both schema and few-shot examples."""
+    def test_build_messages__schema_and_examples_provided__both_appear_in_messages(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
         schema = "User(name: str, age: int)"
         few_shot_examples = [
@@ -85,29 +97,28 @@ class TestStructuredOutputComplianceTemplate:
             )
         ]
 
-        query = template.generate_query(
+        messages = template.build_messages(
             output=output, schema=schema, few_shot_examples=few_shot_examples
         )
+        system_content, user_content = _system_user(messages)
 
-        assert output in query
-        assert schema in query
-        assert "Examples:" in query
-        assert "Valid Example" in query
+        assert output in user_content
+        assert schema in user_content
+        assert "Examples:" in system_content
+        assert "Valid Example" in system_content
 
-    def test_generate_query_empty_examples_list(self):
-        """Test query generation with empty examples list."""
+    def test_build_messages__empty_examples_list__no_examples_section_in_system_content(
+        self,
+    ):
         output = '{"name": "John", "age": 30}'
-        few_shot_examples = []
 
-        query = template.generate_query(
-            output=output, few_shot_examples=few_shot_examples
-        )
+        messages = template.build_messages(output=output, few_shot_examples=[])
+        system_content, user_content = _system_user(messages)
 
-        assert output in query
-        assert "Examples:" not in query
+        assert output in user_content
+        assert "Examples:" not in system_content
 
-    def test_generate_query_example_without_schema(self):
-        """Test query generation with examples that don't have schema."""
+    def test_build_messages__example_without_schema__schema_rendered_as_none(self):
         output = '{"name": "John", "age": 30}'
         few_shot_examples = [
             FewShotExampleStructuredOutputCompliance(
@@ -118,33 +129,34 @@ class TestStructuredOutputComplianceTemplate:
             )
         ]
 
-        query = template.generate_query(
+        messages = template.build_messages(
             output=output, few_shot_examples=few_shot_examples
         )
+        system_content, _ = _system_user(messages)
 
-        assert "<schema>None</schema>" in query
-        assert "Valid JSON" in query
-        assert "true" in query
+        assert "<schema>None</schema>" in system_content
+        assert "Valid JSON" in system_content
+        assert "true" in system_content
 
-    def test_generate_query_template_structure(self):
-        """Test that the generated query has the correct template structure."""
+    def test_build_messages__happyflow(self):
         output = '{"test": "data"}'
 
-        query = template.generate_query(output=output)
+        messages = template.build_messages(output=output)
+        system_content, user_content = _system_user(messages)
 
-        assert "You are an expert in structured data validation" in query
-        assert "Guidelines:" in query
-        assert "1. The OUTPUT must be a valid JSON object" in query
-        assert "2. If a schema is provided" in query
-        assert "3. If no schema is provided" in query
-        assert "4. Common formatting issues" in query
-        assert "5. Partial compliance is considered non-compliant" in query
-        assert "6. Respond only in the specified JSON format" in query
+        assert "You are an expert in structured data validation" in system_content
+        assert "Guidelines:" in system_content
+        assert "1. The OUTPUT must be a valid JSON object" in system_content
+        assert "2. If a schema is provided" in system_content
+        assert "3. If no schema is provided" in system_content
+        assert "4. Common formatting issues" in system_content
+        assert "5. Partial compliance is considered non-compliant" in system_content
+        assert "6. Respond only in the specified JSON format" in system_content
         assert (
             "7. Score should be true if the OUTPUT fully complies, false otherwise"
-            in query
+            in system_content
         )
-        assert "<schema>" in query and "</schema>" in query
-        assert "<output>" in query and "</output>" in query
-        assert '"score": <true or false>' in query
-        assert '"reason": ["list of reasons' in query
+        assert "<schema>" in user_content and "</schema>" in user_content
+        assert "<output>" in user_content and "</output>" in user_content
+        assert '"score": <true or false>' in system_content
+        assert '"reason": ["list of reasons' in system_content

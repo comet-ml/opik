@@ -94,6 +94,7 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
 import ErrorTypeAutocomplete from "@/v2/pages-shared/traces/ErrorTypeAutocomplete/ErrorTypeAutocomplete";
+import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
 import TimeCell from "@/shared/DataTableCells/TimeCell";
@@ -511,6 +512,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
             type,
           },
         },
+        ...getTagsFilterConfig({
+          projectId,
+          entityType: type === TRACE_DATA_TYPE.spans ? "spans" : "traces",
+        }),
         [COLUMN_GUARDRAILS_ID]: {
           keyComponentProps: {
             options: [

@@ -42,22 +42,30 @@ def mock_model():
     return model
 
 
+def _assistant_message(content: str) -> dict:
+    return {"role": "assistant", "content": content}
+
+
 def _all_relevant_responses_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
     if response_format == schema.EvaluateConversationCoherenceResponse:
-        return json.dumps({"verdict": "yes"})
+        return _assistant_message(json.dumps({"verdict": "yes", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
-        return json.dumps(
-            {"reason": "The conversation successfully addressed user goals."}
+        return _assistant_message(
+            json.dumps(
+                {"reason": "The conversation successfully addressed user goals."}
+            )
         )
-    return "{}"
+    return _assistant_message("{}")
 
 
 def test_score__with_all_relevant_responses(mock_model, simple_conversation):
     """Test scoring with all LLM responses being relevant."""
 
     # Mock model response to return yes as verdicts
-    mock_model.generate_string.side_effect = _all_relevant_responses_side_effect
+    mock_model.generate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
 
     metric = ConversationalCoherenceMetric(
         model=mock_model,
@@ -81,7 +89,9 @@ async def test_score__with_all_relevant_responses__async(
 ):
     """Test scoring with all LLM responses being relevant."""
     # Mock model response to return yes as verdicts
-    mock_model.agenerate_string.side_effect = _all_relevant_responses_side_effect
+    mock_model.agenerate_chat_completion.side_effect = (
+        _all_relevant_responses_side_effect
+    )
 
     metric = ConversationalCoherenceMetric(
         model=mock_model,
@@ -101,30 +111,37 @@ async def test_score__with_all_relevant_responses__async(
 
 def _mixed_relevance_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
-    llm_input = kwargs.get("input")
+    messages = kwargs.get("messages") or []
+    llm_input = "\n".join(m["content"] for m in messages)
     if response_format == schema.EvaluateConversationCoherenceResponse:
         # For the 2nd call (irrelevant response)
         if "I like cats" in llm_input:
-            return json.dumps(
-                {
-                    "verdict": "no",
-                    "reason": "The LLM response about liking cats is irrelevant to the weather question.",
-                }
+            return _assistant_message(
+                json.dumps(
+                    {
+                        "verdict": "no",
+                        "reason": "The LLM response about liking cats is irrelevant to the weather question.",
+                    }
+                )
             )
         # For the 1st call (relevant response)
-        return json.dumps({"verdict": "yes"})
+        return _assistant_message(json.dumps({"verdict": "yes", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
-        return json.dumps(
-            {"reason": "The score is 0.5 because one of the responses was irrelevant."}
+        return _assistant_message(
+            json.dumps(
+                {
+                    "reason": "The score is 0.5 because one of the responses was irrelevant."
+                }
+            )
         )
-    return "{}"
+    return _assistant_message("{}")
 
 
 def test_score__with_mixed_relevance(mock_model, irrelevant_conversation):
     """Test scoring with a mix of relevant and irrelevant responses."""
 
     # Mock model response to alternate between yes and no
-    mock_model.generate_string.side_effect = _mixed_relevance_side_effect
+    mock_model.generate_chat_completion.side_effect = _mixed_relevance_side_effect
 
     metric = ConversationalCoherenceMetric(
         model=mock_model,
@@ -148,7 +165,7 @@ def test_score__with_mixed_relevance(mock_model, irrelevant_conversation):
 async def test_score__with_mixed_relevance__async(mock_model, irrelevant_conversation):
     """Test scoring with a mix of relevant and irrelevant responses."""
     # Mock model response to alternate between yes and no
-    mock_model.agenerate_string.side_effect = _mixed_relevance_side_effect
+    mock_model.agenerate_chat_completion.side_effect = _mixed_relevance_side_effect
 
     metric = ConversationalCoherenceMetric(
         model=mock_model,
@@ -180,10 +197,8 @@ def test_score_with_no_reason(mock_model):
         model=mock_model, include_reason=False, track=False
     )
 
-    mock_model.generate_string.return_value = json.dumps(
-        {
-            "verdict": "yes",
-        }
+    mock_model.generate_chat_completion.return_value = _assistant_message(
+        json.dumps({"verdict": "yes", "reason": None})
     )
 
     result = metric.score(conversation=conversation)
@@ -205,10 +220,8 @@ async def test_score_with_no_reason__async(mock_model):
         model=mock_model, include_reason=False, track=False
     )
 
-    mock_model.agenerate_string.return_value = json.dumps(
-        {
-            "verdict": "yes",
-        }
+    mock_model.agenerate_chat_completion.return_value = _assistant_message(
+        json.dumps({"verdict": "yes", "reason": None})
     )
 
     result = await metric.ascore(conversation=conversation)
@@ -223,8 +236,8 @@ def test_score__with_model_validation_error_in_evaluation__raises_MetricComputat
     """Test handling of validation errors in the evaluation response."""
 
     # Return invalid JSON to trigger validation error
-    mock_model.generate_string.return_value = json.dumps(
-        {"invalid_field": "This will cause a validation error"}
+    mock_model.generate_chat_completion.return_value = _assistant_message(
+        json.dumps({"invalid_field": "This will cause a validation error"})
     )
 
     metric = ConversationalCoherenceMetric(
@@ -241,8 +254,8 @@ async def test_score__with_model_validation_error_in_evaluation__async(
     """Test handling of validation errors in the evaluation response."""
 
     # Return invalid JSON to trigger validation error
-    mock_model.agenerate_string.return_value = json.dumps(
-        {"invalid_field": "This will cause a validation error"}
+    mock_model.agenerate_chat_completion.return_value = _assistant_message(
+        json.dumps({"invalid_field": "This will cause a validation error"})
     )
 
     metric = ConversationalCoherenceMetric(
