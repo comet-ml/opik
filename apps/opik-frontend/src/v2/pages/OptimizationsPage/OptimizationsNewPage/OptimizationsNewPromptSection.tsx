@@ -116,7 +116,7 @@ const OptimizationsNewPromptSection: React.FC<
   );
 
   return (
-    <div className="flex-1 space-y-6">
+    <div className="min-w-0 flex-1 space-y-6">
       <FormField
         control={form.control}
         name="name"
@@ -137,8 +137,8 @@ const OptimizationsNewPromptSection: React.FC<
       />
 
       <div>
-        <div className="mb-2 flex h-8 items-center justify-between">
-          <div className="flex items-center gap-0.5">
+        <div className="mb-2 flex h-8 items-center justify-between gap-2">
+          <div className="flex shrink-0 items-center gap-0.5">
             <Label className="comet-body-s-accented">Prompt</Label>
             <BlueprintPromptsSelectBox
               projectId={projectId}
@@ -167,14 +167,14 @@ const OptimizationsNewPromptSection: React.FC<
               </TooltipWrapper>
             )}
           </div>
-          <div className="flex h-full items-center gap-1">
+          <div className="flex h-full min-w-0 items-center gap-1">
             <FormField
               control={form.control}
               name="modelName"
               render={({ field }) => (
-                <FormItem className="flex h-full flex-row items-center gap-1">
+                <FormItem className="flex h-full min-w-0 flex-row items-center gap-1">
                   <FormControl>
-                    <div className="h-full w-56">
+                    <div className="h-full min-w-0 max-w-56">
                       <OptimizationModelSelect
                         value={field.value as PROVIDER_MODEL_TYPE | ""}
                         onChange={onModelChange}

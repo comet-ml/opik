@@ -2,10 +2,11 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FormProvider, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQueryParam, StringParam } from "use-query-params";
-import useAppStore from "@/store/AppStore";
+import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import { OpikEvent, trackEvent } from "@/lib/analytics/tracking";
 import useGetOrCreateDemoDataset from "@/api/datasets/useGetOrCreateDemoDataset";
 import useOptimizationById from "@/api/optimizations/useOptimizationById";
+import useProjectById from "@/api/projects/useProjectById";
 import {
   OptimizationConfigFormType,
   OptimizationConfigSchema,
@@ -17,9 +18,14 @@ import Loader from "@/shared/Loader/Loader";
 
 const OptimizationsNewPage: React.FC = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
+  const activeProjectId = useActiveProjectId();
   const [templateId] = useQueryParam("template", StringParam);
   const [rerunId] = useQueryParam("rerun", StringParam);
   const { getOrCreateDataset } = useGetOrCreateDemoDataset();
+  const { data: project } = useProjectById(
+    { projectId: activeProjectId! },
+    { enabled: !!activeProjectId },
+  );
   const datasetCreationRef = useRef<string | null>(null);
   const [isPreparingDataset, setIsPreparingDataset] = useState(false);
 
@@ -78,7 +84,11 @@ const OptimizationsNewPage: React.FC = () => {
         setIsPreparingDataset(true);
 
         try {
-          const dataset = await getOrCreateDataset(templateData, workspaceName);
+          const dataset = await getOrCreateDataset(
+            templateData,
+            workspaceName,
+            project?.name,
+          );
           if (dataset?.id) {
             form.setValue("datasetId", dataset.id, { shouldValidate: true });
           }
@@ -89,7 +99,14 @@ const OptimizationsNewPage: React.FC = () => {
     };
 
     internalCreateOrGetDataset();
-  }, [rerunData, templateData, getOrCreateDataset, form, workspaceName]);
+  }, [
+    rerunData,
+    templateData,
+    getOrCreateDataset,
+    form,
+    workspaceName,
+    project?.name,
+  ]);
 
   if (Boolean(rerunId) && isRerunFetching) {
     return <Loader message="Loading optimization..." />;
