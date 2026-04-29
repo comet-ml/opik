@@ -13,6 +13,7 @@ import {
 } from "@/types/playground";
 import { isValidJsonObject, safelyParseJSON, snakeCaseObj } from "@/lib/utils";
 import { BASE_API_URL } from "@/api/api";
+import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import { LLMPromptConfigsType, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { ProviderMessageType } from "@/types/llm";
 
@@ -91,6 +92,13 @@ const getCompletionProxyStream = async ({
     configsRecord.temperature != null
   ) {
     delete configsRecord.topP;
+  }
+
+  // Anthropic requires maxCompletionTokens; fall back to the default when
+  // the persisted prompt config is missing it.
+  if (model.includes("claude") && configsRecord.maxCompletionTokens == null) {
+    configsRecord.maxCompletionTokens =
+      DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
   }
 
   return fetch(`${BASE_API_URL}/v1/private/chat/completions`, {
