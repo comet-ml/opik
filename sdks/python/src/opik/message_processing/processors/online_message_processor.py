@@ -46,6 +46,14 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self._replay_manager = fallback_replay_manager
         self._unauthorized_message_types_registry = unauthorized_message_types_registry
 
+        # Migration-period flag for OPIK-6054 / OPIK-6048. The dedicated
+        # PUT /v1/private/assertion-results endpoint may not exist on older
+        # self-hosted backends. On the first 404/405 we remember the BE is
+        # too old and route subsequent assertion writes through the legacy
+        # feedback-scores piggyback for the rest of this process. Goes away
+        # when the legacy write path is removed.
+        self._assertion_results_endpoint_unavailable = False
+
         self._handlers: Dict[Type, MessageProcessingHandler] = {
             messages.CreateSpanMessage: self._process_create_span_message,  # type: ignore
             messages.CreateTraceMessage: self._process_create_trace_message,  # type: ignore
@@ -367,6 +375,10 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
         self,
         message: messages.AddAssertionResultsBatchMessage,
     ) -> None:
+        if self._assertion_results_endpoint_unavailable:
+            self._fallback_assertion_results_to_feedback_scores(message)
+            return
+
         items = [
             assertion_result_batch_item.AssertionResultBatchItem(
                 entity_id=item.entity_id,
@@ -381,11 +393,53 @@ class OpikMessageProcessor(message_processors.BaseMessageProcessor):
 
         LOGGER.debug("Add assertion results request of size: %d", len(items))
 
-        self._rest_client.assertion_results.store_assertions_batch(
-            entity_type=message.entity_type,
-            assertion_results=items,
-        )
+        try:
+            self._rest_client.assertion_results.store_assertions_batch(
+                entity_type=message.entity_type,
+                assertion_results=items,
+            )
+        except rest_api_core.ApiError as exception:
+            # Older self-hosted backends don't expose the dedicated
+            # assertion-results endpoint yet (OPIK-6048). Fall back to
+            # writing as feedback scores tagged with
+            # category_name="suite_assertion" (the pre-OPIK-6054 path) and
+            # remember the choice so we don't pay the round-trip cost
+            # again this session.
+            if exception.status_code in (404, 405):
+                LOGGER.warning(
+                    "assertion-results endpoint unavailable on this backend "
+                    "(status=%d); falling back to feedback-scores for the "
+                    "rest of this session.",
+                    exception.status_code,
+                )
+                self._assertion_results_endpoint_unavailable = True
+                self._fallback_assertion_results_to_feedback_scores(message)
+                return
+            raise
+
         LOGGER.debug("Sent batch of assertion results of size %d", len(items))
+
+    def _fallback_assertion_results_to_feedback_scores(
+        self,
+        message: messages.AddAssertionResultsBatchMessage,
+    ) -> None:
+        scores = [
+            feedback_score_batch_item.FeedbackScoreBatchItem(
+                id=item.entity_id,
+                project_name=item.project_name,
+                name=item.name,
+                value=1.0 if item.status == "passed" else 0.0,
+                category_name="suite_assertion",
+                reason=item.reason,
+                source=item.source,
+            )
+            for item in message.batch
+        ]
+        LOGGER.debug(
+            "Falling back: writing %d assertion results as trace feedback scores",
+            len(scores),
+        )
+        self._rest_client.traces.score_batch_of_traces(scores=scores)
 
     def _process_create_experiment_items_batch_message(
         self,

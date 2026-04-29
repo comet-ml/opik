@@ -10,7 +10,8 @@ from opik.message_processing import messages
 from opik.message_processing.processors.online_message_processor import (
     OpikMessageProcessor,
 )
-from opik.rest_api.types import assertion_result_batch_item
+from opik.rest_api import core as rest_api_core
+from opik.rest_api.types import assertion_result_batch_item, feedback_score_batch_item
 
 
 @pytest.fixture
@@ -99,3 +100,93 @@ class TestAssertionResultsHandler:
 
         mock_rest_client.traces.score_batch_of_traces.assert_not_called()
         mock_rest_client.spans.score_batch_of_spans.assert_not_called()
+
+
+class TestAssertionResultsFallback:
+    """
+    Forward-compat fallback for OPIK-6054 / OPIK-6048: if the dedicated
+    assertion-results endpoint is missing on an older self-hosted backend,
+    write through the legacy feedback-scores piggyback and remember the
+    choice for the rest of the session.
+    """
+
+    def test_process__bad_endpoint_404__falls_back_to_feedback_scores(
+        self,
+        processor: OpikMessageProcessor,
+        mock_rest_client: mock.MagicMock,
+    ):
+        mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="Not Found")
+        )
+
+        processor.process(_build_message())
+
+        mock_rest_client.traces.score_batch_of_traces.assert_called_once()
+        sent = mock_rest_client.traces.score_batch_of_traces.call_args.kwargs["scores"]
+        assert len(sent) == 2
+        assert all(
+            isinstance(item, feedback_score_batch_item.FeedbackScoreBatchItem)
+            for item in sent
+        )
+        assert all(item.category_name == "suite_assertion" for item in sent)
+        assert sent[0].id == "trace-1"
+        assert sent[0].name == "assertion 1"
+        assert sent[0].value == 1.0
+        assert sent[0].source == "sdk"
+        assert sent[1].value == 0.0  # status="failed"
+        assert processor._assertion_results_endpoint_unavailable is True
+
+    def test_process__bad_endpoint_405__falls_back_to_feedback_scores(
+        self,
+        processor: OpikMessageProcessor,
+        mock_rest_client: mock.MagicMock,
+    ):
+        mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
+            rest_api_core.ApiError(status_code=405, body="Method Not Allowed")
+        )
+
+        processor.process(_build_message())
+
+        mock_rest_client.traces.score_batch_of_traces.assert_called_once()
+        assert processor._assertion_results_endpoint_unavailable is True
+
+    def test_process__non_404_api_error__propagates_and_does_not_set_fallback(
+        self,
+        processor: OpikMessageProcessor,
+        mock_rest_client: mock.MagicMock,
+    ):
+        mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
+            rest_api_core.ApiError(status_code=500, body="Internal Server Error")
+        )
+
+        with pytest.raises(rest_api_core.ApiError):
+            # process() catches handler exceptions and routes them to the
+            # replay manager. Bypass that by calling the handler directly so
+            # the test can observe the propagation.
+            processor._process_add_assertion_results_batch_message(_build_message())
+
+        mock_rest_client.traces.score_batch_of_traces.assert_not_called()
+        assert processor._assertion_results_endpoint_unavailable is False
+
+    def test_process__sticky_fallback__second_call_skips_new_endpoint(
+        self,
+        processor: OpikMessageProcessor,
+        mock_rest_client: mock.MagicMock,
+    ):
+        mock_rest_client.assertion_results.store_assertions_batch.side_effect = (
+            rest_api_core.ApiError(status_code=404, body="Not Found")
+        )
+
+        processor.process(_build_message())
+        # First call: tried new endpoint, hit 404, set the sticky flag.
+        assert mock_rest_client.assertion_results.store_assertions_batch.call_count == 1
+        assert processor._assertion_results_endpoint_unavailable is True
+
+        # Reset feedback-scores call_count to isolate the second send.
+        mock_rest_client.traces.score_batch_of_traces.reset_mock()
+        processor.process(_build_message())
+
+        # Second call must NOT retry the new endpoint.
+        assert mock_rest_client.assertion_results.store_assertions_batch.call_count == 1
+        # It went straight to the fallback.
+        mock_rest_client.traces.score_batch_of_traces.assert_called_once()
