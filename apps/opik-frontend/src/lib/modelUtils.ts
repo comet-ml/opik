@@ -91,6 +91,24 @@ export const supportsAnthropicThinkingEffort = (
 };
 
 /**
+ * Some models (e.g. Claude Opus 4.7) reject any non-default value for
+ * temperature, top_p, or top_k. The backend YAML flags those models with
+ * `supportsSamplingParams: false`; everywhere else the flag is absent and we
+ * default to `true`.
+ *
+ * UI uses this to hide the corresponding sliders. Config builders use it to
+ * skip seeding `temperature` / `topP` defaults so the request payload omits
+ * them entirely.
+ */
+export const supportsSamplingParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean => {
+  if (!model) return true;
+  const flags = getLatestModelFlags(model);
+  return flags ? flags.supportsSamplingParams : true;
+};
+
+/**
  * Updates provider config to ensure reasoning models have temperature >= 1.0
  * This function ensures that OpenAI reasoning models (GPT-5 family, O-series)
  * have their temperature set to at least 1.0, as they don't support temperature < 1

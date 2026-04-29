@@ -66,6 +66,15 @@ public class LlmModelRegistryService {
         return registry;
     }
 
+    public boolean supportsSamplingParams(String modelName) {
+        if (modelName == null) {
+            return true;
+        }
+        return findModel(modelName)
+                .map(result -> result.model().supportsSamplingParamsOrDefault())
+                .orElse(true);
+    }
+
     public Optional<ModelLookupResult> findModel(@NonNull String model) {
         var snapshot = this.registry;
 

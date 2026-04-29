@@ -12,5 +12,10 @@ public record LlmModelDefinition(
         String qualifiedName,
         String label,
         boolean structuredOutput,
-        boolean reasoning) {
+        boolean reasoning,
+        Boolean supportsSamplingParams) {
+
+    public boolean supportsSamplingParamsOrDefault() {
+        return supportsSamplingParams == null || supportsSamplingParams;
+    }
 }
