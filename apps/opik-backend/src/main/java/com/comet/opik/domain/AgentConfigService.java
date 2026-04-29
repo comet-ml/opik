@@ -346,7 +346,11 @@ class AgentConfigServiceImpl implements AgentConfigService {
             parts.add("Removed " + String.join(", ", removed));
         }
 
-        return String.join(". ", parts);
+        String description = String.join(". ", parts);
+        if (description.length() > 255) {
+            description = description.substring(0, 252) + "...";
+        }
+        return description;
     }
 
     private UUID createBlueprintSnapshot(
