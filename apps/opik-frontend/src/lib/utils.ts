@@ -329,3 +329,13 @@ export const escapeJsString = (value: string): string => {
     }
   });
 };
+
+export const getSelectAllCheckedState = (
+  selectedCount: number,
+  totalCount: number,
+): boolean | "indeterminate" => {
+  if (totalCount === 0) return false;
+  if (selectedCount >= totalCount) return true;
+  if (selectedCount > 0) return "indeterminate";
+  return false;
+};

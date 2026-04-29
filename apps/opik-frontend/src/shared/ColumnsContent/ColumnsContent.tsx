@@ -13,6 +13,7 @@ import { ColumnData } from "@/types/shared";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import type { ColumnsContentVariant } from "./SortableMenuItem";
 import { useColumnsCount } from "./useColumnsCount";
+import { getSelectAllCheckedState } from "@/lib/utils";
 
 type ColumnsContentShared<TColumnData> = {
   columns: ColumnData<TColumnData>[];
@@ -115,12 +116,14 @@ const ColumnsContent = <TColumnData,>({
     );
   };
 
+  const checkedState = getSelectAllCheckedState(selectedCount, totalCount);
+
   const renderSelectAll = () => {
     if (isMenu) {
       return (
         <DropdownMenuCustomCheckboxItem
-          checked={allColumnsSelected}
-          onCheckedChange={toggleColumns}
+          checked={checkedState}
+          onCheckedChange={() => toggleColumns(!allColumnsSelected)}
           onSelect={(event) => event.preventDefault()}
         >
           <div className="w-full break-words py-2">
@@ -135,16 +138,7 @@ const ColumnsContent = <TColumnData,>({
         onClick={() => toggleColumns(!allColumnsSelected)}
       >
         <span className="absolute left-2 flex size-8 items-center justify-center">
-          <Checkbox
-            checked={
-              allColumnsSelected
-                ? true
-                : selectedCount > 0
-                  ? "indeterminate"
-                  : false
-            }
-            tabIndex={-1}
-          />
+          <Checkbox checked={checkedState} tabIndex={-1} />
         </span>
         <div className="w-full break-words py-2">
           {selectedCount} of {totalCount} selected
