@@ -8,6 +8,8 @@ from ..rate_limit import rate_limit
 
 LOGGER = logging.getLogger(__name__)
 
+MAX_RATE_LIMIT_RETRIES = 10
+
 
 def ensure_rest_api_call_respecting_rate_limit(
     rest_callable: Callable[[], Any],
@@ -26,27 +28,39 @@ def ensure_rest_api_call_respecting_rate_limit(
         The result of the successful REST API call.
 
     Raises:
-        ApiError: If the error is not a 429 rate limit error.
+        ApiError: If the error is not a 429 rate limit error, or if the maximum
+            number of retries is exceeded.
     """
-    while True:
+    for attempt in range(MAX_RATE_LIMIT_RETRIES):
         try:
             result = rest_callable()
             return result
         except ApiError as exception:
             if exception.status_code == 429:
+                if attempt >= MAX_RATE_LIMIT_RETRIES - 1:
+                    LOGGER.error(
+                        "Rate limit retries exhausted after %d attempts",
+                        MAX_RATE_LIMIT_RETRIES,
+                    )
+                    raise
+
                 if exception.headers is not None:
                     rate_limiter = rate_limit.parse_rate_limit(exception.headers)
                     if rate_limiter is not None:
                         retry_after = rate_limiter.retry_after()
                         LOGGER.info(
-                            "Rate limited (HTTP 429), retrying in %s seconds",
+                            "Rate limited (HTTP 429), retrying in %s seconds (attempt %d/%d)",
                             retry_after,
+                            attempt + 1,
+                            MAX_RATE_LIMIT_RETRIES,
                         )
                         time.sleep(retry_after)
                         continue
 
                 LOGGER.info(
-                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
+                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second (attempt %d/%d)",
+                    attempt + 1,
+                    MAX_RATE_LIMIT_RETRIES,
                 )
                 time.sleep(1)
                 continue
