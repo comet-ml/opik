@@ -223,6 +223,8 @@ export * from "./EvaluatorItemPublicType.js";
 export * from "./EvaluatorItemType.js";
 export * from "./EvaluatorItemWrite.js";
 export * from "./EvaluatorItemWriteType.js";
+export * from "./EnvironmentPagePublic.js";
+export * from "./EnvironmentPublic.js";
 export * from "./ExecutionPolicy.js";
 export * from "./ExecutionPolicyCompare.js";
 export * from "./ExecutionPolicyPublic.js";

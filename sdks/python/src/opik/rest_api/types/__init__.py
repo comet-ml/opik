@@ -293,6 +293,8 @@ from .evaluator_item_public_type import EvaluatorItemPublicType
 from .evaluator_item_type import EvaluatorItemType
 from .evaluator_item_write import EvaluatorItemWrite
 from .evaluator_item_write_type import EvaluatorItemWriteType
+from .environment_page_public import EnvironmentPagePublic
+from .environment_public import EnvironmentPublic
 from .execution_policy import ExecutionPolicy
 from .execution_policy_compare import ExecutionPolicyCompare
 from .execution_policy_public import ExecutionPolicyPublic
@@ -930,6 +932,8 @@ __all__ = [
     "EvaluatorItemType",
     "EvaluatorItemWrite",
     "EvaluatorItemWriteType",
+    "EnvironmentPagePublic",
+    "EnvironmentPublic",
     "ExecutionPolicy",
     "ExecutionPolicyCompare",
     "ExecutionPolicyPublic",
