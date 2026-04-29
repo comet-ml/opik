@@ -44,8 +44,6 @@ public enum WorkspaceUserPermission {
 
     PROMPT_DELETE("prompt_delete"),
 
-    PLAYGROUND_USE("playground_use"),
-
     OPTIMIZATION_RUN_VIEW("optimization_run_view"),
     OPTIMIZATION_RUN_DELETE("optimization_run_delete"),
     OPTIMIZATION_STUDIO_USE("optimization_studio_use");
