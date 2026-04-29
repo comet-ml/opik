@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
+import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.ExperimentProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
 import com.google.common.collect.Lists;
@@ -29,6 +30,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static com.comet.opik.api.resources.v1.events.ExperimentAggregateEventListener.FINISHED_STATUSES;
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 import static io.opentelemetry.api.common.AttributeKey.stringKey;
@@ -58,11 +60,13 @@ public class ExperimentProjectMigrationService {
     private static final Set<String> TRAPPED_WORKSPACE_IDS = ConcurrentHashMap.newKeySet();
 
     private final @NonNull ExperimentDAO experimentDAO;
+    private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull ProjectService projectService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
     private final @NonNull ExperimentProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
+    private final @NonNull ExperimentDenormalizationConfig denormalizationConfig;
 
     private final LongHistogram cycleEligibleWorkspaces;
     private final LongGauge cycleTrappedWorkspaces;
@@ -73,17 +77,21 @@ public class ExperimentProjectMigrationService {
     @Inject
     public ExperimentProjectMigrationService(
             @NonNull ExperimentDAO experimentDAO,
+            @NonNull ExperimentItemService experimentItemService,
             @NonNull ProjectService projectService,
             @NonNull ExperimentAggregationPublisher experimentAggregationPublisher,
             @NonNull WorkspaceVersionService workspaceVersionService,
             @NonNull @Config("experimentProjectMigration") ExperimentProjectMigrationConfig config,
-            @NonNull @Config("migration") MigrationConfig migrationConfig) {
+            @NonNull @Config("migration") MigrationConfig migrationConfig,
+            @NonNull @Config("experimentDenormalization") ExperimentDenormalizationConfig denormalizationConfig) {
         this.experimentDAO = experimentDAO;
+        this.experimentItemService = experimentItemService;
         this.projectService = projectService;
         this.experimentAggregationPublisher = experimentAggregationPublisher;
         this.workspaceVersionService = workspaceVersionService;
         this.config = config;
         this.migrationConfig = migrationConfig;
+        this.denormalizationConfig = denormalizationConfig;
 
         var meter = GlobalOpenTelemetry.get().getMeter(METRIC_NAMESPACE);
         this.cycleEligibleWorkspaces = meter
@@ -230,10 +238,24 @@ public class ExperimentProjectMigrationService {
     }
 
     private Mono<Void> triggerReaggregation(String workspaceId, List<ExperimentProjectMapping> migrated) {
+        if (!denormalizationConfig.isEnabled()) {
+            log.debug("Skipping reaggregation: experiment denormalization disabled, workspaceId='{}'", workspaceId);
+            return Mono.empty();
+        }
         var experimentIds = migrated.stream()
                 .map(ExperimentProjectMapping::experimentId)
                 .collect(Collectors.toUnmodifiableSet());
-        return experimentAggregationPublisher.publish(experimentIds, workspaceId, SYSTEM_USER)
+        return experimentItemService.filterExperimentIdsByStatus(experimentIds, FINISHED_STATUSES)
+                .collect(Collectors.toUnmodifiableSet())
+                .flatMap(finished -> {
+                    if (finished.isEmpty()) {
+                        log.info("No finished experiments to reaggregate, workspaceId='{}', candidateCount='{}'",
+                                workspaceId, experimentIds.size());
+                        return Mono.empty();
+                    }
+                    return experimentAggregationPublisher.publish(finished, workspaceId, SYSTEM_USER);
+                })
+                .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, workspaceId))
                 .onErrorResume(throwable -> {
                     log.warn("Failed to trigger experiment reaggregation, workspaceId='{}', experimentIds.size='{}'",
                             workspaceId, experimentIds.size(), throwable);

@@ -2837,7 +2837,7 @@ public class ExperimentDAO {
                     "compute_certain_experiment_project_mapping", workspaceId, userName, "");
             var statement = connection.createStatement(template.render())
                     .bind("demo_experiment_names", DemoData.EXPERIMENTS);
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement));
+            return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
         }))
                 .flatMap(result -> result.map((row, metadata) -> ExperimentProjectMapping.builder()
                         .experimentId(UUID.fromString(row.get("experiment_id", String.class)))
@@ -2856,7 +2856,7 @@ public class ExperimentDAO {
             var statement = connection.createStatement(template.render())
                     .bind("experiment_ids", experimentIds)
                     .bind("project_id", projectId);
-            return makeFluxContextAware(bindUserNameAndWorkspaceContextToStream(statement));
+            return bindUserNameAndWorkspaceContextToStream(statement).subscriberContext(userName, workspaceId);
         }))
                 .flatMap(Result::getRowsUpdated)
                 .reduce(0L, Long::sum);

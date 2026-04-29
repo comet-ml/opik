@@ -47,7 +47,7 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ExperimentAggregateEventListener {
 
-    private static final Set<ExperimentStatus> FINISHED_STATUSES = Set.of(
+    public static final Set<ExperimentStatus> FINISHED_STATUSES = Set.of(
             ExperimentStatus.COMPLETED, ExperimentStatus.CANCELLED);
 
     private final ExperimentItemService experimentItemService;
