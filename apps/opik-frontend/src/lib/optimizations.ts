@@ -26,7 +26,10 @@ import {
   OPTIMIZER_OPTIONS,
 } from "@/constants/optimizations";
 import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
-import { getDefaultTemperatureForModel } from "@/lib/modelUtils";
+import {
+  getDefaultTemperatureForModel,
+  supportsSamplingParams,
+} from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
   LLMOpenAIConfigsType,
@@ -181,7 +184,9 @@ export const getOptimizationDefaultConfigByProvider = (
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
     return {
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+      temperature: supportsSamplingParams(model)
+        ? DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE
+        : undefined,
     } as LLMAnthropicConfigsType;
   }
 
