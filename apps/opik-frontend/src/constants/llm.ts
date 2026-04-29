@@ -99,6 +99,14 @@ export const ANTHROPIC_THINKING_MODELS = [
   PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
 ] as const;
 
+// Models that reject any non-default value for temperature, top_p, top_k.
+// The backend mirrors this list in AnthropicSamplingParams and strips the
+// fields from outbound requests as a safety net. Add a new model id here
+// when its docs say the same.
+export const MODELS_WITHOUT_SAMPLING_PARAMS = [
+  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+] as const;
+
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
 // Note: GPT-5.2 Pro uses Responses API (/v1/responses) not Chat Completions, so it's excluded
