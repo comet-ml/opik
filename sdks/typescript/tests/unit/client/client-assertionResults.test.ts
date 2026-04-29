@@ -33,13 +33,20 @@ describe("OpikClient.traceAssertionResultsBatchQueue wiring", () => {
 
 describe("AssertionResultsBatchQueue.createEntities", () => {
   let storeAssertionsBatch: MockInstance;
+  let scoreBatchOfTraces: MockInstance;
   let queue: AssertionResultsBatchQueue;
-  let api: { assertionResults: { storeAssertionsBatch: MockInstance }; requestOptions: unknown };
+  let api: {
+    assertionResults: { storeAssertionsBatch: MockInstance };
+    traces: { scoreBatchOfTraces: MockInstance };
+    requestOptions: unknown;
+  };
 
   beforeEach(() => {
     storeAssertionsBatch = vi.fn().mockResolvedValue(undefined);
+    scoreBatchOfTraces = vi.fn().mockResolvedValue(undefined);
     api = {
       assertionResults: { storeAssertionsBatch },
+      traces: { scoreBatchOfTraces },
       requestOptions: { headers: { "x-test": "1" } },
     };
     queue = new AssertionResultsBatchQueue(
@@ -101,38 +108,137 @@ describe("AssertionResultsBatchQueue.createEntities", () => {
     expect(storeAssertionsBatch).not.toHaveBeenCalled();
   });
 
-  it("should warn once on 404 from an unsupported backend, not per batch", async () => {
-    const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
-    storeAssertionsBatch.mockRejectedValue(
+  describe("legacy fallback on 404", () => {
+    const make404 = () =>
       new OpikApiError({
         statusCode: 404,
         body: "Not Found",
         rawResponse: new Response(null, { status: 404 }),
-      })
-    );
+      });
 
-    queue.create({
-      entityId: "trace-1",
-      projectName: "test-project",
-      name: "First",
-      status: "passed",
-      source: "sdk",
+    it("should fall back to feedback-scores with categoryName=\"suite_assertion\" when the new endpoint 404s", async () => {
+      const warnSpy = vi
+        .spyOn(logger, "warn")
+        .mockImplementation(() => undefined);
+      storeAssertionsBatch.mockRejectedValueOnce(make404());
+
+      queue.create({
+        entityId: "trace-1",
+        projectName: "test-project",
+        name: "Response is helpful",
+        status: "passed",
+        reason: "Looks good",
+        source: "sdk",
+      });
+      queue.create({
+        entityId: "trace-1",
+        projectName: "test-project",
+        name: "No hallucinations",
+        status: "failed",
+        reason: "Hallucinated date",
+        source: "sdk",
+      });
+
+      await queue.flush();
+
+      expect(storeAssertionsBatch).toHaveBeenCalledTimes(1);
+      expect(scoreBatchOfTraces).toHaveBeenCalledTimes(1);
+      expect(scoreBatchOfTraces).toHaveBeenCalledWith(
+        {
+          scores: [
+            {
+              id: "trace-1",
+              name: "Response is helpful",
+              value: 1,
+              categoryName: "suite_assertion",
+              reason: "Looks good",
+              source: "sdk",
+              projectName: "test-project",
+              projectId: undefined,
+            },
+            {
+              id: "trace-1",
+              name: "No hallucinations",
+              value: 0,
+              categoryName: "suite_assertion",
+              reason: "Hallucinated date",
+              source: "sdk",
+              projectName: "test-project",
+              projectId: undefined,
+            },
+          ],
+        },
+        api.requestOptions
+      );
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toMatch(/OPIK-6048/);
+
+      warnSpy.mockRestore();
     });
-    await queue.flush();
 
-    queue.create({
-      entityId: "trace-2",
-      projectName: "test-project",
-      name: "Second",
-      status: "failed",
-      source: "sdk",
+    it("should latch the fallback so subsequent batches skip the new endpoint", async () => {
+      vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      storeAssertionsBatch.mockRejectedValueOnce(make404());
+
+      queue.create({
+        entityId: "trace-1",
+        projectName: "test-project",
+        name: "First",
+        status: "passed",
+        source: "sdk",
+      });
+      await queue.flush();
+
+      queue.create({
+        entityId: "trace-2",
+        projectName: "test-project",
+        name: "Second",
+        status: "failed",
+        source: "sdk",
+      });
+      await queue.flush();
+
+      // New endpoint tried only on the first batch; second batch goes straight to legacy.
+      expect(storeAssertionsBatch).toHaveBeenCalledTimes(1);
+      expect(scoreBatchOfTraces).toHaveBeenCalledTimes(2);
     });
-    await queue.flush();
 
-    expect(storeAssertionsBatch).toHaveBeenCalledTimes(2);
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    expect(warnSpy.mock.calls[0][0]).toMatch(/OPIK-6048/);
+    it("should propagate non-404 errors instead of falling back", async () => {
+      storeAssertionsBatch.mockRejectedValueOnce(
+        new OpikApiError({
+          statusCode: 500,
+          body: "boom",
+          rawResponse: new Response(null, { status: 500 }),
+        })
+      );
 
-    warnSpy.mockRestore();
+      queue.create({
+        entityId: "trace-1",
+        projectName: "test-project",
+        name: "First",
+        status: "passed",
+        source: "sdk",
+      });
+
+      await expect(
+        // Drive createEntities directly so we observe the throw — BatchQueue.flush()
+        // swallows errors via its own try/catch logger.
+        (queue as unknown as {
+          createEntities: (
+            items: { entityId: string; name: string; status: string; source: string; projectName: string }[]
+          ) => Promise<void>;
+        }).createEntities([
+          {
+            entityId: "trace-1",
+            name: "First",
+            status: "passed",
+            source: "sdk",
+            projectName: "test-project",
+          },
+        ])
+      ).rejects.toMatchObject({ statusCode: 500 });
+
+      expect(scoreBatchOfTraces).not.toHaveBeenCalled();
+    });
   });
 });
