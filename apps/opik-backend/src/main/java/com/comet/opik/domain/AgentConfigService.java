@@ -131,9 +131,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
                         })).subscribeOn(Schedulers.boundedElastic()),
                         agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
                         .doOnNext(blueprint -> {
-                            trackAgentConfigSaved(workspaceId, projectId, blueprint);
+                            String projectName = WorkspaceUtils.getProjectName(request.projectName());
+                            trackAgentConfigSaved(workspaceId, projectId, blueprint, userName, projectName);
                             trackAgentConfigDeployed(workspaceId, projectId,
-                                    blueprint.id(), String.valueOf(blueprint.name()), "prod");
+                                    blueprint.id(), String.valueOf(blueprint.name()), "prod", userName, projectName);
                         }));
     }
 
@@ -163,7 +164,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                     userName);
                         })).subscribeOn(Schedulers.boundedElastic()),
                         agentConfigConfiguration.getBlueprintLockDuration().toJavaDuration())
-                        .doOnNext(blueprint -> trackAgentConfigSaved(workspaceId, projectId, blueprint)));
+                        .doOnNext(blueprint -> {
+                            String projectName = WorkspaceUtils.getProjectName(request.projectName());
+                            trackAgentConfigSaved(workspaceId, projectId, blueprint, userName, projectName);
+                        }));
     }
 
     @Override
@@ -504,9 +508,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
                     return null;
                 })).subscribeOn(Schedulers.boundedElastic()))
                 .doOnSuccess(v -> {
+                    String projectName = projectService.get(projectId, workspaceId).name();
                     for (var env : request.envs()) {
                         trackAgentConfigDeployed(workspaceId, projectId,
-                                env.blueprintId(), "", env.envName());
+                                env.blueprintId(), "", env.envName(), userName, projectName);
                     }
                 });
     }
@@ -535,8 +540,11 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
                     return blueprint.id();
                 })).subscribeOn(Schedulers.boundedElastic()))
-                .doOnNext(blueprintId -> trackAgentConfigDeployed(workspaceId, projectId,
-                        blueprintId, blueprintName, envName))
+                .doOnNext(blueprintId -> {
+                    String projectName = projectService.get(projectId, workspaceId).name();
+                    trackAgentConfigDeployed(workspaceId, projectId,
+                            blueprintId, blueprintName, envName, userName, projectName);
+                })
                 .then();
     }
 
@@ -694,22 +702,29 @@ class AgentConfigServiceImpl implements AgentConfigService {
         return updateConfig(request);
     }
 
-    private void trackAgentConfigSaved(String workspaceId, UUID projectId, AgentBlueprint blueprint) {
+    private void trackAgentConfigSaved(String workspaceId, UUID projectId, AgentBlueprint blueprint,
+            String userName, String projectName) {
+        if (DemoData.PROJECTS.contains(projectName)) {
+            return;
+        }
         analyticsService.trackEvent("opik_agent_config_saved", Map.of(
                 "workspace_id", workspaceId,
                 "project_id", projectId.toString(),
                 "blueprint_id", blueprint.id().toString(),
-                "blueprint_name", String.valueOf(blueprint.name())));
+                "blueprint_name", String.valueOf(blueprint.name())), userName);
     }
 
     private void trackAgentConfigDeployed(String workspaceId, UUID projectId,
-            UUID blueprintId, String blueprintName, String envName) {
+            UUID blueprintId, String blueprintName, String envName, String userName, String projectName) {
+        if (DemoData.PROJECTS.contains(projectName)) {
+            return;
+        }
         analyticsService.trackEvent("opik_agent_config_deployed", Map.of(
                 "workspace_id", workspaceId,
                 "project_id", projectId.toString(),
                 "blueprint_id", blueprintId.toString(),
                 "blueprint_name", blueprintName,
                 "environment", envName,
-                "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))));
+                "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))), userName);
     }
 }
