@@ -33,6 +33,13 @@ console = Console()
 
 COPY_RUNS_DIR = Path.home() / ".opik" / "copy-runs"
 
+# Upper bound on the number of experiments we try to enumerate per dataset.
+# ``client.get_dataset_experiments`` is a hard cap, not a paginator, so this
+# is the same number used for both the source listing and the destination
+# verification. If a real workspace ever exceeds this we saturate visibly
+# (the user sees a warning) rather than silently passing a partial check.
+EXPERIMENT_LIST_CAP = 10_000
+
 
 def _run_dir_key(
     workspace: str,
@@ -292,7 +299,7 @@ def _verify_destination_counts(
             client.get_dataset_experiments(
                 dataset_name=dataset_name,
                 project_name=destination_project,
-                max_results=10_000,
+                max_results=EXPERIMENT_LIST_CAP,
             )
         )
         exp_match = actual_experiments == expected["experiments"]
@@ -303,6 +310,18 @@ def _verify_destination_counts(
             str(actual_experiments),
             "✓" if exp_match else "✗",
         )
+        # Loudly flag the bound: if either side reaches the cap we cannot
+        # honestly say "the counts match", because the API may have
+        # truncated. The export side uses the same cap so this is symmetric.
+        if (
+            actual_experiments >= EXPERIMENT_LIST_CAP
+            or expected["experiments"] >= EXPERIMENT_LIST_CAP
+        ):
+            console.print(
+                f"[yellow]Warning: experiment count reached the {EXPERIMENT_LIST_CAP:,} "
+                f"enumeration cap; the verification result is best-effort. "
+                f"File a follow-up if you have a workspace this large.[/yellow]"
+            )
 
     console.print(table)
     return matched
@@ -443,7 +462,7 @@ def copy_dataset_command(
         experiments_to_export = client.get_dataset_experiments(
             dataset_name=name,
             project_name=source_project,
-            max_results=10_000,
+            max_results=EXPERIMENT_LIST_CAP,
         )
         if not experiments_to_export:
             # No experiments tag along → fall back to dataset-only export.

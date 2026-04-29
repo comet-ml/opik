@@ -159,14 +159,13 @@ class TestClickSurface:
 class TestDestinationProjectPlumbing:
     """Confirm the override flows through to the underlying SDK calls."""
 
-    def test_import_datasets_passes_destination_project_to_create(
+    def test_import_datasets_passes_destination_project_to_get_or_create(
         self, tmp_path: Path
     ) -> None:
         _write_dataset_export(tmp_path, "Foo", item_count=2)
         client = Mock()
-        client.get_dataset.side_effect = exceptions.DatasetNotFound("Foo")
         new_dataset = Mock()
-        client.create_dataset.return_value = new_dataset
+        client.get_or_create_dataset.return_value = new_dataset
 
         import_datasets_from_directory(
             client=client,
@@ -177,8 +176,7 @@ class TestDestinationProjectPlumbing:
             destination_project="DestProj",
         )
 
-        client.get_dataset.assert_called_once_with("Foo", project_name="DestProj")
-        client.create_dataset.assert_called_once_with(
+        client.get_or_create_dataset.assert_called_once_with(
             name="Foo", project_name="DestProj"
         )
         new_dataset.insert.assert_called_once()
@@ -189,8 +187,7 @@ class TestDestinationProjectPlumbing:
         """Regression guard: destination_project=None must not break opik import."""
         _write_dataset_export(tmp_path, "Foo", item_count=1)
         client = Mock()
-        client.get_dataset.side_effect = exceptions.DatasetNotFound("Foo")
-        client.create_dataset.return_value = Mock()
+        client.get_or_create_dataset.return_value = Mock()
 
         import_datasets_from_directory(
             client=client,
@@ -201,24 +198,21 @@ class TestDestinationProjectPlumbing:
         )
 
         # No project_name kwarg → SDK falls back to its default behaviour.
-        client.get_dataset.assert_called_once_with("Foo", project_name=None)
-        client.create_dataset.assert_called_once_with(name="Foo", project_name=None)
+        client.get_or_create_dataset.assert_called_once_with(
+            name="Foo", project_name=None
+        )
 
-    def test_import_datasets_does_not_swallow_non_notfound_errors(
-        self, tmp_path: Path
-    ) -> None:
-        """Auth/network/permission failures from get_dataset must NOT silently
-        trigger create_dataset — they're recorded as a per-file error so the
-        outer loop can keep going (matching how the rest of the function handles
-        per-file failures)."""
+    def test_import_datasets_propagates_sdk_errors(self, tmp_path: Path) -> None:
+        """SDK errors (auth, network, permissions) raised by
+        ``get_or_create_dataset`` must surface as a per-file error rather than
+        being silently swallowed — replaces the prior get/except/create dance."""
 
         class FakeAuthError(Exception):
             pass
 
         _write_dataset_export(tmp_path, "Foo", item_count=1)
         client = Mock()
-        client.get_dataset.side_effect = FakeAuthError("403 forbidden")
-        client.create_dataset.return_value = Mock()
+        client.get_or_create_dataset.side_effect = FakeAuthError("403 forbidden")
 
         result = import_datasets_from_directory(
             client=client,
@@ -228,9 +222,6 @@ class TestDestinationProjectPlumbing:
             debug=False,
         )
 
-        # The dataset must NOT be silently created when get_dataset blew up
-        # for a reason other than "not found".
-        client.create_dataset.assert_not_called()
         assert result["datasets_errors"] == 1
 
     def test_traces_use_destination_project_when_override_set(
