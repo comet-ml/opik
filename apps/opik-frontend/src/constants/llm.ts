@@ -10,7 +10,10 @@ import {
   PythonCodeDetailsTraceForm,
   PythonCodeDetailsSpanForm,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import {
+  AnthropicThinkingEffort,
+  PROVIDER_MODEL_TYPE,
+} from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
 export const PLAYGROUND_SELECTED_DATASET_VERSION_KEY =
@@ -92,18 +95,44 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Anthropic models that support adaptive thinking with effort parameter
-// Claude Opus 4.6 uses adaptive thinking with effort levels: low, medium (default), high, max
-export const ANTHROPIC_THINKING_MODELS = [
-  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
-  PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6,
-] as const;
+// Per-model Anthropic quirks. Add a row when a model deviates from defaults.
+// Defaults: supports sampling params (temperature/top_p), no thinking-effort UI.
+export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
+  Record<
+    PROVIDER_MODEL_TYPE,
+    {
+      // Anthropic rejects non-default values for these on some models. When
+      // false, the UI hides the Temperature/Top P sliders.
+      supportsSamplingParams?: boolean;
+      // When set, the Thinking Effort dropdown is shown with these options.
+      thinkingEffortOptions?: AnthropicThinkingEffort[];
+    }
+  >
+> = {
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7]: {
+    supportsSamplingParams: false,
+    thinkingEffortOptions: ["low", "medium", "high", "xhigh", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6]: {
+    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+  [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
+    thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+};
 
-// Models that reject any non-default value for temperature, top_p, top_k.
-// Append a new id here when its docs say the same.
-export const MODELS_WITHOUT_SAMPLING_PARAMS = [
-  PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
-] as const;
+// Human-readable labels for the AnthropicThinkingEffort values used above.
+export const ANTHROPIC_THINKING_EFFORT_LABELS: Record<
+  AnthropicThinkingEffort,
+  string
+> = {
+  adaptive: "Adaptive",
+  low: "Low",
+  medium: "Medium",
+  high: "High (Default)",
+  xhigh: "xHigh",
+  max: "Max",
+};
 
 // Reasoning models that require temperature = 1.0
 // These models do not support temperature = 0 and will fail if used
@@ -152,19 +181,6 @@ export const THINKING_LEVEL_OPTIONS_FLASH: Array<{
 // Prefer using model-specific constants instead: THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH.
 /** @deprecated Use THINKING_LEVEL_OPTIONS_PRO or THINKING_LEVEL_OPTIONS_FLASH instead. */
 export const THINKING_LEVEL_OPTIONS = THINKING_LEVEL_OPTIONS_PRO;
-
-// Thinking effort options for Anthropic Opus 4.6 with adaptive thinking
-// Effort levels: adaptive, low, medium, high, max (default is high)
-export const ANTHROPIC_THINKING_EFFORT_OPTIONS: Array<{
-  label: string;
-  value: "adaptive" | "low" | "medium" | "high" | "max";
-}> = [
-  { label: "Adaptive", value: "adaptive" },
-  { label: "Low", value: "low" },
-  { label: "Medium", value: "medium" },
-  { label: "High (Default)", value: "high" },
-  { label: "Max", value: "max" },
-];
 
 export const LLM_PROMPT_CUSTOM_TRACE_TEMPLATE: LLMPromptTemplate = {
   label: "Custom LLM-as-judge",

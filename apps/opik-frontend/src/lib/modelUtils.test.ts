@@ -8,7 +8,7 @@ describe("supportsSamplingParams", () => {
     expect(supportsSamplingParams(undefined)).toBe(true);
   });
 
-  it("returns true for any model not in MODELS_WITHOUT_SAMPLING_PARAMS", () => {
+  it("returns true for any model not flagged in ANTHROPIC_MODEL_CAPABILITIES", () => {
     expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6)).toBe(
       true,
     );

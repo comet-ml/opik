@@ -716,6 +716,7 @@ export type AnthropicThinkingEffort =
   | "low"
   | "medium"
   | "high"
+  | "xhigh"
   | "max";
 
 export interface LLMAnthropicConfigsType {

@@ -6,14 +6,12 @@ import {
   PROVIDER_MODEL_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
-import {
-  DEFAULT_ANTHROPIC_CONFIGS,
-  ANTHROPIC_THINKING_EFFORT_OPTIONS,
-} from "@/constants/llm";
+import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { Button } from "@/ui/button";
 import { X } from "lucide-react";
 import {
+  getAnthropicThinkingEffortOptions,
   supportsAnthropicThinkingEffort,
   supportsSamplingParams,
 } from "@/lib/modelUtils";
@@ -210,7 +208,7 @@ const AnthropicModelConfigs = ({
             onChange={(value: AnthropicThinkingEffort) =>
               onChange({ thinkingEffort: value })
             }
-            options={ANTHROPIC_THINKING_EFFORT_OPTIONS}
+            options={getAnthropicThinkingEffortOptions(model)}
             placeholder="Select thinking effort"
           />
         </div>
