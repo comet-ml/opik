@@ -57,7 +57,7 @@ export default function useAssistantManifest(
       return {
         scriptUrl: `${manifestBase}/${manifest.js}`,
         cssUrl: manifest.css ? `${manifestBase}/${manifest.css}` : undefined,
-        shellUrl: `/assistant/${manifest.shell}`,
+        shellUrl: `${manifestBase}/${manifest.shell}`,
         version: manifest.ver,
       };
     },
