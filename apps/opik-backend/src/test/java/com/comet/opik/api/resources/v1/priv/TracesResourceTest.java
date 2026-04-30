@@ -2971,21 +2971,33 @@ class TracesResourceTest {
             long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
             long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
-            var traceWithNullLastUpdatedAt = factory.manufacturePojo(Trace.class).toBuilder()
+            // Cover every null/non-null branch of the fields this PR touches:
+            // - endTime: null (row A) + non-null (rows B / C)
+            // - lastUpdatedAt: null (row A) + non-null (rows B / C)
+            // - visibilityMode: null (row A) + DEFAULT (row B) + HIDDEN (row C)
+            var rowA = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
                     .endTime(null)
                     .duration(null)
                     .lastUpdatedAt(null)
+                    .visibilityMode(null)
                     .usage(null)
                     .feedbackScores(null)
                     .build();
-            var traceWithEndTime = factory.manufacturePojo(Trace.class).toBuilder()
+            var rowB = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
+                    .visibilityMode(VisibilityMode.DEFAULT)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var rowC = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .visibilityMode(VisibilityMode.HIDDEN)
                     .usage(null)
                     .feedbackScores(null)
                     .build();
 
-            var traces = List.of(traceWithNullLastUpdatedAt, traceWithEndTime);
+            var traces = List.of(rowA, rowB, rowC);
 
             traceResourceClient.batchCreateTraces(traces, API_KEY, workspaceName);
 
