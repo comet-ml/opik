@@ -493,10 +493,8 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
     seed: data.model?.seed ?? null,
     custom_parameters: data.model?.custom_parameters ?? null,
   };
-  // Normalize against the loaded model so a rule persisted before this PR
-  // (e.g. Opus 4.7 with `temperature: 0`) doesn't carry a stale value into
-  // the form. Without this, submitting an unedited stale rule would 400 on
-  // Anthropic's side.
+  // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
+  // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
   const config = model
     ? updateProviderConfig(rawConfig, {
         model: model as PROVIDER_MODEL_TYPE,

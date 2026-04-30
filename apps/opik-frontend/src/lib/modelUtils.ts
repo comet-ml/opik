@@ -6,7 +6,6 @@ import {
 } from "@/types/providers";
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
-  ANTHROPIC_THINKING_EFFORT_LABELS,
   DEFAULT_ANTHROPIC_CONFIGS,
   REASONING_MODELS,
 } from "@/constants/llm";
@@ -84,37 +83,38 @@ export const supportsVertexAIThinkingLevel = (
   );
 };
 
-const anthropicCapabilities = (model?: PROVIDER_MODEL_TYPE | "") =>
-  model
-    ? ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
-    : undefined;
+const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
+  adaptive: "Adaptive",
+  low: "Low",
+  medium: "Medium",
+  high: "High (Default)",
+  xhigh: "xHigh",
+  max: "Max",
+};
 
 export const supportsSamplingParams = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => anthropicCapabilities(model)?.supportsSamplingParams ?? true;
+): boolean =>
+  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.supportsSamplingParams ?? true;
 
 export const supportsAnthropicThinkingEffort = (
   model?: PROVIDER_MODEL_TYPE | "",
-): boolean => !!anthropicCapabilities(model)?.thinkingEffortOptions;
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.thinkingEffortOptions;
 
 export const getAnthropicThinkingEffortOptions = (
   model?: PROVIDER_MODEL_TYPE | "",
 ): Array<{ label: string; value: AnthropicThinkingEffort }> =>
-  (anthropicCapabilities(model)?.thinkingEffortOptions ?? []).map((value) => ({
-    label: ANTHROPIC_THINKING_EFFORT_LABELS[value],
-    value,
-  }));
+  (
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.thinkingEffortOptions ?? []
+  ).map((value) => ({ label: EFFORT_LABELS[value], value }));
 
-/**
- * Reconciles a provider config against the newly-selected model. Called from
- * every model-change handler (playground, LLM-as-judge rule dialog) so each
- * site shares one set of rules:
- *
- * - OpenAI reasoning models require temperature >= 1.
- * - Anthropic models that reject sampling params drop temperature/topP.
- * - Anthropic models with thinking-effort coerce a stale value to "high"
- *   (or drop it entirely if the new model has no thinking-effort dropdown).
- */
+// Single reconciler called by every model-change handler (playground, judge
+// dialog). Keeping the rules here means the form state stays valid even when
+// the user switches models without opening the config dropdown.
 export const updateProviderConfig = <
   T extends {
     temperature?: number;
@@ -181,18 +181,9 @@ export const updateProviderConfig = <
   return currentConfig;
 };
 
-/**
- * Wire-format hardening for outbound completion requests. Applies provider
- * invariants that are independent of (and complementary to) the in-form
- * capability normalization in `updateProviderConfig` — this layer never
- * trusts that upstream did its job and keeps the request payload valid.
- *
- * Rules today:
- * - Anthropic: temperature and topP are mutually exclusive — drop topP when
- *   both are set.
- * - Anthropic: maxCompletionTokens is required — fall back to the default
- *   when missing (covers persisted state from older sessions).
- */
+// Last-mile request hardening, complementary to updateProviderConfig: this
+// layer doesn't trust upstream and keeps the payload valid for stale state
+// (e.g. older persisted prompts missing maxCompletionTokens).
 export const sanitizeConfigForRequest = (
   model: PROVIDER_MODEL_TYPE | "",
   configs: Record<string, unknown>,

@@ -95,16 +95,13 @@ export const DEFAULT_CUSTOM_CONFIGS = {
   MAX_CONCURRENT_REQUESTS: 5,
 };
 
-// Per-model Anthropic quirks. Add a row when a model deviates from defaults.
-// Defaults: supports sampling params (temperature/top_p), no thinking-effort UI.
+// Per-model Anthropic quirks. Add a row when a model deviates from defaults
+// (sampling params allowed, no thinking-effort UI).
 export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   Record<
     PROVIDER_MODEL_TYPE,
     {
-      // Anthropic rejects non-default values for these on some models. When
-      // false, the UI hides the Temperature/Top P sliders.
       supportsSamplingParams?: boolean;
-      // When set, the Thinking Effort dropdown is shown with these options.
       thinkingEffortOptions?: AnthropicThinkingEffort[];
     }
   >
@@ -119,19 +116,6 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
   },
-};
-
-// Human-readable labels for the AnthropicThinkingEffort values used above.
-export const ANTHROPIC_THINKING_EFFORT_LABELS: Record<
-  AnthropicThinkingEffort,
-  string
-> = {
-  adaptive: "Adaptive",
-  low: "Low",
-  medium: "Medium",
-  high: "High (Default)",
-  xhigh: "xHigh",
-  max: "Max",
 };
 
 // Reasoning models that require temperature = 1.0
