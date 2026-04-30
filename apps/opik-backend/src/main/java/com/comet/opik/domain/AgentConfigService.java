@@ -23,6 +23,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -276,7 +277,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 : generateNextBlueprintName(dao, workspaceId, projectId);
 
         String description = blueprint.description();
-        if ((description == null || description.isBlank()) && blueprint.type() != AgentBlueprint.BlueprintType.MASK) {
+        if (blueprint.type() == AgentBlueprint.BlueprintType.BLUEPRINT && StringUtils.isBlank(description)) {
             description = generateUpdateDescription(dao, workspaceId, projectId, blueprint.values());
         }
 
@@ -320,10 +321,10 @@ class AgentConfigServiceImpl implements AgentConfigService {
             if (prev == null) {
                 added.add(v.key());
             } else if (!Objects.equals(prev.value(), v.value())) {
-                boolean isNumeric = v.type() == AgentConfigValue.ValueType.INTEGER
+                boolean isPrimitive = v.type() == AgentConfigValue.ValueType.INTEGER
                         || v.type() == AgentConfigValue.ValueType.FLOAT
                         || v.type() == AgentConfigValue.ValueType.BOOLEAN;
-                if (isNumeric) {
+                if (isPrimitive) {
                     modified.add(v.key() + " to " + v.value());
                 } else {
                     modified.add(v.key());
@@ -335,22 +336,24 @@ class AgentConfigServiceImpl implements AgentConfigService {
             return null;
         }
 
-        List<String> parts = new ArrayList<>();
+        StringBuilder description = new StringBuilder();
         if (!added.isEmpty()) {
-            parts.add("Added " + String.join(", ", added));
+            description.append("Added ").append(String.join(", ", added));
         }
         if (!modified.isEmpty()) {
-            parts.add("Modified " + String.join(", ", modified));
+            if (!description.isEmpty()) description.append(". ");
+            description.append("Modified ").append(String.join(", ", modified));
         }
         if (!removed.isEmpty()) {
-            parts.add("Removed " + String.join(", ", removed));
+            if (!description.isEmpty()) description.append(". ");
+            description.append("Removed ").append(String.join(", ", removed));
         }
 
-        String description = String.join(". ", parts);
         if (description.length() > 255) {
-            description = description.substring(0, 252) + "...";
+            description.setLength(252);
+            description.append("...");
         }
-        return description;
+        return description.toString();
     }
 
     private UUID createBlueprintSnapshot(
