@@ -6,6 +6,7 @@ from typing import Optional
 import click
 from rich.logging import RichHandler
 
+from .._group_helpers import bind_items_format_commands
 from .all import export_all_command
 from .dataset import export_dataset_command
 from .experiment import export_experiment_command
@@ -145,36 +146,7 @@ def export_group(ctx: click.Context, workspace: str, api_key: Optional[str]) -> 
 # Set subcommand metavar to ITEM instead of COMMAND
 export_group.subcommand_metavar = "ITEM [ARGS]..."
 
-
-def format_commands(
-    self: click.Group, ctx: click.Context, formatter: click.HelpFormatter
-) -> None:
-    """Override to change 'Commands' heading to 'Items'."""
-    commands = []
-    for subcommand in self.list_commands(ctx):
-        cmd = self.get_command(ctx, subcommand)
-        if cmd is None or cmd.hidden:
-            continue
-        commands.append((subcommand, cmd))
-
-    if len(commands):
-        limit = formatter.width - 6 - max(len(cmd[0]) for cmd in commands)
-        rows = []
-        for subcommand, cmd in commands:
-            help = cmd.get_short_help_str(limit)
-            rows.append((subcommand, help))
-
-        if rows:
-            with formatter.section("Items"):
-                formatter.write_dl(rows)
-
-
-# Override format_commands method
-setattr(
-    export_group,
-    "format_commands",
-    format_commands.__get__(export_group, type(export_group)),
-)
+bind_items_format_commands(export_group)
 
 
 # Add the subcommands

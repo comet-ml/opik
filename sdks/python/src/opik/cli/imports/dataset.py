@@ -20,8 +20,15 @@ def import_datasets_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> Dict[str, int]:
     """Import datasets from a directory.
+
+    Args:
+        destination_project: When provided, datasets are created in this project
+            on the destination workspace, overriding any project info in the
+            source JSON. Used by ``opik copy dataset``. When ``None`` (the
+            default), behavior is identical to a plain ``opik import``.
 
     Returns:
         Dictionary with keys: 'datasets', 'datasets_skipped', 'datasets_errors'
@@ -95,20 +102,17 @@ def import_datasets_from_directory(
                 if debug:
                     console.print(f"[blue]Importing dataset: {dataset_name}[/blue]")
 
-                # Get or create dataset (handles case where dataset already exists)
-                try:
-                    dataset = client.get_dataset(dataset_name)
-                    if debug:
-                        console.print(
-                            f"[blue]Dataset '{dataset_name}' already exists, using existing dataset[/blue]"
-                        )
-                except Exception:
-                    # Dataset doesn't exist, create it
-                    dataset = client.create_dataset(name=dataset_name)
-                    if debug:
-                        console.print(
-                            f"[blue]Created new dataset: {dataset_name}[/blue]"
-                        )
+                # Use the stable SDK helper — it handles the not-found path
+                # internally and surfaces real SDK errors (auth, network,
+                # permissions) as themselves, so we don't need to catch and
+                # re-create.
+                dataset = client.get_or_create_dataset(
+                    name=dataset_name, project_name=destination_project
+                )
+                if debug:
+                    console.print(
+                        f"[blue]Got or created dataset: {dataset_name}[/blue]"
+                    )
 
                 # Import dataset items
                 items = dataset_data.get("items", [])
