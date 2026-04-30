@@ -24,6 +24,7 @@ import { SpanType } from "@/rest_api/api";
 import { getSourceObjValue } from "@/utils/common";
 import ora from "ora";
 import type { ExecutionPolicy } from "../suite/types";
+import { BaseSuiteEvaluator } from "../suite_evaluators/BaseSuiteEvaluator";
 
 type DatasetOrVersion<T extends DatasetItemData> =
   | Dataset<T>
@@ -397,6 +398,9 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     const { scoringInputs } = testCase;
     const effectiveMetrics = metrics ?? this.scoringMetrics;
 
+    const assertionResults: EvaluationScoreResult[] = [];
+    const feedbackScoreResults: EvaluationScoreResult[] = [];
+
     for (const metric of effectiveMetrics) {
       logger.debug(`Calculating score for metric ${metric.name}`);
 
@@ -408,6 +412,11 @@ export class EvaluationEngine<T = Record<string, unknown>> {
           : [metricResults];
 
         scoreResults.push(...resultArray);
+        if (metric instanceof BaseSuiteEvaluator) {
+          assertionResults.push(...resultArray);
+        } else {
+          feedbackScoreResults.push(...resultArray);
+        }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
@@ -417,7 +426,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
       logger.debug(`Finished calculating score for metric ${metric.name}`);
     }
 
-    scoreResults.forEach((score) =>
+    feedbackScoreResults.forEach((score) =>
       trace.score({
         name: score.name,
         value: score.value,
@@ -425,6 +434,26 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         categoryName: score.categoryName,
       })
     );
+
+    const assertionProjectName = this.client.resolveProjectName(
+      trace.data.projectName
+    );
+    assertionResults.forEach((result) => {
+      if (result.value !== 0 && result.value !== 1) {
+        logger.warn(
+          `Suite evaluator "${result.name}" returned non-binary value ${result.value}; coercing to "failed". BaseSuiteEvaluator.score() must return 0 or 1.`
+        );
+      }
+      this.client.traceAssertionResultsBatchQueue.create({
+        entityId: trace.data.id,
+        projectName: assertionProjectName,
+        name: result.name,
+        // TODO(OPIK-6256): switch to typed AssertionStatus once the SDK type lands.
+        status: result.value === 1 ? "passed" : "failed",
+        reason: result.reason,
+        source: "sdk",
+      });
+    });
 
     return {
       testCase,
