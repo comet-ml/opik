@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { supportsSamplingParams } from "@/lib/modelUtils";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { supportsSamplingParams, updateProviderConfig } from "@/lib/modelUtils";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  LLMAnthropicConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+
+const ANTHROPIC = PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE;
 
 describe("supportsSamplingParams", () => {
   it("returns true for an empty model selector", () => {
@@ -24,5 +31,83 @@ describe("supportsSamplingParams", () => {
     expect(supportsSamplingParams(PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7)).toBe(
       false,
     );
+  });
+});
+
+describe("updateProviderConfig — Anthropic", () => {
+  it("strips temperature and topP when switching into Opus 4.7", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.5,
+      topP: 0.9,
+      maxCompletionTokens: 4000,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      provider: ANTHROPIC,
+    });
+    expect(result?.temperature).toBeUndefined();
+    expect(result?.topP).toBeUndefined();
+    expect(result?.maxCompletionTokens).toBe(4000);
+  });
+
+  it("keeps temperature when switching into Opus 4.6", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.5,
+      maxCompletionTokens: 4000,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      provider: ANTHROPIC,
+    });
+    expect(result?.temperature).toBe(0.5);
+  });
+
+  it("coerces invalid thinkingEffort to high when switching to Opus 4.7", () => {
+    const config: LLMAnthropicConfigsType = {
+      maxCompletionTokens: 4000,
+      thinkingEffort: "adaptive",
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      provider: ANTHROPIC,
+    });
+    expect(result?.thinkingEffort).toBe("high");
+  });
+
+  it("keeps a valid thinkingEffort across model switches", () => {
+    const config: LLMAnthropicConfigsType = {
+      maxCompletionTokens: 4000,
+      thinkingEffort: "medium",
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      provider: ANTHROPIC,
+    });
+    expect(result?.thinkingEffort).toBe("medium");
+  });
+
+  it("drops thinkingEffort when switching to a model with no thinking-effort dropdown", () => {
+    const config: LLMAnthropicConfigsType = {
+      maxCompletionTokens: 4000,
+      thinkingEffort: "high",
+    };
+    const result = updateProviderConfig(config, {
+      // Haiku 4.5 has no thinking effort options in ANTHROPIC_MODEL_CAPABILITIES
+      model: PROVIDER_MODEL_TYPE.CLAUDE_HAIKU_4_5,
+      provider: ANTHROPIC,
+    });
+    expect(result?.thinkingEffort).toBeUndefined();
+  });
+
+  it("returns the same reference when no changes are needed", () => {
+    const config: LLMAnthropicConfigsType = {
+      temperature: 0.7,
+      maxCompletionTokens: 4000,
+    };
+    const result = updateProviderConfig(config, {
+      model: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      provider: ANTHROPIC,
+    });
+    expect(result).toBe(config);
   });
 });

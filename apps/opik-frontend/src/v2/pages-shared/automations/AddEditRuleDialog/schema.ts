@@ -132,7 +132,7 @@ const LLMJudgeBaseSchema = z.object({
     })
     .min(1, { message: "Model is required" }),
   config: z.object({
-    temperature: z.number(),
+    temperature: z.number().optional(),
     seed: z
       .number()
       .int()
@@ -488,7 +488,7 @@ export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
   return {
     model: data.model?.name ?? "",
     config: {
-      temperature: data.model?.temperature ?? 0,
+      temperature: data.model?.temperature,
       seed: data.model?.seed ?? null,
       custom_parameters: data.model?.custom_parameters ?? null,
     },
@@ -509,8 +509,11 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
-    temperature,
   };
+
+  if (temperature != null) {
+    model.temperature = temperature;
+  }
 
   if (seed != null) {
     model.seed = seed;

@@ -102,17 +102,22 @@ export const getAnthropicThinkingEffortOptions = (
   }));
 
 /**
- * Updates provider config to ensure reasoning models have temperature >= 1.0
- * This function ensures that OpenAI reasoning models (GPT-5 family, O-series)
- * have their temperature set to at least 1.0, as they don't support temperature < 1
+ * Reconciles a provider config against the newly-selected model. Called from
+ * every model-change handler (playground, LLM-as-judge rule dialog) so each
+ * site shares one set of rules:
  *
- * @param currentConfig - The current provider config (can be LLMPromptConfigsType or a more specific config type)
- * @param params - Configuration object containing model and provider
- * @param params.model - The model type
- * @param params.provider - The composed provider type
- * @returns Updated config with temperature adjusted if needed, or the original config
+ * - OpenAI reasoning models require temperature >= 1.
+ * - Anthropic models that reject sampling params drop temperature/topP.
+ * - Anthropic models with thinking-effort coerce a stale value to "high"
+ *   (or drop it entirely if the new model has no thinking-effort dropdown).
  */
-export const updateProviderConfig = <T extends { temperature?: number }>(
+export const updateProviderConfig = <
+  T extends {
+    temperature?: number;
+    topP?: number;
+    thinkingEffort?: AnthropicThinkingEffort;
+  },
+>(
   currentConfig: T | undefined,
   params: {
     model: PROVIDER_MODEL_TYPE | "";
@@ -125,7 +130,6 @@ export const updateProviderConfig = <T extends { temperature?: number }>(
 
   const providerType = parseComposedProviderType(params.provider);
 
-  // Only adjust temperature for OpenAI reasoning models
   if (
     providerType === PROVIDER_TYPE.OPEN_AI &&
     isReasoningModel(params.model) &&
@@ -136,6 +140,38 @@ export const updateProviderConfig = <T extends { temperature?: number }>(
       ...currentConfig,
       temperature: 1.0,
     };
+  }
+
+  if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const next: T = { ...currentConfig };
+    let changed = false;
+
+    if (!supportsSamplingParams(params.model)) {
+      if (next.temperature !== undefined) {
+        next.temperature = undefined;
+        changed = true;
+      }
+      if (next.topP !== undefined) {
+        next.topP = undefined;
+        changed = true;
+      }
+    }
+
+    const effortOptions = getAnthropicThinkingEffortOptions(params.model);
+    if (effortOptions.length === 0) {
+      if (next.thinkingEffort !== undefined) {
+        next.thinkingEffort = undefined;
+        changed = true;
+      }
+    } else if (
+      next.thinkingEffort !== undefined &&
+      !effortOptions.some((o) => o.value === next.thinkingEffort)
+    ) {
+      next.thinkingEffort = "high";
+      changed = true;
+    }
+
+    return changed ? next : currentConfig;
   }
 
   return currentConfig;
