@@ -55,7 +55,7 @@ const GetStartedView: React.FC = () => {
       }
     >
       <div className="flex flex-col gap-8">
-        {!canStartAnnotation && totalCount > 0 && (
+        {!canStartAnnotation && (
           <Alert variant="destructive">
             <AlertCircle className="size-4" />
             <AlertDescription>
