@@ -10,9 +10,9 @@ This sub-skill:
 
 - Reads the canonical structure from `.github/pull_request_template.md` and the validation rules from `.github/workflows/pr-lint.yml`.
 - Regenerates the description from the current `git diff origin/main...HEAD` and commit history using the same logic as `/comet:create-pr` Step 6/7.
-- Preserves all media (images, GIFs, video links, Loom embeds) and any hand-edits the user added that don't conflict with regenerated content.
+- Preserves all media (images, GIFs, video links, Loom embeds) verbatim, and uses a hidden section-hash marker to detect which `##` sections the user has hand-edited so those sections are kept as-is rather than overwritten.
 - Confirms the proposed update with the user via `AskUserQuestion`, with per-repo `Always` / `Never` mute options persisted to local memory.
-- Is a no-op when the branch has no open PR or when the regenerated body equals the current body (idempotence).
+- Is a no-op when the branch has no open PR, when no PR matches the local HEAD, or when the regenerated body is semantically identical to the current body (sha1 of body excluding the marker).
 
 ## Inputs
 
@@ -28,7 +28,7 @@ Return without prompting or making any API call when any of the failure conditio
 
 **1a. PR resolution.** Determine which PR to operate on:
 
-- **If `pr_number` was passed**: run `gh pr view {pr_number} --repo {repo} --json number,headRefName,headRefOid,state`. Verify `state == "OPEN"` and `headRefName == branch`. If either check fails, discard the hint and fall through to the branch lookup below — never edit the passed PR on mismatch.
+- **If `pr_number` was passed**: run `gh pr view {pr_number} --repo {repo} --json number,headRefName,headRefOid,state`. Verify `state == "OPEN"` and `headRefName == branch`. If either check fails, **fail closed**: log `PR description sync skipped: pr_number={N} does not match branch={branch} (headRefName={X}, state={S}); refusing to switch PRs silently` and return. Do not fall through to the branch lookup — a caller passing a mismatching `pr_number` is a bug or stale state, not a request to switch PRs.
 - **Branch lookup**: run `gh pr list --repo {repo} --head {branch} --state open --json number,url,headRefName,headRefOid`. Filter to PRs whose `headRefOid` matches the local `git rev-parse HEAD`.
   - **0 matches**: no open PR for this exact HEAD — return silently.
   - **Exactly 1 match**: use it.
@@ -38,12 +38,17 @@ Return without prompting or making any API call when any of the failure conditio
 
 ### 2. Fetch current state
 
+Use the PR number resolved in Step 1 (whether from the validated `pr_number` hint or the branch lookup).
+
 ```bash
-gh pr view {pr_number} --repo {repo} --json body,title,headRefOid > /tmp/pr-current.json
+TMP=$(mktemp)
+gh pr view {resolved_pr_number} --repo {repo} --json body,title,headRefOid > "$TMP"
 git diff origin/main...HEAD
 git log origin/main..HEAD --pretty=format:'%h %s'
 cat .github/pull_request_template.md
 ```
+
+Clean up `$TMP` on exit.
 
 ### 3. Regenerate the description
 
@@ -59,26 +64,53 @@ Apply the same logic as `/comet:create-pr` Step 6 (Extract Change Information) a
 
 Apply the same secrecy rules as `/comet:create-pr` Step 7: never include customer/client names, internal hostnames, internal URLs, IPs, bucket names, or credentials.
 
-### 4. Preserve media and hand-edits
+### 4. Detect user edits via the section-hash marker
 
-Parse the *current* PR body. For each of the following, lift the matching content verbatim from the current body and reinsert it into the regenerated body under the same `##` section:
+The sub-skill stores a hidden HTML comment at the bottom of every body it writes:
+
+```html
+<!-- pr-sync: {"Details":"<sha1>","Change checklist":"<sha1>","Issues":"<sha1>","AI-WATERMARK":"<sha1>","Testing":"<sha1>","Documentation":"<sha1>"} -->
+```
+
+Each value is `sha1(<section content with leading/trailing whitespace trimmed>)`. The marker lets the next run distinguish *agent-generated content the user hasn't touched* from *content the user has edited*.
+
+**Marker present:** for each `## <Section>` heading defined in `.github/pull_request_template.md`:
+
+1. Compute `sha1(current section content)`.
+2. If it equals the stored hash → section is *unmodified since the last refresh* → safe to overwrite with the regenerated content.
+3. If it differs → *user has edited this section* → keep the current section content verbatim in the regenerated body; do not regenerate it.
+
+This per-section decision is the merge algorithm. There is no "fuzzy match" or "append on conflict" — the marker is the source of truth.
+
+**Marker absent** (first run on a PR that pre-dates this skill, or a PR whose body was edited externally to strip the marker): regenerate every section per Step 3 — we have no way to know which sections the user touched, so the user reviews the full diff in Step 7 and decides. Their confirmation in Step 7 is the act of adopting managed mode; on `Update` / `Always`, Step 8 installs the marker, and subsequent runs use the per-section logic above.
+
+This means the **first refresh of a managed-mode PR will be the most disruptive** — it proposes overwriting everything. After that, the marker tracks state and refreshes are surgical. The user can always decline the first prompt to opt out (one-shot `Skip` or per-repo `Never`).
+
+### 4b. Preserve media (always, regardless of marker state)
+
+Independent of the marker check, scan the *current* body for media and lift it verbatim into whatever the regenerated body becomes:
 
 - **Markdown images**: any `![…](…)` line.
 - **HTML img tags**: any `<img …>` element (single-line or multi-line).
 - **Video / embed links**: any URL matching `user-images.githubusercontent.com`, `github.com/.../assets/`, `*.loom.com/share/`, `youtube.com/watch`, `youtu.be/`, `vimeo.com/`.
-- **Hand-edited free-text under a known `##` section**: text the user added that does not match the regenerated content for that section. Append it under the same heading rather than overwriting.
 
-Inside `## Testing`, treat the `Video evidence:` sub-section as a preservation island — keep its content as-is.
+Reinsert each piece of media into the regenerated body at the same position relative to its surrounding `##` heading.
 
-If the user adds an entirely new top-level `##` section that isn't in the template (e.g., `## Migration plan`), keep it intact at the bottom of the body.
+If the user adds an entirely new top-level `##` section that isn't in the template (e.g., `## Migration plan`), keep it intact at the bottom of the regenerated body, *above* the `<!-- pr-sync: ... -->` marker.
 
-### 5. Idempotence check
+### 5. Idempotence check (semantic, not byte-equal)
 
-If the regenerated body, after preservation, is byte-equal to the current body (after trimming trailing whitespace on each line), return silently. Do not prompt, do not call `gh pr edit`.
+After Steps 3, 4, and 4b produce the regenerated body, compute `sha1(regenerated body without the marker)`. Compare against `sha1(current body without the marker)`. If equal → no semantic change → return silently. Do not prompt, do not call `gh pr edit`.
+
+This handles the "every push regenerates Testing, but nothing meaningful changed" case: if user-touched sections are preserved verbatim (because their hashes still match the marker) and agent-owned sections regenerate to the same content as before, the body hashes match.
+
+The check applies in both marker-present and marker-absent modes, so a PR whose regenerated body happens to match the current body byte-for-byte (excluding the marker) is a no-op even on first run.
 
 ### 6. Validate against pr-lint
 
-Run the same checks as `/comet:create-pr` Step 8 against the regenerated body — title regex (unchanged here, body only), required `##` sections present, `## Details` non-empty, `## Issues` references a ticket, no leftover `<!-- REPLACE ME` placeholders. If any check fails, auto-fix and re-validate. Never push a body that would fail pr-lint.
+Run the same checks as `/comet:create-pr` Step 8 against the regenerated body — title regex (unchanged here, body only), required `##` sections present, `## Details` non-empty, `## Issues` references a ticket, no leftover template placeholders. If any check fails, auto-fix and re-validate. Never push a body that would fail pr-lint.
+
+**Placeholder check details**: a "leftover template placeholder" means the literal HTML comment block from `.github/pull_request_template.md` appearing as the *only* content of a section (i.e., the user replaced nothing). Match the comment text from the template, not arbitrary `<!-- REPLACE ME` substrings — bodies that legitimately quote the placeholder string while documenting the skill itself must pass.
 
 ### 7. Confirm with user (unless silent mode is active)
 
@@ -102,8 +134,19 @@ Do not show the reminder when there's no media — avoid noise.
 
 ### 8. Apply
 
-- On `Update` or under silent `Always` mode: `gh pr edit {pr_number} --repo {repo} --body-file <tmpfile>`.
-- On `Skip`: return.
+Before writing, **append (or replace) the marker** at the bottom of the regenerated body:
+
+```html
+
+<!-- pr-sync: {"<Section>":"<sha1 of regenerated section content>", ...} -->
+```
+
+The marker is computed from the *final* body that will be written (post Step 4 user-section preservation, post Step 4b media reinsertion). One marker per body; if a previous marker exists, replace it.
+
+Then:
+
+- On `Update` or under silent `Always` mode: write the body to a `mktemp` file, then `gh pr edit {pr_number} --repo {repo} --body-file <tmpfile>`.
+- On `Skip`: return without writing.
 - On `Always for this repo`: write the normalized remote URL into the `always` list of the memory file (Step 9), then apply.
 - On `Never for this repo`: write the normalized remote URL into the `never` list of the memory file, return without applying.
 
@@ -111,9 +154,12 @@ After applying, log: `PR description refreshed in sync with HEAD ({headRefOid}).
 
 ### 9. Memory entry — `feedback_pr_description_auto_refresh.md`
 
-Persist `Always` / `Never` choices to a single user-memory file alongside the user's other feedback memories.
+Persist `Always` / `Never` choices to a single memory file alongside the project's other feedback memories.
 
-**Path**: `{user-memory-dir}/feedback_pr_description_auto_refresh.md`
+**Path resolution** (in order, first hit wins):
+
+1. The directory containing the project's existing `MEMORY.md` index, if one exists. Discover by walking up from `cwd` looking for `**/memory/MEMORY.md` under `~/.claude/projects/<project-id>/`. If found, write next to it: `<that-dir>/feedback_pr_description_auto_refresh.md`.
+2. If no project `MEMORY.md` exists, fall back to `~/.claude/memory/feedback_pr_description_auto_refresh.md` (user-global). Note this in the log so the user knows the choice will apply across all projects until a project memory dir is established.
 
 **Format**:
 
