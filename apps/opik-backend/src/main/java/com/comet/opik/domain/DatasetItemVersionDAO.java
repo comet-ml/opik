@@ -1046,6 +1046,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT
                     ei.dataset_item_id AS id,
                     :datasetId AS dataset_id,
+                    <if(push_top_limit)>
+                    <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), argMax(COALESCE(di.data, map()), eas.resolved_dataset_version_id)) <else> argMax(COALESCE(di.data, map()), eas.resolved_dataset_version_id) <endif> AS data_final,
+                    argMax(COALESCE(di.data, map()), eas.resolved_dataset_version_id) AS data,
+                    argMax(di.description, eas.resolved_dataset_version_id) AS description,
+                    argMax(di.trace_id, eas.resolved_dataset_version_id) AS trace_id,
+                    argMax(di.span_id, eas.resolved_dataset_version_id) AS span_id,
+                    argMax(di.source, eas.resolved_dataset_version_id) AS source,
+                    argMax(di.tags, eas.resolved_dataset_version_id) AS tags,
+                    argMax(di.evaluators, eas.resolved_dataset_version_id) AS evaluators,
+                    argMax(di.execution_policy, eas.resolved_dataset_version_id) AS execution_policy,
+                    argMax(di.item_created_at, eas.resolved_dataset_version_id) AS created_at,
+                    argMax(di.item_last_updated_at, eas.resolved_dataset_version_id) AS last_updated_at,
+                    argMax(di.item_created_by, eas.resolved_dataset_version_id) AS created_by,
+                    argMax(di.item_last_updated_by, eas.resolved_dataset_version_id) AS last_updated_by,
+                    <else>
                     <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                     COALESCE(di.data, map()) AS data,
                     di.description AS description,
@@ -1059,6 +1074,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.item_last_updated_at AS last_updated_at,
                     di.item_created_by AS created_by,
                     di.item_last_updated_by AS last_updated_by,
+                    <endif>
                     avg(ei.duration) AS duration,
                     avg(ei.total_estimated_cost) AS total_estimated_cost,
                     avgMap(ei.usage) AS usage,
@@ -1129,6 +1145,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = ei.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
                     AND di.dataset_version_id = eas.resolved_dataset_version_id
+                <if(push_top_limit)>
+                GROUP BY
+                    ei.dataset_item_id,
+                    :datasetId
+                <else>
                 GROUP BY
                     ei.dataset_item_id,
                     :datasetId,
@@ -1144,6 +1165,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     di.item_last_updated_at,
                     di.item_created_by,
                     di.item_last_updated_by
+                <endif>
                 <if(search || filters)>
                   HAVING 1=1
 
