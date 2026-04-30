@@ -2094,8 +2094,8 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when batch contains a span with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
-        void batch__whenSpanHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+        @DisplayName("when batch spans are inserted, no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
+        void batch__whenSpansAreInserted__thenNoCannotConvertTypeErrors(
                 TransactionTemplateAsync templateAsync) {
             var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
@@ -2120,9 +2120,13 @@ class SpansResourceTest {
 
             long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
 
+            // Code 70 (CANNOT_CONVERT_TYPE) is fully eliminated for spans by this PR. Codes 26 / 27 /
+            // 43 are NOT asserted here because spans BULK_INSERT still has function expressions in
+            // non-datetime cells (toDecimal128 for total_estimated_cost, mapFromArrays for usage)
+            // that trip the FORMAT Values fast-path. Datetime cells were the scope flagged on
+            // OPIK-5694 by Liya; the remaining contributors will need their own follow-up.
             assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
-                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
-                            + "into system.errors when spans have null lastUpdatedAt")
+                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70)")
                     .isZero();
         }
 

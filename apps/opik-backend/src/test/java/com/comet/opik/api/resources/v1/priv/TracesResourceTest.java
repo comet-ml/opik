@@ -2957,8 +2957,8 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("when batch contains a trace with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
-        void batch__whenTraceHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+        @DisplayName("when batch traces are inserted, no FORMAT Values fast-path errors are emitted (OPIK-5694)")
+        void batch__whenTracesAreInserted__thenNoFastPathErrorsEmitted(
                 TransactionTemplateAsync templateAsync) {
             var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
@@ -2966,7 +2966,10 @@ class TracesResourceTest {
 
             var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
 
-            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long parseInputBefore = readClickHouseErrorCount(templateAsync, 27);
+            long convertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
+            long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
             var traceWithNullLastUpdatedAt = factory.manufacturePojo(Trace.class).toBuilder()
                     .projectName(projectName)
@@ -2992,11 +2995,20 @@ class TracesResourceTest {
                 assertThat(retrieved.id()).isEqualTo(trace.id());
             }
 
-            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
-
-            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
-                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
-                            + "into system.errors. Production sees ~30k of these per hour from this code path.")
+            // The trace BATCH_INSERT and the side-effect trace_threads INSERT must both stop
+            // tripping the FORMAT Values fast-path. These counters are silent in production (the
+            // inserts succeed) but pollute system.errors and pod stderr. See OPIK-5694.
+            assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
+                    .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 27) - parseInputBefore)
+                    .as("CANNOT_PARSE_INPUT_ASSERTION_FAILED (27): function expressions in Values cells")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 43) - illegalArgBefore)
+                    .as("ILLEGAL_TYPE_OF_ARGUMENT (43): same fast-path fallback path")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 26) - parseQuotedBefore)
+                    .as("CANNOT_PARSE_QUOTED_STRING (26): same fast-path fallback path")
                     .isZero();
         }
 

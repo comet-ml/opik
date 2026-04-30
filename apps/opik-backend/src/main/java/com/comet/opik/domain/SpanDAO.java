@@ -17,6 +17,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -128,8 +129,8 @@ public class SpanDAO {
                         :parent_span_id<item.index>,
                         :name<item.index>,
                         :type<item.index>,
-                        parseDateTime64BestEffort(:start_time<item.index>, 9),
-                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :start_time<item.index>,
+                        :end_time<item.index>,
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
@@ -139,7 +140,7 @@ public class SpanDAO {
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
-                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        :last_updated_at<item.index>,
                         :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>,
@@ -1520,7 +1521,7 @@ public class SpanDAO {
                         .bind("trace_id" + i, span.traceId())
                         .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
                         .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
-                        .bind("start_time" + i, span.startTime().toString())
+                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(span.startTime()))
                         .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
                         .bind("input" + i, inputValue)
                         .bind("output" + i, outputValue)
@@ -1536,7 +1537,7 @@ public class SpanDAO {
                         .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
 
                 if (span.endTime() != null) {
-                    statement.bind("end_time" + i, span.endTime().toString());
+                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(span.endTime()));
                 } else {
                     statement.bindNull("end_time" + i, String.class);
                 }
@@ -1559,11 +1560,12 @@ public class SpanDAO {
                     statement.bind("usage_values" + i, new Integer[]{});
                 }
 
-                if (span.lastUpdatedAt() != null) {
-                    statement.bind("last_updated_at" + i, span.lastUpdatedAt().toString());
-                } else {
-                    statement.bindNull("last_updated_at" + i, String.class);
-                }
+                // Format the timestamp client-side so the SQL contains a plain string literal in the
+                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
+                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
+                // that would trip the FORMAT Values fast-path. See OPIK-5694.
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
+                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : Instant.now()));
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
