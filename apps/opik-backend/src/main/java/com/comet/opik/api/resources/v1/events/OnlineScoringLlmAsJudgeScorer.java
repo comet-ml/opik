@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -48,6 +49,14 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceToScoreLlmAsJudge> {
 
     private static final int MAX_TOOL_CALL_ROUNDS = 10;
+
+    /**
+     * Per-variable substitution cap for the test-suite-assertion (tool-enabled) path. ≈ 4 KB chars
+     * (~ 1 K tokens via the {@code Tokens.estimate} convention) is large enough that small trace
+     * input/output blobs render inline (cheap, no tool round-trip) but small enough that a huge
+     * trace doesn't blow context — the agent fetches the rest via the {@code read} tool.
+     */
+    private static final int MAX_PROMPT_FIELD_CHARS = 4_000;
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
@@ -109,11 +118,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
-                var strategy = message.experimentId() != null
-                        ? new InstructionStrategy()
-                        : llmProviderFactory.getStructuredOutputStrategy(modelName);
-                scoreRequest = OnlineScoringEngine.prepareLlmRequest(
-                        message.llmAsJudgeCode(), trace, strategy, message.promptType());
+                if (message.experimentId() != null) {
+                    // Assertion path: cap variable substitutions so huge trace input/output JSON
+                    // doesn't pre-load context. The agent has read/jq tools to drill in on demand.
+                    String drillDownHint = "use read(type=trace, id=%s, tier=FULL) to see full"
+                            .formatted(trace.id());
+                    scoreRequest = OnlineScoringEngine.prepareLlmRequest(
+                            message.llmAsJudgeCode(), trace, new InstructionStrategy(),
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
+                } else {
+                    scoreRequest = OnlineScoringEngine.prepareLlmRequest(
+                            message.llmAsJudgeCode(), trace,
+                            llmProviderFactory.getStructuredOutputStrategy(modelName),
+                            message.promptType());
+                }
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
                         trace.id(), exception.getMessage());
@@ -172,14 +190,29 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         }
     }
 
-    private ChatRequest addToolSpecs(ChatRequest request) {
+    // Package-private for unit tests.
+    ChatRequest addToolSpecs(ChatRequest request) {
+        // Preserve all the original request's tunables (response format, temperature, etc.) and
+        // only layer the tool specifications on top. ChatRequest rejects setting both
+        // `parameters` and `toolSpecifications` directly because tool specs live inside
+        // ChatRequestParameters — so we copy the existing parameters via overrideWith and
+        // override toolSpecifications, then attach the rebuilt parameters to a fresh request.
+        // The naive ChatRequest.builder().messages(...).toolSpecifications(...) version that
+        // used to live here silently dropped every other field, leaving the initial scoring
+        // call with a different shape from the final structured re-issue at the end of
+        // handleToolCalls.
+        var parameters = ChatRequestParameters.builder()
+                .overrideWith(request.parameters())
+                .toolSpecifications(toolRegistry.specs())
+                .build();
         return ChatRequest.builder()
                 .messages(request.messages())
-                .toolSpecifications(toolRegistry.specs())
+                .parameters(parameters)
                 .build();
     }
 
-    private ChatResponse handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
+    // Package-private for unit tests.
+    ChatResponse handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
             ChatRequest structuredRequest, TraceToScoreLlmAsJudge message) {
 
         AiMessage aiMessage = chatResponse.aiMessage();

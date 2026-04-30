@@ -91,6 +91,42 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
+     * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
+     * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
+     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path so a 50K-token
+     * trace's input/output doesn't get pasted verbatim into the prompt — the agent can pull the
+     * full content via the {@code read} tool when it actually needs it.
+     */
+    public static ChatRequest prepareLlmRequest(
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType,
+            int maxReplacementChars, @NotNull String drillDownHint) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    static Map<String, String> capReplacements(Map<String, String> replacements,
+            int maxReplacementChars, String drillDownHint) {
+        return replacements.entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> capSingleReplacement(e.getValue(), maxReplacementChars, drillDownHint),
+                (a, b) -> b,
+                java.util.LinkedHashMap::new));
+    }
+
+    private static String capSingleReplacement(String value, int maxReplacementChars, String drillDownHint) {
+        if (value == null || value.length() <= maxReplacementChars) {
+            return value;
+        }
+        int dropped = value.length() - maxReplacementChars;
+        return value.substring(0, maxReplacementChars)
+                + "[TRUNCATED %,d chars — %s]".formatted(dropped, drillDownHint);
+    }
+
+    /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
      * the template messages with Span variables and with the proper structured output format.
      *
