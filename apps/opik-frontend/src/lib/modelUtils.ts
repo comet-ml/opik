@@ -1,15 +1,19 @@
 import {
   AnthropicThinkingEffort,
-  PROVIDER_MODEL_TYPE,
   COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
 } from "@/types/providers";
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   ANTHROPIC_THINKING_EFFORT_LABELS,
+  DEFAULT_ANTHROPIC_CONFIGS,
   REASONING_MODELS,
 } from "@/constants/llm";
-import { PROVIDER_TYPE } from "@/types/providers";
-import { parseComposedProviderType } from "@/lib/provider";
+import {
+  getProviderFromModel,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 /**
@@ -175,4 +179,40 @@ export const updateProviderConfig = <
   }
 
   return currentConfig;
+};
+
+/**
+ * Wire-format hardening for outbound completion requests. Applies provider
+ * invariants that are independent of (and complementary to) the in-form
+ * capability normalization in `updateProviderConfig` — this layer never
+ * trusts that upstream did its job and keeps the request payload valid.
+ *
+ * Rules today:
+ * - Anthropic: temperature and topP are mutually exclusive — drop topP when
+ *   both are set.
+ * - Anthropic: maxCompletionTokens is required — fall back to the default
+ *   when missing (covers persisted state from older sessions).
+ */
+export const sanitizeConfigForRequest = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (!model) return configs;
+
+  const sanitized: Record<string, unknown> = { ...configs };
+
+  if (
+    getProviderFromModel(model as PROVIDER_MODEL_TYPE) ===
+    PROVIDER_TYPE.ANTHROPIC
+  ) {
+    if (sanitized.topP != null && sanitized.temperature != null) {
+      delete sanitized.topP;
+    }
+    if (sanitized.maxCompletionTokens == null) {
+      sanitized.maxCompletionTokens =
+        DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+    }
+  }
+
+  return sanitized;
 };

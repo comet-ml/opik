@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { supportsSamplingParams, updateProviderConfig } from "@/lib/modelUtils";
+import {
+  sanitizeConfigForRequest,
+  supportsSamplingParams,
+  updateProviderConfig,
+} from "@/lib/modelUtils";
 import {
   COMPOSED_PROVIDER_TYPE,
   LLMAnthropicConfigsType,
@@ -109,5 +113,65 @@ describe("updateProviderConfig — Anthropic", () => {
       provider: ANTHROPIC,
     });
     expect(result).toBe(config);
+  });
+});
+
+describe("sanitizeConfigForRequest", () => {
+  it("drops topP when both temperature and topP are set on an Anthropic model", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      {
+        temperature: 0.7,
+        topP: 0.9,
+        maxCompletionTokens: 4000,
+      },
+    );
+    expect(result.temperature).toBe(0.7);
+    expect(result.topP).toBeUndefined();
+  });
+
+  it("keeps topP when temperature is not set", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      {
+        topP: 0.9,
+        maxCompletionTokens: 4000,
+      },
+    );
+    expect(result.topP).toBe(0.9);
+  });
+
+  it("substitutes default maxCompletionTokens for Anthropic when missing", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      {
+        throttling: 0,
+      },
+    );
+    expect(result.maxCompletionTokens).toBe(4000);
+  });
+
+  it("does not touch maxCompletionTokens when already set", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      {
+        maxCompletionTokens: 64000,
+      },
+    );
+    expect(result.maxCompletionTokens).toBe(64000);
+  });
+
+  it("does not apply Anthropic rules to non-Anthropic models", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_4O, {
+      temperature: 0.7,
+      topP: 0.9,
+    });
+    expect(result.topP).toBe(0.9);
+    expect(result.maxCompletionTokens).toBeUndefined();
+  });
+
+  it("returns the original object when model is empty", () => {
+    const configs = { temperature: 0.5 };
+    expect(sanitizeConfigForRequest("", configs)).toBe(configs);
   });
 });
