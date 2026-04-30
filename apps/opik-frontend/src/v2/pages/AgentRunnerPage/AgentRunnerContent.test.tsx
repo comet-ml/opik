@@ -175,7 +175,7 @@ describe("AgentRunnerContent", () => {
     setConnectedRunner();
     mockUseSandboxJobStatus.mockReturnValue({
       data: { status: SandboxJobStatus.RUNNING },
-    } as ReturnType<typeof useSandboxJobStatus>);
+    } as unknown as ReturnType<typeof useSandboxJobStatus>);
 
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
@@ -190,7 +190,7 @@ describe("AgentRunnerContent", () => {
     setConnectedRunner();
     mockUseSandboxJobStatus.mockReturnValue({
       data: { status: SandboxJobStatus.PENDING },
-    } as ReturnType<typeof useSandboxJobStatus>);
+    } as unknown as ReturnType<typeof useSandboxJobStatus>);
 
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
@@ -205,7 +205,7 @@ describe("AgentRunnerContent", () => {
     setConnectedRunner();
     mockUseSandboxJobStatus.mockReturnValue({
       data: { status: SandboxJobStatus.COMPLETED },
-    } as ReturnType<typeof useSandboxJobStatus>);
+    } as unknown as ReturnType<typeof useSandboxJobStatus>);
 
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
