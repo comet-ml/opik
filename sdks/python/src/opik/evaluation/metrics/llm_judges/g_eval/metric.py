@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from threading import Lock
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, cast, Dict, List, Optional, Tuple, Union
 import pydantic
 
 from opik.evaluation.metrics import base_metric, score_result
@@ -101,11 +101,12 @@ class GEval(base_metric.BaseMetric):
         if cached is not None:
             return cached
 
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
+        messages = template.build_chain_of_thought_messages(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
         )
-        generated = self._model.generate_string(input=prompt)
+        message = self._model.generate_chat_completion(messages=messages)
+        generated = message["content"]
         self._store_chain_of_thought(cache_key, generated)
         return generated
 
@@ -115,11 +116,12 @@ class GEval(base_metric.BaseMetric):
         if cached is not None:
             return cached
 
-        prompt = template.G_EVAL_COT_TEMPLATE.format(
+        messages = template.build_chain_of_thought_messages(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
         )
-        generated = await self._model.agenerate_string(input=prompt)
+        message = await self._model.agenerate_chat_completion(messages=messages)
+        generated = message["content"]
         self._store_chain_of_thought(cache_key, generated)
         return generated
 
@@ -211,19 +213,12 @@ class GEval(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object containing the G-Eval score
             (between 0.0 and 1.0) and a reason for the score.
         """
-        llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
+        messages = template.build_query_messages(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
             chain_of_thought=self.llm_chain_of_thought(),
             input=output,
         )
-
-        request = [
-            {
-                "content": llm_query,
-                "role": "user",
-            },
-        ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
             provider_kwargs: Dict[str, Any] = {
@@ -235,7 +230,7 @@ class GEval(base_metric.BaseMetric):
 
             with base_model.get_provider_response(
                 model_provider=self._model,
-                messages=request,
+                messages=cast(List[Dict[str, Any]], list(messages)),
                 **provider_kwargs,
             ) as model_output:
                 return parser.parse_litellm_model_output(
@@ -244,11 +239,11 @@ class GEval(base_metric.BaseMetric):
                     log_probs_supported=self._log_probs_supported,
                 )
 
-        model_output_string = self._model.generate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=GEvalScoreFormat
         )
 
-        return parser.parse_model_output_string(model_output_string, self.name)
+        return parser.parse_model_output_string(message["content"], self.name)
 
     async def ascore(
         self,
@@ -259,19 +254,12 @@ class GEval(base_metric.BaseMetric):
         Async variant of :meth:`score`, evaluating the provided LLM output using
         the configured judge model and returning a ``ScoreResult``.
         """
-        llm_query = template.G_EVAL_QUERY_TEMPLATE.format(
+        messages = template.build_query_messages(
             task_introduction=self.task_introduction,
             evaluation_criteria=self.evaluation_criteria,
             chain_of_thought=await self.allm_chain_of_thought(),
             input=output,
         )
-
-        request = [
-            {
-                "content": llm_query,
-                "role": "user",
-            },
-        ]
 
         if isinstance(self._model, models.LiteLLMChatModel):
             provider_kwargs: Dict[str, Any] = {
@@ -283,7 +271,7 @@ class GEval(base_metric.BaseMetric):
 
             async with base_model.aget_provider_response(
                 model_provider=self._model,
-                messages=request,
+                messages=cast(List[Dict[str, Any]], list(messages)),
                 **provider_kwargs,
             ) as model_output:
                 return parser.parse_litellm_model_output(
@@ -292,11 +280,11 @@ class GEval(base_metric.BaseMetric):
                     log_probs_supported=self._log_probs_supported,
                 )
 
-        model_output_string = await self._model.agenerate_string(
-            input=llm_query, response_format=GEvalScoreFormat
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=GEvalScoreFormat
         )
 
-        return parser.parse_model_output_string(model_output_string, self.name)
+        return parser.parse_model_output_string(message["content"], self.name)
 
 
 class GEvalPreset(GEval):

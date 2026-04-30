@@ -23,6 +23,7 @@ import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataT
 import ExpandableSearchInput from "@/shared/ExpandableSearchInput/ExpandableSearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import SelectBox, { SelectBoxProps } from "@/shared/SelectBox/SelectBox";
+import { Skeleton } from "@/ui/skeleton";
 import SpanDetailsButton from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceTreeViewer/SpanDetailsButton";
 import useTreeDetailsStore, {
   TreeNodeConfig,
@@ -247,13 +248,15 @@ export const TraceTreeToolbar: React.FC<TraceTreeToolbarProps> = ({
 
 // Right toolbar — sits above the data panel
 type TraceDataToolbarProps = {
-  dataToView: Trace | Span;
+  dataToView: Trace | Span | undefined;
   setActiveSection: (v: DetailsActionSectionValue) => void;
+  isLoading?: boolean;
 };
 
 export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
   dataToView,
   setActiveSection,
+  isLoading = false,
 }) => {
   const {
     permissions: { canAnnotateTraceSpanThread },
@@ -271,7 +274,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
 
   const rows = useMemo(() => (dataToView ? [dataToView] : []), [dataToView]);
 
-  const isSpan = isObjectSpan(dataToView);
+  const isSpan = dataToView ? isObjectSpan(dataToView) : false;
   const dataType = isSpan ? "spans" : "traces";
   const inspectType: BASE_TRACE_DATA_TYPE = isSpan
     ? (dataToView as Span).type
@@ -282,10 +285,16 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
       <span className="comet-body-xs-accented whitespace-nowrap text-foreground">
         Inspect:
       </span>
-      <BaseTraceDataTypeIcon type={inspectType} />
-      <span className="comet-body-xs-accented truncate">
-        {dataToView?.name}
-      </span>
+      {isLoading || !dataToView ? (
+        <Skeleton className="h-4 w-32" />
+      ) : (
+        <>
+          <BaseTraceDataTypeIcon type={inspectType} />
+          <span className="comet-body-xs-accented truncate">
+            {dataToView?.name}
+          </span>
+        </>
+      )}
 
       <div className="flex-auto" />
 
@@ -295,6 +304,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
         dataType={dataType}
         buttonVariant="ghost"
         buttonSize="2xs"
+        disabled={isLoading || !dataToView}
       />
       {canAnnotateTraceSpanThread && (
         <DetailsActionSectionToggle
@@ -305,6 +315,7 @@ export const TraceDataToolbar: React.FC<TraceDataToolbarProps> = ({
           variant="ghost"
           buttonSize="2xs"
           hotkey="A"
+          disabled={isLoading || !dataToView}
         />
       )}
     </div>

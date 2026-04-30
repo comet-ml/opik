@@ -94,3 +94,165 @@ The `distributed_headers()` context manager accepts two parameters:
 </Note>
 
 For more details and additional examples, see the [distributed_headers context manager API reference](https://www.comet.com/docs/opik/python-sdk-reference/context_manager/distributed_headers.html).
+
+## Distributed Traces with a Remote Service Using OpenTelemetry
+
+When the downstream service is instrumented with the standard OpenTelemetry SDK (rather than the Opik SDK), Opik provides helpers to bridge the two systems so the OTel span produced by the remote service still appears under the correct Opik trace and parent span.
+
+The bridge works through two HTTP headers carried from the client to the remote service:
+
+- `opik_trace_id` — the Opik trace the OTel span should be attached to.
+- `opik_parent_span_id` — the Opik span to use as the parent (optional).
+
+On the receiving side, the helper translates these headers into two OpenTelemetry span attributes (`opik.trace_id`, `opik.parent_span_id`) recognized by the Opik OTLP ingest endpoint. Both values must be valid UUIDs; blank or malformed values are dropped with a warning so a misconfigured caller never silently corrupts the parent linkage.
+
+### Client: emitting distributed-trace headers
+
+<Tabs>
+<Tab title="Python" value="python">
+
+```python title="client.py"
+import requests
+from opik import opik_context, track
+
+@track()
+def my_client_function(prompt: str) -> str:
+    headers = {
+        # Adds 'opik_trace_id' and 'opik_parent_span_id'
+        **opik_context.get_distributed_trace_headers(),
+    }
+    response = requests.post(
+        "http://.../generate_response",
+        headers=headers,
+        json={"prompt": prompt},
+    )
+    return response.json()
+```
+
+</Tab>
+<Tab title="TypeScript" value="typescript">
+
+```ts title="client.ts"
+import { getDistributedTraceHeaders, track } from "opik";
+
+const myClientFunction = track(
+  { name: "client" },
+  async (prompt: string) => {
+    const response = await fetch("http://.../generate_response", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // Adds 'opik_trace_id' and 'opik_parent_span_id'.
+        // Returns null outside of a track() context.
+        ...(getDistributedTraceHeaders() ?? {}),
+      },
+      body: JSON.stringify({ prompt }),
+    });
+    return response.json();
+  }
+);
+```
+
+</Tab>
+</Tabs>
+
+### Remote service: attaching the headers to an OpenTelemetry span
+
+The remote service creates a span with the OpenTelemetry SDK as usual and then calls the Opik bridging helper with the incoming HTTP headers. The helper sets the `opik.trace_id` / `opik.parent_span_id` / `opik.span_id` attributes on the *boundary* span only.
+
+To make sure descendant OpenTelemetry spans (children created inside the boundary span via `start_as_current_span` / `tracer.startSpan`) also land under the original Opik trace and parent, register the `OpikSpanProcessor` on the same `TracerProvider` as your OTLP exporter. Without it, only the boundary span is linked and its descendants are orphaned in a synthetic Opik trace.
+
+In Python, `OpikSpanProcessor` ships with the main `opik` package under `opik.integrations.otel`. In TypeScript it lives in a separate `opik-otel` package — install it alongside `opik` (`npm install opik-otel @opentelemetry/api @opentelemetry/sdk-trace-base`).
+
+<Tabs>
+<Tab title="Python" value="python">
+
+```python title="server.py"
+from fastapi import FastAPI, Request
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opik.integrations.otel import OpikSpanProcessor, distributed_trace
+
+# Configure the tracer provider with the OTLP exporter that ships spans to Opik
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+# Register OpikSpanProcessor so descendants of the boundary span inherit
+# opik.trace_id / opik.parent_span_id automatically.
+provider.add_span_processor(OpikSpanProcessor())
+trace.set_tracer_provider(provider)
+
+app = FastAPI()
+tracer = trace.get_tracer("my-service")
+
+
+@app.post("/generate_response")
+def generate_response(request: Request) -> str:
+    with tracer.start_as_current_span("server-span") as span:
+        # Reads opik_trace_id / opik_parent_span_id from the request headers
+        # and sets the corresponding OTel span attributes on the boundary span.
+        distributed_trace.attach_to_parent(span, dict(request.headers))
+
+        # Any descendants are picked up automatically by OpikSpanProcessor.
+        with tracer.start_as_current_span("child-span"):
+            # ... handle the request, set additional span attributes ...
+            pass
+        return "ok"
+```
+
+</Tab>
+<Tab title="TypeScript" value="typescript">
+
+```ts title="server.ts"
+import http from "node:http";
+import { context, trace } from "@opentelemetry/api";
+import {
+  BasicTracerProvider,
+  BatchSpanProcessor,
+} from "@opentelemetry/sdk-trace-base";
+import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-http";
+import { attachToParent, OpikSpanProcessor } from "opik-otel";
+
+// Configure the tracer provider with the OTLP exporter that ships spans to Opik.
+// OpikSpanProcessor must be registered before the exporter so the opik.* attributes
+// it sets at span start are visible at export time.
+const provider = new BasicTracerProvider({
+  spanProcessors: [
+    new OpikSpanProcessor(),
+    new BatchSpanProcessor(new OTLPTraceExporter()),
+  ],
+});
+provider.register();
+
+const tracer = trace.getTracer("my-service");
+
+const server = http.createServer((req, res) => {
+  const boundary = tracer.startSpan("server-span");
+  // Reads opik_trace_id / opik_parent_span_id from req.headers
+  // and sets the corresponding OTel span attributes on the boundary span.
+  attachToParent(boundary, req.headers);
+
+  // Set the boundary as the active parent so child spans inherit its OTel
+  // context — this is what lets OpikSpanProcessor see the boundary's
+  // opik.trace_id / opik.span_id when the child starts. Plain
+  // `tracer.startSpan("child")` would otherwise create an orphan root span.
+  const parentCtx = trace.setSpan(context.active(), boundary);
+  const child = tracer.startSpan("child-span", {}, parentCtx);
+  // ... handle the request, set additional span attributes ...
+  child.end();
+
+  boundary.end();
+  res.end("ok");
+});
+```
+
+</Tab>
+</Tabs>
+
+<Note>
+  `OpikSpanProcessor` only mutates spans whose parent already carries the Opik attributes (set by `attach_to_parent` / `attachToParent` on the boundary, or inherited from upstream W3C `baggage`). Spans outside an attached subtree are left untouched, so today's behaviour for unrelated OTel traces is unchanged.
+</Note>
+
+The remote service must be configured with an OTLP exporter pointing at the Opik backend (`/v1/private/otel/v1/traces`). See the [OpenTelemetry Python SDK](/integrations/opentelemetry-python-sdk) integration guide for a full exporter configuration example; the same endpoint is used by the OpenTelemetry JS/Node SDK.

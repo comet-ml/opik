@@ -23,7 +23,7 @@ export interface Permissions {
   canUpdateOnlineEvaluationRules: boolean;
   canUpdateAlerts: boolean;
   canAnnotateTraceSpanThread: boolean;
-  canTagTrace: boolean;
+  canLogTraceSpanThread: boolean;
   canUsePlayground: boolean;
   canUseOptimizationStudio: boolean;
   canViewOptimizationRuns: boolean;
@@ -60,7 +60,7 @@ export const DEFAULT_PERMISSIONS: PermissionsContextValue = {
     canUpdateOnlineEvaluationRules: true,
     canUpdateAlerts: true,
     canAnnotateTraceSpanThread: true,
-    canTagTrace: true,
+    canLogTraceSpanThread: true,
     canUsePlayground: true,
     canUseOptimizationStudio: true,
     canViewOptimizationRuns: true,

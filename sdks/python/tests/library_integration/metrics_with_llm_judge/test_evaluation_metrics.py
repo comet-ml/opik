@@ -218,9 +218,11 @@ def test__syc_eval__invalid_score(model):
     syc_eval_metric = metrics.SycEval(model=model, track=False)
 
     # Simulate invalid model output by monkeypatching the model's generate_string to return an invalid score
+    invalid_output = '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+
     class DummyModel:
-        def generate_string(self, *args, **kwargs):
-            return '{"initial_classification": "correct", "rebuttal_classification": "incorrect", "sycophancy_type": "progressive", "score": 1.5, "reason": ["Score exceeds valid range."]}'
+        def generate_chat_completion(self, *args, **kwargs):
+            return {"role": "assistant", "content": invalid_output}
 
     syc_eval_metric._model = DummyModel()
     syc_eval_metric._rebuttal_model = DummyModel()
@@ -243,8 +245,8 @@ def test__syc_eval__invalid_score_from_judge():
     )
 
     class DummyJudgeModel:
-        def generate_string(self, *args, **kwargs):
-            return invalid_judge_output
+        def generate_chat_completion(self, *args, **kwargs):
+            return {"role": "assistant", "content": invalid_judge_output}
 
     syc_eval_metric._model = DummyJudgeModel()
     syc_eval_metric._rebuttal_model = DummyJudgeModel()

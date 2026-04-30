@@ -97,17 +97,17 @@ class Hallucination(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if hallucination
                 is detected, 0.0 otherwise, along with the reason for the verdict.
         """
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             input=input,
             output=output,
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = self._model.generate_string(
-            input=llm_query, response_format=HallucinationResponseFormat
+        message = self._model.generate_chat_completion(
+            messages=messages, response_format=HallucinationResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)
 
     async def ascore(
         self,
@@ -129,14 +129,14 @@ class Hallucination(base_metric.BaseMetric):
             score_result.ScoreResult: A ScoreResult object with a value of 1.0 if hallucination
                 is detected, 0.0 otherwise, along with the reason for the verdict.
         """
-        llm_query = template.generate_query(
+        messages = template.build_messages(
             input=input,
             output=output,
             context=context,
             few_shot_examples=self.few_shot_examples,
         )
-        model_output = await self._model.agenerate_string(
-            input=llm_query, response_format=HallucinationResponseFormat
+        message = await self._model.agenerate_chat_completion(
+            messages=messages, response_format=HallucinationResponseFormat
         )
 
-        return parser.parse_model_output(content=model_output, name=self.name)
+        return parser.parse_model_output(content=message["content"], name=self.name)

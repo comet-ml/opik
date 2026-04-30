@@ -1,4 +1,4 @@
-# Create Initiative Ticket
+# Create Initiative Epic
 
 Create a quarterly pillar Epic in Jira for a strategic initiative, synthesizing information from Notion PRDs and Figma designs.
 

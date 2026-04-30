@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { RotateCw, Undo2, X } from "lucide-react";
+import { Undo2, X } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -57,6 +57,7 @@ import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
@@ -76,7 +77,6 @@ import CommentsCell from "@/shared/DataTableCells/CommentsCell";
 import FeedbackScoreHeader from "@/shared/DataTableHeaders/FeedbackScoreHeader";
 import { formatScoreDisplay } from "@/lib/feedback-scores";
 import DataTableStateHandler from "@/shared/DataTableStateHandler/DataTableStateHandler";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import TracesOrSpansPathsAutocomplete from "@/v2/pages-shared/traces/TracesOrSpansPathsAutocomplete/TracesOrSpansPathsAutocomplete";
 import TracesOrSpansFeedbackScoresSelect from "@/v2/pages-shared/traces/TracesOrSpansFeedbackScoresSelect/TracesOrSpansFeedbackScoresSelect";
@@ -986,19 +986,14 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 minDate={minDate}
                 maxDate={maxDate}
               />
-              <TooltipWrapper content="Refresh traces list">
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  className="shrink-0"
-                  onClick={() => {
-                    refetch();
-                    refetchStatistic();
-                  }}
-                >
-                  <RotateCw />
-                </Button>
-              </TooltipWrapper>
+              <RefreshButton
+                tooltip="Refresh traces list"
+                isFetching={isFetching}
+                onRefresh={() => {
+                  refetch();
+                  refetchStatistic();
+                }}
+              />
               <DataTableRowHeightSelector
                 type={height as ROW_HEIGHT}
                 setType={setHeight}

@@ -220,7 +220,7 @@ def test_test_suite__pass_threshold_not_met__item_fails(
     suite = opik_client.create_test_suite(
         name=dataset_name,
         description="Test pass threshold failure",
-        global_assertions=["The response correctly states that 2 + 2 equals 4"],
+        global_assertions=["The response gives the numeric answer 4"],
         global_execution_policy={"runs_per_item": 2, "pass_threshold": 2},
         project_name=PROJECT_NAME,
     )

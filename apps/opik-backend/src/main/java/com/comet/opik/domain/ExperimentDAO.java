@@ -27,6 +27,7 @@ import com.comet.opik.domain.filter.FilterQueryBuilder;
 import com.comet.opik.domain.filter.FilterStrategy;
 import com.comet.opik.domain.sorting.SortingQueryBuilder;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.RowUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -68,6 +69,7 @@ import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
+import static com.comet.opik.domain.AsyncContextUtils.bindUserNameAndWorkspaceContextToStream;
 import static com.comet.opik.domain.AsyncContextUtils.bindWorkspaceIdToFlux;
 import static com.comet.opik.domain.CommentResultMapper.parseCommentsFromJson;
 import static com.comet.opik.infrastructure.FilterUtils.getSTWithLogComment;
@@ -152,10 +154,19 @@ public class ExperimentDAO {
             FilterStrategy.EXPERIMENT_SCORES_AGGREGATED,
             FilterStrategy.EXPERIMENT_SCORES_AGGREGATED_IS_EMPTY);
 
+    /**
+     * Per-workspace check: does any non-demo experiment have {@code project_id = ''} on its
+     * latest row? GROUP BY id with {@code argMax(project_id, last_updated_at)} in HAVING dedups
+     * the {@code ReplacingMergeTree}; we avoid {@code FINAL} because ClickHouse pushes outer
+     * WHERE predicates into the FINAL scan and would mask post-migration rows.
+     */
     private static final String HAS_VERSION1_EXPERIMENTS = """
-            SELECT 1 FROM experiments
-            WHERE workspace_id = :workspace_id AND project_id = ''
+            SELECT 1
+            FROM experiments
+            WHERE workspace_id = :workspace_id
             AND name NOT IN :demo_experiment_names
+            GROUP BY id
+            HAVING argMax(project_id, last_updated_at) = ''
             LIMIT 1
             SETTINGS log_comment = '<log_comment>'""";
 
@@ -628,7 +639,7 @@ public class ExperimentDAO {
                 SELECT
                     e.workspace_id as workspace_id,
                     e.dataset_id as dataset_id,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], e.project_id) as project_id,
                     e.id as id,
                     e.name as name,
                     e.metadata as metadata,
@@ -658,7 +669,7 @@ public class ExperimentDAO {
                     if(agg.total_count = 0, NULL, agg.passed_count) AS passed_count,
                     if(agg.total_count = 0, NULL, agg.total_count) AS total_count,
                     agg.assertion_scores as assertion_scores,
-                    agg.project_ids as combined_project_ids
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(e.project_id), cast([e.project_id] AS Array(String)), cast([] AS Array(String))) as combined_project_ids
                 FROM experiments_resolved AS e
                 INNER JOIN experiments_from_aggregates_final AS agg ON e.id = agg.experiment_id
                 WHERE 1=1
@@ -675,10 +686,10 @@ public class ExperimentDAO {
                 AND (<experiment_scores_agg_empty_filters>)
                 <endif>
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.project_id)))
                 <endif>
                 <endif>
 
@@ -955,10 +966,10 @@ public class ExperimentDAO {
                 AND (<experiment_scores_agg_empty_filters>)
                 <endif>
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.project_id)))
                 <endif>
                 <endif>
 
@@ -1081,16 +1092,16 @@ public class ExperimentDAO {
                     ef.tags,
                     ef.prompt_ids,
                     ef.created_at,
-                    agg.project_ids as project_ids,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(ef.experiment_project_id), cast([ef.experiment_project_id] AS Array(String)), cast([] AS Array(String))) as project_ids,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], ef.experiment_project_id) as project_id
                 FROM experiments_filtered ef
                 INNER JOIN experiments_from_aggregates_final agg ON ef.id = agg.experiment_id
                 WHERE 1=1
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND ef.experiment_project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(ef.experiment_project_id)))
                 <endif>
                 <endif>
                 <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>
@@ -1488,8 +1499,8 @@ public class ExperimentDAO {
                     agg.duration_values AS duration,
                     agg.total_estimated_cost_sum as total_estimated_cost,
                     agg.total_estimated_cost_avg as total_estimated_cost_avg,
-                    agg.project_ids as project_ids,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id,
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(e.experiment_project_id), cast([e.experiment_project_id] AS Array(String)), cast([] AS Array(String))) as project_ids,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], e.experiment_project_id) as project_id,
                     agg.pass_rate as pass_rate,
                     agg.passed_count as passed_count,
                     agg.total_count as total_count,
@@ -1498,10 +1509,10 @@ public class ExperimentDAO {
                 INNER JOIN experiments_from_aggregates_final AS agg ON e.id = agg.experiment_id
                 WHERE 1=1
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.experiment_project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.experiment_project_id)))
                 <endif>
                 <endif>
                 <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>
@@ -1688,7 +1699,94 @@ public class ExperimentDAO {
             SETTINGS log_comment = '<log_comment>', short_circuit_function_evaluation = 'force_enable';
             """;
 
+    /**
+     * Returns workspaces with at least one eligible orphan experiment, ordered by smallest
+     * count first. An experiment is eligible when its latest row has {@code project_id = ''}
+     * (checked via {@code argMax} in HAVING — see {@link #HAS_VERSION1_EXPERIMENTS}) and all
+     * its linked traces resolve to a single non-empty project.
+     */
+    private static final String FIND_ELIGIBLE_EXPERIMENT_WORKSPACES = """
+            SELECT
+                workspace_id,
+                count(DISTINCT id) AS experiments_count
+            FROM (
+                SELECT
+                    e.workspace_id AS workspace_id,
+                    e.id AS id
+                FROM experiments e
+                INNER JOIN experiment_items ei
+                    ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
+                INNER JOIN traces t
+                    ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+                WHERE e.name NOT IN :demo_experiment_names
+                AND t.project_id != ''
+                <if(excluded_workspace_ids)>
+                AND e.workspace_id NOT IN :excluded_workspace_ids
+                <endif>
+                GROUP BY e.workspace_id, e.id
+                HAVING count(DISTINCT t.project_id) = 1
+                AND argMax(e.project_id, e.last_updated_at) = ''
+            )
+            GROUP BY workspace_id
+            ORDER BY experiments_count ASC
+            LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * For one workspace, returns each eligible experiment id and the (single) trace project_id
+     * to migrate it to. Same dedup pattern as {@link #FIND_ELIGIBLE_EXPERIMENT_WORKSPACES}.
+     */
+    private static final String COMPUTE_EXPERIMENT_PROJECT_MAPPING = """
+            SELECT
+                e.id AS experiment_id,
+                any(t.project_id) AS project_id
+            FROM experiments e
+            INNER JOIN experiment_items ei
+                ON e.workspace_id = ei.workspace_id AND e.id = ei.experiment_id
+            INNER JOIN traces t
+                ON ei.workspace_id = t.workspace_id AND ei.trace_id = t.id
+            WHERE e.workspace_id = :workspace_id
+            AND e.name NOT IN :demo_experiment_names
+            AND t.project_id != ''
+            GROUP BY e.id
+            HAVING count(DISTINCT t.project_id) = 1
+            AND argMax(e.project_id, e.last_updated_at) = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
+    /**
+     * Re-INSERT the latest row per id with overridden {@code project_id}, {@code last_updated_by}
+     * and {@code last_updated_at}. Uses {@code SELECT * REPLACE} so any future column added to
+     * {@code experiments} is automatically copied without a schema-drift fix to this query —
+     * the alternative (explicit column list) would silently lose new columns by writing their
+     * defaults instead of preserving the source row's values.
+     *
+     * <p>Assumption: {@code experiments} has no {@code MATERIALIZED} or {@code ALIAS} columns.
+     * Adding one would require updating this query (the INSERT would fail loudly at execution
+     * time, surfacing the issue rather than corrupting data silently).
+     */
+    private static final String BATCH_SET_PROJECT_ID = """
+            INSERT INTO experiments
+            SELECT * REPLACE (
+                :user_name AS last_updated_by,
+                now64(9) AS last_updated_at,
+                :project_id AS project_id
+            )
+            FROM (
+                SELECT *
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND id IN :experiment_ids
+                ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
+                LIMIT 1 BY id
+            )
+            WHERE project_id = ''
+            SETTINGS log_comment = '<log_comment>'
+            """;
+
     private final @NonNull ConnectionFactory connectionFactory;
+    private final @NonNull TransactionTemplateAsync asyncTemplate;
     private final @NonNull SortingQueryBuilder sortingQueryBuilder;
     private final @NonNull ExperimentSortingFactory sortingFactory;
     private final @NonNull FilterQueryBuilder filterQueryBuilder;
@@ -2710,4 +2808,57 @@ public class ExperimentDAO {
         }
     }
 
+    Flux<EligibleWorkspace> findEligibleExperimentWorkspaces(Set<String> excludedWorkspaceIds, int limit) {
+        var excludedWorkspacesCount = CollectionUtils.size(excludedWorkspaceIds);
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var details = "excludedWorkspacesCount=%d, limit=%d, ".formatted(excludedWorkspacesCount, limit);
+            var template = getSTWithLogComment(FIND_ELIGIBLE_EXPERIMENT_WORKSPACES,
+                    "find_eligible_experiment_workspaces", workspaceId, userName, details);
+            if (excludedWorkspacesCount > 0) {
+                template.add("excluded_workspace_ids", true);
+            }
+            var statement = connection.createStatement(template.render())
+                    .bind("demo_experiment_names", DemoData.EXPERIMENTS)
+                    .bind("limit", limit);
+            if (excludedWorkspacesCount > 0) {
+                statement.bind("excluded_workspace_ids", excludedWorkspaceIds);
+            }
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> EligibleWorkspace.builder()
+                            .workspaceId(row.get("workspace_id", String.class))
+                            .experimentsCount(row.get("experiments_count", Long.class))
+                            .build()));
+        }));
+    }
+
+    Flux<ExperimentProjectMapping> computeExperimentProjectMapping() {
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var template = getSTWithLogComment(COMPUTE_EXPERIMENT_PROJECT_MAPPING,
+                    "compute_certain_experiment_project_mapping", workspaceId, userName, "");
+            var statement = connection.createStatement(template.render())
+                    .bind("demo_experiment_names", DemoData.EXPERIMENTS);
+            return bindWorkspaceIdToFlux(statement).subscriberContext(userName, workspaceId);
+        }))
+                .flatMap(result -> result.map((row, metadata) -> ExperimentProjectMapping.builder()
+                        .experimentId(UUID.fromString(row.get("experiment_id", String.class)))
+                        .projectId(UUID.fromString(row.get("project_id", String.class)))
+                        .build()));
+    }
+
+    Mono<Long> batchSetProjectId(Set<UUID> experimentIds, @NonNull UUID projectId) {
+        if (CollectionUtils.isEmpty(experimentIds)) {
+            return Mono.just(0L);
+        }
+        return asyncTemplate.stream(connection -> makeFluxContextAware((userName, workspaceId) -> {
+            var details = "experimentCount=%d, projectId=%s".formatted(experimentIds.size(), projectId);
+            var template = getSTWithLogComment(
+                    BATCH_SET_PROJECT_ID, "batch_set_project_id", workspaceId, userName, details);
+            var statement = connection.createStatement(template.render())
+                    .bind("experiment_ids", experimentIds)
+                    .bind("project_id", projectId);
+            return bindUserNameAndWorkspaceContextToStream(statement).subscriberContext(userName, workspaceId);
+        }))
+                .flatMap(Result::getRowsUpdated)
+                .reduce(0L, Long::sum);
+    }
 }

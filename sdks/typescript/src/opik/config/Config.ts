@@ -16,7 +16,6 @@ export interface OpikConfig {
   holdUntilFlush?: boolean;
 }
 
-// ALEX
 export interface ConstructorOpikConfig extends OpikConfig {
   headers?: Record<string, string>;
 }

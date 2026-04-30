@@ -1339,3 +1339,73 @@ def test_opik_client__search_traces__exclude_defaults_to_none():
 
     mock_search.assert_called_once()
     assert mock_search.call_args.kwargs["exclude"] is None
+
+
+def test_opik_client__log_assertion_results__happy_path():
+    client = opik_client.Opik(project_name="test-project")
+    mock_streamer = MagicMock()
+    client._streamer = mock_streamer
+
+    client.log_assertion_results(
+        assertion_results=[
+            {"id": "trace-1", "name": "must mention paris", "status": "passed"},
+            {
+                "id": "trace-1",
+                "name": "must be polite",
+                "status": "failed",
+                "reason": "rude tone",
+                "project_name": "override-project",
+            },
+        ]
+    )
+
+    mock_streamer.put.assert_called_once()
+    msg = mock_streamer.put.call_args.args[0]
+    assert isinstance(msg, messages.AddAssertionResultsBatchMessage)
+    assert msg.entity_type == "TRACE"
+    # supports_batching is False so the streamer doesn't try to re-batch
+    assert msg.supports_batching is False
+    assert len(msg.batch) == 2
+    first, second = msg.batch
+    assert first.entity_id == "trace-1"
+    assert first.name == "must mention paris"
+    assert first.status == "passed"
+    assert first.source == "sdk"
+    assert first.project_name == "test-project"
+    assert second.status == "failed"
+    assert second.reason == "rude tone"
+    assert second.project_name == "override-project"
+
+
+def test_opik_client__log_assertion_results__skips_invalid_status():
+    client = opik_client.Opik(project_name="test-project")
+    mock_streamer = MagicMock()
+    client._streamer = mock_streamer
+
+    client.log_assertion_results(
+        assertion_results=[
+            {"id": "trace-1", "name": "ok", "status": "passed"},
+            {"id": "trace-1", "name": "bogus", "status": "PASSED"},
+            {"id": "trace-1", "name": "boolish", "status": True},
+            {"id": "trace-1", "name": "missing"},
+        ]
+    )
+
+    mock_streamer.put.assert_called_once()
+    msg = mock_streamer.put.call_args.args[0]
+    assert [item.name for item in msg.batch] == ["ok"]
+
+
+def test_opik_client__log_assertion_results__nothing_valid__does_not_emit():
+    client = opik_client.Opik(project_name="test-project")
+    mock_streamer = MagicMock()
+    client._streamer = mock_streamer
+
+    client.log_assertion_results(
+        assertion_results=[
+            {"id": "", "name": "ok", "status": "passed"},
+            {"id": "trace-1", "name": "bogus", "status": "PASSED"},
+        ]
+    )
+
+    mock_streamer.put.assert_not_called()

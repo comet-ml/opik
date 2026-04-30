@@ -9,7 +9,7 @@ import pytest
 
 from opik.evaluation.metrics.llm_judges import g_eval
 from opik.evaluation.models import models_factory
-from opik.evaluation.models.litellm import litellm_chat_model
+from opik.evaluation.models.litellm import litellm_chat_model, response_parser
 from opik.evaluation.models import base_model
 
 
@@ -322,80 +322,146 @@ def test_models_factory_track_parameter_creates_separate_instances(monkeypatch):
     assert model_tracked is model_tracked_2
 
 
-class TestExtractMessageContent:
-    def test_returns_content_when_present(self):
-        choice = {"message": {"content": "hello"}}
-        assert litellm_chat_model._extract_message_content(choice) == "hello"
+class TestParseAssistantMessage:
+    def _wrap(self, message):
+        return SimpleNamespace(choices=[{"message": message}])
 
-    def test_returns_none_when_no_content_and_no_tool_calls(self):
-        choice = {"message": {"content": None}}
-        assert litellm_chat_model._extract_message_content(choice) is None
+    def test_returns_content_when_present(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap({"content": "hello"})
+        )
+        assert message == {"role": "assistant", "content": "hello"}
+
+    def test_raises_when_no_content_and_no_tool_calls(self):
+        from opik import exceptions
+
+        with pytest.raises(exceptions.BaseLLMError):
+            response_parser.parse_assistant_message(self._wrap({"content": None}))
 
     def test_falls_back_to_structured_output_tool_call(self):
-        choice = {
-            "message": {
-                "content": None,
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "json_tool_call",
-                            "arguments": '{"assertion_1": {"score": true, "reason": "ok", "confidence": 0.9}}',
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "call_synthetic",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": '{"assertion_1": {"score": true, "reason": "ok", "confidence": 0.9}}',
+                            },
                         }
-                    }
-                ],
-            }
-        }
-        result = litellm_chat_model._extract_message_content(choice)
-        assert '"assertion_1"' in result
-        assert '"score": true' in result
+                    ],
+                }
+            )
+        )
+        assert '"assertion_1"' in message["content"]
+        assert "tool_calls" not in message
 
     def test_falls_back_to_structured_output_tool_call_from_object_message(self):
-        choice = {
-            "message": SimpleNamespace(
-                content=None,
-                tool_calls=[
-                    SimpleNamespace(
-                        function=SimpleNamespace(
-                            name="json_tool_call",
-                            arguments='{"score": true}',
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                SimpleNamespace(
+                    content=None,
+                    tool_calls=[
+                        SimpleNamespace(
+                            id="call_synthetic",
+                            function=SimpleNamespace(
+                                name="json_tool_call",
+                                arguments='{"score": true}',
+                            ),
                         )
-                    )
-                ],
+                    ],
+                )
             )
-        }
-        assert litellm_chat_model._extract_message_content(choice) == '{"score": true}'
+        )
+        assert message["content"] == '{"score": true}'
+        assert "tool_calls" not in message
 
-    def test_ignores_non_structured_output_tool_calls(self):
-        choice = {
-            "message": {
-                "content": None,
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "get_weather",
-                            "arguments": '{"city": "Paris"}',
+    def test_surfaces_real_tool_calls_alongside_text(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": "looking that up",
+                    "tool_calls": [
+                        {
+                            "id": "call_123",
+                            "function": {
+                                "name": "web_search",
+                                "arguments": '{"query": "capital of France"}',
+                            },
                         }
-                    }
-                ],
+                    ],
+                }
+            )
+        )
+        assert message["content"] == "looking that up"
+        assert message["tool_calls"] == [
+            {
+                "id": "call_123",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": '{"query": "capital of France"}',
+                },
             }
-        }
-        assert litellm_chat_model._extract_message_content(choice) is None
+        ]
 
-    def test_prefers_content_over_tool_calls(self):
-        choice = {
-            "message": {
-                "content": "direct content",
-                "tool_calls": [
-                    {
-                        "function": {
-                            "name": "json_tool_call",
-                            "arguments": "should not use this",
-                        }
-                    }
-                ],
+    def test_skips_synthetic_tool_call_when_listed_alongside_real_ones(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": None,
+                    "tool_calls": [
+                        {
+                            "id": "synth",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": '{"score": 5}',
+                            },
+                        },
+                        {
+                            "id": "call_real",
+                            "function": {
+                                "name": "get_weather",
+                                "arguments": '{"city": "Paris"}',
+                            },
+                        },
+                    ],
+                }
+            )
+        )
+        assert message["content"] == '{"score": 5}'
+        assert message["tool_calls"] == [
+            {
+                "id": "call_real",
+                "type": "function",
+                "function": {
+                    "name": "get_weather",
+                    "arguments": '{"city": "Paris"}',
+                },
             }
-        }
-        assert litellm_chat_model._extract_message_content(choice) == "direct content"
+        ]
+
+    def test_prefers_content_over_synthetic_tool_call_arguments(self):
+        message = response_parser.parse_assistant_message(
+            self._wrap(
+                {
+                    "content": "direct content",
+                    "tool_calls": [
+                        {
+                            "id": "synth",
+                            "function": {
+                                "name": "json_tool_call",
+                                "arguments": "should not use this",
+                            },
+                        }
+                    ],
+                }
+            )
+        )
+        assert message["content"] == "direct content"
+        assert "tool_calls" not in message
 
 
 @pytest.mark.parametrize(

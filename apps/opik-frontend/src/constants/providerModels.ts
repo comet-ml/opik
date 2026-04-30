@@ -695,6 +695,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-1t:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH,
+      label: "inclusionai/ling-2.6-flash",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
     },
@@ -1171,6 +1175,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-nano-30b-a3b:free",
     },
     {
+      value:
+        PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B_REASONING_FREE,
+      label: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
       label: "nvidia/nemotron-3-super-120b-a12b",
     },
@@ -1525,6 +1534,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING_PRO,
       label: "perplexity/sonar-reasoning-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
+      label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_FREE,
+      label: "poolside/laguna-xs.2:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.PRIME_INTELLECT_INTELLECT_3,

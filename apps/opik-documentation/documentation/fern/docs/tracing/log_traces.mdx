@@ -21,7 +21,7 @@ Opik's tracing functionality allows you to track not just all the LLM calls made
   <img src="/img/tracing/introduction.png" />
 </Frame>
 
-Opik supports agent observability using our [Typescript SDK](/reference/typescript-sdk/overview),
+Opik supports agent observability using our [TypeScript SDK](/reference/typescript-sdk/overview),
 [Python SDK](/reference/python-sdk/overview), [first class OpenTelemetry support](/v1/integrations/opentelemetry)
 and our [REST API](/reference/rest-api/overview).
 
@@ -41,7 +41,7 @@ Before adding observability to your application, you will first need to install 
 Opik SDK.
 
 <Tabs>
-    <Tab value="Typescript SDK" title="Typescript SDK" language="typescript">
+    <Tab value="TypeScript SDK" title="TypeScript SDK" language="typescript">
 
     ```bash
     npm install opik
@@ -421,12 +421,12 @@ input parameters and function output for that function. If we detect that a deco
 is being called within another decorated function, we will create a nested span for the inner
 function.
 
-While decorators are most popular in Python, we also support them in our Typescript SDK:
+While decorators are most popular in Python, we also support them in our TypeScript SDK:
 
 <Tabs>
-    <Tab title="Typescript" value="typescript" language="typescript">
-        TypeScript started supporting decorators from version 5 but it's use is still not widespread.
-        The Opik typescript SDK also supports decorators but it's currently considered experimental.
+    <Tab title="TypeScript" value="typescript" language="typescript">
+        TypeScript started supporting decorators from version 5 but its use is still not widespread.
+        The Opik TypeScript SDK also supports decorators but it's currently considered experimental.
 
         ```typescript maxLines=100
         import { track } from "opik";

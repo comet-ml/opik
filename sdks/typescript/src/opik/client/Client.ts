@@ -8,6 +8,7 @@ import type { FeedbackScoreData } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
 import { getProjectUrlByTraceId } from "@/utils/url";
+import { AssertionResultsBatchQueue } from "./AssertionResultsBatchQueue";
 import { SpanBatchQueue } from "./SpanBatchQueue";
 import { SpanFeedbackScoresBatchQueue } from "./SpanFeedbackScoresBatchQueue";
 import { TraceBatchQueue } from "./TraceBatchQueue";
@@ -99,6 +100,7 @@ export class OpikClient {
   public traceBatchQueue: TraceBatchQueue;
   public spanFeedbackScoresBatchQueue: SpanFeedbackScoresBatchQueue;
   public traceFeedbackScoresBatchQueue: TraceFeedbackScoresBatchQueue;
+  public traceAssertionResultsBatchQueue: AssertionResultsBatchQueue;
   public datasetBatchQueue: DatasetBatchQueue;
 
   private lastProjectNameLogged: string | undefined;
@@ -139,6 +141,11 @@ export class OpikClient {
     this.traceFeedbackScoresBatchQueue = new TraceFeedbackScoresBatchQueue(
       this.api,
       delay
+    );
+    this.traceAssertionResultsBatchQueue = new AssertionResultsBatchQueue(
+      this.api,
+      delay,
+      "TRACE"
     );
     this.datasetBatchQueue = new DatasetBatchQueue(this.api, delay);
 
@@ -1951,6 +1958,7 @@ export class OpikClient {
       await this.spanBatchQueue.flush();
       await this.traceFeedbackScoresBatchQueue.flush();
       await this.spanFeedbackScoresBatchQueue.flush();
+      await this.traceAssertionResultsBatchQueue.flush();
       await this.datasetBatchQueue.flush();
       // Note: Prompt operations are synchronous and don't use batching
       if (!silent) logger.info("Successfully flushed all data to Opik");
