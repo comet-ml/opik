@@ -2546,4 +2546,214 @@ class ExperimentAggregatesIntegrationTest {
                 .isNotEmpty();
     }
 
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: default-sort pagination consistent before/after aggregation (OPT3)")
+    void defaultSortPaginationConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment1 = createExperiment(dataset, apiKey, workspaceName);
+        var experiment2 = createExperiment(dataset, apiKey, workspaceName);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment1.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+        createExperimentItemWithData(experiment2.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment1.id(), experiment2.id());
+        int pageSize = 2;
+
+        var beforePage1 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 1, pageSize, apiKey, workspaceName);
+        var beforePage2 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 2, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforePage1);
+        assertThat(beforePage1.content()).hasSize(pageSize);
+
+        List.of(experiment1.id(), experiment2.id())
+                .forEach(id -> experimentAggregatesService.populateAggregations(id)
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.USER_NAME, USER)
+                                .put(RequestContext.WORKSPACE_ID, workspaceId))
+                        .block());
+
+        var afterPage1 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 1, pageSize, apiKey, workspaceName);
+        var afterPage2 = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, null, 2, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(afterPage1);
+        assertThat(afterPage1.content()).hasSize(pageSize);
+
+        assertThat(afterPage1.total())
+                .as("Total count should match before/after aggregation for default-sort default page load")
+                .isEqualTo(beforePage1.total());
+
+        var beforePage1Ids = beforePage1.content().stream().map(DatasetItem::id).toList();
+        var afterPage1Ids = afterPage1.content().stream().map(DatasetItem::id).toList();
+        assertThat(afterPage1Ids)
+                .as("Page 1 IDs should match exactly before/after aggregation")
+                .containsExactlyElementsOf(beforePage1Ids);
+
+        var beforePage2Ids = beforePage2.content().stream().map(DatasetItem::id).toList();
+        var afterPage2Ids = afterPage2.content().stream().map(DatasetItem::id).toList();
+        assertThat(afterPage2Ids)
+                .as("Page 2 IDs should match exactly before/after aggregation")
+                .containsExactlyElementsOf(beforePage2Ids);
+
+        assertThat(afterPage1Ids)
+                .as("Page 1 and page 2 should not overlap")
+                .doesNotContainAnyElementsOf(afterPage2Ids);
+    }
+
+    @ParameterizedTest(name = "Filter: field={0} operator={1} value={2}")
+    @MethodSource("comparisonFilterTestCases")
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: filtered results consistent before/after aggregation")
+    void filteredResultsConsistentBeforeAndAfterAggregates(String field, Operator operator, String value) {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+        var filters = List
+                .of(new ExperimentsComparisonFilter(field, FieldType.NUMBER, operator, null, value));
+
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, apiKey, workspaceName);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, apiKey, workspaceName);
+
+        var beforeIds = beforeAggregation.content().stream().map(DatasetItem::id).sorted().toList();
+        var afterIds = afterAggregation.content().stream().map(DatasetItem::id).sorted().toList();
+        assertThat(afterIds)
+                .as("Filtered IDs should match exactly before/after aggregation for filter %s %s %s",
+                        field, operator, value)
+                .containsExactlyElementsOf(beforeIds);
+        assertThat(afterAggregation.total())
+                .as("Filtered total should match before/after aggregation for filter %s %s %s",
+                        field, operator, value)
+                .isEqualTo(beforeAggregation.total());
+    }
+
+    static Stream<Arguments> comparisonFilterTestCases() {
+        return Stream.of(
+                // Matches all items (every duration is positive)
+                Arguments.of("duration", Operator.GREATER_THAN_EQUAL, "0"),
+                // Matches no items (no duration this large)
+                Arguments.of("duration", Operator.GREATER_THAN, "999999999999"),
+                // Mid-range threshold — matches a subset (durations are 10s, 20s, ... per item index)
+                Arguments.of("duration", Operator.GREATER_THAN, "15000"));
+    }
+
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: searched results consistent before/after aggregation")
+    void searchedResultsConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        for (var searchTerm : List.of("output-", "no_such_substring_xyz_123")) {
+            var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    dataset.id(), experimentIds, searchTerm, null, apiKey, workspaceName);
+
+            experimentAggregatesService.populateAggregations(experiment.id())
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    dataset.id(), experimentIds, searchTerm, null, apiKey, workspaceName);
+
+            var beforeIds = beforeAggregation.content().stream().map(DatasetItem::id).sorted().toList();
+            var afterIds = afterAggregation.content().stream().map(DatasetItem::id).sorted().toList();
+            assertThat(afterIds)
+                    .as("Searched IDs should match exactly before/after aggregation for term '%s'", searchTerm)
+                    .containsExactlyElementsOf(beforeIds);
+            assertThat(afterAggregation.total())
+                    .as("Searched total should match before/after aggregation for term '%s'", searchTerm)
+                    .isEqualTo(beforeAggregation.total());
+        }
+    }
+
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: experiment items for deleted dataset items consistent before/after aggregation")
+    void experimentItemsForDeletedDatasetItemConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        var experimentItems = createExperimentItemWithData(
+                experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey, workspaceName);
+
+        var datasetItemIdsToDelete = experimentItems.stream()
+                .limit(Math.max(1, experimentItems.size() / 2))
+                .map(ExperimentItem::datasetItemId)
+                .distinct()
+                .toList();
+        datasetResourceClient.deleteDatasetItems(datasetItemIdsToDelete, apiKey, workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, null, apiKey, workspaceName);
+
+        assertPageNotEmpty(afterAggregation);
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
 }
