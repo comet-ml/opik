@@ -149,4 +149,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private EnvironmentConfig environment = new EnvironmentConfig();
 }
