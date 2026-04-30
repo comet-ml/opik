@@ -23,6 +23,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
@@ -274,12 +275,85 @@ class AgentConfigServiceImpl implements AgentConfigService {
         String name = blueprint.type() == AgentBlueprint.BlueprintType.MASK
                 ? ""
                 : generateNextBlueprintName(dao, workspaceId, projectId);
+
+        String description = blueprint.description();
+        if (blueprint.type() == AgentBlueprint.BlueprintType.BLUEPRINT && StringUtils.isBlank(description)) {
+            description = generateUpdateDescription(dao, workspaceId, projectId, blueprint.values());
+        }
+
+        blueprint = blueprint.toBuilder().description(description).build();
         UUID blueprintId = createBlueprintSnapshot(dao, workspaceId, projectId, configId, name, blueprint);
 
         return blueprint.toBuilder()
                 .id(blueprintId)
                 .name(name)
                 .build();
+    }
+
+    private String generateUpdateDescription(
+            AgentConfigDAO dao,
+            String workspaceId,
+            UUID projectId,
+            List<AgentConfigValue> newValues) {
+
+        if (newValues == null || newValues.isEmpty()) {
+            return null;
+        }
+
+        AgentBlueprint previous = dao.getLatestBlueprint(workspaceId, projectId,
+                AgentBlueprint.BlueprintType.BLUEPRINT);
+        Map<String, AgentConfigValue> previousByKey = previous != null && previous.values() != null
+                ? previous.values().stream().collect(Collectors.toMap(AgentConfigValue::key, v -> v))
+                : Map.of();
+
+        Set<String> newKeys = newValues.stream().map(AgentConfigValue::key).collect(Collectors.toSet());
+
+        List<String> removed = previousByKey.keySet().stream()
+                .filter(k -> !newKeys.contains(k))
+                .sorted()
+                .toList();
+
+        List<String> added = new ArrayList<>();
+        List<String> modified = new ArrayList<>();
+
+        for (AgentConfigValue v : newValues) {
+            AgentConfigValue prev = previousByKey.get(v.key());
+            if (prev == null) {
+                added.add(v.key());
+            } else if (!Objects.equals(prev.value(), v.value())) {
+                boolean isPrimitive = v.type() == AgentConfigValue.ValueType.INTEGER
+                        || v.type() == AgentConfigValue.ValueType.FLOAT
+                        || v.type() == AgentConfigValue.ValueType.BOOLEAN;
+                if (isPrimitive) {
+                    modified.add(v.key() + " to " + v.value());
+                } else {
+                    modified.add(v.key());
+                }
+            }
+        }
+
+        if (added.isEmpty() && modified.isEmpty() && removed.isEmpty()) {
+            return null;
+        }
+
+        StringBuilder description = new StringBuilder();
+        if (!added.isEmpty()) {
+            description.append("Added ").append(String.join(", ", added));
+        }
+        if (!modified.isEmpty()) {
+            if (!description.isEmpty()) description.append(". ");
+            description.append("Modified ").append(String.join(", ", modified));
+        }
+        if (!removed.isEmpty()) {
+            if (!description.isEmpty()) description.append(". ");
+            description.append("Removed ").append(String.join(", ", removed));
+        }
+
+        if (description.length() > 255) {
+            description.setLength(252);
+            description.append("...");
+        }
+        return description.toString();
     }
 
     private UUID createBlueprintSnapshot(
