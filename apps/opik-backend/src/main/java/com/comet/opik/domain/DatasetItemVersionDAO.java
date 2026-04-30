@@ -2417,19 +2417,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             template.add("has_aggregated", hasAggregated);
                             template.add("has_raw", hasRaw);
 
-                            // Push-top-limit: only when all experiments are aggregated (single branch).
-                            // Two cases:
-                            //  - explicit sort: top-N driven by user-supplied sort, requires SortingFactory support.
-                            //  - default sort (no sortingFields, no filters, no search): outer query orders by
-                            //    dataset_item_id DESC, so the same expression can drive a Top-N pre-filter that
-                            //    also activates skip indexes on dataset_item_id (OPT3).
+                            // Push-top-limit: only when all experiments are aggregated (single branch),
+                            // and only when no filters/search are present. The Top-N CTE selects items by
+                            // sort BEFORE filters are applied; with filters/search active the outer query
+                            // would strip items from the top-N and silently return short pages.
                             boolean hasSortingFields = CollectionUtils.isNotEmpty(criteria.sortingFields());
                             boolean hasFilters = CollectionUtils.isNotEmpty(criteria.filters());
                             boolean hasSearch = StringUtils.isNotBlank(criteria.search());
                             boolean pushTopLimit = hasAggregated && !hasRaw
-                                    && ((hasSortingFields
-                                            && sortingFactory.supportsPushTopLimit(criteria.sortingFields()))
-                                            || (!hasSortingFields && !hasFilters && !hasSearch));
+                                    && !hasFilters && !hasSearch
+                                    && (!hasSortingFields
+                                            || sortingFactory.supportsPushTopLimit(criteria.sortingFields()));
 
                             if (pushTopLimit) {
                                 template.add("push_top_limit", true);
