@@ -120,6 +120,13 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private MigrationConfig migration = new MigrationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentProjectMigrationConfig experimentProjectMigration = ExperimentProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
@@ -142,4 +149,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private EnvironmentConfig environment = new EnvironmentConfig();
 }

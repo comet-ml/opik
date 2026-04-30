@@ -7,6 +7,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCustomCheckboxItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import uniq from "lodash/uniq";
@@ -21,6 +22,7 @@ import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { useDatasetIdFromCompareExperimentsURL } from "@/v2/pages/CompareExperimentsPage/useDatasetIdFromCompareExperimentsURL";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
+import { getSelectAllCheckedState } from "@/lib/utils";
 
 const COLLAPSE_KEYS_BUTTON_WIDTH = 340;
 
@@ -73,6 +75,26 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
 
       return [...(selectedKeys || []), key];
     });
+  };
+
+  const visibleSelectedCount = dataKeys.filter(
+    (key) => selectedKeys?.includes(key),
+  ).length;
+  const allKeysSelected =
+    dataKeys.length > 0 && visibleSelectedCount === dataKeys.length;
+  const selectAllCheckedState = getSelectAllCheckedState(
+    visibleSelectedCount,
+    dataKeys.length,
+  );
+
+  const handleToggleAll = () => {
+    if (allKeysSelected) {
+      setSelectedKeys((current) =>
+        (current ?? []).filter((key) => !dataKeys.includes(key)),
+      );
+    } else {
+      setSelectedKeys((current) => union(current ?? [], dataKeys));
+    }
   };
 
   useEffect(() => {
@@ -135,6 +157,20 @@ const ExperimentDataset = ({ data, datasetItemId }: ExperimentDatasetProps) => {
                   {key}
                 </DropdownMenuCustomCheckboxItem>
               ))}
+              {dataKeys.length > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuCustomCheckboxItem
+                    checked={selectAllCheckedState}
+                    onSelect={(event) => event.preventDefault()}
+                    onCheckedChange={handleToggleAll}
+                  >
+                    <div className="w-full break-words py-2">
+                      {visibleSelectedCount} of {dataKeys.length} selected
+                    </div>
+                  </DropdownMenuCustomCheckboxItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

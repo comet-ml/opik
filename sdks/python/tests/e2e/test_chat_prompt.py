@@ -2,15 +2,17 @@ import uuid
 import opik
 from opik.api_objects.prompt import PromptType, ChatPrompt
 from . import verifiers
+from ..testlib import generate_project_name
 import opik.exceptions
 import pytest
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
     """Test creating a chat prompt with multiple messages."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = "test_project"
     prompt_name = f"chat-prompt-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -21,7 +23,7 @@ def test_chat_prompt__create__happyflow(opik_client: opik.Opik):
         name=prompt_name,
         messages=messages,
         metadata={"version": "1.0", "type": "customer_support"},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify the prompt was created correctly
@@ -38,7 +40,6 @@ def test_chat_prompt__format__happyflow(opik_client: opik.Opik):
     """Test formatting a chat prompt with variables."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-format-project-{unique_identifier}"
     prompt_name = f"chat-prompt-format-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are a {{role}}."},
@@ -48,7 +49,7 @@ def test_chat_prompt__format__happyflow(opik_client: opik.Opik):
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify the prompt was created correctly
@@ -56,7 +57,7 @@ def test_chat_prompt__format__happyflow(opik_client: opik.Opik):
         chat_prompt,
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Format with variables
@@ -75,7 +76,6 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
     """Test creating a new version of a chat prompt."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-project-{unique_identifier}"
     prompt_name = f"chat-prompt-versioning-{unique_identifier}"
     messages_v1 = [
         {"role": "system", "content": "You are helpful."},
@@ -84,7 +84,7 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
 
     # Create initial version
     chat_prompt_v1 = opik_client.create_chat_prompt(
-        name=prompt_name, messages=messages_v1, project_name=project_name
+        name=prompt_name, messages=messages_v1, project_name=PROJECT_NAME
     )
 
     # Create new version with different messages
@@ -95,7 +95,7 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
     ]
 
     chat_prompt_v2 = opik_client.create_chat_prompt(
-        name=prompt_name, messages=messages_v2, project_name=project_name
+        name=prompt_name, messages=messages_v2, project_name=PROJECT_NAME
     )
 
     # Verify both versions
@@ -103,14 +103,14 @@ def test_chat_prompt__create_new_version__happyflow(opik_client: opik.Opik):
         chat_prompt_v1,
         name=prompt_name,
         messages=messages_v1,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
         chat_prompt_v2,
         name=prompt_name,
         messages=messages_v2,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify they share the same prompt ID but have different version IDs
@@ -131,7 +131,6 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
     """Test that creating a chat prompt with identical messages doesn't create a new version."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-no-dup-project-{unique_identifier}"
     prompt_name = f"chat-prompt-no-dup-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are helpful."},
@@ -140,12 +139,12 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
 
     # Create initial version
     chat_prompt_v1 = opik_client.create_chat_prompt(
-        name=prompt_name, messages=messages, project_name=project_name
+        name=prompt_name, messages=messages, project_name=PROJECT_NAME
     )
 
     # Try to create with same messages
     chat_prompt_v2 = opik_client.create_chat_prompt(
-        name=prompt_name, messages=messages, project_name=project_name
+        name=prompt_name, messages=messages, project_name=PROJECT_NAME
     )
 
     # Verify both prompts
@@ -155,7 +154,7 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         messages=messages,
         commit=chat_prompt_v1.commit,
         prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
@@ -164,7 +163,7 @@ def test_chat_prompt__do_not_create_new_version_with_same_messages(
         messages=messages,
         commit=chat_prompt_v1.commit,
         prompt_id=chat_prompt_v1.__internal_api__prompt_id__,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -172,7 +171,6 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
     """Test creating a ChatPrompt directly using the class."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-direct-project-{unique_identifier}"
     prompt_name = f"chat-prompt-direct-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are an expert."},
@@ -184,7 +182,7 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
         name=prompt_name,
         messages=messages,
         metadata={"category": "education"},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify it was synced to backend
@@ -193,7 +191,7 @@ def test_chat_prompt__direct_class_instantiation__happyflow(opik_client: opik.Op
         name=prompt_name,
         messages=messages,
         metadata={"category": "education"},
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -201,7 +199,6 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
     """Test chat prompt with multimodal content (text + images)."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-multimodal-project-{unique_identifier}"
     prompt_name = f"chat-prompt-multimodal-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You analyze images."},
@@ -220,7 +217,7 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify multimodal content is preserved
@@ -228,7 +225,7 @@ def test_chat_prompt__multimodal_content__happyflow(opik_client: opik.Opik):
         chat_prompt,
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     assert len(chat_prompt.template[1]["content"]) == 2
@@ -240,7 +237,6 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
     """Test chat prompts with different template types."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-mustache--project-{unique_identifier}"
     # Test with Mustache
     prompt_name_mustache = f"chat-prompt-mustache-{unique_identifier}"
     messages_mustache = [
@@ -251,7 +247,7 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
         name=prompt_name_mustache,
         messages=messages_mustache,
         type=PromptType.MUSTACHE,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
@@ -259,7 +255,7 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
         name=prompt_name_mustache,
         messages=messages_mustache,
         type=PromptType.MUSTACHE,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     formatted_mustache = chat_prompt_mustache.format(variables={"name": "Bob"})
@@ -275,7 +271,7 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
         name=prompt_name_jinja,
         messages=messages_jinja,
         type=PromptType.JINJA2,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
@@ -283,7 +279,7 @@ def test_chat_prompt__different_types__mustache_and_jinja2(opik_client: opik.Opi
         name=prompt_name_jinja,
         messages=messages_jinja,
         type=PromptType.JINJA2,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     formatted_jinja = chat_prompt_jinja.format(variables={"name": "Carol"})
@@ -294,21 +290,20 @@ def test_chat_prompt__empty_messages__should_work(opik_client: opik.Opik):
     """Test chat prompt with empty messages list."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-empty--project-{unique_identifier}"
     prompt_name = f"chat-prompt-empty-{unique_identifier}"
     messages = []
 
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
         chat_prompt,
         name=prompt_name,
         messages=[],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -316,7 +311,6 @@ def test_chat_prompt__multiple_roles__happyflow(opik_client: opik.Opik):
     """Test chat prompt with system, user, and assistant messages."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-multirole-project-{unique_identifier}"
     prompt_name = f"chat-prompt-multirole-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -328,14 +322,14 @@ def test_chat_prompt__multiple_roles__happyflow(opik_client: opik.Opik):
     chat_prompt = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     verifiers.verify_chat_prompt_version(
         chat_prompt,
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     formatted = chat_prompt.format(variables={"country": "France"})
@@ -351,7 +345,6 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
     """Test that get_chat_prompt() returns a ChatPrompt object for chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-get-{unique_id}"
-    project_name = f"chat-prompt-get-project-{unique_id}"
 
     # Create a chat prompt
     created_prompt = opik_client.create_chat_prompt(
@@ -360,13 +353,13 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "Hello {{name}}"},
         ],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Retrieve it with get_chat_prompt()
     retrieved_prompt = opik_client.get_chat_prompt(
         name=prompt_name,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     assert retrieved_prompt is not None
@@ -374,7 +367,7 @@ def test_get_chat_prompt__chat_prompt__returns_chat_prompt(opik_client: opik.Opi
     assert retrieved_prompt.name == prompt_name
     assert retrieved_prompt.commit == created_prompt.commit
     assert len(retrieved_prompt.template) == 2
-    assert retrieved_prompt.project_name == project_name
+    assert retrieved_prompt.project_name == PROJECT_NAME
 
 
 def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(
@@ -383,22 +376,21 @@ def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(
     """Test that get_chat_prompt() raises an error for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-{unique_id}"
-    project_name = f"text-prompt-project-{unique_id}"
 
     # Create a text prompt
     text_prompt = opik_client.create_prompt(
         name=prompt_name,
         prompt="Hello {{name}}",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Try to retrieve it with get_chat_prompt() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
-        opik_client.get_chat_prompt(name=prompt_name, project_name=project_name)
+        opik_client.get_chat_prompt(name=prompt_name, project_name=PROJECT_NAME)
 
     # Verify the text prompt remains unchanged
     retrieved_prompt = opik_client.get_prompt(
-        name=prompt_name, project_name=project_name
+        name=prompt_name, project_name=PROJECT_NAME
     )
     assert retrieved_prompt is not None
     verifiers.verify_prompt_version(
@@ -408,7 +400,7 @@ def test_get_chat_prompt__string_prompt__prompt_structure_mismatch_error(
         commit=text_prompt.commit,
         prompt_id=text_prompt.__internal_api__prompt_id__,
         version_id=text_prompt.__internal_api__version_id__,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -418,18 +410,17 @@ def test_get_chat_prompt_history__chat_prompt__returns_chat_prompts(
     """Test that get_chat_prompt_history() returns ChatPrompt objects for chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-history-{unique_id}"
-    project_name = f"chat-prompt-history-project-{unique_id}"
 
     # Create multiple versions of a chat prompt
     v1 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 1"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     v2 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 2"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     v3 = opik_client.create_chat_prompt(
         name=prompt_name,
@@ -437,12 +428,12 @@ def test_get_chat_prompt_history__chat_prompt__returns_chat_prompts(
             {"role": "system", "content": "System message"},
             {"role": "user", "content": "Version 3"},
         ],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Retrieve history
     history = opik_client.get_chat_prompt_history(
-        name=prompt_name, project_name=project_name
+        name=prompt_name, project_name=PROJECT_NAME
     )
 
     assert len(history) == 3
@@ -462,20 +453,19 @@ def test_get_chat_prompt_history__string_prompt__prompt_structure_mismatch_error
     """Test that get_chat_prompt_history() raises an error for text prompts (type mismatch)."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"text-prompt-history-{unique_id}"
-    project_name = f"text-prompt-history-project-{unique_id}"
 
     # Create a text prompt
     text_prompt = opik_client.create_prompt(
-        name=prompt_name, prompt="Hello", project_name=project_name
+        name=prompt_name, prompt="Hello", project_name=PROJECT_NAME
     )
 
     # Try to get history with get_chat_prompt_history() - should raise an error due to type mismatch
     with pytest.raises(opik.exceptions.PromptTemplateStructureMismatch):
-        opik_client.get_chat_prompt_history(name=prompt_name, project_name=project_name)
+        opik_client.get_chat_prompt_history(name=prompt_name, project_name=PROJECT_NAME)
 
     # Verify the text prompt remains unchanged
     retrieved_prompt = opik_client.get_prompt(
-        name=prompt_name, project_name=project_name
+        name=prompt_name, project_name=PROJECT_NAME
     )
     assert retrieved_prompt is not None
     verifiers.verify_prompt_version(
@@ -485,7 +475,7 @@ def test_get_chat_prompt_history__string_prompt__prompt_structure_mismatch_error
         commit=text_prompt.commit,
         prompt_id=text_prompt.__internal_api__prompt_id__,
         version_id=text_prompt.__internal_api__version_id__,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -493,36 +483,34 @@ def test_search_prompts__filter_chat_prompts_only(opik_client: opik.Opik):
     """Test that search_prompts() with template_structure filter returns only ChatPrompt instances."""
     unique_id = str(uuid.uuid4())[-6:]
 
-    project_name = f"search-prompts-project-{unique_id}"
-
     # Create text prompts
     text_prompt_1 = opik_client.create_prompt(
         name=f"text-search-{unique_id}-1",
         prompt="Text prompt 1",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     text_prompt_2 = opik_client.create_prompt(
         name=f"text-search-{unique_id}-2",
         prompt="Text prompt 2",
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Create chat prompts
     chat_prompt_1 = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}-1",
         messages=[{"role": "user", "content": "Chat 1"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     chat_prompt_2 = opik_client.create_chat_prompt(
         name=f"chat-search-{unique_id}-2",
         messages=[{"role": "user", "content": "Chat 2"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Search for only chat prompts using template_structure filter
     results = opik_client.search_prompts(
         filter_string=f'name contains "{unique_id}" AND template_structure = "chat"',
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Should only return chat prompts, not text prompts
@@ -540,23 +528,22 @@ def test_get_chat_prompt__with_commit__chat_prompt(opik_client: opik.Opik):
     """Test that get_chat_prompt() with commit works for chat prompts."""
     unique_id = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-commit-{unique_id}"
-    project_name = f"chat-prompt-commit-project-{unique_id}"
 
     # Create multiple versions
     v1 = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 1"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     _ = opik_client.create_chat_prompt(
         name=prompt_name,
         messages=[{"role": "user", "content": "Version 2"}],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Retrieve specific version by commit
     retrieved_v1 = opik_client.get_chat_prompt(
-        name=prompt_name, commit=v1.commit, project_name=project_name
+        name=prompt_name, commit=v1.commit, project_name=PROJECT_NAME
     )
 
     assert retrieved_v1 is not None
@@ -564,7 +551,7 @@ def test_get_chat_prompt__with_commit__chat_prompt(opik_client: opik.Opik):
     assert retrieved_v1.commit == v1.commit
     assert retrieved_v1.template[0]["content"] == "Version 1"
     assert retrieved_v1.name == prompt_name
-    assert retrieved_v1.project_name == project_name
+    assert retrieved_v1.project_name == PROJECT_NAME
 
 
 def test_get_chat_prompt__nonexistent__returns_none(opik_client: opik.Opik):
@@ -579,7 +566,6 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
     """Test that template_structure is immutable for chat prompts."""
     unique_identifier = str(uuid.uuid4())[-6:]
     prompt_name = f"test-immutable-chat-structure-{unique_identifier}"
-    project_name = f"test-immutable-chat-structure-project-{unique_identifier}"
 
     # Create initial chat prompt
     chat_prompt = opik_client.create_chat_prompt(
@@ -588,7 +574,7 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello!"},
         ],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify chat prompt was created
@@ -599,7 +585,7 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
             {"role": "system", "content": "You are a helpful assistant."},
             {"role": "user", "content": "Hello!"},
         ],
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Attempt to create a text prompt version with the same name should fail
@@ -607,12 +593,12 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
         opik_client.create_prompt(
             name=prompt_name,
             prompt="This is a text prompt: {{variable}}",
-            project_name=project_name,
+            project_name=PROJECT_NAME,
         )
 
     # Verify the original chat prompt remains unchanged
     retrieved_chat_prompt = opik_client.get_chat_prompt(
-        name=prompt_name, project_name=project_name
+        name=prompt_name, project_name=PROJECT_NAME
     )
     assert retrieved_chat_prompt is not None
     verifiers.verify_chat_prompt_version(
@@ -622,7 +608,7 @@ def test_chat_prompt__template_structure_immutable__error(opik_client: opik.Opik
         commit=chat_prompt.commit,
         prompt_id=chat_prompt.__internal_api__prompt_id__,
         version_id=chat_prompt.__internal_api__version_id__,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
 
@@ -630,13 +616,12 @@ def test_chat_prompt__invalid_messages__raises_validation_error(opik_client: opi
     """Test that invalid messages raise ValidationError."""
     unique_identifier = str(uuid.uuid4())[-6:]
     prompt_name = f"chat-prompt-invalid-{unique_identifier}"
-    project_name = f"chat-prompt-invalid-project-{unique_identifier}"
 
     with pytest.raises(opik.exceptions.ValidationError) as exc_info:
         ChatPrompt(
             name=prompt_name,
             messages=[{"role": "invalid", "content": "hello"}],
-            project_name=project_name,
+            project_name=PROJECT_NAME,
         )
 
     assert "ChatPrompt.__init__" in str(exc_info.value)
@@ -647,7 +632,6 @@ def test_chat_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
     """Test that create_chat_prompt() accepts tags parameter."""
     unique_identifier = str(uuid.uuid4())[-6:]
 
-    project_name = f"chat-prompt-with-tags-project-{unique_identifier}"
     prompt_name = f"chat-prompt-with-tags-{unique_identifier}"
     messages = [
         {"role": "system", "content": "You are a helpful assistant."},
@@ -660,7 +644,7 @@ def test_chat_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
         name=prompt_name,
         messages=messages,
         tags=tags,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify prompt was created
@@ -668,15 +652,15 @@ def test_chat_prompt__create_with_tags__happyflow(opik_client: opik.Opik):
         chat_prompt,
         name=prompt_name,
         messages=messages,
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
 
     # Verify tags were set by searching for the prompt
     filtered_prompts = opik_client.search_prompts(
         filter_string=f'name = "{prompt_name}" AND tags contains "chat-tag1"',
-        project_name=project_name,
+        project_name=PROJECT_NAME,
     )
     assert len(filtered_prompts) == 1
     assert filtered_prompts[0].name == prompt_name
     assert set(filtered_prompts[0].tags) == set(tags)
-    assert filtered_prompts[0].project_name == project_name
+    assert filtered_prompts[0].project_name == PROJECT_NAME

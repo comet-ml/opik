@@ -83,6 +83,7 @@ import static com.comet.opik.api.FeedbackScoreBatchContainer.FeedbackScoreBatch;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.resources.utils.ExperimentsTestUtils.getQuantities;
 import static com.comet.opik.api.resources.utils.TestUtils.toURLEncodedQueryParam;
+import static com.comet.opik.api.resources.utils.resources.ExperimentTestAssertions.EXPERIMENT_IGNORED_FIELDS;
 import static com.comet.opik.utils.ValidationUtils.SCALE;
 import static java.util.stream.Collectors.groupingBy;
 import static java.util.stream.Collectors.mapping;
@@ -102,10 +103,6 @@ class ExperimentsResourceFindProjectExperimentsTest {
     private static final String USER = "user-" + RandomStringUtils.secure().nextAlphanumeric(36);
 
     private static final String URL_TEMPLATE = "%s/v1/private/experiments";
-
-    private static final String[] EXPERIMENT_IGNORED_FIELDS = new String[]{
-            "id", "datasetId", "name", "feedbackScores", "assertionScores", "traceCount", "createdAt",
-            "lastUpdatedAt", "createdBy", "lastUpdatedBy", "comments", "projectName", "datasetItemCount"};
 
     private final TestContainersSetup setup = new TestContainersSetup(Mockito.mock(EventBus.class));
 

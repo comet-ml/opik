@@ -4,7 +4,6 @@ import { Clock, FilePen, Pencil, User } from "lucide-react";
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import Loader from "@/shared/Loader/Loader";
-import { cn } from "@/lib/utils";
 import { Card } from "@/ui/card";
 import DeployToPopover from "./DeployToPopover";
 import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
@@ -19,14 +18,13 @@ import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
 import DiffVersionPopover from "./DiffVersionPopover";
 import AgentConfigTagList from "./AgentConfigTagList";
+import SingleLineExpandableText from "@/shared/SingleLineExpandableText/SingleLineExpandableText";
 import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
 import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 import {
   collectMultiLineKeys,
   hasAnyExpandableField,
 } from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
-
-const DESCRIPTION_TRUNCATE_LENGTH = 80;
 
 type AgentConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
@@ -69,7 +67,6 @@ const AgentConfigurationDetailView: React.FC<
     label: string;
     blueprintId: string;
   } | null>(null);
-  const [notesExpanded, setNotesExpanded] = useState(false);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setComparedVersion({
@@ -82,9 +79,6 @@ const AgentConfigurationDetailView: React.FC<
   const isLatestVersion = versions[0]?.id === item.id;
 
   const description = item.description;
-
-  const descriptionIsLong =
-    (description?.length ?? 0) > DESCRIPTION_TRUNCATE_LENGTH;
 
   const collapsibleKeys = useMemo(
     () => collectMultiLineKeys(agentConfig?.values ?? []),
@@ -162,30 +156,9 @@ const AgentConfigurationDetailView: React.FC<
         {description && (
           <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
             <FilePen className="mt-1 size-3 shrink-0" />
-            <div
-              className={cn(
-                "flex min-w-0 flex-1 items-baseline gap-1",
-                notesExpanded && "flex-wrap",
-              )}
-            >
-              <span
-                className={cn(
-                  "min-w-0",
-                  notesExpanded ? "break-words" : "truncate",
-                )}
-              >
-                {description}
-              </span>
-              {descriptionIsLong && (
-                <button
-                  type="button"
-                  className="shrink-0 text-light-slate underline"
-                  onClick={() => setNotesExpanded((v) => !v)}
-                >
-                  {notesExpanded ? "Show less" : "Show more"}
-                </button>
-              )}
-            </div>
+            <SingleLineExpandableText key={item.id}>
+              {description}
+            </SingleLineExpandableText>
           </div>
         )}
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">

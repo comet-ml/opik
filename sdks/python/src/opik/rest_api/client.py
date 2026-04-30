@@ -6,6 +6,7 @@ import httpx
 from .agent_configs.client import AgentConfigsClient, AsyncAgentConfigsClient
 from .alerts.client import AlertsClient, AsyncAlertsClient
 from .annotation_queues.client import AnnotationQueuesClient, AsyncAnnotationQueuesClient
+from .assertion_results.client import AssertionResultsClient, AsyncAssertionResultsClient
 from .attachments.client import AsyncAttachmentsClient, AttachmentsClient
 from .automation_rule_evaluators.client import AsyncAutomationRuleEvaluatorsClient, AutomationRuleEvaluatorsClient
 from .chat_completions.client import AsyncChatCompletionsClient, ChatCompletionsClient
@@ -105,6 +106,7 @@ class OpikApi:
         self.agent_configs = AgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AnnotationQueuesClient(client_wrapper=self._client_wrapper)
+        self.assertion_results = AssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = CheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)
@@ -252,6 +254,7 @@ class AsyncOpikApi:
         self.agent_configs = AsyncAgentConfigsClient(client_wrapper=self._client_wrapper)
         self.alerts = AsyncAlertsClient(client_wrapper=self._client_wrapper)
         self.annotation_queues = AsyncAnnotationQueuesClient(client_wrapper=self._client_wrapper)
+        self.assertion_results = AsyncAssertionResultsClient(client_wrapper=self._client_wrapper)
         self.attachments = AsyncAttachmentsClient(client_wrapper=self._client_wrapper)
         self.check = AsyncCheckClient(client_wrapper=self._client_wrapper)
         self.automation_rule_evaluators = AsyncAutomationRuleEvaluatorsClient(client_wrapper=self._client_wrapper)

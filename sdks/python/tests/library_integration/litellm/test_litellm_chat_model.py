@@ -300,3 +300,78 @@ def test_litellm_chat_model_with_track_true__traces_created(fake_backend, monkey
     assert isinstance(result, str)
     assert len(result) > 0
     assert len(fake_backend.trace_trees) == 1
+
+
+def test_litellm_chat_model_generate_chat_completion__happyflow(monkeypatch):
+    """``generate_chat_completion`` returns a typed assistant ``ConversationDict``."""
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        track=False,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+
+    message = model.generate_chat_completion(
+        messages=[
+            {"role": "system", "content": "You answer in one sentence."},
+            {"role": "user", "content": "Tell me a short fact about Python."},
+        ]
+    )
+
+    assert message["role"] == "assistant"
+    assert isinstance(message["content"], str)
+    assert len(message["content"]) > 0
+
+
+@pytest.mark.asyncio
+async def test_litellm_chat_model_agenerate_chat_completion__happyflow(monkeypatch):
+    """Async ``agenerate_chat_completion`` returns the same shape as the sync path."""
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        track=False,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+
+    message = await model.agenerate_chat_completion(
+        messages=[
+            {"role": "system", "content": "You answer in one sentence."},
+            {"role": "user", "content": "Tell me a short fact about async Python."},
+        ]
+    )
+
+    assert message["role"] == "assistant"
+    assert isinstance(message["content"], str)
+    assert len(message["content"]) > 0
+
+
+def test_litellm_chat_model_generate_chat_completion__with_response_format(monkeypatch):
+    """``response_format`` produces JSON content matching the schema."""
+    import json as _json
+
+    monkeypatch.setenv("OPIK_ENABLE_LITELLM_MODELS_MONITORING", "false")
+
+    class Answer(pydantic.BaseModel):
+        capital: str
+
+    model = litellm_chat_model.LiteLLMChatModel(
+        model_name=MODEL_FOR_TESTS,
+        track=False,
+        reasoning_effort=llm_constants.OPENAI_REASONING_EFFORT,
+    )
+
+    message = model.generate_chat_completion(
+        messages=[
+            {
+                "role": "user",
+                "content": "What is the capital of France? Reply as JSON.",
+            },
+        ],
+        response_format=Answer,
+    )
+
+    assert message["role"] == "assistant"
+    parsed = _json.loads(message["content"])
+    assert isinstance(parsed["capital"], str)

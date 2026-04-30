@@ -64,7 +64,7 @@ export type EvaluationScoreResult = {
   /** Whether the scoring failed */
   scoringFailed?: boolean;
 
-  /** Optional category name for grouping scores (e.g., "suite_assertion") */
+  /** Optional category name for grouping scores */
   categoryName?: string;
 };
 

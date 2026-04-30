@@ -42,6 +42,8 @@ tags:
   description: Alert resources
 - name: Annotation Queues
   description: Private annotation queue operations
+- name: Assertion Results
+  description: Assertion result related resources
 - name: Attachments
   description: Attachments related resources
 - name: Check
@@ -1120,6 +1122,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/assertion-results:
+    put:
+      tags:
+      - Assertion Results
+      summary: Batch ingestion of assertion results
+      description: Batch ingestion of assertion results for traces or spans
+      operationId: storeAssertionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssertionResultBatch"
+      responses:
+        "204":
+          description: No Content
   /v1/private/attachment/list:
     get:
       tags:
@@ -9285,6 +9302,58 @@ components:
           items:
             minLength: 1
             type: string
+    AssertionResultBatch:
+      required:
+      - assertion_results
+      - entity_type
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - TRACE
+          - SPAN
+          - THREAD
+        assertion_results:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AssertionResultBatchItem"
+    AssertionResultBatchItem:
+      required:
+      - entity_id
+      - name
+      - source
+      - status
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+        name:
+          minLength: 1
+          type: string
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
     Attachment:
       required:
       - file_name
@@ -18276,6 +18345,11 @@ components:
         forceWorkspaceVersion:
           minLength: 1
           type: string
+        defaultPageSize:
+          maximum: 100
+          minimum: 5
+          type: integer
+          format: int32
         v2WorkspaceAllowlist:
           type: string
           writeOnly: true

@@ -46,6 +46,7 @@ import com.comet.opik.utils.JsonUtils;
 import com.google.common.eventbus.EventBus;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -270,6 +271,242 @@ class OptimizationsResourceTest {
                             .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
                                     equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_DELETE.getValue()))));
         }
+
+        @Test
+        @DisplayName("Create optimization passes required permissions to auth endpoint")
+        void createOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callCreate(optimization, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Create optimization returns 403 when permission is denied")
+        void createOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            try (var response = optimizationResourceClient.callCreate(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Upsert optimization passes required permissions to auth endpoint")
+        void upsertOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callUpsert(optimization, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Upsert optimization returns 403 when permission is denied")
+        void upsertOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            var optimization = optimizationResourceClient.createPartialOptimization().build();
+
+            try (var response = optimizationResourceClient.callUpsert(optimization, apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update optimization passes required permissions to auth endpoint")
+        void updateOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callUpdate(id, podamFactory.manufacturePojo(OptimizationUpdate.class),
+                    apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update optimization returns 403 when permission is denied")
+        void updateOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            try (var response = optimizationResourceClient.callUpdate(UUID.randomUUID(),
+                    podamFactory.manufacturePojo(OptimizationUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Find optimizations passes required permissions to auth endpoint")
+        void findOptimizationsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callFind(apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Find optimizations returns 403 when permission is denied")
+        void findOptimizationsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callFind(apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Get optimization passes required permissions to auth endpoint")
+        void getOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callGet(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get optimization returns 403 when permission is denied")
+        void getOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callGet(UUID.randomUUID(), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Cancel studio optimization passes required permissions to auth endpoint")
+        void cancelStudioOptimizationPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Cancel studio optimization returns 403 when permission is denied")
+        void cancelStudioOptimizationReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_STUDIO_USE.getValue());
+
+            try (var response = optimizationResourceClient.callCancelStudio(UUID.randomUUID(), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Get studio optimization logs passes required permissions to auth endpoint")
+        void getStudioOptimizationLogsPassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var id = optimizationResourceClient.create(apiKey, workspaceName);
+
+            wireMock.server().resetRequests();
+            optimizationResourceClient.callGetStudioLogs(id, apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Get studio optimization logs returns 403 when permission is denied")
+        void getStudioOptimizationLogsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.OPTIMIZATION_RUN_VIEW.getValue());
+
+            try (var response = optimizationResourceClient.callGetStudioLogs(UUID.randomUUID(), apiKey,
+                    workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
     }
 
     @Nested

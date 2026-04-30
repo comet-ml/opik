@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { ChartLine, RotateCw } from "lucide-react";
+import { ChartLine } from "lucide-react";
 import {
   CellContext,
   ColumnSort,
@@ -14,6 +14,7 @@ import {
   StringParam,
   useQueryParam,
 } from "use-query-params";
+import useTablePageSize from "@/hooks/useTablePageSize";
 import get from "lodash/get";
 import uniq from "lodash/uniq";
 import isNumber from "lodash/isNumber";
@@ -56,7 +57,7 @@ import ExperimentsActionsPanel from "@/v2/pages-shared/experiments/ExperimentsAc
 import ExperimentRowActionsCell from "@/v2/pages/ExperimentsPage/ExperimentRowActionsCell";
 import FeedbackScoresChartsWrapper from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartsWrapper";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Card } from "@/ui/card";
@@ -82,7 +83,6 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTableVirtualBody from "@/shared/DataTable/DataTableVirtualBody";
 import { ChartData } from "@/v2/pages-shared/experiments/FeedbackScoresChartsWrapper/FeedbackScoresChartContent";
 import GroupsButton from "@/shared/GroupsButton/GroupsButton";
-import useQueryParamAndLocalStorageState from "@/hooks/useQueryParamAndLocalStorageState";
 import TextCell from "@/shared/DataTableCells/TextCell";
 import DatasetVersionCell from "@/shared/DataTableCells/DatasetVersionCell";
 import { EXPERIMENT_STATUS } from "@/types/datasets";
@@ -169,15 +169,7 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     updateType: "replaceIn",
   });
 
-  const [size, setSize] = useQueryParamAndLocalStorageState<
-    number | null | undefined
-  >({
-    localStorageKey: PAGINATION_SIZE_KEY,
-    queryKey: "size",
-    defaultValue: 100,
-    queryParamConfig: NumberParam,
-    syncQueryWithLocalStorageOnInit: true,
-  });
+  const [size, setSize] = useTablePageSize(PAGINATION_SIZE_KEY);
 
   const [groupLimit, setGroupLimit] = useQueryParam<Record<string, number>>(
     "limits",
@@ -707,16 +699,11 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
             }}
           />
           <Separator orientation="vertical" className="mx-2 h-4" />
-          <TooltipWrapper content="Refresh experiments list">
-            <Button
-              variant="outline"
-              size="icon-sm"
-              className="shrink-0"
-              onClick={() => refetch()}
-            >
-              <RotateCw />
-            </Button>
-          </TooltipWrapper>
+          <RefreshButton
+            tooltip="Refresh experiments list"
+            isFetching={isFetching}
+            onRefresh={() => refetch()}
+          />
           <ColumnsButton
             columns={availableColumns}
             selectedColumns={selectedColumns}

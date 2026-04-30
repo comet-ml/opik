@@ -50,22 +50,28 @@ def mock_model():
     return model
 
 
+def _assistant_message(content: str) -> dict:
+    return {"role": "assistant", "content": content}
+
+
 def _no_frustration_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
     if response_format == schema.EvaluateUserFrustrationResponse:
-        return json.dumps({"verdict": "no"})
+        return _assistant_message(json.dumps({"verdict": "no", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
-        return json.dumps(
-            {"reason": "The conversation shows no signs of user frustration."}
+        return _assistant_message(
+            json.dumps(
+                {"reason": "The conversation shows no signs of user frustration."}
+            )
         )
-    return "{}"
+    return _assistant_message("{}")
 
 
 def test_score__with_no_frustration(mock_model, simple_conversation):
     """Test scoring with no user frustration."""
 
     # Mock model response to return no as verdicts (no frustration)
-    mock_model.generate_string.side_effect = _no_frustration_side_effect
+    mock_model.generate_chat_completion.side_effect = _no_frustration_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,
@@ -87,7 +93,7 @@ def test_score__with_no_frustration(mock_model, simple_conversation):
 async def test_score__with_no_frustration__async(mock_model, simple_conversation):
     """Test scoring with no user frustration."""
     # Mock model response to return no as verdicts (no frustration)
-    mock_model.agenerate_string.side_effect = _no_frustration_side_effect
+    mock_model.agenerate_chat_completion.side_effect = _no_frustration_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,
@@ -107,32 +113,37 @@ async def test_score__with_no_frustration__async(mock_model, simple_conversation
 
 def _mixed_frustration_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
-    llm_input = kwargs.get("input")
+    messages = kwargs.get("messages") or []
+    llm_input = "\n".join(m["content"] for m in messages)
     if response_format == schema.EvaluateUserFrustrationResponse:
         # For the call with frustrated response
         if "Both. Just give me a basic example." in llm_input:
-            return json.dumps(
-                {
-                    "verdict": "yes",
-                    "reason": "The user expresses frustration because the LLM's response didn't meet their expectations.",
-                }
+            return _assistant_message(
+                json.dumps(
+                    {
+                        "verdict": "yes",
+                        "reason": "The user expresses frustration because the LLM's response didn't meet their expectations.",
+                    }
+                )
             )
         # For other calls (no frustration)
-        return json.dumps({"verdict": "no"})
+        return _assistant_message(json.dumps({"verdict": "no", "reason": None}))
     elif response_format == schema.ScoreReasonResponse:
-        return json.dumps(
-            {
-                "reason": "The score is 0.25 because the user showed frustration in one of their messages."
-            }
+        return _assistant_message(
+            json.dumps(
+                {
+                    "reason": "The score is 0.25 because the user showed frustration in one of their messages."
+                }
+            )
         )
-    return "{}"
+    return _assistant_message("{}")
 
 
 def test_score__with_mixed_frustration(mock_model, frustrated_conversation):
     """Test scoring with a mix of frustrated and non-frustrated responses."""
 
     # Mock model response to alternate between yes and no
-    mock_model.generate_string.side_effect = _mixed_frustration_side_effect
+    mock_model.generate_chat_completion.side_effect = _mixed_frustration_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,
@@ -156,7 +167,7 @@ async def test_score__with_mixed_frustration__async(
 ):
     """Test scoring with a mix of frustrated and non-frustrated responses."""
     # Mock model response to alternate between yes and no
-    mock_model.agenerate_string.side_effect = _mixed_frustration_side_effect
+    mock_model.agenerate_chat_completion.side_effect = _mixed_frustration_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,
@@ -185,10 +196,8 @@ def test_score_with_no_reason(mock_model):
     # Create a new metric with include_reason=False
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
 
-    mock_model.generate_string.return_value = json.dumps(
-        {
-            "verdict": "no",
-        }
+    mock_model.generate_chat_completion.return_value = _assistant_message(
+        json.dumps({"verdict": "no", "reason": None})
     )
 
     result = metric.score(conversation=conversation)
@@ -209,10 +218,8 @@ async def test_score_with_no_reason__async(mock_model):
     # Create a new metric with include_reason=False
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
 
-    mock_model.agenerate_string.return_value = json.dumps(
-        {
-            "verdict": "no",
-        }
+    mock_model.agenerate_chat_completion.return_value = _assistant_message(
+        json.dumps({"verdict": "no", "reason": None})
     )
 
     result = await metric.ascore(conversation=conversation)
@@ -227,8 +234,8 @@ def test_score__with_model_validation_error_in_evaluation__raises_MetricComputat
     """Test handling of validation errors in the evaluation response."""
 
     # Return invalid JSON to trigger validation error
-    mock_model.generate_string.return_value = json.dumps(
-        {"invalid_field": "This will cause a validation error"}
+    mock_model.generate_chat_completion.return_value = _assistant_message(
+        json.dumps({"invalid_field": "This will cause a validation error"})
     )
 
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
@@ -243,8 +250,8 @@ async def test_score__with_model_validation_error_in_evaluation__async(
     """Test handling of validation errors in the evaluation response."""
 
     # Return invalid JSON to trigger validation error
-    mock_model.agenerate_string.return_value = json.dumps(
-        {"invalid_field": "This will cause a validation error"}
+    mock_model.agenerate_chat_completion.return_value = _assistant_message(
+        json.dumps({"invalid_field": "This will cause a validation error"})
     )
 
     metric = UserFrustrationMetric(model=mock_model, include_reason=False, track=False)
@@ -299,17 +306,23 @@ async def test_score__no_user_assistant_turns__raises_MetricComputationError__as
 def _all_frustrated_side_effect(*args, **kwargs):
     response_format = kwargs.get("response_format")
     if response_format == schema.EvaluateUserFrustrationResponse:
-        return json.dumps(
-            {
-                "verdict": "yes",
-                "reason": "The user is showing clear signs of frustration.",
-            }
+        return _assistant_message(
+            json.dumps(
+                {
+                    "verdict": "yes",
+                    "reason": "The user is showing clear signs of frustration.",
+                }
+            )
         )
     elif response_format == schema.ScoreReasonResponse:
-        return json.dumps(
-            {"reason": "The score is 0.0 because all user messages show frustration."}
+        return _assistant_message(
+            json.dumps(
+                {
+                    "reason": "The score is 0.0 because all user messages show frustration."
+                }
+            )
         )
-    return "{}"
+    return _assistant_message("{}")
 
 
 def test_score__with_all_frustrated_responses(mock_model):
@@ -321,7 +334,7 @@ def test_score__with_all_frustrated_responses(mock_model):
     ]
 
     # Mock model response to return yes for all verdicts (all frustrated)
-    mock_model.generate_string.side_effect = _all_frustrated_side_effect
+    mock_model.generate_chat_completion.side_effect = _all_frustrated_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,
@@ -349,7 +362,7 @@ async def test_score__with_all_frustrated_responses__async(mock_model):
     ]
 
     # Mock model response to return yes for all verdicts (all frustrated)
-    mock_model.agenerate_string.side_effect = _all_frustrated_side_effect
+    mock_model.agenerate_chat_completion.side_effect = _all_frustrated_side_effect
 
     metric = UserFrustrationMetric(
         model=mock_model,

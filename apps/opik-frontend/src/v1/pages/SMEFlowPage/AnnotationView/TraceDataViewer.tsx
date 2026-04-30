@@ -120,6 +120,7 @@ const TraceDataViewer: React.FC = () => {
     <>
       <div className="relative pr-4">
         <TraceIdentifier
+          label="Trace"
           name={displayTrace?.name}
           id={displayTrace?.id || ""}
         />

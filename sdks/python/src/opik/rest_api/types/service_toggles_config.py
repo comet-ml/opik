@@ -39,6 +39,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
         typing.List[str], FieldMetadata(alias="v2WorkspaceAllowlistIds")
     ]
     force_workspace_version: typing_extensions.Annotated[str, FieldMetadata(alias="forceWorkspaceVersion")]
+    default_page_size: typing_extensions.Annotated[typing.Optional[int], FieldMetadata(alias="defaultPageSize")] = None
     v2workspace_allowlist: typing_extensions.Annotated[
         typing.Optional[str], FieldMetadata(alias="v2WorkspaceAllowlist")
     ] = None

@@ -20,6 +20,7 @@ import AddTagDialog, {
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { mapRowDataForExport } from "@/lib/traces/exportUtils";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 type ThreadsActionsPanelProps = {
   getDataForExport: () => Promise<Thread[]>;
@@ -46,6 +47,10 @@ const ThreadsActionsPanel: React.FunctionComponent<
   const { mutate } = useThreadBatchDeleteMutation();
   const disabled = !selectedRows?.length;
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
+
+  const {
+    permissions: { canLogTraceSpanThread },
+  } = usePermissions();
 
   const { rules, isLoading: isRulesLoading } = useFilteredRulesList({
     projectId,
@@ -83,14 +88,16 @@ const ThreadsActionsPanel: React.FunctionComponent<
         confirmText="Delete threads"
         confirmButtonVariant="destructive"
       />
-      <AddTagDialog
-        key={`tag-${resetKeyRef.current}`}
-        rows={selectedRows}
-        open={open === 3}
-        setOpen={setOpen}
-        projectId={projectId}
-        type={TAG_ENTITY_TYPE.threads}
-      />
+      {canLogTraceSpanThread && (
+        <AddTagDialog
+          key={`tag-${resetKeyRef.current}`}
+          rows={selectedRows}
+          open={open === 3}
+          setOpen={setOpen}
+          projectId={projectId}
+          type={TAG_ENTITY_TYPE.threads}
+        />
+      )}
       <RunEvaluationDialog
         key={`evaluation-${resetKeyRef.current}`}
         open={open === 4}
@@ -108,20 +115,22 @@ const ThreadsActionsPanel: React.FunctionComponent<
         dataType="threads"
         buttonVariant={buttonVariant}
       />
-      <TooltipWrapper content="Manage tags">
-        <Button
-          variant={buttonVariant}
-          size="sm"
-          onClick={() => {
-            setOpen(3);
-            resetKeyRef.current = resetKeyRef.current + 1;
-          }}
-          disabled={disabled}
-        >
-          <Tag className="mr-1.5 size-3.5" />
-          <span>Manage tags</span>
-        </Button>
-      </TooltipWrapper>
+      {canLogTraceSpanThread && (
+        <TooltipWrapper content="Manage tags">
+          <Button
+            variant={buttonVariant}
+            size="sm"
+            onClick={() => {
+              setOpen(3);
+              resetKeyRef.current = resetKeyRef.current + 1;
+            }}
+            disabled={disabled}
+          >
+            <Tag className="mr-1.5 size-3.5" />
+            <span>Manage tags</span>
+          </Button>
+        </TooltipWrapper>
+      )}
       <EvaluateButton
         isNoRules={!rules?.length}
         disabled={disabled}

@@ -23,6 +23,7 @@ import { DatasetItem } from "@/types/datasets";
 import SyntaxHighlighter from "@/shared/SyntaxHighlighter/SyntaxHighlighter";
 import { Alert, AlertDescription, AlertTitle } from "@/ui/alert";
 import { extractOpikMetadata } from "@/lib/dataset-item-utils";
+import { getSelectAllCheckedState } from "@/lib/utils";
 import { OPIK_GENERATION_MODEL_FIELD } from "@/constants/datasets";
 
 function DiversityTag({ score }: { score: number }): React.ReactElement {
@@ -257,8 +258,11 @@ const GeneratedSamplesDialog: React.FunctionComponent<
     setOpen(false);
   }, [samples, selectedSamples, onAddItems, setOpen]);
 
-  const allSelected = selectedSamples.size === samples.length;
   const noneSelected = selectedSamples.size === 0;
+  const selectAllCheckedState = getSelectAllCheckedState(
+    selectedSamples.size,
+    samples.length,
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -322,31 +326,27 @@ const GeneratedSamplesDialog: React.FunctionComponent<
 
             {/* Selection Controls */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={handleSelectAll}
-                />
+              <div
+                className="flex cursor-pointer items-center gap-2"
+                onClick={() => handleSelectAll()}
+              >
+                <Checkbox checked={selectAllCheckedState} tabIndex={-1} />
                 <span className="text-sm">
-                  {allSelected ? "Deselect all" : "Select all"}
+                  {selectedSamples.size} of {samples.length} selected
                 </span>
-                {samples.length > 20 && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowAllSamples(!showAllSamples)}
-                    className="ml-4"
-                  >
-                    <Eye className="mr-1 size-4" />
-                    {showAllSamples
-                      ? `Show sample (${displaySamples.length})`
-                      : `Show all (${samples.length})`}
-                  </Button>
-                )}
               </div>
-              <Tag variant="gray">
-                {selectedSamples.size} of {samples.length} selected
-              </Tag>
+              {samples.length > 20 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowAllSamples(!showAllSamples)}
+                >
+                  <Eye className="mr-1 size-4" />
+                  {showAllSamples
+                    ? `Show sample (${displaySamples.length})`
+                    : `Show all (${samples.length})`}
+                </Button>
+              )}
             </div>
 
             {/* Compact Sample List */}

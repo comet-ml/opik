@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { flatMap, get, uniq } from "lodash";
 import md5 from "md5";
-import { FoldVertical, RotateCw, UnfoldVertical } from "lucide-react";
+import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import useRulesLogsList from "@/api/automations/useRulesLogsList";
 import NoData from "@/shared/NoData/NoData";
@@ -14,6 +14,7 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import ExpandableTextCell from "@/shared/DataTableCells/ExpandableTextCell";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import {
@@ -180,18 +181,11 @@ const AutomationLogsPage = () => {
         >
           <h1 className="comet-title-xs truncate break-words">Logs</h1>
           <div className="flex items-center gap-2">
-            <TooltipWrapper content="Refresh logs list">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={() => {
-                  refetch();
-                }}
-              >
-                <RotateCw />
-              </Button>
-            </TooltipWrapper>
+            <RefreshButton
+              tooltip="Refresh logs list"
+              isFetching={isFetching}
+              onRefresh={() => refetch()}
+            />
             <TooltipWrapper
               content={allExpanded ? "Collapse all" : "Expand all"}
             >

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo } from "react";
-import { Eye, EyeOff, MoreVertical } from "lucide-react";
+import { MoreVertical } from "lucide-react";
 
 import { DropdownOption, OnChangeFn } from "@/types/shared";
 import { Button } from "@/ui/button";
@@ -7,7 +7,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuCustomCheckboxItem,
-  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
@@ -18,6 +17,7 @@ import {
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import { getSelectAllCheckedState } from "@/lib/utils";
 
 const OPTIONS: DropdownOption<TREE_DATABLOCK_TYPE>[] = [
   { label: "Duration", value: TREE_DATABLOCK_TYPE.DURATION },
@@ -68,6 +68,13 @@ const SpanDetailsButton: React.FC<SpanDetailsButtonProps> = ({
     [onConfigChange, options],
   );
 
+  const totalCount = options.length + 1;
+  const selectedCount =
+    options.filter(({ value }) => config[value]).length +
+    (config[TREE_DATABLOCK_TYPE.DURATION_TIMELINE] ? 1 : 0);
+  const allSelected = selectedCount === totalCount;
+  const checkedState = getSelectAllCheckedState(selectedCount, totalCount);
+
   return (
     <DropdownMenu>
       <TooltipWrapper content="More options">
@@ -108,16 +115,17 @@ const SpanDetailsButton: React.FC<SpanDetailsButtonProps> = ({
           >
             Timeline
           </DropdownMenuCustomCheckboxItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => toggleColumns(true)}>
-            <Eye className="mr-2 size-4" />
-            Show all
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => toggleColumns(false)}>
-            <EyeOff className="mr-2 size-4" />
-            Hide all
-          </DropdownMenuItem>
         </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuCustomCheckboxItem
+          checked={checkedState}
+          onSelect={(event) => event.preventDefault()}
+          onCheckedChange={() => toggleColumns(!allSelected)}
+        >
+          <div className="w-full break-words py-2">
+            {selectedCount} of {totalCount} selected
+          </div>
+        </DropdownMenuCustomCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );

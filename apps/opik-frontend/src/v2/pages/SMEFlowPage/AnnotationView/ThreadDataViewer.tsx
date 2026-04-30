@@ -11,6 +11,7 @@ import TraceMessages from "@/v2/pages-shared/traces/TraceMessages/TraceMessages"
 import { COLUMN_TYPE } from "@/types/shared";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import { manageToolFilter } from "@/v2/pages-shared/traces/spanTypeFilter";
+import TraceIdentifier from "./TraceIdentifier";
 
 const MAX_THREAD_TRACES = 1000;
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -111,6 +112,10 @@ const ThreadDataViewer: React.FunctionComponent = () => {
   return (
     <>
       <div className="relative pr-4">
+        <TraceIdentifier
+          label="Thread"
+          id={thread?.thread_model_id || thread?.id || ""}
+        />
         {isFetching && (
           <div className="absolute right-6 top-2 z-10">
             <Loader2 className="size-4 animate-spin text-slate-400" />

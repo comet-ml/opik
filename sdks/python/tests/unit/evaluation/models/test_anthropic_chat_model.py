@@ -24,8 +24,8 @@ def _make_text_response(text="ok"):
     return SimpleNamespace(content=[block])
 
 
-def _make_tool_use_response(data):
-    block = SimpleNamespace(type="tool_use", input=data)
+def _make_tool_use_response(data, *, block_id="call_1", name="json_tool_call"):
+    block = SimpleNamespace(type="tool_use", id=block_id, name=name, input=data)
     return SimpleNamespace(content=[block])
 
 
@@ -59,23 +59,60 @@ def _clear_model_cache():
 
 
 class TestResponseParser:
-    def test_extract_text_content(self):
-        response = _make_text_response("hello world")
-        assert response_parser.extract_text_content(response) == "hello world"
+    def test_parses_text_response(self):
+        message = response_parser.parse_assistant_message(
+            _make_text_response("hello world")
+        )
+        assert message == {"role": "assistant", "content": "hello world"}
 
-    def test_extract_text_content_none_when_no_text(self):
-        response = SimpleNamespace(content=[SimpleNamespace(type="tool_use", input={})])
-        assert response_parser.extract_text_content(response) is None
+    def test_concatenates_multiple_text_blocks(self):
+        response = SimpleNamespace(
+            content=[
+                SimpleNamespace(type="text", text="hello "),
+                SimpleNamespace(type="text", text="world"),
+            ]
+        )
+        message = response_parser.parse_assistant_message(response)
+        assert message["content"] == "hello world"
 
-    def test_extract_tool_use_content(self):
+    def test_promotes_single_tool_use_arguments_into_content(self):
         data = {"score": 10, "reason": "good"}
-        response = _make_tool_use_response(data)
-        result = response_parser.extract_tool_use_content(response)
-        assert json.loads(result) == data
+        message = response_parser.parse_assistant_message(_make_tool_use_response(data))
+        assert message["role"] == "assistant"
+        assert "tool_calls" not in message
+        assert json.loads(message["content"]) == data
 
-    def test_extract_tool_use_content_none_when_no_tool(self):
-        response = _make_text_response("hello")
-        assert response_parser.extract_tool_use_content(response) is None
+    def test_emits_tool_calls_when_text_and_tool_use_coexist(self):
+        response = SimpleNamespace(
+            content=[
+                SimpleNamespace(type="text", text="picking a tool"),
+                SimpleNamespace(
+                    type="tool_use",
+                    id="call_42",
+                    name="web_search",
+                    input={"query": "capital of France"},
+                ),
+            ]
+        )
+        message = response_parser.parse_assistant_message(response)
+        assert message["content"] == "picking a tool"
+        assert message["tool_calls"] == [
+            {
+                "id": "call_42",
+                "type": "function",
+                "function": {
+                    "name": "web_search",
+                    "arguments": json.dumps({"query": "capital of France"}),
+                },
+            }
+        ]
+
+    def test_raises_when_no_text_and_no_tool_use(self):
+        from opik import exceptions
+
+        response = SimpleNamespace(content=[])
+        with pytest.raises(exceptions.BaseLLMError):
+            response_parser.parse_assistant_message(response)
 
 
 class TestMessageAdapter:

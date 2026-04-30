@@ -366,6 +366,41 @@ class GuardrailBatchMessage(BaseMessage):
 
 
 @dataclasses.dataclass
+class AssertionResultMessage(BaseMessage):
+    """
+    There is no handler for that in the message processor, it exists
+    only as an item of AddAssertionResultsBatchMessage.
+    """
+
+    entity_id: str
+    project_name: Optional[str]
+    name: str
+    status: Literal["passed", "failed"]
+    source: Literal["sdk", "ui", "online_scoring"]
+    reason: Optional[str] = None
+
+    message_type = "AssertionResultMessage"
+
+
+@dataclasses.dataclass
+class AddAssertionResultsBatchMessage(BaseMessage):
+    batch: List[AssertionResultMessage]
+    entity_type: Literal["TRACE", "SPAN", "THREAD"] = "TRACE"
+    # Producers (Opik.log_assertion_results) already split via
+    # sequence_splitter; bypass BatchManager so the streamer doesn't try to
+    # re-batch (no batcher mapping is registered for this message type).
+    supports_batching: bool = False
+
+    message_type = "AddAssertionResultsBatchMessage"
+
+    def __post_init__(self) -> None:
+        self.batch = _deserialize_base_message_batch(self.batch, AssertionResultMessage)
+
+    def as_db_message_dict(self) -> Dict[str, Any]:
+        return _serialize_base_message_batch_to_dict(self.__dict__, self.batch)
+
+
+@dataclasses.dataclass
 class ExperimentItemMessage(BaseMessage):
     """
     There is no handler for that in the message processor, it exists

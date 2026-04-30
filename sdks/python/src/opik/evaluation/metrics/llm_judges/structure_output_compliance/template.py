@@ -1,5 +1,7 @@
 from typing import List, Optional
 
+from opik.evaluation.models import base_model
+
 from .schema import FewShotExampleStructuredOutputCompliance
 
 
@@ -52,17 +54,26 @@ def _format_examples(
     return f"\n\nExamples:\n\n{rendered}\n"
 
 
-def generate_query(
+def build_messages(
     output: str,
     schema: Optional[str] = None,
     few_shot_examples: Optional[List[FewShotExampleStructuredOutputCompliance]] = None,
-) -> str:
+) -> List[base_model.ConversationDict]:
+    """Build the [system, user] message pair for a compliance judgment.
+
+    Static instructions and few-shot examples (config-time only) live in the
+    system message so providers can cache them; the per-call ``schema`` and
+    ``output`` go in the user message.
+    """
     examples_str = _format_examples(few_shot_examples)
     schema_value = schema if schema else "(No schema provided — assume valid JSON.)"
 
-    return (
-        f"{_INSTRUCTIONS}"
-        f"{examples_str}\n"
-        f"<schema>\n{schema_value}\n</schema>\n\n"
-        f"<output>\n{output}\n</output>\n"
+    system_content = f"{_INSTRUCTIONS}{examples_str}"
+    user_content = (
+        f"<schema>\n{schema_value}\n</schema>\n\n<output>\n{output}\n</output>"
     )
+
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]

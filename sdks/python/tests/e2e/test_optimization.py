@@ -8,12 +8,13 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
     dataset = opik_client.create_dataset(dataset_name)
 
     project_name = f"test_optimization_{dataset_name}"
+    optimization_name = f"some-optimization-name-{dataset_name}"
 
     # Create optimization
     optimization = opik_client.create_optimization(
         objective_name="some-objective-name",
         dataset_name=dataset.name,
-        name="some-optimization-name",
+        name=optimization_name,
         project_name=project_name,
     )
 
@@ -22,7 +23,7 @@ def test_optimization_lifecycle__happyflow(opik_client: opik.Opik, dataset_name:
     verifiers.verify_optimization(
         opik_client=opik_client,
         optimization_id=optimization.id,
-        name="some-optimization-name",
+        name=optimization_name,
         dataset_name=dataset.name,
         status="running",
         objective_name="some-objective-name",
