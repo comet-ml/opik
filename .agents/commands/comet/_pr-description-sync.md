@@ -86,17 +86,19 @@ This per-section decision is the merge algorithm. There is no "fuzzy match" or "
 
 This means the **first refresh of a managed-mode PR will be the most disruptive** — it proposes overwriting everything. After that, the marker tracks state and refreshes are surgical. The user can always decline the first prompt to opt out (one-shot `Skip` or per-repo `Never`).
 
-### 4b. Preserve media (always, regardless of marker state)
+### 4b. Preserve media (template-managed sections only)
 
-Independent of the marker check, scan the *current* body for media and lift it verbatim into whatever the regenerated body becomes:
+Scope: media extraction and reinsertion apply **only to template-managed sections** — the `##` headings defined in `.github/pull_request_template.md`. Media inside custom (non-template) `##` sections is preserved verbatim as part of the section's intact appended block (see below) and is **never** lifted out, scanned, or independently reinserted. This prevents duplicate-write and reorder hazards when a custom section contains the same image syntax that the scanner would otherwise pick up.
+
+For each template-managed `##` section in the *current* body, scan it for media and lift it verbatim into the regenerated version of the same section:
 
 - **Markdown images**: any `![…](…)` line.
 - **HTML img tags**: any `<img …>` element (single-line or multi-line).
 - **Video / embed links**: any URL matching `user-images.githubusercontent.com`, `github.com/.../assets/`, `*.loom.com/share/`, `youtube.com/watch`, `youtu.be/`, `vimeo.com/`.
 
-Reinsert each piece of media into the regenerated body at the same position relative to its surrounding `##` heading.
+Reinsert each piece of media at the same relative position within its template-managed section. Sections preserved verbatim under the marker check (Step 4) carry their media along automatically — no separate lift step is needed for them.
 
-If the user adds an entirely new top-level `##` section that isn't in the template (e.g., `## Migration plan`), keep it intact at the bottom of the regenerated body, *above* the `<!-- pr-sync: ... -->` marker.
+**Custom (non-template) sections**: if the user adds an entirely new top-level `##` section that isn't in the template (e.g., `## Migration plan`), keep it intact — content, media, and all — and append it at the bottom of the regenerated body, *above* the `<!-- pr-sync: ... -->` marker. The media scan above must not touch it.
 
 ### 5. Idempotence check (semantic, not byte-equal)
 
