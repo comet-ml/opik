@@ -1,4 +1,4 @@
-package com.comet.opik.api.resources.v1.events;
+package com.comet.opik.api.resources.v1.events.tools;
 
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.Span;
@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -90,7 +89,8 @@ class SpanTreeSerializerTest {
             var node = parseJson(result);
 
             var inputText = node.get(0).get("input").asText();
-            assertThat(inputText).contains("...[truncated]");
+            assertThat(inputText).contains("[TRUNCATED");
+            assertThat(inputText).contains("chars]");
             assertThat(inputText.length()).isLessThan(longInput.length());
         }
 
@@ -126,122 +126,6 @@ class SpanTreeSerializerTest {
 
             assertThat(node.get(0).get("error_info").asText()).isEqualTo("something went wrong");
             assertThat(node.get(0).get("duration_ms").asDouble()).isEqualTo(42.5);
-        }
-    }
-
-    @Nested
-    class SerializeSpanDetails {
-
-        @Test
-        void matchById() {
-            var targetId = UUID.randomUUID();
-            var span = Span.builder()
-                    .id(targetId)
-                    .traceId(UUID.randomUUID())
-                    .name("detail_span")
-                    .type(SpanType.tool)
-                    .startTime(java.time.Instant.now())
-                    .input(JsonUtils.getMapper().valueToTree(Map.of("query", "weather")))
-                    .output(JsonUtils.getMapper().valueToTree(Map.of("result", "sunny")))
-                    .metadata(JsonUtils.getMapper().valueToTree(Map.of("key", "value")))
-                    .model("gpt-4")
-                    .provider("openai")
-                    .tags(Set.of("search", "external"))
-                    .usage(Map.of("prompt_tokens", 100, "completion_tokens", 50))
-                    .duration(123.4)
-                    .build();
-
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(span), targetId.toString());
-            var node = parseJson(result);
-
-            assertThat(node.get("id").asText()).isEqualTo(targetId.toString());
-            assertThat(node.get("name").asText()).isEqualTo("detail_span");
-            assertThat(node.get("type").asText()).isEqualTo("tool");
-            assertThat(node.get("input").get("query").asText()).isEqualTo("weather");
-            assertThat(node.get("output").get("result").asText()).isEqualTo("sunny");
-            assertThat(node.get("metadata").get("key").asText()).isEqualTo("value");
-            assertThat(node.get("model").asText()).isEqualTo("gpt-4");
-            assertThat(node.get("provider").asText()).isEqualTo("openai");
-            assertThat(node.get("usage").get("prompt_tokens").asInt()).isEqualTo(100);
-            assertThat(node.get("duration_ms").asDouble()).isEqualTo(123.4);
-        }
-
-        @Test
-        void noMatchReturnsError() {
-            var span = buildSpan(UUID.randomUUID(), null, "other", SpanType.general, null);
-            var missingId = UUID.randomUUID().toString();
-
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(span), missingId);
-
-            assertThat(result).contains("No span found with id");
-            assertThat(result).contains(missingId);
-        }
-
-        @Test
-        void invalidIdFormatReturnsError() {
-            var span = buildSpan(UUID.randomUUID(), null, "other", SpanType.general, null);
-
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(span), "not-a-uuid");
-
-            assertThat(result).contains("Invalid span_id format");
-        }
-
-        @Test
-        void emptyListReturnsError() {
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(), UUID.randomUUID().toString());
-
-            assertThat(result).contains("No spans available");
-        }
-
-        @Test
-        void nullListReturnsError() {
-            var result = SpanTreeSerializer.serializeSpanDetails(null, UUID.randomUUID().toString());
-
-            assertThat(result).contains("No spans available");
-        }
-
-        @Test
-        void fullUntruncatedOutput() {
-            var longValue = "x".repeat(2000);
-            var targetId = UUID.randomUUID();
-            var span = Span.builder()
-                    .id(targetId)
-                    .traceId(UUID.randomUUID())
-                    .name("big_detail")
-                    .type(SpanType.general)
-                    .startTime(java.time.Instant.now())
-                    .input(JsonUtils.getMapper().valueToTree(Map.of("data", longValue)))
-                    .build();
-
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(span), targetId.toString());
-            var node = parseJson(result);
-
-            assertThat(node.get("input").get("data").asText()).isEqualTo(longValue);
-            assertThat(result).doesNotContain("[truncated]");
-        }
-
-        @Test
-        void includesErrorInfo() {
-            var targetId = UUID.randomUUID();
-            var span = Span.builder()
-                    .id(targetId)
-                    .traceId(UUID.randomUUID())
-                    .name("errored")
-                    .type(SpanType.general)
-                    .startTime(java.time.Instant.now())
-                    .errorInfo(ErrorInfo.builder()
-                            .exceptionType("RuntimeError")
-                            .message("boom")
-                            .traceback("at line 42")
-                            .build())
-                    .build();
-
-            var result = SpanTreeSerializer.serializeSpanDetails(List.of(span), targetId.toString());
-            var node = parseJson(result);
-
-            assertThat(node.get("error_info").get("exception_type").asText()).isEqualTo("RuntimeError");
-            assertThat(node.get("error_info").get("message").asText()).isEqualTo("boom");
-            assertThat(node.get("error_info").get("traceback").asText()).isEqualTo("at line 42");
         }
     }
 

@@ -2,6 +2,11 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
+import com.comet.opik.api.resources.v1.events.tools.EntityRef;
+import com.comet.opik.api.resources.v1.events.tools.EntityType;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
+import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
@@ -49,6 +54,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final LlmProviderFactory llmProviderFactory;
     private final TestSuiteAssertionCounterService testSuiteAssertionCounterService;
     private final SpanService spanService;
+    private final ToolRegistry toolRegistry;
+    private final TraceCompressor traceCompressor;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -58,7 +65,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull TraceService traceService,
             @NonNull TestSuiteAssertionCounterService testSuiteAssertionCounterService,
             @NonNull LlmProviderFactory llmProviderFactory,
-            @NonNull SpanService spanService) {
+            @NonNull SpanService spanService,
+            @NonNull ToolRegistry toolRegistry,
+            @NonNull TraceCompressor traceCompressor) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -66,6 +75,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.llmProviderFactory = llmProviderFactory;
         this.testSuiteAssertionCounterService = testSuiteAssertionCounterService;
         this.spanService = spanService;
+        this.toolRegistry = toolRegistry;
+        this.traceCompressor = traceCompressor;
     }
 
     @Override
@@ -164,7 +175,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private ChatRequest addToolSpecs(ChatRequest request) {
         return ChatRequest.builder()
                 .messages(request.messages())
-                .toolSpecifications(TraceSpanToolDefinition.ALL_TOOLS)
+                .toolSpecifications(toolRegistry.specs())
                 .build();
     }
 
@@ -178,6 +189,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
         var trace = message.trace();
         var spans = fetchSpans(trace.id(), message.workspaceId(), message.userName());
+        var ctx = new TraceToolContext(trace, spans, message.workspaceId(), message.userName());
+        // Pre-seed the active trace into the cache so read/jq/search can hit it without re-fetching.
+        ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
+                traceCompressor.buildFullJson(trace, spans));
         var messages = new ArrayList<>(toolRequest.messages());
 
         for (int round = 0; round < MAX_TOOL_CALL_ROUNDS; round++) {
@@ -190,8 +205,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             for (var toolExecRequest : chatResponse.aiMessage().toolExecutionRequests()) {
                 log.debug("Tool call round '{}' for traceId '{}': tool '{}'",
                         round, trace.id(), toolExecRequest.name());
-                var result = TraceSpanToolDefinition.executeTool(
-                        toolExecRequest.name(), toolExecRequest.arguments(), spans);
+                var result = toolRegistry.execute(
+                        toolExecRequest.name(), toolExecRequest.arguments(), ctx);
                 messages.add(ToolExecutionResultMessage.from(toolExecRequest, result));
             }
 

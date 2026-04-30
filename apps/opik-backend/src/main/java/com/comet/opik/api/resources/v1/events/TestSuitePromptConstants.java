@@ -1,5 +1,8 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
+import com.comet.opik.api.resources.v1.events.tools.ReadTool;
+
 /**
  * Holds the LLM-as-judge prompt templates used for test suite assertion evaluation.
  * <p>
@@ -36,17 +39,24 @@ final class TestSuitePromptConstants {
             (tool calls, LLM calls, intermediate steps) with truncated input/output. \
             Use it to understand what the agent actually did.
 
-            2. **`%s`** — Call this AFTER reviewing the overview to get \
-            the full, untruncated input/output/metadata of a specific span by its ID.
+            2. **`%s`** — Fetch any Opik entity by id, including the full \
+            input/output/metadata of a specific span. Supported types: `trace`, `span`, \
+            `dataset`, `dataset_item`, `project`. Pass `{"type": "<type>", "id": "<uuid>"}`; \
+            optionally add `"tier": "FULL|MEDIUM|SKELETON|SUMMARY"` to override the \
+            auto-picked size. Use `read(type=span, id=<id>, tier=FULL)` after reviewing \
+            the trace overview to drill into a specific span. Returned content is sized \
+            to fit a token budget; long string fields may include a truncation marker \
+            like `[TRUNCATED N chars — use jq('<path>') to see full]` — note that suffix \
+            is informational in this version.
 
             **When to call tools:** Before judging ANY assertion that references tool usage, \
             function calls, model selection, intermediate behavior, or execution details, \
             you MUST call `%s` first. Do NOT assume the tool was or was not called \
             based only on the top-level output — always verify by inspecting the trace.
             """.formatted(
-            TraceSpanToolDefinition.OVERVIEW_TOOL_NAME,
-            TraceSpanToolDefinition.DETAILS_TOOL_NAME,
-            TraceSpanToolDefinition.OVERVIEW_TOOL_NAME);
+            GetTraceSpansTool.NAME,
+            ReadTool.NAME,
+            GetTraceSpansTool.NAME);
 
     static final String USER_MESSAGE_TEMPLATE = """
             ## Input

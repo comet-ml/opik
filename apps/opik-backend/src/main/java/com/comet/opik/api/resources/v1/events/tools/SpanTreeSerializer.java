@@ -1,4 +1,4 @@
-package com.comet.opik.api.resources.v1.events;
+package com.comet.opik.api.resources.v1.events.tools;
 
 import com.comet.opik.api.Span;
 import com.comet.opik.utils.JsonUtils;
@@ -47,27 +47,8 @@ class SpanTreeSerializer {
         return arrayNode.toString();
     }
 
-    String serializeSpanDetails(List<Span> spans, String spanId) {
-        if (spans == null || spans.isEmpty()) {
-            return "{\"error\": \"No spans available for this trace\"}";
-        }
-
-        UUID targetId;
-        try {
-            targetId = UUID.fromString(spanId);
-        } catch (IllegalArgumentException e) {
-            return "{\"error\": \"Invalid span_id format: %s\"}".formatted(spanId);
-        }
-
-        return spans.stream()
-                .filter(s -> targetId.equals(s.id()))
-                .findFirst()
-                .map(s -> buildSpanNode(s, true).toString())
-                .orElse("{\"error\": \"No span found with id: %s\"}".formatted(spanId));
-    }
-
     private static ObjectNode buildTreeNode(Span span, Map<UUID, List<Span>> childrenByParent) {
-        var node = buildSpanNode(span, false);
+        var node = buildSpanNode(span);
         var children = childrenByParent.get(span.id());
         if (children != null && !children.isEmpty()) {
             var childrenArray = JsonUtils.getMapper().createArrayNode();
@@ -79,53 +60,22 @@ class SpanTreeSerializer {
         return node;
     }
 
-    private static ObjectNode buildSpanNode(Span span, boolean detailed) {
+    private static ObjectNode buildSpanNode(Span span) {
         var node = JsonUtils.getMapper().createObjectNode();
         node.put("id", span.id().toString());
         node.put("name", span.name());
         node.put("type", span.type() != null ? span.type().toString() : null);
-
-        if (detailed) {
-            node.set("input", span.input());
-            node.set("output", span.output());
-            node.set("metadata", span.metadata());
-        } else {
-            node.put("input", truncate(jsonNodeToString(span.input())));
-            node.put("output", truncate(jsonNodeToString(span.output())));
-        }
-
+        node.put("input", truncate(jsonNodeToString(span.input())));
+        node.put("output", truncate(jsonNodeToString(span.output())));
         node.put("model", span.model());
         node.put("provider", span.provider());
 
-        if (detailed && span.tags() != null && !span.tags().isEmpty()) {
-            var tagsArray = node.putArray("tags");
-            span.tags().forEach(tagsArray::add);
-        }
-
-        if (detailed && span.usage() != null && !span.usage().isEmpty()) {
-            var usageNode = node.putObject("usage");
-            span.usage().forEach((k, v) -> {
-                if (v != null) {
-                    usageNode.put(k, v);
-                }
-            });
-        }
-
         if (span.errorInfo() != null) {
-            if (detailed) {
-                var errorNode = node.putObject("error_info");
-                errorNode.put("exception_type", span.errorInfo().exceptionType());
-                errorNode.put("message", span.errorInfo().message());
-                errorNode.put("traceback", span.errorInfo().traceback());
-            } else {
-                node.put("error_info", span.errorInfo().message());
-            }
+            node.put("error_info", span.errorInfo().message());
         }
-
         if (span.duration() != null) {
             node.put("duration_ms", span.duration());
         }
-
         return node;
     }
 
@@ -136,7 +86,9 @@ class SpanTreeSerializer {
         if (value.length() <= OVERVIEW_TRUNCATION_LENGTH) {
             return value;
         }
-        return value.substring(0, OVERVIEW_TRUNCATION_LENGTH) + "...[truncated]";
+        int dropped = value.length() - OVERVIEW_TRUNCATION_LENGTH;
+        return value.substring(0, OVERVIEW_TRUNCATION_LENGTH)
+                + "[TRUNCATED %,d chars]".formatted(dropped);
     }
 
     private static String jsonNodeToString(JsonNode node) {
