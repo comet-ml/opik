@@ -196,7 +196,10 @@ export const sanitizeConfigForRequest = (
     getProviderFromModel(model as PROVIDER_MODEL_TYPE) ===
     PROVIDER_TYPE.ANTHROPIC
   ) {
-    if (sanitized.topP != null && sanitized.temperature != null) {
+    if (!supportsSamplingParams(model)) {
+      delete sanitized.temperature;
+      delete sanitized.topP;
+    } else if (sanitized.topP != null && sanitized.temperature != null) {
       delete sanitized.topP;
     }
     if (sanitized.maxCompletionTokens == null) {

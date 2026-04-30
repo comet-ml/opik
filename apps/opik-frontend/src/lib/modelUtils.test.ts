@@ -170,6 +170,19 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.maxCompletionTokens).toBeUndefined();
   });
 
+  it("strips temperature and topP for models that reject sampling params", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+      {
+        temperature: 0.5,
+        topP: 0.9,
+        maxCompletionTokens: 4000,
+      },
+    );
+    expect(result.temperature).toBeUndefined();
+    expect(result.topP).toBeUndefined();
+  });
+
   it("returns the original object when model is empty", () => {
     const configs = { temperature: 0.5 };
     expect(sanitizeConfigForRequest("", configs)).toBe(configs);
