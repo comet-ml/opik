@@ -2094,14 +2094,17 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when batch spans are inserted, no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
-        void batch__whenSpansAreInserted__thenNoCannotConvertTypeErrors(
+        @DisplayName("when batch spans are inserted, no FORMAT Values fast-path errors are emitted (OPIK-5694)")
+        void batch__whenSpansAreInserted__thenNoFastPathErrorsEmitted(
                 TransactionTemplateAsync templateAsync) {
             var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER);
 
-            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long parseInputBefore = readClickHouseErrorCount(templateAsync, 27);
+            long convertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
+            long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
             var spanWithNullLastUpdatedAt = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .endTime(null)
@@ -2118,15 +2121,19 @@ class SpansResourceTest {
             spanResourceClient.batchCreateSpans(List.of(spanWithNullLastUpdatedAt, spanWithEndTime),
                     API_KEY, workspaceName);
 
-            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
-
-            // Code 70 (CANNOT_CONVERT_TYPE) is fully eliminated for spans by this PR. Codes 26 / 27 /
-            // 43 are NOT asserted here because spans BULK_INSERT still has function expressions in
-            // non-datetime cells (toDecimal128 for total_estimated_cost, mapFromArrays for usage)
-            // that trip the FORMAT Values fast-path. Datetime cells were the scope flagged on
-            // OPIK-5694 by Liya; the remaining contributors will need their own follow-up.
-            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
-                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70)")
+            // After the fix, the spans BULK_INSERT must not increment any of the FORMAT Values
+            // fast-path counters. See OPIK-5694.
+            assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
+                    .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 27) - parseInputBefore)
+                    .as("CANNOT_PARSE_INPUT_ASSERTION_FAILED (27): function expressions in Values cells")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 43) - illegalArgBefore)
+                    .as("ILLEGAL_TYPE_OF_ARGUMENT (43): same fast-path fallback path")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 26) - parseQuotedBefore)
+                    .as("CANNOT_PARSE_QUOTED_STRING (26): same fast-path fallback path")
                     .isZero();
         }
 

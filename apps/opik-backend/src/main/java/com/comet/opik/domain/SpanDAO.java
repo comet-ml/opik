@@ -136,10 +136,10 @@ public class SpanDAO {
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal128(:total_estimated_cost<item.index>, 12),
+                        :total_estimated_cost<item.index>,
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
-                        mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
+                        :usage<item.index>,
                         :last_updated_at<item.index>,
                         :error_info<item.index>,
                         :created_by<item.index>,
@@ -1542,23 +1542,12 @@ public class SpanDAO {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                if (span.usage() != null) {
-                    Stream.Builder<String> keys = Stream.builder();
-                    Stream.Builder<Integer> values = Stream.builder();
-
-                    span.usage().forEach((key, value) -> {
-                        if (Objects.nonNull(value)) {
-                            keys.add(key);
-                            values.add(value);
-                        }
-                    });
-
-                    statement.bind("usage_keys" + i, keys.build().toArray(String[]::new));
-                    statement.bind("usage_values" + i, values.build().toArray(Integer[]::new));
-                } else {
-                    statement.bind("usage_keys" + i, new String[]{});
-                    statement.bind("usage_values" + i, new Integer[]{});
-                }
+                Map<String, Integer> usageMap = span.usage() == null
+                        ? Map.of()
+                        : span.usage().entrySet().stream()
+                                .filter(e -> e.getValue() != null)
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                statement.bind("usage" + i, usageMap);
 
                 // Format the timestamp client-side so the SQL contains a plain string literal in the
                 // last_updated_at cell. Fall back to "now" when the client did not provide a value —
@@ -2582,11 +2571,11 @@ public class SpanDAO {
     private void bindCost(Span span, Statement statement, String index) {
         if (span.totalEstimatedCost() != null) {
             // Cost is set manually by the user
-            statement.bind("total_estimated_cost" + index, span.totalEstimatedCost().toString());
+            statement.bind("total_estimated_cost" + index, span.totalEstimatedCost());
             statement.bind("total_estimated_cost_version" + index, "");
         } else {
             BigDecimal estimatedCost = calculateCost(span);
-            statement.bind("total_estimated_cost" + index, estimatedCost.toString());
+            statement.bind("total_estimated_cost" + index, estimatedCost);
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
