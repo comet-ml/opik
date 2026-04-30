@@ -639,7 +639,7 @@ public class ExperimentDAO {
                 SELECT
                     e.workspace_id as workspace_id,
                     e.dataset_id as dataset_id,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], e.project_id) as project_id,
                     e.id as id,
                     e.name as name,
                     e.metadata as metadata,
@@ -669,7 +669,7 @@ public class ExperimentDAO {
                     if(agg.total_count = 0, NULL, agg.passed_count) AS passed_count,
                     if(agg.total_count = 0, NULL, agg.total_count) AS total_count,
                     agg.assertion_scores as assertion_scores,
-                    agg.project_ids as combined_project_ids
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(e.project_id), cast([e.project_id] AS Array(String)), cast([] AS Array(String))) as combined_project_ids
                 FROM experiments_resolved AS e
                 INNER JOIN experiments_from_aggregates_final AS agg ON e.id = agg.experiment_id
                 WHERE 1=1
@@ -686,10 +686,10 @@ public class ExperimentDAO {
                 AND (<experiment_scores_agg_empty_filters>)
                 <endif>
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.project_id)))
                 <endif>
                 <endif>
 
@@ -966,10 +966,10 @@ public class ExperimentDAO {
                 AND (<experiment_scores_agg_empty_filters>)
                 <endif>
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.project_id)))
                 <endif>
                 <endif>
 
@@ -1092,16 +1092,16 @@ public class ExperimentDAO {
                     ef.tags,
                     ef.prompt_ids,
                     ef.created_at,
-                    agg.project_ids as project_ids,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(ef.experiment_project_id), cast([ef.experiment_project_id] AS Array(String)), cast([] AS Array(String))) as project_ids,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], ef.experiment_project_id) as project_id
                 FROM experiments_filtered ef
                 INNER JOIN experiments_from_aggregates_final agg ON ef.id = agg.experiment_id
                 WHERE 1=1
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND ef.experiment_project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(ef.experiment_project_id)))
                 <endif>
                 <endif>
                 <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>
@@ -1499,8 +1499,8 @@ public class ExperimentDAO {
                     agg.duration_values AS duration,
                     agg.total_estimated_cost_sum as total_estimated_cost,
                     agg.total_estimated_cost_avg as total_estimated_cost_avg,
-                    agg.project_ids as project_ids,
-                    if(empty(agg.project_ids), '', agg.project_ids[1]) as project_id,
+                    multiIf(notEmpty(agg.project_ids), agg.project_ids, notEmpty(e.experiment_project_id), cast([e.experiment_project_id] AS Array(String)), cast([] AS Array(String))) as project_ids,
+                    if(notEmpty(agg.project_ids), agg.project_ids[1], e.experiment_project_id) as project_id,
                     agg.pass_rate as pass_rate,
                     agg.passed_count as passed_count,
                     agg.total_count as total_count,
@@ -1509,10 +1509,10 @@ public class ExperimentDAO {
                 INNER JOIN experiments_from_aggregates_final AS agg ON e.id = agg.experiment_id
                 WHERE 1=1
                 <if(project_id)>
-                AND has(agg.project_ids, :project_id)
+                AND (has(agg.project_ids, :project_id) OR (empty(agg.project_ids) AND e.experiment_project_id = :project_id))
                 <endif>
                 <if(project_deleted)>
-                AND (has(agg.project_ids, '') OR empty(agg.project_ids))
+                AND (has(agg.project_ids, '') OR (empty(agg.project_ids) AND empty(e.experiment_project_id)))
                 <endif>
                 <endif>
                 <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>

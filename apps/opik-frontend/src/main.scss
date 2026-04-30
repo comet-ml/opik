@@ -42,6 +42,7 @@
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.6);
 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -121,6 +122,7 @@
     /* Feature/brand colors */
     --feature-experiment-management: #6c6ff7;
     --feature-llm: #52aea4;
+    --color-ollie: #f46e41;
 
     /* Config link icon color */
     --color-fuchsia: #db46ef;
@@ -337,6 +339,7 @@
     /* Feature colors - Dark Mode */
     --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
+    --color-ollie: #f46e41;
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;
@@ -350,6 +353,7 @@
 
     /* Muted colors - Dark Mode */
     --muted: 0, 0%, 11%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.06);
 
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;

@@ -31,6 +31,7 @@ type PluginStore = {
     onWidthChange: (width: number) => void;
   }> | null;
   AssistantPrewarmer: React.ComponentType | null;
+  AssistantDebugInfo: React.ComponentType | null;
   UpgradeButton: React.ComponentType | null;
   init: unknown;
   setupPlugins: (folderName: string) => Promise<void>;
@@ -53,6 +54,7 @@ const PLUGIN_NAMES = [
   "SidebarWorkspaceSelector",
   "AssistantSidebar",
   "AssistantPrewarmer",
+  "AssistantDebugInfo",
   "UpgradeButton",
   "init",
 ];
@@ -73,6 +75,7 @@ const usePluginsStore = create<PluginStore>((set) => ({
   SidebarWorkspaceSelector: null,
   AssistantSidebar: null,
   AssistantPrewarmer: null,
+  AssistantDebugInfo: null,
   UpgradeButton: null,
   init: null,
   setupPlugins: async (folderName: string) => {

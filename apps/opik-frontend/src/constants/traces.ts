@@ -1,4 +1,5 @@
 import { BASE_TRACE_DATA_TYPE, SPAN_TYPE } from "@/types/traces";
+import { TagProps } from "@/ui/tag";
 
 export const TRACE_TYPE_FOR_TREE = "trace";
 
@@ -78,6 +79,17 @@ export const TRACE_TYPE_COLORS_MAP: Record<
     color: "var(--type-llm-assistant)",
     bg: "var(--type-llm-assistant-bg)",
   },
+};
+
+export const TAG_VARIANT_BY_TRACE_TYPE: Record<
+  BASE_TRACE_DATA_TYPE,
+  TagProps["variant"]
+> = {
+  [TRACE_TYPE_FOR_TREE]: "purple",
+  [SPAN_TYPE.llm]: "blue",
+  [SPAN_TYPE.general]: "green",
+  [SPAN_TYPE.tool]: "burgundy",
+  [SPAN_TYPE.guardrail]: "orange",
 };
 
 export const SPAN_TYPE_LABELS_MAP: Record<SPAN_TYPE, string> = {

@@ -2465,4 +2465,85 @@ class ExperimentAggregatesIntegrationTest {
         assertDatasetItemsWithExperimentItems(expectedAfterDelete, afterDelete.content());
     }
 
+    @Test
+    @DisplayName("Experiments with ZERO_UUID aggregate project_id are visible when experiment has correct project_id")
+    void experimentsWithZeroUuidAggregateProjectIdAreVisibleViaFallback() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+
+        var experiment = experimentResourceClient.createPartialExperiment()
+                .datasetId(dataset.id())
+                .datasetName(dataset.name())
+                .projectName(project.name())
+                .build();
+        experimentResourceClient.create(experiment, apiKey, workspaceName);
+
+        // Populate aggregates BEFORE creating items/traces.
+        // This simulates the race condition: aggregate gets project_id = ZERO_UUID
+        // because getProjectId() finds no traces yet.
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // FIND: experiment should be found by project_id despite ZERO_UUID aggregate
+        var findCriteria = ExperimentSearchCriteria.builder()
+                .projectId(project.id())
+                .entityType(EntityType.TRACE)
+                .sortingFields(List.of())
+                .build();
+
+        var findResult = experimentService.find(1, 10, findCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(findResult).isNotNull();
+        assertThat(findResult.content())
+                .as("FIND should return experiment with ZERO_UUID aggregate when experiment has correct project_id")
+                .extracting(Experiment::id)
+                .contains(experiment.id());
+
+        assertThat(findResult.total())
+                .as("FIND total count should include experiment with ZERO_UUID aggregate")
+                .isGreaterThanOrEqualTo(1);
+
+        // FIND_GROUPS: experiment should appear in grouped view
+        var groupCriteria = ExperimentGroupCriteria.builder()
+                .groups(List.of(GroupBy.builder().field(GroupingFactory.DATASET_ID).type(FieldType.STRING).build()))
+                .projectId(project.id())
+                .build();
+
+        var groupsResult = experimentService.findGroups(groupCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(groupsResult).isNotNull();
+        assertThat(groupsResult.content())
+                .as("FIND_GROUPS should return groups containing experiment with ZERO_UUID aggregate")
+                .isNotEmpty();
+
+        // FIND_GROUPS_AGGREGATIONS: experiment should appear in aggregations
+        var groupAggResult = experimentService.findGroupsAggregations(groupCriteria)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        assertThat(groupAggResult).isNotNull();
+        assertThat(groupAggResult.content())
+                .as("FIND_GROUPS_AGGREGATIONS should return aggregations for experiment with ZERO_UUID aggregate")
+                .isNotEmpty();
+    }
+
 }
