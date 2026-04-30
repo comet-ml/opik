@@ -40,7 +40,9 @@ import usePlaygroundStore, {
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import createLogPlaygroundProcessor, {
+  LogProcessor,
   LogProcessorArgs,
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
@@ -78,6 +80,10 @@ const useActionButtonActions = ({
   const queryClient = useQueryClient();
 
   const { toast } = useToast();
+
+  const {
+    permissions: { canLogTraceSpanThread, canCreateExperiments },
+  } = usePermissions();
 
   const isRunning = useIsRunning();
   const setAllRunning = useSetAllRunning();
@@ -595,10 +601,15 @@ const useActionButtonActions = ({
     isToStopRef.current = false;
     setAllRunning(true);
 
-    const logProcessor = createLogPlaygroundProcessor({
-      ...logProcessorHandlers,
-      projectName,
-    });
+    const shouldLogPlaygroundData = datasetName
+      ? canLogTraceSpanThread && canCreateExperiments
+      : canLogTraceSpanThread;
+    const logProcessor: LogProcessor = shouldLogPlaygroundData
+      ? createLogPlaygroundProcessor({
+          ...logProcessorHandlers,
+          projectName,
+        })
+      : { log: () => {}, finishLogging: () => {} };
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
@@ -637,6 +648,9 @@ const useActionButtonActions = ({
     maxConcurrentRequests,
     setProgress,
     projectName,
+    datasetName,
+    canLogTraceSpanThread,
+    canCreateExperiments,
   ]);
 
   const runAll = useCallback(async () => {
@@ -653,10 +667,15 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
 
-      const logProcessor = createLogPlaygroundProcessor({
-        ...logProcessorHandlers,
-        projectName,
-      });
+      const shouldLogPlaygroundData = datasetName
+        ? canLogTraceSpanThread && canCreateExperiments
+        : canLogTraceSpanThread;
+      const logProcessor: LogProcessor = shouldLogPlaygroundData
+        ? createLogPlaygroundProcessor({
+            ...logProcessorHandlers,
+            projectName,
+          })
+        : { log: () => {}, finishLogging: () => {} };
 
       const combinations: DatasetItemPromptCombination[] =
         datasetItems.length > 0
@@ -686,6 +705,9 @@ const useActionButtonActions = ({
       logProcessorHandlers,
       processCombination,
       projectName,
+      datasetName,
+      canLogTraceSpanThread,
+      canCreateExperiments,
     ],
   );
 

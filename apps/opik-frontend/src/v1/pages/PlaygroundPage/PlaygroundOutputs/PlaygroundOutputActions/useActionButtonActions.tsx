@@ -20,7 +20,9 @@ import {
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import createLogPlaygroundProcessor, {
+  LogProcessor,
   LogProcessorArgs,
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
@@ -54,6 +56,10 @@ const useActionButtonActions = ({
   const { navigate } = useNavigateToExperiment();
 
   const { toast } = useToast();
+
+  const {
+    permissions: { canLogTraceSpanThread, canCreateExperiments },
+  } = usePermissions();
 
   const isRunning = useIsRunning();
   const setIsRunning = useSetIsRunning();
@@ -205,7 +211,12 @@ const useActionButtonActions = ({
     setIsRunning(true);
     clearCreatedExperiments();
 
-    const logProcessor = createLogPlaygroundProcessor(logProcessorHandlers);
+    const shouldLogPlaygroundData = datasetName
+      ? canLogTraceSpanThread && canCreateExperiments
+      : canLogTraceSpanThread;
+    const logProcessor: LogProcessor = shouldLogPlaygroundData
+      ? createLogPlaygroundProcessor(logProcessorHandlers)
+      : { log: () => {}, finishLogging: () => {} };
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
@@ -243,6 +254,9 @@ const useActionButtonActions = ({
     logProcessorHandlers,
     maxConcurrentRequests,
     setProgress,
+    datasetName,
+    canLogTraceSpanThread,
+    canCreateExperiments,
   ]);
 
   const navigateToExperiments = useCallback(() => {
