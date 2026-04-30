@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.utils.resources.AgentConfigsResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
+import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.hc.core5.http.HttpStatus;
 import org.awaitility.Awaitility;
@@ -32,6 +33,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.List;
 import java.util.UUID;
@@ -46,11 +48,12 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@DisplayName("AgentConfigService analytics BI events")
+@DisplayName("AgentConfigsResource analytics BI events")
 @ExtendWith(DropwizardAppExtensionProvider.class)
-class AgentConfigServiceAnalyticsTest {
+class AgentConfigsResourceAnalyticsTest {
 
     private static final String USER = UUID.randomUUID().toString();
 
@@ -63,6 +66,7 @@ class AgentConfigServiceAnalyticsTest {
             ZOOKEEPER_CONTAINER);
 
     private final WireMockUtils.WireMockRuntime wireMock;
+    private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
 
     @RegisterApp
     private final TestDropwizardAppExtension app;
@@ -103,7 +107,6 @@ class AgentConfigServiceAnalyticsTest {
 
     @AfterAll
     void tearDownAll() {
-        REDIS.stop();
         MYSQL.stop();
         wireMock.server().stop();
         CLICKHOUSE.stop();
@@ -120,18 +123,20 @@ class AgentConfigServiceAnalyticsTest {
     }
 
     private AgentConfigCreate blueprintRequest(UUID projectId, String projectName) {
+        var value = factory.manufacturePojo(AgentConfigValue.class).toBuilder()
+                .type(AgentConfigValue.ValueType.STRING)
+                .build();
+
+        var blueprint = factory.manufacturePojo(AgentBlueprint.class).toBuilder()
+                .id(null)
+                .type(AgentBlueprint.BlueprintType.BLUEPRINT)
+                .values(List.of(value))
+                .build();
+
         return AgentConfigCreate.builder()
                 .projectId(projectId)
                 .projectName(projectName)
-                .blueprint(AgentBlueprint.builder()
-                        .type(AgentBlueprint.BlueprintType.BLUEPRINT)
-                        .description(UUID.randomUUID().toString())
-                        .values(List.of(AgentConfigValue.builder()
-                                .key(UUID.randomUUID().toString())
-                                .value(UUID.randomUUID().toString())
-                                .type(AgentConfigValue.ValueType.STRING)
-                                .build()))
-                        .build())
+                .blueprint(blueprint)
                 .build();
     }
 
@@ -146,13 +151,28 @@ class AgentConfigServiceAnalyticsTest {
             var apiKey = UUID.randomUUID().toString();
             var workspaceName = UUID.randomUUID().toString();
             var workspaceId = UUID.randomUUID().toString();
+            var projectName = UUID.randomUUID().toString();
 
             mockTargetWorkspace(apiKey, workspaceName, workspaceId);
             wireMock.server().resetRequests();
 
-            agentConfigsClient.createAgentConfig(
-                    blueprintRequest(null, UUID.randomUUID().toString()),
-                    apiKey, workspaceName, HttpStatus.SC_CREATED);
+            var request = blueprintRequest(null, projectName);
+            var blueprintId = agentConfigsClient.createAgentConfig(
+                    request, apiKey, workspaceName, HttpStatus.SC_CREATED);
+
+            assertThat(blueprintId).isNotNull();
+
+            var prodBlueprint = agentConfigsClient.getBlueprintById(
+                    blueprintId, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(prodBlueprint).isNotNull();
+            assertThat(prodBlueprint.id()).isEqualTo(blueprintId);
+            assertThat(prodBlueprint.type()).isEqualTo(AgentBlueprint.BlueprintType.BLUEPRINT);
+            assertThat(prodBlueprint.description()).isEqualTo(request.blueprint().description());
+            assertThat(prodBlueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(request.blueprint().values());
 
             var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
             var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
@@ -170,7 +190,7 @@ class AgentConfigServiceAnalyticsTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.AgentConfigServiceAnalyticsTest#demoProjectNames")
+        @MethodSource("com.comet.opik.domain.AgentConfigsResourceAnalyticsTest#demoProjectNames")
         @DisplayName("demo project: no analytics events are sent")
         void createConfig_demoProject_doesNotSendEvents(String demoProjectName) {
             var apiKey = UUID.randomUUID().toString();
@@ -217,9 +237,23 @@ class AgentConfigServiceAnalyticsTest {
 
             wireMock.server().resetRequests();
 
-            agentConfigsClient.updateAgentConfig(
-                    blueprintRequest(null, projectName),
-                    apiKey, workspaceName, HttpStatus.SC_CREATED);
+            var updateRequest = blueprintRequest(null, projectName);
+            var updatedBlueprintId = agentConfigsClient.updateAgentConfig(
+                    updateRequest, apiKey, workspaceName, HttpStatus.SC_CREATED);
+
+            assertThat(updatedBlueprintId).isNotNull();
+
+            var updatedBlueprint = agentConfigsClient.getBlueprintById(
+                    updatedBlueprintId, null, apiKey, workspaceName, HttpStatus.SC_OK);
+
+            assertThat(updatedBlueprint).isNotNull();
+            assertThat(updatedBlueprint.id()).isEqualTo(updatedBlueprintId);
+            assertThat(updatedBlueprint.type()).isEqualTo(AgentBlueprint.BlueprintType.BLUEPRINT);
+            assertThat(updatedBlueprint.description()).isEqualTo(updateRequest.blueprint().description());
+            assertThat(updatedBlueprint.values())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .isEqualTo(updateRequest.blueprint().values());
 
             var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
 
@@ -231,7 +265,7 @@ class AgentConfigServiceAnalyticsTest {
         }
 
         @ParameterizedTest
-        @MethodSource("com.comet.opik.domain.AgentConfigServiceAnalyticsTest#demoProjectNames")
+        @MethodSource("com.comet.opik.domain.AgentConfigsResourceAnalyticsTest#demoProjectNames")
         @DisplayName("demo project: no analytics events are sent")
         void updateConfig_demoProject_doesNotSendEvents(String demoProjectName) {
             var apiKey = UUID.randomUUID().toString();

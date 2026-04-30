@@ -251,11 +251,11 @@ class AgentConfigServiceImpl implements AgentConfigService {
 
         String projectName = WorkspaceUtils.getProjectName(request.projectName());
 
-        return Mono.fromCallable(() -> {
-            UUID projectId = projectService.findProjectIdByName(workspaceId, projectName)
-                    .orElseThrow(() -> new NotFoundException("Project '%s' not found".formatted(projectName)));
-            return projectService.get(projectId, workspaceId);
-        }).subscribeOn(Schedulers.boundedElastic());
+        return Mono.fromCallable(() -> projectService.findByNames(workspaceId, List.of(projectName))
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new NotFoundException("Project '%s' not found".formatted(projectName))))
+                .subscribeOn(Schedulers.boundedElastic());
     }
 
     private AgentBlueprint createBlueprint(
@@ -504,8 +504,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                             upsertEnvs(dao, workspaceId, projectId, userName, request.envs());
 
                             return null;
-                        })).subscribeOn(Schedulers.boundedElastic()))
-                        .publishOn(Schedulers.boundedElastic())
+                        })))
                         .doOnSuccess(v -> {
                             for (var env : request.envs()) {
                                 trackAgentConfigDeployed(workspaceId, projectId,
@@ -540,8 +539,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                                             .build()));
 
                             return blueprint.id();
-                        })).subscribeOn(Schedulers.boundedElastic()))
-                        .publishOn(Schedulers.boundedElastic())
+                        })))
                         .doOnNext(blueprintId -> trackAgentConfigDeployed(workspaceId, projectId,
                                 blueprintId, blueprintName, envName, userName, project.name())))
                 .then();
