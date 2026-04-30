@@ -111,7 +111,7 @@ describe("AgentRunnerContent", () => {
     });
     mockUseSandboxJobStatus.mockReturnValue({
       data: null,
-    } as ReturnType<typeof useSandboxJobStatus>);
+    } as unknown as ReturnType<typeof useSandboxJobStatus>);
   });
 
   it("shows empty state when idle", () => {
