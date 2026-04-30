@@ -2645,7 +2645,7 @@ class TestEnsureEnvironmentExists:
         env1.name = "staging"
         env2 = MagicMock()
         env2.name = "production"
-        mock_rest_client.environments.list_environments.return_value = MagicMock(
+        mock_rest_client.environments.find_environments.return_value = MagicMock(
             content=[env1, env2]
         )
 
@@ -2668,7 +2668,7 @@ class TestEnsureEnvironmentExists:
 
         existing = MagicMock()
         existing.name = "production"
-        mock_rest_client.environments.list_environments.return_value = MagicMock(
+        mock_rest_client.environments.find_environments.return_value = MagicMock(
             content=[existing]
         )
 
@@ -2690,7 +2690,7 @@ class TestEnsureEnvironmentExists:
     ):
         mock_rest_client = MagicMock()
         mock_opik_api_cls.return_value = mock_rest_client
-        mock_rest_client.environments.list_environments.return_value = MagicMock(
+        mock_rest_client.environments.find_environments.return_value = MagicMock(
             content=[]
         )
 
@@ -2712,7 +2712,7 @@ class TestEnsureEnvironmentExists:
     ):
         mock_rest_client = MagicMock()
         mock_opik_api_cls.return_value = mock_rest_client
-        mock_rest_client.environments.list_environments.side_effect = Exception(
+        mock_rest_client.environments.find_environments.side_effect = Exception(
             "network error"
         )
 
@@ -2733,7 +2733,7 @@ class TestEnsureEnvironmentExists:
     ):
         mock_rest_client = MagicMock()
         mock_opik_api_cls.return_value = mock_rest_client
-        mock_rest_client.environments.list_environments.return_value = MagicMock(
+        mock_rest_client.environments.find_environments.return_value = MagicMock(
             content=[]
         )
         mock_rest_client.environments.create_environment.side_effect = Exception(

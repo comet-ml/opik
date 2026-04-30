@@ -13,7 +13,7 @@ from opik.configurator import opik_rest_helpers
 from opik.exceptions import ConfigurationError
 import opik.url_helpers as url_helpers
 from opik.api_key import opik_api_key
-
+from opik.rest_api import client as rest_api_client
 
 LOGGER = logging.getLogger(__name__)
 
@@ -642,7 +642,6 @@ def _ensure_environment_exists(
     Checks if an environment with the given name exists in the workspace.
     Creates it if it does not. Logs a warning and returns silently on failure.
     """
-    from opik.rest_api import client as rest_api_client
 
     try:
         http_client = opik_rest_helpers._get_httpx_client(
@@ -653,7 +652,7 @@ def _ensure_environment_exists(
             httpx_client=http_client,
         )
 
-        page = rest_client.environments.list_environments()
+        page = rest_client.environments.find_environments()
         existing_names = [env.name for env in (page.content or []) if env.name]
         if environment_name not in existing_names:
             rest_client.environments.create_environment(name=environment_name)
