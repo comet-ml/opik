@@ -33,6 +33,8 @@ def _import_by_type(
     api_key: Optional[str] = None,
     force: bool = False,
     include_attachments: bool = True,
+    destination_project: Optional[str] = None,
+    exclude_experiments: bool = False,
 ) -> None:
     """
     Import data by type (dataset, project, experiment) with pattern matching.
@@ -46,6 +48,11 @@ def _import_by_type(
         debug: Enable debug output
         recreate_experiments: Whether to recreate experiments after importing
         force: Discard any existing manifest and restart from scratch
+        destination_project: When set, override every project_name in the import
+            with this project. Currently wired only on ``import dataset``.
+        exclude_experiments: When True, skip the experiments/traces/spans
+            branch even if an ``experiments/`` directory is present alongside
+            ``datasets/``. Only meaningful with ``destination_project``.
     """
     try:
         debug_print(f"DEBUG: Starting {import_type} import from {path}", debug)
@@ -111,8 +118,48 @@ def _import_by_type(
 
         if import_type == "dataset":
             stats = import_datasets_from_directory(
-                client, source_dir, dry_run, name_pattern, debug, manifest=manifest
+                client,
+                source_dir,
+                dry_run,
+                name_pattern,
+                debug,
+                manifest=manifest,
+                destination_project=destination_project,
             )
+
+            # Same-workspace v1 → v2 migration story: when the user is
+            # redirecting the dataset into a destination project, also pull
+            # any sibling experiments (with the same project override) so a
+            # single ``opik import dataset`` invocation matches the
+            # transitive scope of ``opik copy dataset``. Suppressed by
+            # ``--exclude-experiments`` and a no-op when the export dir
+            # carries no ``experiments/`` (the typical
+            # ``opik export dataset`` layout).
+            if destination_project is not None and not exclude_experiments:
+                experiments_dir = base_path / "experiments"
+                if experiments_dir.exists() and any(
+                    experiments_dir.glob("experiment_*.json")
+                ):
+                    debug_print(
+                        f"Found experiments directory at {experiments_dir}, importing with destination_project={destination_project!r}",
+                        debug,
+                    )
+                    experiments_stats = import_experiments_from_directory(
+                        client,
+                        experiments_dir,
+                        dry_run,
+                        None,
+                        debug,
+                        manifest=manifest,
+                        destination_project=destination_project,
+                    )
+                    # Merge experiment-import stats into the dataset stats so
+                    # the summary surfaces both. ``import_experiments_from_directory``
+                    # already returns the dataset keys it touched, so prefer
+                    # the larger of the two when keys overlap rather than
+                    # silently overwriting dataset counts with zero.
+                    for key, value in experiments_stats.items():
+                        stats[key] = max(stats.get(key, 0), value)
         elif import_type == "project":
             stats = import_projects_from_directory(
                 client,
@@ -317,6 +364,17 @@ import_group.add_command(import_all_command)
     help="Directory containing exported data. Defaults to opik_exports.",
 )
 @click.option(
+    "--destination-project",
+    type=str,
+    default=None,
+    help="Target a specific project on the destination workspace (auto-created if missing). When set, any sibling experiments/ directory is also imported into this project unless --exclude-experiments is passed.",
+)
+@click.option(
+    "--exclude-experiments",
+    is_flag=True,
+    help="Skip experiment/trace/span import even when an experiments/ directory is present. Only meaningful with --destination-project.",
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Show what would be imported without actually importing.",
@@ -336,6 +394,8 @@ def import_dataset(
     ctx: click.Context,
     name: str,
     path: str,
+    destination_project: Optional[str],
+    exclude_experiments: bool,
     dry_run: bool,
     force: bool,
     debug: bool,
@@ -359,11 +419,26 @@ def import_dataset(
     \b
         # Import from a custom path
         opik import my-workspace dataset "my-dataset" --path ./custom-exports/
+    \b
+        # Import into a specific destination project (also pulls sibling experiments/)
+        opik import my-workspace dataset "my-dataset" --destination-project "Project B"
+    \b
+        # Import only the dataset definition + items, skip experiments
+        opik import my-workspace dataset "my-dataset" --destination-project "Project B" --exclude-experiments
     """
     workspace = ctx.obj["workspace"]
     api_key = ctx.obj.get("api_key") if ctx.obj else None
     _import_by_type(
-        "dataset", path, workspace, dry_run, name, debug, api_key=api_key, force=force
+        "dataset",
+        path,
+        workspace,
+        dry_run,
+        name,
+        debug,
+        api_key=api_key,
+        force=force,
+        destination_project=destination_project,
+        exclude_experiments=exclude_experiments,
     )
 
 

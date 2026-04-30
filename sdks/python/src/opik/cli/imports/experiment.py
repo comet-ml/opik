@@ -82,6 +82,7 @@ def _build_dataset_item_id_map(
     dry_run: bool,
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> tuple[Dict[str, str], Dict[str, int]]:
     """Build a mapping from original dataset_item_id to new dataset_item_id.
 
@@ -196,7 +197,13 @@ def _build_dataset_item_id_map(
 
     # Import datasets (this will create dataset items with new IDs)
     dataset_import_stats = import_datasets_from_directory(
-        client, datasets_dir, dry_run, None, debug, manifest=manifest
+        client,
+        datasets_dir,
+        dry_run,
+        None,
+        debug,
+        manifest=manifest,
+        destination_project=destination_project,
     )
 
     # Update dataset_stats with import results
@@ -257,7 +264,9 @@ def _build_dataset_item_id_map(
 
             # Get the imported dataset
             try:
-                dataset = client.get_dataset(dataset_name)
+                dataset = client.get_dataset(
+                    dataset_name, project_name=destination_project
+                )
             except Exception:
                 debug_print(
                     f"Warning: Could not get dataset '{dataset_name}' after import",
@@ -666,6 +675,7 @@ def recreate_experiments(
     dataset_item_id_map: Optional[Dict[str, str]] = None,
     debug: bool = False,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> int:
     """Recreate experiments from JSON files.
 
@@ -675,7 +685,12 @@ def recreate_experiments(
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id.
                             If None, will be treated as empty dict (all items will be skipped).
         manifest: Optional migration manifest for resumable imports.
+        destination_project: When provided, experiments are recreated in this
+            project, overriding ``project_name``.
     """
+    if destination_project is not None:
+        project_name = destination_project
+
     experiment_files = find_experiment_files(project_dir)
 
     if not experiment_files:
@@ -758,8 +773,14 @@ def _import_traces_from_projects_directory(
     dry_run: bool,
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> tuple[Dict[str, str], Dict[str, int]]:
     """Import traces from projects directory and return trace_id_map and statistics.
+
+    Args:
+        destination_project: When provided, traces and spans are written to this
+            project, overriding the project derived from each trace's
+            ``project_dir`` name.
 
     Returns:
         Tuple of (trace_id_map, stats_dict) where:
@@ -791,7 +812,9 @@ def _import_traces_from_projects_directory(
     )
 
     for project_dir in project_dirs:
-        project_name = project_dir.name
+        project_name = (
+            destination_project if destination_project is not None else project_dir.name
+        )
         trace_files = list(project_dir.glob("trace_*.json"))
 
         if not trace_files:
@@ -986,11 +1009,17 @@ def import_experiments_from_directory(
     name_pattern: Optional[str],
     debug: bool,
     manifest: Optional[MigrationManifest] = None,
+    destination_project: Optional[str] = None,
 ) -> Dict[str, int]:
     """Import experiments from a directory.
 
     This function will first import prompts and traces from their respective directories
     (if they exist) to build a trace_id_map, then use that map when recreating experiments.
+
+    Args:
+        destination_project: When provided, all datasets, traces, spans, and
+            recreated experiments are written to this project, overriding any
+            project info derived from the source export.
 
     Returns:
         Dictionary with keys: 'experiments', 'experiments_skipped', 'experiments_errors',
@@ -1056,6 +1085,7 @@ def import_experiments_from_directory(
                 dry_run,
                 debug,
                 manifest=manifest,
+                destination_project=destination_project,
             )
         else:
             debug_print(
@@ -1065,7 +1095,12 @@ def import_experiments_from_directory(
 
         # Import traces first to build trace_id_map
         trace_id_map, traces_stats = _import_traces_from_projects_directory(
-            client, workspace_root, dry_run, debug, manifest=manifest
+            client,
+            workspace_root,
+            dry_run,
+            debug,
+            manifest=manifest,
+            destination_project=destination_project,
         )
 
         if not trace_id_map and not dry_run:
@@ -1215,6 +1250,11 @@ def import_experiments_from_directory(
                         "Using default project name (no project found in metadata or trace files)",
                         debug,
                     )
+
+                # Force every recreated experiment into the destination project
+                # regardless of what the source export said.
+                if destination_project is not None:
+                    project_for_logs = destination_project
 
                 # Use trace_id_map and dataset_item_id_map to translate IDs (empty dicts if None)
                 # Note: dataset_item_id_map is already a dict (not None) from _build_dataset_item_id_map
