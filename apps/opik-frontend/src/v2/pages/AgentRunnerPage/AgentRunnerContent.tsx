@@ -71,7 +71,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
     jobData?.status === SandboxJobStatus.PENDING;
 
   const { DialogComponent: navigationBlockerDialog } = useNavigationBlocker({
-    condition: isJobRunning,
+    condition: isJobRunning || createJobMutation.isPending,
     title: "Agent execution in progress",
     description:
       "Your agent is currently running. Leaving now will interrupt the execution and may result in an incomplete trace. Are you sure you want to leave?",

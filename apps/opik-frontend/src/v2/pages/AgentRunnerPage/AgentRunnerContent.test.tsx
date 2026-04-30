@@ -7,6 +7,7 @@ import {
   SandboxJobStatus,
 } from "@/types/agent-sandbox";
 import useSandboxJobStatus from "@/api/agent-sandbox/useSandboxJobStatus";
+import useSandboxCreateJobMutation from "@/api/agent-sandbox/useSandboxCreateJobMutation";
 import type { PairingState } from "@/hooks/usePairingState";
 import { ReactNode } from "react";
 import { TooltipProvider } from "@/ui/tooltip";
@@ -33,6 +34,7 @@ vi.mock("@/api/agent-sandbox/useSandboxJobStatus", () => ({
 }));
 
 const mockUseSandboxJobStatus = vi.mocked(useSandboxJobStatus);
+const mockUseSandboxCreateJobMutation = vi.mocked(useSandboxCreateJobMutation);
 
 vi.mock("./AgentRunnerEmptyState", () => {
   const MockEmptyState = () => <div data-testid="empty-state">Empty state</div>;
@@ -112,6 +114,10 @@ describe("AgentRunnerContent", () => {
     mockUseSandboxJobStatus.mockReturnValue({
       data: null,
     } as unknown as ReturnType<typeof useSandboxJobStatus>);
+    mockUseSandboxCreateJobMutation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+    } as unknown as ReturnType<typeof useSandboxCreateJobMutation>);
   });
 
   it("shows empty state when idle", () => {
@@ -191,6 +197,22 @@ describe("AgentRunnerContent", () => {
     mockUseSandboxJobStatus.mockReturnValue({
       data: { status: SandboxJobStatus.PENDING },
     } as unknown as ReturnType<typeof useSandboxJobStatus>);
+
+    render(<AgentRunnerContent projectId="proj-1" />, {
+      wrapper: createWrapper(queryClient),
+    });
+
+    expect(mockUseNavigationBlocker).toHaveBeenCalledWith(
+      expect.objectContaining({ condition: true }),
+    );
+  });
+
+  it("blocks navigation while the create-job mutation is in flight (before jobData arrives)", () => {
+    setConnectedRunner();
+    mockUseSandboxCreateJobMutation.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: true,
+    } as unknown as ReturnType<typeof useSandboxCreateJobMutation>);
 
     render(<AgentRunnerContent projectId="proj-1" />, {
       wrapper: createWrapper(queryClient),
