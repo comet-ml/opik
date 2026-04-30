@@ -21,6 +21,7 @@ import TagList from "../TagList/TagList";
 import MessagesTab from "./MessagesTab";
 import DetailsTab from "./DetailsTab";
 import AgentGraphTab from "./AgentGraphTab";
+import ErrorCallout from "./ErrorCallout";
 import AgentConfigurationTab, {
   isAgentConfigurationMetadata,
 } from "./AgentConfigurationTab";
@@ -258,21 +259,23 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
           />
         </div>
 
+        <ErrorCallout error={data.error_info} search={search} />
+
         <Tabs
           defaultValue={defaultTab}
           value={selectedTab!}
           onValueChange={setTab}
         >
-          <TabsList variant="underline">
+          <TabsList variant="segmented">
             {canShowMessagesTab && (
-              <TabsTrigger variant="underline" value="messages">
+              <TabsTrigger variant="segmented" value="messages">
                 Messages
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="details">
+            <TabsTrigger variant="segmented" value="details">
               Details
             </TabsTrigger>
-            <TabsTrigger variant="underline" value="feedback_scores">
+            <TabsTrigger variant="segmented" value="feedback_scores">
               Feedback scores
               <ExplainerIcon
                 className="ml-1"
@@ -280,12 +283,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
               />
             </TabsTrigger>
             {hasSpanAgentGraph && (
-              <TabsTrigger variant="underline" value="graph">
+              <TabsTrigger variant="segmented" value="graph">
                 Agent graph
               </TabsTrigger>
             )}
             {hasAgentConfiguration && (
-              <TabsTrigger variant="underline" value="configuration">
+              <TabsTrigger variant="segmented" value="configuration">
                 Configuration
               </TabsTrigger>
             )}
@@ -309,7 +312,7 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             />
           </TabsContent>
           <TabsContent value="feedback_scores">
-            <div className="space-y-6">
+            <div className="space-y-4">
               <div>
                 <ConfigurableFeedbackScoreTable
                   title={isTrace ? "Trace scores" : "Span scores"}
