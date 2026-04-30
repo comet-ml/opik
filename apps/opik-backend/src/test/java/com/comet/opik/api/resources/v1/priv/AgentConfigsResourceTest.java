@@ -608,20 +608,26 @@ class AgentConfigsResourceTest {
             assertThat(retrieved.description()).isEqualTo("Added " + newKey);
         }
 
-        Stream<Arguments> numericValueTypes() {
+        Stream<Arguments> modifiedKeyValueTypes() {
             return Stream.of(
                     arguments(ValueType.FLOAT, RandomStringUtils.insecure().nextNumeric(3),
-                            RandomStringUtils.insecure().nextNumeric(4)),
+                            RandomStringUtils.insecure().nextNumeric(4), true),
                     arguments(ValueType.INTEGER, RandomStringUtils.insecure().nextNumeric(3),
-                            RandomStringUtils.insecure().nextNumeric(4)),
-                    arguments(ValueType.BOOLEAN, "true", "false"));
+                            RandomStringUtils.insecure().nextNumeric(4), true),
+                    arguments(ValueType.BOOLEAN, "true", "false", true),
+                    arguments(ValueType.STRING, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false),
+                    arguments(ValueType.PROMPT, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false),
+                    arguments(ValueType.PROMPT_COMMIT, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false));
         }
 
         @ParameterizedTest
-        @MethodSource("numericValueTypes")
-        @DisplayName("Success: auto-generates description with new value when numeric-like key is modified")
-        void updateAgentConfig__noDescription__modifiesNumericKey__thenAutoGeneratesDescription(ValueType type,
-                String oldValue, String newValue) {
+        @MethodSource("modifiedKeyValueTypes")
+        @DisplayName("Success: auto-generates description when a key is modified, including new value for primitives only")
+        void updateAgentConfig__noDescription__modifiesKey__thenAutoGeneratesDescription(ValueType type,
+                String oldValue, String newValue, boolean includeValueInDescription) {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
             var key = RandomStringUtils.insecure().nextAlphanumeric(10);
 
@@ -642,44 +648,10 @@ class AgentConfigsResourceTest {
 
             var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(retrieved.description()).isEqualTo("Modified " + key + " to " + newValue);
-        }
-
-        Stream<Arguments> nonNumericValueTypes() {
-            return Stream.of(
-                    arguments(ValueType.STRING),
-                    arguments(ValueType.PROMPT),
-                    arguments(ValueType.PROMPT_COMMIT));
-        }
-
-        @ParameterizedTest
-        @MethodSource("nonNumericValueTypes")
-        @DisplayName("Success: auto-generates description without value when non-numeric key is modified")
-        void updateAgentConfig__noDescription__modifiesNonNumericKey__thenAutoGeneratesDescriptionWithoutValue(
-                ValueType type) {
-            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
-            var key = RandomStringUtils.insecure().nextAlphanumeric(10);
-            var oldValue = RandomStringUtils.insecure().nextAlphanumeric(10);
-            var newValue = RandomStringUtils.insecure().nextAlphanumeric(10);
-
-            createInitialBlueprint(projectId, List.of(
-                    AgentConfigValue.builder().key(key).value(oldValue).type(type).build()));
-
-            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(key).value(newValue)
-                                                    .type(type).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
-
-            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
-                    TEST_WORKSPACE, HttpStatus.SC_OK);
-            assertThat(retrieved.description()).isEqualTo("Modified " + key);
+            var expectedDescription = includeValueInDescription
+                    ? "Modified " + key + " to " + newValue
+                    : "Modified " + key;
+            assertThat(retrieved.description()).isEqualTo(expectedDescription);
         }
 
         @Test
