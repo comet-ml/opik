@@ -102,6 +102,7 @@ class AgentConfigServiceAnalyticsTest {
 
     @AfterAll
     void tearDownAll() {
+        REDIS.stop();
         MYSQL.stop();
         wireMock.server().stop();
         CLICKHOUSE.stop();
