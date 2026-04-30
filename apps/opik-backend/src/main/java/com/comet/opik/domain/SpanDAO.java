@@ -139,7 +139,7 @@ public class SpanDAO {
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
                         mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
-                        if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
                         :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>,
