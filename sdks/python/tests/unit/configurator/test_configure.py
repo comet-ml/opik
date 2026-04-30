@@ -16,6 +16,7 @@ from opik.configurator.configure import (
     OPIK_BASE_URL_CLOUD,
     OPIK_BASE_URL_LOCAL,
     OpikConfigurator,
+    _ensure_environment_exists,
 )
 from opik.exceptions import ConfigurationError
 
@@ -2629,3 +2630,119 @@ class TestSetEnvironmentVariablesForIntegrations:
         )
 
         assert "OPIK_ENVIRONMENT" not in os.environ
+
+
+class TestEnsureEnvironmentExists:
+    @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
+    @patch("opik.rest_api.client.OpikApi")
+    def test_does_not_create_when_environment_already_exists(
+        self, mock_opik_api_cls, mock_get_httpx_client
+    ):
+        mock_rest_client = MagicMock()
+        mock_opik_api_cls.return_value = mock_rest_client
+
+        env1 = MagicMock()
+        env1.name = "staging"
+        env2 = MagicMock()
+        env2.name = "production"
+        mock_rest_client.environments.list_environments.return_value = MagicMock(
+            content=[env1, env2]
+        )
+
+        _ensure_environment_exists(
+            api_key="key",
+            workspace="ws",
+            api_url="http://localhost/api/",
+            environment_name="staging",
+        )
+
+        mock_rest_client.environments.create_environment.assert_not_called()
+
+    @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
+    @patch("opik.rest_api.client.OpikApi")
+    def test_creates_environment_when_it_does_not_exist(
+        self, mock_opik_api_cls, mock_get_httpx_client
+    ):
+        mock_rest_client = MagicMock()
+        mock_opik_api_cls.return_value = mock_rest_client
+
+        existing = MagicMock()
+        existing.name = "production"
+        mock_rest_client.environments.list_environments.return_value = MagicMock(
+            content=[existing]
+        )
+
+        _ensure_environment_exists(
+            api_key="key",
+            workspace="ws",
+            api_url="http://localhost/api/",
+            environment_name="staging",
+        )
+
+        mock_rest_client.environments.create_environment.assert_called_once_with(
+            name="staging"
+        )
+
+    @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
+    @patch("opik.rest_api.client.OpikApi")
+    def test_creates_environment_when_list_is_empty(
+        self, mock_opik_api_cls, mock_get_httpx_client
+    ):
+        mock_rest_client = MagicMock()
+        mock_opik_api_cls.return_value = mock_rest_client
+        mock_rest_client.environments.list_environments.return_value = MagicMock(
+            content=[]
+        )
+
+        _ensure_environment_exists(
+            api_key=None,
+            workspace=None,
+            api_url="http://localhost/api/",
+            environment_name="dev",
+        )
+
+        mock_rest_client.environments.create_environment.assert_called_once_with(
+            name="dev"
+        )
+
+    @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
+    @patch("opik.rest_api.client.OpikApi")
+    def test_does_not_raise_when_list_call_fails(
+        self, mock_opik_api_cls, mock_get_httpx_client
+    ):
+        mock_rest_client = MagicMock()
+        mock_opik_api_cls.return_value = mock_rest_client
+        mock_rest_client.environments.list_environments.side_effect = Exception(
+            "network error"
+        )
+
+        # Should swallow and log, not raise
+        _ensure_environment_exists(
+            api_key="key",
+            workspace="ws",
+            api_url="http://localhost/api/",
+            environment_name="staging",
+        )
+
+        mock_rest_client.environments.create_environment.assert_not_called()
+
+    @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
+    @patch("opik.rest_api.client.OpikApi")
+    def test_does_not_raise_when_create_call_fails(
+        self, mock_opik_api_cls, mock_get_httpx_client
+    ):
+        mock_rest_client = MagicMock()
+        mock_opik_api_cls.return_value = mock_rest_client
+        mock_rest_client.environments.list_environments.return_value = MagicMock(
+            content=[]
+        )
+        mock_rest_client.environments.create_environment.side_effect = Exception(
+            "conflict"
+        )
+
+        _ensure_environment_exists(
+            api_key="key",
+            workspace="ws",
+            api_url="http://localhost/api/",
+            environment_name="staging",
+        )

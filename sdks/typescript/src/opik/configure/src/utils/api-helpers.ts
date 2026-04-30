@@ -178,3 +178,4 @@ export function normalizeOpikUrl(url: string): string {
   // Ensure trailing slash
   return url.endsWith('/') ? url : `${url}/`;
 }
+

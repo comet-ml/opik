@@ -24,6 +24,7 @@ import {
 import { uploadEnvironmentVariablesStep } from '../steps/upload-environment-variables/index';
 import { buildOpikApiUrl } from '../utils/urls';
 import { analytics } from '../utils/analytics';
+import { ensureEnvironmentExists } from './ensure-environment';
 
 export async function runNodejsWizard(options: WizardOptions): Promise<void> {
   debug('Starting Node.js CLI');
@@ -133,6 +134,11 @@ export async function runNodejsWizard(options: WizardOptions): Promise<void> {
     }
   }
   */
+
+  if (environment) {
+    debug(`Ensuring environment '${environment}' exists in workspace`);
+    await ensureEnvironmentExists(host, environment, projectApiKey || undefined, workspaceName);
+  }
 
   debug('Adding environment variables');
   const isLocalDeployment = deploymentType === DeploymentType.LOCAL;

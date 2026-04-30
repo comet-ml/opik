@@ -536,6 +536,14 @@ class OpikConfigurator:
         try:
             url = self.api_url
 
+            if self.environment:
+                _ensure_environment_exists(
+                    api_key=self.api_key,
+                    workspace=self.workspace,
+                    api_url=url,
+                    environment_name=self.environment,
+                )
+
             if save_to_file:
                 new_config = opik.config.OpikConfig(
                     api_key=self.api_key,
@@ -622,6 +630,37 @@ class OpikConfigurator:
             )
 
         self.base_url = normalized_extracted
+
+
+def _ensure_environment_exists(
+    api_key: Optional[str],
+    workspace: Optional[str],
+    api_url: str,
+    environment_name: str,
+) -> None:
+    """
+    Checks if an environment with the given name exists in the workspace.
+    Creates it if it does not. Logs a warning and returns silently on failure.
+    """
+    from opik.rest_api import client as rest_api_client
+
+    try:
+        http_client = opik_rest_helpers._get_httpx_client(
+            api_key=api_key, workspace=workspace
+        )
+        rest_client = rest_api_client.OpikApi(
+            base_url=api_url,
+            httpx_client=http_client,
+        )
+
+        page = rest_client.environments.list_environments()
+        existing_names = [env.name for env in (page.content or []) if env.name]
+        if environment_name not in existing_names:
+            rest_client.environments.create_environment(name=environment_name)
+    except Exception:
+        LOGGER.warning(
+            "Failed to ensure environment '%s' exists.", environment_name, exc_info=True
+        )
 
 
 def _set_environment_variables_for_integrations(
