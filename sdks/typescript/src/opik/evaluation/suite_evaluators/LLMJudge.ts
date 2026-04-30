@@ -222,7 +222,6 @@ export class LLMJudge extends BaseSuiteEvaluator {
         value: 0,
         reason: `LLM scoring failed: ${error instanceof Error ? error.message : String(error)}`,
         scoringFailed: true,
-        categoryName: "suite_assertion",
       }));
     }
   }

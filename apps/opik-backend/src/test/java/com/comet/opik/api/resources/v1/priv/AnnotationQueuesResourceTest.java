@@ -320,6 +320,51 @@ class AnnotationQueuesResourceTest {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
+
+        @Test
+        @DisplayName("Update annotation queue passes required permissions to auth endpoint")
+        void updateAnnotationQueuePassesRequiredPermissionsToAuthEndpoint() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            var projectId = projectResourceClient.createProject(project, apiKey, workspaceName);
+
+            var annotationQueue = factory.manufacturePojo(AnnotationQueue.class)
+                    .toBuilder()
+                    .id(null)
+                    .projectId(projectId)
+                    .build();
+
+            var queueId = annotationQueuesResourceClient.createAnnotationQueue(annotationQueue, apiKey, workspaceName,
+                    HttpStatus.SC_CREATED);
+
+            wireMock.server().resetRequests();
+            annotationQueuesResourceClient.callUpdateAnnotationQueue(queueId,
+                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName).close();
+
+            wireMock.server().verify(
+                    postRequestedFor(urlPathEqualTo("/opik/auth"))
+                            .withRequestBody(matchingJsonPath("$.requiredPermissions[0]",
+                                    equalTo(WorkspaceUserPermission.ANNOTATION_QUEUE_EDIT.getValue()))));
+        }
+
+        @Test
+        @DisplayName("Update annotation queue returns 403 when permission is denied")
+        void updateAnnotationQueueReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.ANNOTATION_QUEUE_EDIT.getValue());
+
+            try (var response = annotationQueuesResourceClient.callUpdateAnnotationQueue(UUID.randomUUID(),
+                    factory.manufacturePojo(AnnotationQueueUpdate.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
     }
 
     @Nested

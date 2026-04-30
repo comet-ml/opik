@@ -36,7 +36,9 @@ run_precommit_scope() {
     exit 1
   fi
 
-  git add -u
+  # -C pins the work tree so an inherited GIT_DIR (worktree commits) can't
+  # trick `git add -u` into using cwd as the work tree.
+  git -C "$REPO_ROOT" add -u
 }
 
 # Check for staged Java files
@@ -50,7 +52,7 @@ if staged_files | grep -E '\.java$' >/dev/null; then
   fi
 
   # Add any potentially modified files by Spotless back to the index
-  git add -u
+  git -C "$REPO_ROOT" add -u
 else
   echo "No Java files changed. Skipping Spotless."
 fi
@@ -66,7 +68,7 @@ if staged_files | grep -E '^apps/opik-frontend/' >/dev/null; then
   fi
 
   # Add any potentially modified files by lint back to the index
-  git add -u
+  git -C "$REPO_ROOT" add -u
 else
   echo "No frontend files changed. Skipping lint and typecheck."
 fi

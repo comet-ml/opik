@@ -155,6 +155,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     INCEPTION_MERCURY_2("inception/mercury-2"),
     INCEPTION_MERCURY_CODER("inception/mercury-coder"),
     INCLUSIONAI_LING_2_6_1T_FREE("inclusionai/ling-2.6-1t:free"),
+    INCLUSIONAI_LING_2_6_FLASH("inclusionai/ling-2.6-flash"),
     INCLUSIONAI_LING_2_6_FLASH_FREE("inclusionai/ling-2.6-flash:free"),
     INFLECTION_INFLECTION_3_PI("inflection/inflection-3-pi"),
     INFLECTION_INFLECTION_3_PRODUCTIVITY("inflection/inflection-3-productivity"),
@@ -274,6 +275,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     NVIDIA_LLAMA_3_3_NEMOTRON_SUPER_49B_V1_5("nvidia/llama-3.3-nemotron-super-49b-v1.5"),
     NVIDIA_NEMOTRON_3_NANO_30B_A3B("nvidia/nemotron-3-nano-30b-a3b"),
     NVIDIA_NEMOTRON_3_NANO_30B_A3B_FREE("nvidia/nemotron-3-nano-30b-a3b:free"),
+    NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B_REASONING_FREE("nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"),
     NVIDIA_NEMOTRON_3_SUPER_120B_A12B("nvidia/nemotron-3-super-120b-a12b"),
     NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE("nvidia/nemotron-3-super-120b-a12b:free"),
     NVIDIA_NEMOTRON_NANO_12B_V2_VL("nvidia/nemotron-nano-12b-v2-vl"),
@@ -363,6 +365,8 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     PERPLEXITY_SONAR_PRO_SEARCH("perplexity/sonar-pro-search"),
     PERPLEXITY_SONAR_REASONING("perplexity/sonar-reasoning"),
     PERPLEXITY_SONAR_REASONING_PRO("perplexity/sonar-reasoning-pro"),
+    POOLSIDE_LAGUNA_M_1_FREE("poolside/laguna-m.1:free"),
+    POOLSIDE_LAGUNA_XS_2_FREE("poolside/laguna-xs.2:free"),
     PRIME_INTELLECT_INTELLECT_3("prime-intellect/intellect-3"),
     QWEN_QWEN_2_5_72B_INSTRUCT("qwen/qwen-2.5-72b-instruct"),
     QWEN_QWEN_2_5_72B_INSTRUCT_FREE("qwen/qwen-2.5-72b-instruct:free"),
@@ -420,6 +424,11 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     QWEN_QWEN3_5_9B("qwen/qwen3.5-9b"),
     QWEN_QWEN3_5_FLASH_02_23("qwen/qwen3.5-flash-02-23"),
     QWEN_QWEN3_5_PLUS_02_15("qwen/qwen3.5-plus-02-15"),
+    QWEN_QWEN3_5_PLUS_20260420("qwen/qwen3.5-plus-20260420"),
+    QWEN_QWEN3_6_27B("qwen/qwen3.6-27b"),
+    QWEN_QWEN3_6_35B_A3B("qwen/qwen3.6-35b-a3b"),
+    QWEN_QWEN3_6_FLASH("qwen/qwen3.6-flash"),
+    QWEN_QWEN3_6_MAX_PREVIEW("qwen/qwen3.6-max-preview"),
     QWEN_QWEN3_6_PLUS("qwen/qwen3.6-plus"),
     QWEN_QWEN3_6_PLUS_PREVIEW_FREE("qwen/qwen3.6-plus-preview:free"),
     QWEN_QWEN3_6_PLUS_FREE("qwen/qwen3.6-plus:free"),
@@ -486,7 +495,14 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     Z_AI_GLM_5_TURBO("z-ai/glm-5-turbo"),
     Z_AI_GLM_5_1("z-ai/glm-5.1"),
     Z_AI_GLM_5V_TURBO("z-ai/glm-5v-turbo"),
-    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest");
+    ANTHROPIC_CLAUDE_HAIKU_LATEST("~anthropic/claude-haiku-latest"),
+    ANTHROPIC_CLAUDE_OPUS_LATEST("~anthropic/claude-opus-latest"),
+    ANTHROPIC_CLAUDE_SONNET_LATEST("~anthropic/claude-sonnet-latest"),
+    GOOGLE_GEMINI_FLASH_LATEST("~google/gemini-flash-latest"),
+    GOOGLE_GEMINI_PRO_LATEST("~google/gemini-pro-latest"),
+    MOONSHOTAI_KIMI_LATEST("~moonshotai/kimi-latest"),
+    OPENAI_GPT_LATEST("~openai/gpt-latest"),
+    OPENAI_GPT_MINI_LATEST("~openai/gpt-mini-latest");
 
     private static final String WARNING_UNKNOWN_MODEL = "could not find OpenRouterModelName with value '{}'";
 

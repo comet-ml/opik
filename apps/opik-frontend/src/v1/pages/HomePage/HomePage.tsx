@@ -7,6 +7,7 @@ import ObservabilitySection from "@/v1/pages/HomePage/ObservabilitySection";
 import EvaluationSection from "@/v1/pages/HomePage/EvaluationSection";
 import OptimizationRunsSection from "@/v1/pages/HomePage/OptimizationRunsSection";
 import WelcomeBanner from "@/v1/pages/HomePage/WecomeBanner";
+import { usePermissions } from "@/contexts/PermissionsContext";
 
 const SHOW_WELCOME_MESSAGE_KEY = "home-welcome-message";
 
@@ -15,6 +16,9 @@ const HomePage = () => {
     useLocalStorageState<boolean>(SHOW_WELCOME_MESSAGE_KEY, {
       defaultValue: true,
     });
+  const {
+    permissions: { canViewOptimizationRuns },
+  } = usePermissions();
 
   return (
     <div className="pt-6">
@@ -31,7 +35,7 @@ const HomePage = () => {
       <OverallPerformanceSection />
       <ObservabilitySection />
       <EvaluationSection />
-      <OptimizationRunsSection />
+      {canViewOptimizationRuns && <OptimizationRunsSection />}
     </div>
   );
 };

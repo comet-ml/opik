@@ -1,5 +1,4 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { RotateCw } from "lucide-react";
 import useLocalStorageState from "use-local-storage-state";
 import { RowSelectionState } from "@tanstack/react-table";
 import { useNavigate } from "@tanstack/react-router";
@@ -36,13 +35,14 @@ import DatasetSelectBox from "@/v2/pages-shared/experiments/DatasetSelectBox/Dat
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import OptimizationRowActionsCell from "@/v2/pages/OptimizationsPage/OptimizationRowActionsCell";
 import SearchInput from "@/shared/SearchInput/SearchInput";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import {
   generateActionsColumDef,
   generateSelectColumDef,
 } from "@/shared/DataTable/utils";
+import OptimizationsEmptyState from "@/v2/pages/OptimizationsPage/OptimizationsEmptyState";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import { buildDocsUrl } from "@/v2/lib/utils";
 import emptyOptStudioLightUrl from "/images/empty-optimization-studio-light.svg";
@@ -330,27 +330,25 @@ const OptimizationsPage: React.FunctionComponent = () => {
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-1 flex min-h-7 items-center justify-between">
         <h1 className="comet-body-accented truncate break-words">
-          Optimization Studio
+          Optimization runs
         </h1>
       </div>
       {isEmpty ? (
-        <PageEmptyState
-          lightImageUrl={emptyOptStudioLightUrl}
-          darkImageUrl={emptyOptStudioDarkUrl}
-          title="No optimization runs yet"
-          description={
-            "Explore different prompt variations and see what performs best.\nOptimizations help you improve accuracy, consistency, and overall user experience."
-          }
-          primaryActionLabel={
-            canUseOptimizationStudio ? "Create optimization run" : undefined
-          }
-          onPrimaryAction={
-            canUseOptimizationStudio ? handleNewOptimizationClick : undefined
-          }
-          docsUrl={buildDocsUrl(
-            "/development/optimization-runs/optimization_studio",
-          )}
-        />
+        isOptimizationStudioEnabled && canUseOptimizationStudio ? (
+          <OptimizationsEmptyState
+            onOptimizeClick={handleNewOptimizationClick}
+          />
+        ) : (
+          <PageEmptyState
+            lightImageUrl={emptyOptStudioLightUrl}
+            darkImageUrl={emptyOptStudioDarkUrl}
+            title="No optimization runs yet"
+            description="Try different prompt versions and see what performs best. Optimization runs help you improve accuracy, consistency, and user experience."
+            docsUrl={buildDocsUrl(
+              "/development/optimization-runs/optimization_studio",
+            )}
+          />
+        )
       ) : (
         <>
           {isOptimizationStudioEnabled && canUseOptimizationStudio && (
@@ -386,16 +384,11 @@ const OptimizationsPage: React.FunctionComponent = () => {
                     <Separator orientation="vertical" className="mx-2 h-4" />
                   </>
                 )}
-                <TooltipWrapper content="Refresh optimizations list">
-                  <Button
-                    variant="outline"
-                    size="icon-sm"
-                    className="shrink-0"
-                    onClick={() => refetch()}
-                  >
-                    <RotateCw />
-                  </Button>
-                </TooltipWrapper>
+                <RefreshButton
+                  tooltip="Refresh optimizations list"
+                  isFetching={isFetching}
+                  onRefresh={() => refetch()}
+                />
                 <ColumnsButton
                   columns={visibleColumns}
                   selectedColumns={selectedColumns}

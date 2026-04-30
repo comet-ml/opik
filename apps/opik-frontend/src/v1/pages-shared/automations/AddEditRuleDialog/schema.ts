@@ -101,10 +101,13 @@ export const FiltersSchema = z
         }
       }
 
-      // Validate key for dictionary types
+      // Validate key for dictionary types (optional for input/output)
+      const isKeyOptionalField =
+        filter.field === "input" || filter.field === "output";
       if (
         (filter.type === COLUMN_TYPE.dictionary ||
           filter.type === COLUMN_TYPE.numberDictionary) &&
+        !isKeyOptionalField &&
         (!filter.key || filter.key.trim().length === 0)
       ) {
         ctx.addIssue({

@@ -76,8 +76,23 @@ export const PromptDiffPair: React.FC<{
     diffTemplate ?? diffPrompt?.requested_version?.template ?? "";
   const changed = baseText !== diffText;
   const commitsChanged = baseCommit !== diffCommit;
+  const hasBase = !!baseCommit || baseTemplate !== undefined;
+  const hasDiff = !!diffCommit || diffTemplate !== undefined;
 
   const renderDiffContent = (text: string, isBase: boolean) => {
+    if (isBase ? !hasDiff : !hasBase) {
+      return (
+        <div
+          className={cn(
+            "comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border p-2 text-sm",
+            isBase ? SIDE_STYLES.base : SIDE_STYLES.diff,
+          )}
+        >
+          {text || "(empty)"}
+        </div>
+      );
+    }
+
     if (!changed) {
       return (
         <div className="comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-2 text-sm text-muted-foreground">
@@ -92,9 +107,6 @@ export const PromptDiffPair: React.FC<{
       </div>
     );
   };
-
-  const hasBase = !!baseCommit || !!baseTemplate;
-  const hasDiff = !!diffCommit || !!diffTemplate;
 
   return (
     <>

@@ -3,9 +3,15 @@ import get from "lodash/get";
 import { StringParam, useQueryParam } from "use-query-params";
 import { Brain, Calendar, MessageSquareMore, PenLine } from "lucide-react";
 
-import { AgentGraphData, Span, Trace } from "@/types/traces";
+import {
+  AgentGraphData,
+  BASE_TRACE_DATA_TYPE,
+  Span,
+  Trace,
+} from "@/types/traces";
 import {
   METADATA_AGENT_GRAPH_KEY,
+  TAG_VARIANT_BY_TRACE_TYPE,
   TRACE_TYPE_FOR_TREE,
 } from "@/constants/traces";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -246,7 +252,9 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
             traceId={traceId}
             spanId={spanId}
             className="pl-1"
-            tagVariant="gray"
+            tagVariant={
+              TAG_VARIANT_BY_TRACE_TYPE[type as BASE_TRACE_DATA_TYPE] ?? "gray"
+            }
           />
         </div>
 

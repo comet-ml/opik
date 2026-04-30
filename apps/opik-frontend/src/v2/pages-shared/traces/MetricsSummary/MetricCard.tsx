@@ -25,6 +25,9 @@ export type MetricCardProps = {
   selected?: boolean;
   onClick?: () => void;
   className?: string;
+  hideDelta?: boolean;
+  hideLabel?: boolean;
+  hideValue?: boolean;
 };
 
 const MetricCard: React.FC<MetricCardProps> = ({
@@ -37,6 +40,9 @@ const MetricCard: React.FC<MetricCardProps> = ({
   selected = false,
   onClick,
   className,
+  hideDelta = false,
+  hideLabel = false,
+  hideValue = false,
 }) => {
   const percentage = computePercentageChange(
     currentRaw ?? null,
@@ -70,37 +76,51 @@ const MetricCard: React.FC<MetricCardProps> = ({
     );
   };
 
+  const iconOnly = hideLabel && hideValue && hideDelta;
+
   return (
     <div
       className={cn(
-        "flex h-11 cursor-pointer items-center justify-between border px-4 transition-colors [&:not(:last-child)]:-mr-px",
+        "flex h-11 cursor-pointer items-center border px-4 transition-colors [&:not(:last-child)]:-mr-px",
+        iconOnly ? "justify-center" : "justify-between",
         selected ? "bg-background" : "bg-soft-background hover:bg-background",
         className,
       )}
       onClick={onClick}
     >
-      <div className="flex items-center gap-3">
+      <div
+        className={cn(
+          "flex min-w-0 items-center",
+          iconOnly ? "gap-0" : "gap-3",
+        )}
+      >
         <Icon className="size-4 shrink-0 text-muted-slate" />
-        <div className="flex items-center gap-2">
-          <span
-            className={cn(
-              "comet-body-s",
-              selected ? "text-foreground" : "text-muted-slate",
+        {!iconOnly && (
+          <div className="flex min-w-0 items-center gap-2">
+            {!hideLabel && (
+              <span
+                className={cn(
+                  "comet-body-s min-w-0 truncate",
+                  selected ? "text-foreground" : "text-muted-slate",
+                )}
+              >
+                {label}
+              </span>
             )}
-          >
-            {label}
-          </span>
-          <span
-            className={cn(
-              "comet-body-s",
-              selected ? "text-foreground" : "text-muted-slate",
-              value === "N/A" && "comet-body-xs text-light-slate",
+            {!hideValue && (
+              <span
+                className={cn(
+                  "comet-body-s min-w-0 truncate",
+                  selected ? "text-foreground" : "text-muted-slate",
+                  value === "N/A" && "comet-body-xs text-light-slate",
+                )}
+              >
+                {value}
+              </span>
             )}
-          >
-            {value}
-          </span>
-          {renderChange()}
-        </div>
+            {!hideDelta && renderChange()}
+          </div>
+        )}
       </div>
     </div>
   );

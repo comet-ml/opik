@@ -6,6 +6,7 @@ import { ValueType } from "recharts/types/component/DefaultTooltipContent";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/date";
 import { formatCost } from "@/lib/money";
+import { useObserveResizeNode } from "@/hooks/useObserveResizeNode";
 import MetricCard from "./MetricCard";
 import useProjectKpiCards, {
   KpiEntityType,
@@ -16,7 +17,10 @@ import { Filters } from "@/types/filters";
 import { LOGS_SOURCE } from "@/types/traces";
 import { PercentageTrendType } from "@/shared/PercentageTrend/PercentageTrend";
 import MetricContainerChart from "@/v2/pages-shared/dashboards/widgets/ProjectMetricsWidget/MetricChart/MetricChartContainer";
-import { METRIC_NAME_TYPE } from "@/api/projects/useProjectMetric";
+import {
+  INTERVAL_TYPE,
+  METRIC_NAME_TYPE,
+} from "@/api/projects/useProjectMetric";
 import { CHART_TYPE } from "@/constants/chart";
 import {
   durationYTickFormatter,
@@ -157,11 +161,11 @@ const SKELETON_BAR_HEIGHTS = Array.from(
 );
 
 const ChartPlaceholderBars: React.FC = () => (
-  <div className="flex h-[var(--chart-height)] min-h-[80px] items-end gap-[3px]">
+  <div className="flex h-[var(--chart-height)] min-h-[80px] min-w-0 items-end gap-[3px] overflow-hidden">
     {SKELETON_BAR_HEIGHTS.map((height, i) => (
       <div
         key={i}
-        className="flex-1 rounded-t-sm bg-[hsl(var(--muted))]"
+        className="min-w-0 flex-1 rounded-t-sm bg-[hsl(var(--muted))]"
         style={{ height }}
       />
     ))}
@@ -180,6 +184,19 @@ const ChartEmptyState: React.FC = () => (
 );
 
 const REFETCH_INTERVAL = 30000;
+
+type CardMode = "full" | "no-delta" | "no-label" | "icon-only";
+
+const PER_CARD_WIDTH_FULL = 240;
+const PER_CARD_WIDTH_NO_DELTA = 160;
+const PER_CARD_WIDTH_NO_LABEL = 80;
+
+const getCardMode = (perCardWidth: number): CardMode => {
+  if (perCardWidth >= PER_CARD_WIDTH_FULL) return "full";
+  if (perCardWidth >= PER_CARD_WIDTH_NO_DELTA) return "no-delta";
+  if (perCardWidth >= PER_CARD_WIDTH_NO_LABEL) return "no-label";
+  return "icon-only";
+};
 
 export type MetricsSummaryProps = {
   projectId: string;
@@ -266,10 +283,41 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
     [],
   );
 
+  const [containerWidth, setContainerWidth] = useState(0);
+  const handleResize = useCallback((node: HTMLDivElement) => {
+    setContainerWidth(node.getBoundingClientRect().width);
+  }, []);
+  const { ref: containerRef } =
+    useObserveResizeNode<HTMLDivElement>(handleResize);
+
+  const cardMode = useMemo<CardMode>(() => {
+    if (containerWidth === 0) return "full";
+    return getCardMode(containerWidth / filteredCards.length);
+  }, [containerWidth, filteredCards.length]);
+
+  const chartResponsive = useMemo(() => {
+    const isHourly = chartIntervalConfig.interval === INTERVAL_TYPE.HOURLY;
+    switch (cardMode) {
+      case "full":
+        return {};
+      case "no-delta":
+        return { xTickInterval: 1 as const };
+      case "no-label":
+        return {
+          customXTickFormatter: (val: string) =>
+            isHourly
+              ? dayjs(val).utc().format("HH")
+              : dayjs(val).utc().format("D"),
+        };
+      case "icon-only":
+        return { hideXAxis: true, hideYAxis: true };
+    }
+  }, [cardMode, chartIntervalConfig.interval]);
+
   const showData = !isPending && !allZero;
 
   return (
-    <div>
+    <div ref={containerRef}>
       <div
         className="grid"
         style={{
@@ -299,6 +347,9 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
                 isFirst && "rounded-tl-md",
                 isLast && "rounded-tr-md",
               )}
+              hideDelta={cardMode !== "full"}
+              hideLabel={cardMode === "no-label" || cardMode === "icon-only"}
+              hideValue={cardMode === "icon-only"}
             />
           );
         })}
@@ -330,6 +381,7 @@ const MetricsSummary: React.FC<MetricsSummaryProps> = ({
             logsSource={logsSource}
             tooltipPosition={{ y: 0 }}
             targetTickCount={2}
+            {...chartResponsive}
             {...chartFilters}
           />
         ) : (

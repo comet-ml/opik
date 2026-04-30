@@ -156,6 +156,20 @@ describe("resolveProjectSwitchTarget", () => {
     expect(result.search).toBeUndefined();
   });
 
+  it("stays on /agent-playground (empty allowlist) with empty search", () => {
+    const result = resolveProjectSwitchTarget(
+      [...projectChain, match(`${CUR}/agent-playground`)],
+      { anything: "x" },
+      WS,
+      NEW_PROJECT,
+    );
+    expect(result).toEqual({
+      to: "/$workspaceName/projects/$projectId/agent-playground",
+      params: { workspaceName: WS, projectId: NEW_PROJECT },
+      search: {},
+    });
+  });
+
   it("stays on /home with empty search (search dropped)", () => {
     const result = resolveProjectSwitchTarget(
       [...projectChain, match(`${CUR}/home`)],

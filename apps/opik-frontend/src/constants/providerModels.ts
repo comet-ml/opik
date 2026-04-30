@@ -314,6 +314,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/spotlight",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW,
+      label: "arcee-ai/trinity-large-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE,
       label: "arcee-ai/trinity-large-preview:free",
     },
@@ -689,6 +693,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
       label: "inclusionai/ling-2.6-1t:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH,
+      label: "inclusionai/ling-2.6-flash",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
@@ -1167,6 +1175,11 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "nvidia/nemotron-3-nano-30b-a3b:free",
     },
     {
+      value:
+        PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B_REASONING_FREE,
+      label: "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.NVIDIA_NEMOTRON_3_SUPER_120B_A12B,
       label: "nvidia/nemotron-3-super-120b-a12b",
     },
@@ -1371,6 +1384,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openai/gpt-5.4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_IMAGE_2,
+      label: "openai/gpt-5.4-image-2",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_5_4_MINI,
       label: "openai/gpt-5.4-mini",
     },
@@ -1491,6 +1508,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/hunter-alpha",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
+      label: "openrouter/pareto-code",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
       label: "perplexity/sonar",
     },
@@ -1513,6 +1534,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR_REASONING_PRO,
       label: "perplexity/sonar-reasoning-pro",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_M_1_FREE,
+      label: "poolside/laguna-m.1:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.POOLSIDE_LAGUNA_XS_2_FREE,
+      label: "poolside/laguna-xs.2:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.PRIME_INTELLECT_INTELLECT_3,
@@ -1743,6 +1772,26 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "qwen/qwen3.5-plus-02-15",
     },
     {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_5_PLUS_20260420,
+      label: "qwen/qwen3.5-plus-20260420",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_27B,
+      label: "qwen/qwen3.6-27b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_35B_A3B,
+      label: "qwen/qwen3.6-35b-a3b",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_FLASH,
+      label: "qwen/qwen3.6-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_MAX_PREVIEW,
+      label: "qwen/qwen3.6-max-preview",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.QWEN_QWEN3_6_PLUS,
       label: "qwen/qwen3.6-plus",
     },
@@ -1943,6 +1992,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "xiaomi/mimo-v2-pro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5,
+      label: "xiaomi/mimo-v2.5",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.XIAOMI_MIMO_V2_5_PRO,
+      label: "xiaomi/mimo-v2.5-pro",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_4_32B,
       label: "z-ai/glm-4-32b",
     },
@@ -1997,6 +2054,38 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.Z_AI_GLM_5V_TURBO,
       label: "z-ai/glm-5v-turbo",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_HAIKU_LATEST,
+      label: "~anthropic/claude-haiku-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_LATEST,
+      label: "~anthropic/claude-opus-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_LATEST,
+      label: "~anthropic/claude-sonnet-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_FLASH_LATEST,
+      label: "~google/gemini-flash-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_PRO_LATEST,
+      label: "~google/gemini-pro-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MOONSHOTAI_KIMI_LATEST,
+      label: "~moonshotai/kimi-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_LATEST,
+      label: "~openai/gpt-latest",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_MINI_LATEST,
+      label: "~openai/gpt-mini-latest",
     },
   ],
 

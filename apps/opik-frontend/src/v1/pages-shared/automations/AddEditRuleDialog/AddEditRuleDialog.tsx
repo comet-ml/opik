@@ -38,6 +38,7 @@ import {
   UI_EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
 import { Filter } from "@/types/filters";
+import { COLUMN_TYPE } from "@/types/shared";
 import { isFilterValid } from "@/lib/filters";
 import { isPythonCodeRule, isLLMJudgeRule } from "@/lib/rules";
 import useAppStore from "@/store/AppStore";
@@ -408,8 +409,20 @@ const AddEditRuleDialog: React.FC<AddEditRuleDialogProps> = ({
     const formData = form.getValues();
     const ruleType = formData.type;
 
-    // Filter out empty/incomplete filters using the existing utility
-    const validFilters = formData.filters.filter(isFilterValid);
+    const validFilters = formData.filters
+      .filter((f) =>
+        isFilterValid(
+          (f.field === "input" || f.field === "output") && !f.key
+            ? { ...f, type: COLUMN_TYPE.string }
+            : f,
+        ),
+      )
+      .map((f) => {
+        if ((f.field === "input" || f.field === "output") && f.key) {
+          return { ...f, field: `${f.field}_json` };
+        }
+        return f;
+      });
 
     const ruleData = {
       name: formData.ruleName,

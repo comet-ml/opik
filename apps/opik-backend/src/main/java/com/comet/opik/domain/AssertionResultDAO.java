@@ -1,5 +1,6 @@
 package com.comet.opik.domain;
 
+import com.comet.opik.api.AssertionResultBatchItem;
 import com.comet.opik.api.AssertionStatus;
 import com.comet.opik.api.FeedbackScoreItem;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
@@ -30,6 +31,8 @@ import static com.comet.opik.utils.AsyncUtils.makeMonoContextAware;
 public interface AssertionResultDAO {
 
     Mono<Long> insertBatch(@NonNull EntityType entityType, @NonNull List<? extends FeedbackScoreItem> assertionScores);
+
+    Mono<Long> saveBatch(EntityType entityType, List<AssertionResultBatchItem> assertionResults);
 }
 
 @Singleton
@@ -59,7 +62,7 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                          :project_id<item.index>,
                          :workspace_id,
                          :name<item.index>,
-                         :passed<item.index>,
+                         :status<item.index>,
                          :reason<item.index>,
                          :source<item.index>,
                          :user_name,
@@ -99,6 +102,31 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
         }));
     }
 
+    @Override
+    public Mono<Long> saveBatch(@NonNull EntityType entityType,
+            @NonNull List<AssertionResultBatchItem> assertionResults) {
+
+        Preconditions.checkArgument(CollectionUtils.isNotEmpty(assertionResults),
+                "Argument 'assertionResults' must not be empty");
+
+        return asyncTemplate.nonTransaction(connection -> makeMonoContextAware((userName, workspaceId) -> {
+
+            var logComment = getLogComment("bulk_insert_assertion_result", workspaceId, userName,
+                    assertionResults.size());
+            var template = TemplateUtils.getBatchSql(BULK_INSERT_ASSERTION_RESULT, assertionResults.size());
+            template.add("log_comment", logComment);
+
+            var statement = connection.createStatement(template.render());
+
+            bindAssertionResultParameters(entityType, assertionResults, statement);
+            bindUserNameAndWorkspace(statement, userName, workspaceId);
+
+            return Flux.from(statement.execute())
+                    .flatMap(Result::getRowsUpdated)
+                    .reduce(Long::sum);
+        }));
+    }
+
     private void bindParameters(EntityType entityType, List<? extends FeedbackScoreItem> scores,
             Statement statement) {
         for (var i = 0; i < scores.size(); i++) {
@@ -108,9 +136,24 @@ class AssertionResultDAOImpl implements AssertionResultDAO {
                     .bind("entity_id" + i, item.id())
                     .bind("project_id" + i, item.projectId())
                     .bind("name" + i, item.name())
-                    .bind("passed" + i, item.value().compareTo(BigDecimal.ONE) >= 0
+                    .bind("status" + i, item.value().compareTo(BigDecimal.ONE) >= 0
                             ? AssertionStatus.PASSED.getValue()
                             : AssertionStatus.FAILED.getValue())
+                    .bind("source" + i, item.source().getValue())
+                    .bind("reason" + i, getValueOrDefault(item.reason()));
+        }
+    }
+
+    private void bindAssertionResultParameters(EntityType entityType, List<AssertionResultBatchItem> items,
+            Statement statement) {
+        for (var i = 0; i < items.size(); i++) {
+            var item = items.get(i);
+
+            statement.bind("entity_type" + i, entityType.getType())
+                    .bind("entity_id" + i, item.entityId())
+                    .bind("project_id" + i, item.projectId())
+                    .bind("name" + i, item.name())
+                    .bind("status" + i, item.status().getValue())
                     .bind("source" + i, item.source().getValue())
                     .bind("reason" + i, getValueOrDefault(item.reason()));
         }

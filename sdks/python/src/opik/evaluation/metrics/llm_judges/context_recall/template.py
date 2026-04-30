@@ -1,5 +1,7 @@
 from typing import List, TypedDict
 
+from opik.evaluation.models import base_model
+
 
 class FewShotExampleContextRecall(TypedDict):
     title: str
@@ -42,32 +44,7 @@ FEW_SHOT_EXAMPLES: List[FewShotExampleContextRecall] = [
 ]
 
 
-def generate_query(
-    input: str,
-    output: str,
-    expected_output: str,
-    context: List[str],
-    few_shot_examples: List[FewShotExampleContextRecall],
-) -> str:
-    examples_str = "\n\n".join(
-        [
-            f"#### Example {i + 1}: {example['title']}\n\n"
-            f'- **Input:** "{example["input"]}"\n'
-            f'- **Output:** "{example["output"]}"\n'
-            f'- **Expected Output:** "{example["expected_output"]}"\n'
-            f'- **Context:** "{example["context"]}"\n'
-            f"- **Result:**\n"
-            f"  ```json\n"
-            f"  {{\n"
-            f'    "context_recall_score": {example["context_recall_score"]},\n'
-            f'    "reason": "{example["reason"]}"\n'
-            f"  }}\n"
-            f"  ```"
-            for i, example in enumerate(few_shot_examples)
-        ]
-    )
-
-    return f"""YOU ARE AN EXPERT AI METRIC EVALUATOR SPECIALIZING IN CONTEXTUAL UNDERSTANDING AND RESPONSE ACCURACY.
+_SYSTEM_PROMPT = """YOU ARE AN EXPERT AI METRIC EVALUATOR SPECIALIZING IN CONTEXTUAL UNDERSTANDING AND RESPONSE ACCURACY.
 YOUR TASK IS TO EVALUATE THE "context_recall_score" METRIC, WHICH MEASURES HOW WELL A GIVEN RESPONSE FROM
 AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEXT AND USER INPUT.
 
@@ -123,19 +100,49 @@ AN LLM (Language Model) MATCHES THE EXPECTED ANSWER BASED ON THE PROVIDED CONTEX
 ###FEW-SHOT EXAMPLES###
 
 {examples_str}
+"""
 
-###INPUTS:###
-***
-Input:
-{input}
 
-Output:
-{output}
+def _format_examples(few_shot_examples: List[FewShotExampleContextRecall]) -> str:
+    return "\n\n".join(
+        [
+            f"#### Example {i + 1}: {example['title']}\n\n"
+            f'- **Input:** "{example["input"]}"\n'
+            f'- **Output:** "{example["output"]}"\n'
+            f'- **Expected Output:** "{example["expected_output"]}"\n'
+            f'- **Context:** "{example["context"]}"\n'
+            f"- **Result:**\n"
+            f"  ```json\n"
+            f"  {{\n"
+            f'    "context_recall_score": {example["context_recall_score"]},\n'
+            f'    "reason": "{example["reason"]}"\n'
+            f"  }}\n"
+            f"  ```"
+            for i, example in enumerate(few_shot_examples)
+        ]
+    )
 
-Expected Output:
-{expected_output}
 
-Context:
-{context}
-***
-    """
+def build_messages(
+    input: str,
+    output: str,
+    expected_output: str,
+    context: List[str],
+    few_shot_examples: List[FewShotExampleContextRecall],
+) -> List[base_model.ConversationDict]:
+    system_content = _SYSTEM_PROMPT.format(
+        examples_str=_format_examples(few_shot_examples)
+    )
+    user_content = (
+        "###INPUTS:###\n"
+        "***\n"
+        f"Input:\n{input}\n\n"
+        f"Output:\n{output}\n\n"
+        f"Expected Output:\n{expected_output}\n\n"
+        f"Context:\n{context}\n"
+        "***"
+    )
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]

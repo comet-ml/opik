@@ -54,12 +54,17 @@ public class OpenTelemetryMapper {
         var endTimeMs = Duration.ofNanos(otelSpan.getEndTimeUnixNano()).toMillis();
 
         var otelSpanId = otelSpan.getSpanId();
-        var opikSpanId = convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp);
 
-        // Check for opik.trace_id and opik.parent_span_id override attributes.
+        // Check for opik.trace_id, opik.span_id, and opik.parent_span_id override attributes.
         // When present, these connect the span to an existing OPIK trace/span as-is (no ID conversion).
+        // opik.span_id is typically set by the SDK's OpikSpanProcessor, which mints a UUIDv7 per span and
+        // chains it via opik.parent_span_id so descendants of an attached subtree stay properly linked.
+        var opikSpanIdOverride = extractOpikSpanId(otelSpan);
         var opikTraceIdOverride = extractOpikTraceId(otelSpan);
         var opikParentSpanIdOverride = extractOpikParentSpanId(otelSpan);
+
+        var opikSpanId = opikSpanIdOverride
+                .orElseGet(() -> convertOtelIdToUUIDv7(otelSpanId.toByteArray(), traceTimestamp));
 
         UUID effectiveTraceId;
         UUID opikParentSpanId;
@@ -283,6 +288,21 @@ public class OpenTelemetryMapper {
     public static Optional<UUID> extractOpikParentSpanId(Span otelSpan) {
         return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR)
                 .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_PARENT_SPAN_ID_ATTR));
+    }
+
+    /**
+     * Extracts the opik.span_id attribute from an OTEL span, if present.
+     * When set, the value is used verbatim as the Opik span id, bypassing the SHA-256
+     * conversion of the OTEL span id. The SDK's OpikSpanProcessor mints this per span
+     * and threads it as opik.parent_span_id on each child, so descendants of an attached
+     * OTEL subtree stay linked across batch boundaries without relying on Redis.
+     *
+     * @param otelSpan the OTEL span to extract from
+     * @return the OPIK span UUID if the attribute is present and valid
+     */
+    public static Optional<UUID> extractOpikSpanId(Span otelSpan) {
+        return extractStringAttribute(otelSpan, GeneralMappingRules.OPIK_SPAN_ID_ATTR)
+                .flatMap(value -> parseUUIDv7(value, GeneralMappingRules.OPIK_SPAN_ID_ATTR));
     }
 
     private static Optional<String> extractStringAttribute(Span otelSpan, String key) {

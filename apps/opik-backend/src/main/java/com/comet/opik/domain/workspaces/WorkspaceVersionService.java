@@ -80,6 +80,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  */
 public interface WorkspaceVersionService {
     Mono<WorkspaceVersion> getWorkspaceVersion(String workspaceId, OpikVersion authSuggestedVersion);
+
+    Mono<Boolean> evictCache(String workspaceId);
 }
 
 /**
@@ -233,5 +235,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private WorkspaceVersion buildResponse(OpikVersion version) {
         return WorkspaceVersion.builder().opikVersion(version).build();
+    }
+
+    @Override
+    public Mono<Boolean> evictCache(@NonNull String workspaceId) {
+        return cacheManager.evict(cacheKey(workspaceId), false);
     }
 }

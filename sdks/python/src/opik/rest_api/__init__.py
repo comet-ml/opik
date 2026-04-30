@@ -50,6 +50,9 @@ from .types import (
     AnnotationQueueWrite,
     AnnotationQueueWriteScope,
     AssertionResult,
+    AssertionResultBatchItem,
+    AssertionResultBatchItemSource,
+    AssertionResultBatchItemStatus,
     AssertionResultCompare,
     AssertionScoreAverage,
     AssertionScoreAveragePublic,
@@ -642,6 +645,7 @@ from . import (
     agent_configs,
     alerts,
     annotation_queues,
+    assertion_results,
     attachments,
     automation_rule_evaluators,
     chat_completions,
@@ -674,6 +678,7 @@ from . import (
     workspaces,
 )
 from .alerts import GetWebhookExamplesRequestAlertType
+from .assertion_results import AssertionResultBatchEntityType
 from .attachments import (
     AttachmentListRequestEntityType,
     DownloadAttachmentRequestEntityType,
@@ -760,6 +765,10 @@ __all__ = [
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
     "AssertionResult",
+    "AssertionResultBatchEntityType",
+    "AssertionResultBatchItem",
+    "AssertionResultBatchItemSource",
+    "AssertionResultBatchItemStatus",
     "AssertionResultCompare",
     "AssertionScoreAverage",
     "AssertionScoreAveragePublic",
@@ -1385,6 +1394,7 @@ __all__ = [
     "agent_configs",
     "alerts",
     "annotation_queues",
+    "assertion_results",
     "attachments",
     "automation_rule_evaluators",
     "chat_completions",
