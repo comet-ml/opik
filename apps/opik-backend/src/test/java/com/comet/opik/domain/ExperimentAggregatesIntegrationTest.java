@@ -2546,4 +2546,48 @@ class ExperimentAggregatesIntegrationTest {
                 .isNotEmpty();
     }
 
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: explicit sort + filter consistent before/after aggregation")
+    void explicitSortAndFilterConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+        createExperimentItemWithData(experiment.id(), dataset.id(), project.name(), feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment.id());
+        var sorting = List.of(new com.comet.opik.api.sorting.SortingField("duration",
+                com.comet.opik.api.sorting.Direction.ASC));
+        var filters = List.of(new ExperimentsComparisonFilter("duration", FieldType.NUMBER,
+                Operator.GREATER_THAN, null, "30000"));
+        int pageSize = 2;
+
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, sorting, 1, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, sorting, 1, pageSize, apiKey, workspaceName);
+
+        assertThat(afterAggregation.total())
+                .as("Filtered+sorted total should match before/after aggregation")
+                .isEqualTo(beforeAggregation.total());
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
 }

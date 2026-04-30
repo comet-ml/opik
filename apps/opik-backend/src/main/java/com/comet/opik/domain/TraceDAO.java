@@ -224,7 +224,7 @@ class TraceDAOImpl implements TraceDAO {
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
-                        if(:last_updated_at<item.index> IS NULL, NULL, parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
                         :error_info<item.index>,
                         :user_name,
                         :user_name,

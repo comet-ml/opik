@@ -49,6 +49,7 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
@@ -2090,6 +2091,53 @@ class SpansResourceTest {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when batch contains a span with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
+        void batch__whenSpanHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+                TransactionTemplateAsync templateAsync) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER);
+
+            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+
+            var spanWithNullLastUpdatedAt = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .endTime(null)
+                    .duration(null)
+                    .lastUpdatedAt(null)
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+            var spanWithEndTime = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .feedbackScores(null)
+                    .totalEstimatedCost(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(spanWithNullLastUpdatedAt, spanWithEndTime),
+                    API_KEY, workspaceName);
+
+            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
+
+            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
+                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
+                            + "into system.errors when spans have null lastUpdatedAt")
+                    .isZero();
+        }
+
+        private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
+            return templateAsync.nonTransaction(connection -> {
+                var statement = connection.createStatement(
+                        "SELECT value FROM system.errors WHERE code = :code");
+                statement.bind("code", errorCode);
+                return Mono.from(statement.execute())
+                        .flatMap(result -> Mono.from(result.map((row, meta) -> {
+                            Long value = row.get("value", Long.class);
+                            return value != null ? value : 0L;
+                        })))
+                        .defaultIfEmpty(0L);
+            }).block();
         }
     }
 
