@@ -58,13 +58,12 @@ The table below shows the default permissions for each role. Custom roles can co
 | --------------------- | ------------------------------- | ------ | ----- | -------- | ---- |
 | Admin                 | Invite users to workspace       | Yes    | Yes   | No       | No   |
 | Admin                 | Configure workspace settings    | Yes    | No    | No       | No   |
-| Admin                 | Delete workspaces               | Yes    | No    | No       | No   |
 | Admin                 | Define AI providers             | Yes    | Yes   | No       | No   |
 | Experiment management | Change project settings         | Yes    | No    | No       | No   |
 | Experiment management | Approve and manage models       | Yes    | No    | No       | No   |
 | Observability         | Create projects                 | Yes    | Yes   | No       | No   |
 | Observability         | Delete projects                 | Yes    | Yes   | No       | No   |
-| Observability         | View project data               | Yes    | Yes   | Yes      | Yes  |
+| Observability         | View logs                       | Yes    | Yes   | Yes      | Yes  |
 | Observability         | Log trace, span, or thread      | Yes    | Yes   | No       | No   |
 | Observability         | Delete trace                    | Yes    | Yes   | No       | No   |
 | Observability         | Annotate trace, span, or thread | Yes    | Yes   | Yes      | No   |
@@ -76,11 +75,11 @@ The table below shows the default permissions for each role. Custom roles can co
 | Dashboards            | Create dashboards               | Yes    | Yes   | No       | No   |
 | Dashboards            | Delete dashboards               | Yes    | Yes   | No       | No   |
 | Experiments           | View experiments                | Yes    | Yes   | No       | Yes  |
-| Experiments           | Create experiment               | Yes    | Yes   | No       | No   |
-| Datasets              | View datasets                   | Yes    | Yes   | No       | Yes  |
-| Datasets              | Create datasets                 | Yes    | Yes   | No       | No   |
-| Datasets              | Edit datasets                   | Yes    | Yes   | No       | No   |
-| Datasets              | Delete datasets                 | Yes    | Yes   | No       | No   |
+| Experiments           | Create experiment ¹             | Yes    | Yes   | No       | No   |
+| Datasets              | View datasets and test suites   | Yes    | Yes   | No       | Yes  |
+| Datasets              | Create datasets and test suites | Yes    | Yes   | No       | No   |
+| Datasets              | Edit datasets and test suites   | Yes    | Yes   | No       | No   |
+| Datasets              | Delete datasets and test suites | Yes    | Yes   | No       | No   |
 | Annotation queues     | View annotation queues          | Yes    | Yes   | Yes      | Yes  |
 | Annotation queues     | Create annotation queue         | Yes    | Yes   | No       | No   |
 | Annotation queues     | Edit annotation queue           | Yes    | Yes   | No       | No   |
@@ -89,7 +88,11 @@ The table below shows the default permissions for each role. Custom roles can co
 | Playground            | Use playground                  | Yes    | Yes   | No       | No   |
 | Optimization          | View Optimization runs          | Yes    | Yes   | No       | Yes  |
 | Optimization          | Delete Optimization runs        | Yes    | Yes   | No       | No   |
-| Optimization          | Use optimization studio         | Yes    | Yes   | No       | No   |
+| Optimization          | Use optimization studio ²       | Yes    | Yes   | No       | No   |
+
+¹ Requires the `Log trace, span, or thread` permission.
+
+² Requires `Log trace, span, or thread`, `Annotate trace, span, or thread`, and `Create experiment` permissions.
 
 ### Custom roles
 
