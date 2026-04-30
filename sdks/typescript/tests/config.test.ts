@@ -8,20 +8,19 @@ import { mockAPIFunction } from "@tests/mockUtils";
 
 describe("Opik client config", () => {
   let loggerErrorSpy: MockInstance<typeof logger.error>;
-  const originalEnvironmentVariables = { ...process.env };
 
   beforeEach(() => {
     loggerErrorSpy = vi.spyOn(logger, "error");
   });
 
   afterEach(() => {
-    process.env = { ...originalEnvironmentVariables };
+    vi.unstubAllEnvs();
     loggerErrorSpy.mockRestore();
   });
 
   it("should throw an error if the host is cloud and the API key is not set", async () => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "";
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", undefined);
 
     expect(() => {
       new Opik();
@@ -29,17 +28,17 @@ describe("Opik client config", () => {
   });
 
   it("should throw an error if the host is cloud and workspace is not set", async () => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "test";
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", "test");
 
     const opik = new Opik();
     expect(opik.config.workspaceName).toBe("default");
   });
 
   it("should not throw an error if everything is set", async () => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "test";
-    process.env.OPIK_WORKSPACE = "test";
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", "test");
+    vi.stubEnv("OPIK_WORKSPACE", "test");
 
     expect(() => {
       new Opik();
@@ -47,11 +46,14 @@ describe("Opik client config", () => {
   });
 
   it("should load the config from the file", async () => {
-    process.env.OPIK_CONFIG_PATH = path.resolve(
-      __dirname,
-      "./examples/valid-opik-config.ini"
+    vi.stubEnv(
+      "OPIK_CONFIG_PATH",
+      path.resolve(__dirname, "./examples/valid-opik-config.ini")
     );
-    process.env.OPIK_API_KEY = undefined;
+    vi.stubEnv("OPIK_API_KEY", undefined);
+    vi.stubEnv("OPIK_URL_OVERRIDE", undefined);
+    vi.stubEnv("OPIK_WORKSPACE", undefined);
+    vi.stubEnv("OPIK_PROJECT_NAME", undefined);
 
     const opik = new Opik();
 
@@ -62,10 +64,10 @@ describe("Opik client config", () => {
   });
 
   it("should load environment from OPIK_ENVIRONMENT env var", async () => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "test";
-    process.env.OPIK_WORKSPACE = "test";
-    process.env.OPIK_ENVIRONMENT = "production";
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", "test");
+    vi.stubEnv("OPIK_WORKSPACE", "test");
+    vi.stubEnv("OPIK_ENVIRONMENT", "production");
 
     const opik = new Opik();
 
@@ -73,11 +75,14 @@ describe("Opik client config", () => {
   });
 
   it("should load environment from config file", async () => {
-    process.env.OPIK_CONFIG_PATH = path.resolve(
-      __dirname,
-      "./examples/valid-opik-config.ini"
+    vi.stubEnv(
+      "OPIK_CONFIG_PATH",
+      path.resolve(__dirname, "./examples/valid-opik-config.ini")
     );
-    process.env.OPIK_API_KEY = undefined;
+    vi.stubEnv("OPIK_API_KEY", undefined);
+    vi.stubEnv("OPIK_URL_OVERRIDE", undefined);
+    vi.stubEnv("OPIK_WORKSPACE", undefined);
+    vi.stubEnv("OPIK_ENVIRONMENT", undefined);
 
     const opik = new Opik();
 
@@ -85,10 +90,10 @@ describe("Opik client config", () => {
   });
 
   it("should default environment to 'development' when not set", async () => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "test";
-    process.env.OPIK_WORKSPACE = "test";
-    delete process.env.OPIK_ENVIRONMENT;
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", "test");
+    vi.stubEnv("OPIK_WORKSPACE", "test");
+    vi.stubEnv("OPIK_ENVIRONMENT", undefined);
 
     const opik = new Opik();
 
@@ -96,11 +101,13 @@ describe("Opik client config", () => {
   });
 
   it("should being able to override config values from the environment variables + explicit config", async () => {
-    process.env.OPIK_CONFIG_PATH = path.resolve(
-      __dirname,
-      "./examples/partial-opik-config.ini"
+    vi.stubEnv(
+      "OPIK_CONFIG_PATH",
+      path.resolve(__dirname, "./examples/partial-opik-config.ini")
     );
-    process.env.OPIK_API_KEY = "api-key-override";
+    vi.stubEnv("OPIK_API_KEY", "api-key-override");
+    vi.stubEnv("OPIK_URL_OVERRIDE", undefined);
+    vi.stubEnv("OPIK_WORKSPACE", undefined);
 
     const opik = new Opik({
       workspaceName: "workspace-override",
@@ -117,11 +124,13 @@ describe("Opik client config", () => {
   });
 
   it("should throw an error if the config is not valid from the file (only API url, missing API key)", async () => {
-    process.env.OPIK_CONFIG_PATH = path.resolve(
-      __dirname,
-      "./examples/invalid-opik-config.ini"
+    vi.stubEnv(
+      "OPIK_CONFIG_PATH",
+      path.resolve(__dirname, "./examples/invalid-opik-config.ini")
     );
-    process.env.OPIK_API_KEY = undefined;
+    vi.stubEnv("OPIK_API_KEY", undefined);
+    vi.stubEnv("OPIK_URL_OVERRIDE", undefined);
+    vi.stubEnv("OPIK_WORKSPACE", undefined);
 
     expect(() => {
       new Opik();
@@ -153,9 +162,9 @@ workspace = "test-tilde"`;
     });
 
     try {
-      process.env.OPIK_CONFIG_PATH = "~/custom/.opik.config";
-      delete process.env.OPIK_API_KEY;
-      delete process.env.OPIK_URL_OVERRIDE;
+      vi.stubEnv("OPIK_CONFIG_PATH", "~/custom/.opik.config");
+      vi.stubEnv("OPIK_API_KEY", undefined);
+      vi.stubEnv("OPIK_URL_OVERRIDE", undefined);
 
       const opik = new Opik();
 
@@ -176,9 +185,13 @@ workspace = "test-tilde"`;
 
 describe("Opik client custom config", () => {
   beforeEach(() => {
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
-    process.env.OPIK_API_KEY = "test";
-    process.env.OPIK_WORKSPACE = "test";
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/api");
+    vi.stubEnv("OPIK_API_KEY", "test");
+    vi.stubEnv("OPIK_WORKSPACE", "test");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
   });
 
   it("Custom headers present - happy path - initial configuration", async () => {
@@ -281,7 +294,6 @@ describe("Opik client custom config", () => {
 describe("Opik client apiKey propagation", () => {
   const originalFetch = global.fetch;
   let capturedHeaders: Headers | null = null;
-  const originalEnvironmentVariables = { ...process.env };
 
   beforeEach(() => {
     // Mock fetch to capture request headers
@@ -304,7 +316,7 @@ describe("Opik client apiKey propagation", () => {
   afterEach(() => {
     global.fetch = originalFetch;
     capturedHeaders = null;
-    process.env = { ...originalEnvironmentVariables };
+    vi.unstubAllEnvs();
   });
 
   it("should propagate apiKey to Authorization header in HTTP requests", async () => {
@@ -334,9 +346,9 @@ describe("Opik client apiKey propagation", () => {
 
   it("should propagate apiKey from environment variable to HTTP requests", async () => {
     const testApiKey = "env-api-key-67890";
-    process.env.OPIK_API_KEY = testApiKey;
-    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/opik/api";
-    process.env.OPIK_WORKSPACE = "test-workspace";
+    vi.stubEnv("OPIK_API_KEY", testApiKey);
+    vi.stubEnv("OPIK_URL_OVERRIDE", "https://www.comet.com/opik/api");
+    vi.stubEnv("OPIK_WORKSPACE", "test-workspace");
 
     const client = new Opik();
 
