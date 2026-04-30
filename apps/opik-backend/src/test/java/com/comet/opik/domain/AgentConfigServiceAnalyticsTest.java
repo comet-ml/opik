@@ -86,6 +86,7 @@ class AgentConfigServiceAnalyticsTest {
                         .databaseAnalyticsFactory(databaseAnalyticsFactory)
                         .redisUrl(REDIS.getRedisURI())
                         .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportEnabled(true)
                         .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                         .customConfigs(List.of(
                                 new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
