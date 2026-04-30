@@ -564,6 +564,19 @@ class AgentConfigsResourceTest {
             assertThat(retrieved.description()).isEqualTo("Updated blueprint");
         }
 
+        private void createInitialBlueprint(UUID projectId, List<AgentConfigValue> values) {
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+        }
+
         @Test
         @DisplayName("Success: auto-generates description listing added keys when none provided")
         void updateAgentConfig__noDescription__addsKeys__thenAutoGeneratesDescription() {
@@ -573,18 +586,8 @@ class AgentConfigsResourceTest {
             var existingValue = RandomStringUtils.insecure().nextAlphanumeric(10);
             var newValue = RandomStringUtils.insecure().nextNumeric(5);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(existingKey).value(existingValue)
-                                                    .type(ValueType.STRING).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(existingKey).value(existingValue).type(ValueType.STRING).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -622,18 +625,8 @@ class AgentConfigsResourceTest {
             var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
             var key = RandomStringUtils.insecure().nextAlphanumeric(10);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(key).value(oldValue)
-                                                    .type(type).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(key).value(oldValue).type(type).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -669,18 +662,8 @@ class AgentConfigsResourceTest {
             var oldValue = RandomStringUtils.insecure().nextAlphanumeric(10);
             var newValue = RandomStringUtils.insecure().nextAlphanumeric(10);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(key).value(oldValue)
-                                                    .type(type).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(key).value(oldValue).type(type).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -708,20 +691,9 @@ class AgentConfigsResourceTest {
             var keptValue = RandomStringUtils.insecure().nextAlphanumeric(10);
             var removedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(keptKey).value(keptValue)
-                                                    .type(ValueType.STRING).build(),
-                                            AgentConfigValue.builder().key(removedKey).value(removedValue)
-                                                    .type(ValueType.STRING).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(keptKey).value(keptValue).type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key(removedKey).value(removedValue).type(ValueType.STRING).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -749,18 +721,8 @@ class AgentConfigsResourceTest {
             var newValue = RandomStringUtils.insecure().nextAlphanumeric(10);
             var explicitDescription = RandomStringUtils.insecure().nextAlphanumeric(20);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(key).value(oldValue)
-                                                    .type(ValueType.STRING).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(key).value(oldValue).type(ValueType.STRING).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
@@ -794,22 +756,10 @@ class AgentConfigsResourceTest {
             var addedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
             var removedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
 
-            agentConfigsResourceClient.createAgentConfig(
-                    AgentConfigCreate.builder()
-                            .projectId(projectId)
-                            .blueprint(AgentBlueprint.builder()
-                                    .type(BlueprintType.BLUEPRINT)
-                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
-                                    .values(List.of(
-                                            AgentConfigValue.builder().key(unchangedKey).value(unchangedValue)
-                                                    .type(ValueType.STRING).build(),
-                                            AgentConfigValue.builder().key(modifiedKey).value(modifiedOldValue)
-                                                    .type(ValueType.INTEGER).build(),
-                                            AgentConfigValue.builder().key(removedKey).value(removedValue)
-                                                    .type(ValueType.STRING).build()))
-                                    .build())
-                            .build(),
-                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(unchangedKey).value(unchangedValue).type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key(modifiedKey).value(modifiedOldValue).type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key(removedKey).value(removedValue).type(ValueType.STRING).build()));
 
             var blueprintId = agentConfigsResourceClient.updateAgentConfig(
                     AgentConfigCreate.builder()
