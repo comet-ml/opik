@@ -3,7 +3,6 @@ import axios from 'axios';
 import { ensureEnvironmentExists } from '../../src/nodejs/ensure-environment';
 
 vi.mock('axios');
-vi.mock('../../src/utils/debug', () => ({ debug: vi.fn() }));
 vi.mock('../../src/utils/urls', () => ({
   buildOpikApiUrl: (host: string) => `${host}opik/api`,
 }));
@@ -66,21 +65,21 @@ describe('ensureEnvironmentExists', () => {
     expect(postHeaders['Comet-Workspace']).toBeUndefined();
   });
 
-  it('does not throw when the list request fails', async () => {
+  it('throws when the list request fails', async () => {
     vi.mocked(axios.get).mockRejectedValueOnce(new Error('network error'));
 
     await expect(
       ensureEnvironmentExists('http://localhost:5173/', 'staging'),
-    ).resolves.not.toThrow();
+    ).rejects.toThrow("Failed to ensure environment 'staging' exists");
     expect(axios.post).not.toHaveBeenCalled();
   });
 
-  it('does not throw when the create request fails', async () => {
+  it('throws when the create request fails', async () => {
     vi.mocked(axios.get).mockResolvedValueOnce({ data: { content: [] } });
     vi.mocked(axios.post).mockRejectedValueOnce(new Error('conflict'));
 
     await expect(
       ensureEnvironmentExists('http://localhost:5173/', 'staging'),
-    ).resolves.not.toThrow();
+    ).rejects.toThrow("Failed to ensure environment 'staging' exists");
   });
 });

@@ -640,7 +640,10 @@ def _ensure_environment_exists(
 ) -> None:
     """
     Checks if an environment with the given name exists in the workspace.
-    Creates it if it does not. Logs a warning and returns silently on failure.
+    Creates it if it does not.
+
+    Raises:
+        ConfigurationError: If the environment cannot be found or created.
     """
 
     try:
@@ -656,10 +659,10 @@ def _ensure_environment_exists(
         existing_names = [env.name for env in (page.content or []) if env.name]
         if environment_name not in existing_names:
             rest_client.environments.create_environment(name=environment_name)
-    except Exception:
-        LOGGER.warning(
-            "Failed to ensure environment '%s' exists.", environment_name, exc_info=True
-        )
+    except Exception as e:
+        raise ConfigurationError(
+            f"Failed to ensure environment '{environment_name}' exists."
+        ) from e
 
 
 def _set_environment_variables_for_integrations(

@@ -2707,7 +2707,7 @@ class TestEnsureEnvironmentExists:
 
     @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
     @patch("opik.rest_api.client.OpikApi")
-    def test_does_not_raise_when_list_call_fails(
+    def test_raises_when_list_call_fails(
         self, mock_opik_api_cls, mock_get_httpx_client
     ):
         mock_rest_client = MagicMock()
@@ -2716,19 +2716,17 @@ class TestEnsureEnvironmentExists:
             "network error"
         )
 
-        # Should swallow and log, not raise
-        _ensure_environment_exists(
-            api_key="key",
-            workspace="ws",
-            api_url="http://localhost/api/",
-            environment_name="staging",
-        )
-
-        mock_rest_client.environments.create_environment.assert_not_called()
+        with pytest.raises(ConfigurationError):
+            _ensure_environment_exists(
+                api_key="key",
+                workspace="ws",
+                api_url="http://localhost/api/",
+                environment_name="staging",
+            )
 
     @patch("opik.configurator.opik_rest_helpers._get_httpx_client")
     @patch("opik.rest_api.client.OpikApi")
-    def test_does_not_raise_when_create_call_fails(
+    def test_raises_when_create_call_fails(
         self, mock_opik_api_cls, mock_get_httpx_client
     ):
         mock_rest_client = MagicMock()
@@ -2740,9 +2738,10 @@ class TestEnsureEnvironmentExists:
             "conflict"
         )
 
-        _ensure_environment_exists(
-            api_key="key",
-            workspace="ws",
-            api_url="http://localhost/api/",
-            environment_name="staging",
-        )
+        with pytest.raises(ConfigurationError):
+            _ensure_environment_exists(
+                api_key="key",
+                workspace="ws",
+                api_url="http://localhost/api/",
+                environment_name="staging",
+            )

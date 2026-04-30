@@ -1,6 +1,5 @@
 import axios from 'axios';
 import { buildOpikApiUrl } from '../utils/urls';
-import { debug } from '../utils/debug';
 
 export async function ensureEnvironmentExists(
   host: string,
@@ -22,7 +21,7 @@ export async function ensureEnvironmentExists(
     if (!names.includes(environmentName)) {
       await axios.post(baseApiUrl, { name: environmentName }, { headers, timeout: 5000 });
     }
-  } catch {
-    debug(`Could not ensure environment '${environmentName}' exists — skipping.`);
+  } catch (e) {
+    throw new Error(`Failed to ensure environment '${environmentName}' exists: ${e instanceof Error ? e.message : String(e)}`);
   }
 }
