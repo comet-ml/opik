@@ -1,7 +1,18 @@
-import { PROVIDER_MODEL_TYPE, COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { REASONING_MODELS, ANTHROPIC_THINKING_MODELS } from "@/constants/llm";
-import { PROVIDER_TYPE } from "@/types/providers";
-import { parseComposedProviderType } from "@/lib/provider";
+import {
+  AnthropicThinkingEffort,
+  COMPOSED_PROVIDER_TYPE,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
+import {
+  ANTHROPIC_MODEL_CAPABILITIES,
+  DEFAULT_ANTHROPIC_CONFIGS,
+  REASONING_MODELS,
+} from "@/constants/llm";
+import {
+  getProviderFromModel,
+  parseComposedProviderType,
+} from "@/lib/provider";
 import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 
 /**
@@ -72,36 +83,45 @@ export const supportsVertexAIThinkingLevel = (
   );
 };
 
-/**
- * Checks if an Anthropic model supports thinking effort parameter
- * Currently only Claude Opus 4.6 supports adaptive thinking with effort levels
- *
- * @param model - The model type to check
- * @returns true if the model supports thinking effort, false otherwise
- */
-export const supportsAnthropicThinkingEffort = (
-  model?: PROVIDER_MODEL_TYPE | "",
-): boolean => {
-  return Boolean(
-    model &&
-      (ANTHROPIC_THINKING_MODELS as readonly PROVIDER_MODEL_TYPE[]).includes(
-        model as PROVIDER_MODEL_TYPE,
-      ),
-  );
+const EFFORT_LABELS: Record<AnthropicThinkingEffort, string> = {
+  adaptive: "Adaptive",
+  low: "Low",
+  medium: "Medium",
+  high: "High (Default)",
+  xhigh: "xHigh",
+  max: "Max",
 };
 
-/**
- * Updates provider config to ensure reasoning models have temperature >= 1.0
- * This function ensures that OpenAI reasoning models (GPT-5 family, O-series)
- * have their temperature set to at least 1.0, as they don't support temperature < 1
- *
- * @param currentConfig - The current provider config (can be LLMPromptConfigsType or a more specific config type)
- * @param params - Configuration object containing model and provider
- * @param params.model - The model type
- * @param params.provider - The composed provider type
- * @returns Updated config with temperature adjusted if needed, or the original config
- */
-export const updateProviderConfig = <T extends { temperature?: number }>(
+export const supportsSamplingParams = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.supportsSamplingParams ?? true;
+
+export const supportsAnthropicThinkingEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.thinkingEffortOptions;
+
+export const getAnthropicThinkingEffortOptions = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): Array<{ label: string; value: AnthropicThinkingEffort }> =>
+  (
+    ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.thinkingEffortOptions ?? []
+  ).map((value) => ({ label: EFFORT_LABELS[value], value }));
+
+// Single reconciler called by every model-change handler (playground, judge
+// dialog). Keeping the rules here means the form state stays valid even when
+// the user switches models without opening the config dropdown.
+export const updateProviderConfig = <
+  T extends {
+    temperature?: number;
+    topP?: number;
+    thinkingEffort?: AnthropicThinkingEffort;
+  },
+>(
   currentConfig: T | undefined,
   params: {
     model: PROVIDER_MODEL_TYPE | "";
@@ -114,7 +134,6 @@ export const updateProviderConfig = <T extends { temperature?: number }>(
 
   const providerType = parseComposedProviderType(params.provider);
 
-  // Only adjust temperature for OpenAI reasoning models
   if (
     providerType === PROVIDER_TYPE.OPEN_AI &&
     isReasoningModel(params.model) &&
@@ -127,5 +146,67 @@ export const updateProviderConfig = <T extends { temperature?: number }>(
     };
   }
 
+  if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const next: T = { ...currentConfig };
+    let changed = false;
+
+    if (!supportsSamplingParams(params.model)) {
+      if (next.temperature !== undefined) {
+        next.temperature = undefined;
+        changed = true;
+      }
+      if (next.topP !== undefined) {
+        next.topP = undefined;
+        changed = true;
+      }
+    }
+
+    const effortOptions = getAnthropicThinkingEffortOptions(params.model);
+    if (effortOptions.length === 0) {
+      if (next.thinkingEffort !== undefined) {
+        next.thinkingEffort = undefined;
+        changed = true;
+      }
+    } else if (
+      next.thinkingEffort !== undefined &&
+      !effortOptions.some((o) => o.value === next.thinkingEffort)
+    ) {
+      next.thinkingEffort = "high";
+      changed = true;
+    }
+
+    return changed ? next : currentConfig;
+  }
+
   return currentConfig;
+};
+
+// Last-mile request hardening, complementary to updateProviderConfig: this
+// layer doesn't trust upstream and keeps the payload valid for stale state
+// (e.g. older persisted prompts missing maxCompletionTokens).
+export const sanitizeConfigForRequest = (
+  model: PROVIDER_MODEL_TYPE | "",
+  configs: Record<string, unknown>,
+): Record<string, unknown> => {
+  if (!model) return configs;
+
+  const sanitized: Record<string, unknown> = { ...configs };
+
+  if (
+    getProviderFromModel(model as PROVIDER_MODEL_TYPE) ===
+    PROVIDER_TYPE.ANTHROPIC
+  ) {
+    if (!supportsSamplingParams(model)) {
+      delete sanitized.temperature;
+      delete sanitized.topP;
+    } else if (sanitized.topP != null && sanitized.temperature != null) {
+      delete sanitized.topP;
+    }
+    if (sanitized.maxCompletionTokens == null) {
+      sanitized.maxCompletionTokens =
+        DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+    }
+  }
+
+  return sanitized;
 };
