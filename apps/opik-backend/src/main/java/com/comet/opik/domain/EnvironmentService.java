@@ -181,13 +181,13 @@ class EnvironmentServiceImpl implements EnvironmentService {
 
     @Override
     public void delete(@NonNull Set<UUID> ids) {
-        if (ids.isEmpty()) {
-            log.info("ids list is empty, returning");
-            return;
-        }
-
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
+
+        if (ids.isEmpty()) {
+            log.info("ids list is empty for environments delete, on workspace_id '{}'", workspaceId);
+            return;
+        }
 
         template.inTransaction(WRITE, handle -> {
             handle.attach(EnvironmentDAO.class).delete(ids, workspaceId);
