@@ -16,6 +16,7 @@ from .core.request_options import RequestOptions
 from .dashboards.client import AsyncDashboardsClient, DashboardsClient
 from .datasets.client import AsyncDatasetsClient, DatasetsClient
 from .environment import OpikApiEnvironment
+from .environments.client import AsyncEnvironmentsClient, EnvironmentsClient
 from .experiments.client import AsyncExperimentsClient, ExperimentsClient
 from .feedback_definitions.client import AsyncFeedbackDefinitionsClient, FeedbackDefinitionsClient
 from .guardrails.client import AsyncGuardrailsClient, GuardrailsClient
@@ -113,6 +114,7 @@ class OpikApi:
         self.chat_completions = ChatCompletionsClient(client_wrapper=self._client_wrapper)
         self.dashboards = DashboardsClient(client_wrapper=self._client_wrapper)
         self.datasets = DatasetsClient(client_wrapper=self._client_wrapper)
+        self.environments = EnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = ExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = FeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = GuardrailsClient(client_wrapper=self._client_wrapper)
@@ -261,6 +263,7 @@ class AsyncOpikApi:
         self.chat_completions = AsyncChatCompletionsClient(client_wrapper=self._client_wrapper)
         self.dashboards = AsyncDashboardsClient(client_wrapper=self._client_wrapper)
         self.datasets = AsyncDatasetsClient(client_wrapper=self._client_wrapper)
+        self.environments = AsyncEnvironmentsClient(client_wrapper=self._client_wrapper)
         self.experiments = AsyncExperimentsClient(client_wrapper=self._client_wrapper)
         self.feedback_definitions = AsyncFeedbackDefinitionsClient(client_wrapper=self._client_wrapper)
         self.guardrails = AsyncGuardrailsClient(client_wrapper=self._client_wrapper)
