@@ -7,7 +7,7 @@ import { hyperLink } from "@uiw/codemirror-extensions-hyper-link";
 import ReactMarkdown from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
-import remarkGfm from "node_modules/remark-gfm/lib";
+import remarkGfm from "remark-gfm";
 import { isNull } from "lodash";
 import { useCodemirrorTheme } from "@/hooks/useCodemirrorTheme";
 import { useSearchPanelTheme } from "@/shared/SyntaxHighlighter/hooks/useSearchPanelTheme";
