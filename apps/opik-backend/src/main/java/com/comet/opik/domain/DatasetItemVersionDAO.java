@@ -34,6 +34,7 @@ import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
@@ -983,6 +984,17 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 GROUP BY entity_id
             )
+            <if(push_top_limit && !push_top_needs_div)>
+            , top_dataset_items AS (
+                SELECT eia_t.dataset_item_id
+                FROM experiment_item_aggregates AS eia_t FINAL
+                WHERE eia_t.workspace_id = :workspace_id
+                AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
+                GROUP BY eia_t.dataset_item_id
+                ORDER BY <if(top_sorting)><top_sorting><else>eia_t.dataset_item_id DESC<endif>
+                LIMIT :top_limit OFFSET :top_offset
+            )
+            <endif>
             , dataset_items_aggr_resolved AS (
                 SELECT
                     div_dedup.dataset_item_id AS id,
@@ -1006,19 +1018,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     WHERE workspace_id = :workspace_id
                     AND dataset_id  = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
+                    <if(push_top_limit && !push_top_needs_div)>
+                    AND dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items)
+                    <endif>
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
                     LIMIT 1 BY id
                 ) AS div_dedup
             )
-            <if(push_top_limit)>
+            <if(push_top_limit && push_top_needs_div)>
             , top_dataset_items AS (
                 SELECT eia_t.dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
-                <if(push_top_needs_div)>
                 INNER JOIN experiment_aggregated_scope_ids eas_t ON eas_t.id = eia_t.experiment_id
                 LEFT JOIN dataset_items_aggr_resolved AS di_t ON (di_t.id = eia_t.dataset_item_id OR di_t.row_id = eia_t.dataset_item_id)
                     AND di_t.dataset_version_id = eas_t.resolved_dataset_version_id
-                <endif>
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 GROUP BY eia_t.dataset_item_id
@@ -2404,16 +2417,25 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             template.add("has_aggregated", hasAggregated);
                             template.add("has_raw", hasRaw);
 
-                            // Push-top-limit: only when all experiments are aggregated (single branch)
+                            // Push-top-limit: only when all experiments are aggregated (single branch),
+                            // and only when no filters/search are present. The Top-N CTE selects items by
+                            // sort BEFORE filters are applied; with filters/search active the outer query
+                            // would strip items from the top-N and silently return short pages.
+                            boolean hasSortingFields = CollectionUtils.isNotEmpty(criteria.sortingFields());
+                            boolean hasFilters = CollectionUtils.isNotEmpty(criteria.filters());
+                            boolean hasSearch = StringUtils.isNotBlank(criteria.search());
                             boolean pushTopLimit = hasAggregated && !hasRaw
-                                    && CollectionUtils.isNotEmpty(criteria.sortingFields())
-                                    && sortingFactory.supportsPushTopLimit(criteria.sortingFields());
+                                    && !hasFilters && !hasSearch
+                                    && (!hasSortingFields
+                                            || sortingFactory.supportsPushTopLimit(criteria.sortingFields()));
 
                             if (pushTopLimit) {
                                 template.add("push_top_limit", true);
-                                template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
-                                if (sortingFactory.pushTopLimitNeedsDivJoin(criteria.sortingFields())) {
-                                    template.add("push_top_needs_div", true);
+                                if (hasSortingFields) {
+                                    template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
+                                    if (sortingFactory.pushTopLimitNeedsDivJoin(criteria.sortingFields())) {
+                                        template.add("push_top_needs_div", true);
+                                    }
                                 }
                             }
 
