@@ -42,6 +42,8 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.sorting.Direction;
+import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -2742,10 +2744,16 @@ class ExperimentAggregatesIntegrationTest {
                 workspaceName);
 
         var experimentIds = List.of(experiment.id());
-        var sorting = List.of(new com.comet.opik.api.sorting.SortingField("duration",
-                com.comet.opik.api.sorting.Direction.ASC));
-        var filters = List.of(new ExperimentsComparisonFilter("duration", FieldType.NUMBER,
-                Operator.GREATER_THAN, null, "30000"));
+        var sorting = List.of(SortingField.builder()
+                .field("duration")
+                .direction(Direction.ASC)
+                .build());
+        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+                .field("duration")
+                .type(FieldType.NUMBER)
+                .operator(Operator.GREATER_THAN)
+                .value("30000")
+                .build());
         int pageSize = 2;
 
         var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
