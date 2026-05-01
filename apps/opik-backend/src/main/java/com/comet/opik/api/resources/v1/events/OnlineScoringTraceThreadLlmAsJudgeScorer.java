@@ -225,9 +225,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             userFacingLogger.info("Received response for threadId '{}':\n\n{}", threadId, chatResponse);
 
             var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
-            parsed.nullScoreNames().forEach(name -> userFacingLogger.info(
-                    "Skipped score '{}' for threadId '{}' because the judge returned a null value (treated as not applicable)",
-                    name, threadId));
+            OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
             return parsed.scores().stream()
                     .map(item -> FeedbackScoresMapper.INSTANCE.map(
                             item.toBuilder()

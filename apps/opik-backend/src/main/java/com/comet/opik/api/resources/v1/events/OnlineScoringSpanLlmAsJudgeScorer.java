@@ -124,9 +124,7 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
 
             var parsed = OnlineScoringEngine.toFeedbackScores(score);
-            parsed.nullScoreNames().forEach(name -> userFacingLogger.info(
-                    "Skipped score '{}' for spanId '{}' because the judge returned a null value (treated as not applicable)",
-                    name, span.id()));
+            OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "spanId", span.id());
             return parsed.scores().stream()
                     .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
                             .id(span.id())

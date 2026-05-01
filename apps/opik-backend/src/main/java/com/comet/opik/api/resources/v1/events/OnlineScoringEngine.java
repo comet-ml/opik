@@ -34,6 +34,7 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
+import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
@@ -513,6 +514,13 @@ public class OnlineScoringEngine {
         }
     }
 
+    public static void logSkippedNullScores(
+            Logger userFacingLogger, ParsedFeedbackScores parsed, String entityType, Object entityId) {
+        parsed.nullScoreNames().forEach(name -> userFacingLogger.info(
+                "Skipped score '{}' for {} '{}' because the judge returned a null value (treated as not applicable)",
+                name, entityType, entityId));
+    }
+
     public static ParsedFeedbackScores toFeedbackScores(@NotNull ChatResponse chatResponse) {
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
@@ -532,12 +540,12 @@ public class OnlineScoringEngine {
             var scoreName = scoreMetric.getKey();
             var scoreNested = scoreMetric.getValue();
             if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
-                log.info("No score found for '{}' score in {}", scoreName, scoreNested);
+                log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
                 return;
             }
             var actualScore = scoreNested.path(SCORE_FIELD_NAME);
             if (actualScore.isNull()) {
-                log.info("Skipping '{}' score because the judge returned a null value", scoreName);
+                log.debug("Skipping '{}' score because the judge returned a null value", scoreName);
                 nullScoreNames.add(scoreName);
                 return;
             }
