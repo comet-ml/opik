@@ -332,9 +332,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         item.sampling() != null ? item.sampling() : Map.of());
 
                 if (item.scoredAt() != null) {
-                    statement.bind("scored_at" + i, item.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(item.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (item.source() != null) {
@@ -513,9 +513,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         : new String[]{});
 
                 if (traceThreadModel.scoredAt() != null) {
-                    statement.bind("scored_at" + i, traceThreadModel.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(traceThreadModel.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (traceThreadModel.source() != null) {
@@ -563,7 +563,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
                     .bind("project_id", projectId)
                     .bind("thread_ids", threadIds)
-                    .bind("scored_at", scoredAt.toString());
+                    .bind("scored_at", ClickHouseDateTimeFormat.formatNanos(scoredAt));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));
