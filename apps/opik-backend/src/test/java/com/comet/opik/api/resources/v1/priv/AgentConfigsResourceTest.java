@@ -22,13 +22,16 @@ import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import com.comet.opik.domain.AgentConfigEnv;
 import com.comet.opik.domain.AgentConfigValue;
 import com.comet.opik.domain.AgentConfigValue.ValueType;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -50,10 +53,19 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AgentConfigValueAssertionUtils.assertConfigValue;
 import static com.comet.opik.api.resources.utils.AgentConfigValueAssertionUtils.assertConfigValues;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -95,13 +107,25 @@ class AgentConfigsResourceTest {
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, ClickHouseContainerUtils.DATABASE_NAME);
+                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
+        APP = newTestDropwizardAppExtension(
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -172,6 +196,8 @@ class AgentConfigsResourceTest {
                     .blueprint(blueprint)
                     .build();
 
+            wireMock.server().resetRequests();
+
             var blueprintId = agentConfigsResourceClient.createAgentConfig(request, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -179,6 +205,63 @@ class AgentConfigsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(prodBlueprint).isNotNull();
             assertThat(prodBlueprint.id()).isEqualTo(blueprintId);
+
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
+
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(WORKSPACE_ID)))));
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(WORKSPACE_ID)))
+                                .and(matchingJsonPath("$.event_properties.environment",
+                                        equalTo("prod")))
+                                .and(matchingJsonPath("$.event_properties.deployed_to_prod",
+                                        equalTo("true")))));
+            });
+        }
+
+        @Test
+        @DisplayName("Success: demo project does not emit analytics events")
+        void createAgentConfig__demoProject__doesNotSendAnalyticsEvents() {
+            var demoProjectName = DemoData.PROJECTS.getFirst();
+
+            var values = List.of(
+                    AgentConfigValue.builder()
+                            .key("model")
+                            .value("gpt-4")
+                            .type(ValueType.STRING)
+                            .build());
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Demo config")
+                    .values(values)
+                    .build();
+
+            var request = AgentConfigCreate.builder()
+                    .projectName(demoProjectName)
+                    .blueprint(blueprint)
+                    .build();
+
+            wireMock.server().resetRequests();
+
+            agentConfigsResourceClient.createAgentConfig(request, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
+
+            Awaitility.await().during(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))));
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))));
+            });
         }
 
         @ParameterizedTest
