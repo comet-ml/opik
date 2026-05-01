@@ -83,13 +83,13 @@ class ReadToolTest {
     }
 
     @Test
-    void threadTypeReturnsNotYetSupported() {
+    void threadTypeIsRejected() {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"thread\", \"id\": \"any-string\"}", ctx));
 
-        assertThat(result.get("error").asText()).contains("not yet supported");
+        assertThat(result.get("error").asText()).contains("type=thread is not supported");
     }
 
     @Test

@@ -33,9 +33,9 @@ import java.util.UUID;
  *
  * <p>Args: {@code {type, id, tier?}}.
  * <ul>
- *   <li>{@code type} ∈ {@code trace, span, dataset, dataset_item, project, thread}.</li>
- *   <li>{@code id} entity id (UUID for everything except thread, which is a string —
- *       <strong>thread is not yet supported in this phase</strong>).</li>
+ *   <li>{@code type} ∈ {@code trace, span, dataset, dataset_item, project}.
+ *       {@code thread} is not supported in this phase.</li>
+ *   <li>{@code id} entity id (UUID).</li>
  *   <li>{@code tier} is optional. When absent, the matching compressor auto-picks.
  *       For fixed-tier compressors (dataset → SUMMARY) the arg is ignored.</li>
  * </ul>
@@ -86,8 +86,8 @@ public class ReadTool implements ToolExecutor {
                     + " an entity that is not the active trace.")
             .parameters(JsonObjectSchema.builder()
                     .addStringProperty("type",
-                            "Entity type: one of trace, span, dataset, dataset_item, project, thread.")
-                    .addStringProperty("id", "Entity id (UUID for trace/span/dataset/dataset_item/project).")
+                            "Entity type: one of trace, span, dataset, dataset_item, project.")
+                    .addStringProperty("id", "Entity id (UUID).")
                     .addStringProperty("tier",
                             "Optional. Force a specific tier: FULL, MEDIUM, SKELETON, or SUMMARY."
                                     + " Defaults to the compressor's auto-pick (size-driven for adaptive"
@@ -447,6 +447,9 @@ public class ReadTool implements ToolExecutor {
                 type = EntityType.valueOf(typeStr.toUpperCase());
             } catch (IllegalArgumentException e) {
                 return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
+            }
+            if (type == EntityType.THREAD) {
+                return ParsedArgs.error(errorJson("type=thread is not supported by the read tool"));
             }
             CompressionTier tier = null;
             String tierStr = textOrNull(node.get("tier"));

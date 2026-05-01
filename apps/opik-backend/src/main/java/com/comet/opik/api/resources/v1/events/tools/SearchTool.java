@@ -74,8 +74,8 @@ public class SearchTool implements ToolExecutor {
                     + " feed straight into the jq tool to extract the full value.")
             .parameters(JsonObjectSchema.builder()
                     .addStringProperty("type",
-                            "Entity type: one of trace, span, dataset, dataset_item, project, thread.")
-                    .addStringProperty("id", "Entity id (UUID for trace/span/dataset/dataset_item/project).")
+                            "Entity type: one of trace, span, dataset, dataset_item, project.")
+                    .addStringProperty("id", "Entity id (UUID).")
                     .addStringProperty("pattern",
                             "Regex matched case-insensitively against every string value in scope.")
                     .addStringProperty("path",
@@ -302,6 +302,9 @@ public class SearchTool implements ToolExecutor {
                 type = EntityType.valueOf(typeStr.toUpperCase());
             } catch (IllegalArgumentException e) {
                 return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
+            }
+            if (type == EntityType.THREAD) {
+                return ParsedArgs.error(errorJson("type=thread is not supported by the search tool"));
             }
             return new ParsedArgs(type, id, pattern, path, null);
         } catch (Exception e) {

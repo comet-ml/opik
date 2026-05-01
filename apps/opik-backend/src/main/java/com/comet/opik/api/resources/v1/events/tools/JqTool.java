@@ -24,8 +24,10 @@ import java.util.Optional;
  *
  * <p>Args: {@code {type, id, expression}}.
  * <ul>
- *   <li>{@code type} ∈ {trace, span, dataset, dataset_item, project, thread}.</li>
- *   <li>{@code id} entity id (UUID for everything except thread).</li>
+ *   <li>{@code type} ∈ {trace, span, dataset, dataset_item, project}.
+ *       {@code thread} is not supported because {@link ReadTool} cannot cache
+ *       a thread entity, so a thread lookup would always cache-miss.</li>
+ *   <li>{@code id} entity id (UUID).</li>
  *   <li>{@code expression} a jq expression evaluated against the cached
  *       full JSON.</li>
  * </ul>
@@ -63,8 +65,8 @@ public class JqTool implements ToolExecutor {
                     + " multi-result expressions render one value per line. Output is capped at 16 KB.")
             .parameters(JsonObjectSchema.builder()
                     .addStringProperty("type",
-                            "Entity type: one of trace, span, dataset, dataset_item, project, thread.")
-                    .addStringProperty("id", "Entity id (UUID for trace/span/dataset/dataset_item/project).")
+                            "Entity type: one of trace, span, dataset, dataset_item, project.")
+                    .addStringProperty("id", "Entity id (UUID).")
                     .addStringProperty("expression",
                             "jq expression to evaluate against the cached full JSON of the entity.")
                     .required("type", "id", "expression")
@@ -101,7 +103,7 @@ public class JqTool implements ToolExecutor {
             // Argument validation failures are LLM-driven (the model emitted a malformed
             // tool call); keep at debug to avoid log noise but make the bad input
             // discoverable when chasing a specific judge run.
-            log.debug("jq tool received invalid arguments: '{}' -> {}", arguments, args.error);
+            log.debug("jq tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
             return args.error;
         }
 
@@ -142,10 +144,10 @@ public class JqTool implements ToolExecutor {
         // expected to occur; keep them at debug to avoid log noise. Anything else
         // (StackOverflowError, unexpected internals) is a real server-side concern.
         if (t instanceof JsonQueryException) {
-            log.debug("jq {} failed for {}:{} expression='{}': {}",
+            log.debug("jq '{}' failed for '{}:{}' expression='{}': '{}'",
                     stage, args.type, args.id, args.expression, t.getMessage());
         } else {
-            log.warn("jq {} crashed for {}:{} expression='{}'",
+            log.warn("jq '{}' crashed for '{}:{}' expression='{}'",
                     stage, args.type, args.id, args.expression, t);
         }
     }
@@ -158,6 +160,11 @@ public class JqTool implements ToolExecutor {
             try {
                 rendered = mapper.writeValueAsString(node);
             } catch (Exception e) {
+                // Should not happen for jq output (it comes from the same Jackson tree
+                // that just deserialized the cached JSON), but if it does, we still want
+                // to surface a row to the agent — log so we can diagnose later.
+                log.warn("jq result rendering failed for '{}:{}' expression='{}', falling back to toString()",
+                        args.type, args.id, args.expression, e);
                 rendered = node.toString();
             }
             if (!body.isEmpty()) {
@@ -237,6 +244,9 @@ public class JqTool implements ToolExecutor {
                 type = EntityType.valueOf(typeStr.toUpperCase());
             } catch (IllegalArgumentException e) {
                 return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
+            }
+            if (type == EntityType.THREAD) {
+                return ParsedArgs.error(errorJson("type=thread is not supported by the jq tool"));
             }
             return new ParsedArgs(type, id, expression, null);
         } catch (Exception e) {
