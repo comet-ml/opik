@@ -71,7 +71,10 @@ public final class DatasetCompressor implements EntityCompressor {
         }
         node.set("sample_items", samples);
         node.put("drill_down_hint", DRILL_DOWN_HINT);
-        return new CompressionResult(node, CompressionTier.SUMMARY);
+        return CompressionResult.builder()
+                .payload(node)
+                .tier(CompressionTier.SUMMARY)
+                .build();
     }
 
     private static JsonNode buildTruncatedDataNode(DatasetItem item) {

@@ -72,7 +72,10 @@ public final class TraceCompressor implements EntityCompressor {
             case SKELETON, SUMMARY -> buildSkeleton(trace, spans);
         };
         CompressionTier reportedTier = tier == CompressionTier.SUMMARY ? CompressionTier.SKELETON : tier;
-        return new CompressionResult(payload, reportedTier);
+        return CompressionResult.builder()
+                .payload(payload)
+                .tier(reportedTier)
+                .build();
     }
 
     private static CompressionTier pickTier(JsonNode fullJson, CompressionTier forced) {

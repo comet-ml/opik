@@ -35,7 +35,10 @@ public final class GenericCompressor {
         JsonNode data = tier == CompressionTier.FULL
                 ? entityJson
                 : PathAwareTruncator.truncate(entityJson, STRING_TRUNCATION_LENGTH);
-        return new CompressionResult(data, tier);
+        return CompressionResult.builder()
+                .payload(data)
+                .tier(tier)
+                .build();
     }
 
     private static CompressionTier pickTier(JsonNode entityJson, CompressionTier forced) {
