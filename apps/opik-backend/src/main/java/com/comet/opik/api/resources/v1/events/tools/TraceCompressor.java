@@ -4,18 +4,11 @@ import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.utils.JsonUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 /**
  * Bespoke adaptive compressor for traces. The cached FULL form is the
@@ -104,43 +97,15 @@ public final class TraceCompressor implements EntityCompressor {
         if (trace.duration() != null) {
             node.put("total_duration_ms", trace.duration());
         }
-
-        ArrayNode tree = mapper.createArrayNode();
-        Map<UUID, List<Span>> childrenByParent = new LinkedHashMap<>();
-        Set<UUID> ids = new HashSet<>();
-        List<Span> roots = new ArrayList<>();
-
-        for (var s : spans) {
-            ids.add(s.id());
-        }
-        for (var s : spans) {
-            if (s.parentSpanId() == null || !ids.contains(s.parentSpanId())) {
-                roots.add(s);
-            } else {
-                childrenByParent.computeIfAbsent(s.parentSpanId(), k -> new ArrayList<>()).add(s);
-            }
-        }
-        for (var root : roots) {
-            tree.add(buildSkeletonNode(root, childrenByParent));
-        }
-        node.set("span_tree", tree);
+        node.set("span_tree", SpanHierarchy.toTree(spans, TraceCompressor::buildSkeletonNode));
         return node;
     }
 
-    private static ObjectNode buildSkeletonNode(Span span, Map<UUID, List<Span>> childrenByParent) {
-        var mapper = JsonUtils.getMapper();
-        ObjectNode node = mapper.createObjectNode();
+    private static ObjectNode buildSkeletonNode(Span span) {
+        ObjectNode node = JsonUtils.getMapper().createObjectNode();
         node.put("id", span.id().toString());
         node.put("name", span.name());
         node.put("type", span.type() != null ? span.type().toString() : null);
-        var children = childrenByParent.get(span.id());
-        if (children != null && !children.isEmpty()) {
-            ArrayNode arr = mapper.createArrayNode();
-            for (var child : children) {
-                arr.add(buildSkeletonNode(child, childrenByParent));
-            }
-            node.set("children", arr);
-        }
         return node;
     }
 }

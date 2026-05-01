@@ -6,13 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import lombok.experimental.UtilityClass;
 
-import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 
 @UtilityClass
 class SpanTreeSerializer {
@@ -23,41 +17,7 @@ class SpanTreeSerializer {
         if (spans == null || spans.isEmpty()) {
             return "[]";
         }
-
-        Map<UUID, List<Span>> childrenByParent = new LinkedHashMap<>();
-        Set<UUID> spanIds = new HashSet<>();
-        List<Span> roots = new ArrayList<>();
-
-        for (var span : spans) {
-            spanIds.add(span.id());
-        }
-
-        for (var span : spans) {
-            if (span.parentSpanId() == null || !spanIds.contains(span.parentSpanId())) {
-                roots.add(span);
-            } else {
-                childrenByParent.computeIfAbsent(span.parentSpanId(), k -> new ArrayList<>()).add(span);
-            }
-        }
-
-        var arrayNode = JsonUtils.getMapper().createArrayNode();
-        for (var root : roots) {
-            arrayNode.add(buildTreeNode(root, childrenByParent));
-        }
-        return arrayNode.toString();
-    }
-
-    private static ObjectNode buildTreeNode(Span span, Map<UUID, List<Span>> childrenByParent) {
-        var node = buildSpanNode(span);
-        var children = childrenByParent.get(span.id());
-        if (children != null && !children.isEmpty()) {
-            var childrenArray = JsonUtils.getMapper().createArrayNode();
-            for (var child : children) {
-                childrenArray.add(buildTreeNode(child, childrenByParent));
-            }
-            node.set("children", childrenArray);
-        }
-        return node;
+        return SpanHierarchy.toTree(spans, SpanTreeSerializer::buildSpanNode).toString();
     }
 
     private static ObjectNode buildSpanNode(Span span) {

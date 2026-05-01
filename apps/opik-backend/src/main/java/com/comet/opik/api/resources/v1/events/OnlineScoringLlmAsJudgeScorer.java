@@ -107,7 +107,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         log.info("Message received with traceId '{}', userName '{}', to be scored in '{}'",
                 trace.id(), message.userName(), message.llmAsJudgeCode().model().name());
 
-        try (var logContext = wrapWithMdc(Map.of(
+        try (var ignored = wrapWithMdc(Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, message.workspaceId(),
                 UserLog.TRACE_ID, trace.id().toString(),
