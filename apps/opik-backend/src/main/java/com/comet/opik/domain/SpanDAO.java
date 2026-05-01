@@ -1558,7 +1558,15 @@ public class SpanDAO {
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
-                bindCostForBulkInsert(span, statement, i);
+                // BULK_INSERT writes the cost cell directly into Decimal128(12) (no toDecimal128
+                // wrap), so the driver must emit an unquoted numeric literal — bind the
+                // BigDecimal itself rather than its String form. See OPIK-5694.
+                BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
+                statement.bind("total_estimated_cost" + i, cost);
+                statement.bind("total_estimated_cost_version" + i,
+                        span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
+                                ? ESTIMATED_COST_VERSION
+                                : "");
 
                 if (span.ttft() != null) {
                     statement.bind("ttft" + i, span.ttft());
@@ -2568,14 +2576,6 @@ public class SpanDAO {
                 spanUpdate.metadata()).compareTo(BigDecimal.ZERO) > 0;
     }
 
-    /**
-     * Cost binder for the single-row INSERT and UPDATE templates. Those SQL templates wrap the
-     * cell as {@code toDecimal128(:total_estimated_cost, 12)} — they expect a quoted string the
-     * driver wraps with {@code '...'}, so {@code toDecimal128('123.456', 12)} parses via the
-     * Decimal-aware string path and is lossless. Binding a {@link BigDecimal} here would let the
-     * driver emit an unquoted numeric, and {@code toDecimal128(123.456, 12)} would route through
-     * Float64 first (precision drift on 17+ significant-digit values).
-     */
     private void bindCost(Span span, Statement statement, String index) {
         if (span.totalEstimatedCost() != null) {
             // Cost is set manually by the user
@@ -2587,23 +2587,6 @@ public class SpanDAO {
             statement.bind("total_estimated_cost_version" + index,
                     estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
         }
-    }
-
-    /**
-     * Cost binder for {@link #BULK_INSERT}. The cell in that template is now a bare
-     * {@code :total_estimated_cost<idx>} placeholder (no {@code toDecimal128(...)} wrap), so the
-     * driver must emit an unquoted numeric literal — which means binding the value as a
-     * {@link BigDecimal}. CH parses the literal directly into the {@code Decimal128(12)} column
-     * without a Float64 detour, preserving precision and avoiding the FORMAT Values fast-path
-     * fallback that a quoted-decimal-into-Decimal128-cell would trip.
-     */
-    private void bindCostForBulkInsert(Span span, Statement statement, int index) {
-        BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
-        statement.bind("total_estimated_cost" + index, cost);
-        statement.bind("total_estimated_cost_version" + index,
-                span.totalEstimatedCost() != null
-                        ? ""
-                        : (cost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : ""));
     }
 
     @WithSpan
