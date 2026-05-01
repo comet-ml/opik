@@ -211,15 +211,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .build();
     }
 
-    /**
-     * Single source of truth for whether the agentic tool path (read / jq / search / get_trace_spans)
-     * is enabled for this scoring run. Today: scoped to test-suite-assertion runs (i.e.
-     * {@code experimentId != null}); the assertion path uses capped variable substitutions on the
-     * prompt and lets the agent fetch the rest on demand. Extending tools to additional flows
-     * (preview rules, ad-hoc evaluations, etc.) is a one-line change here.
-     */
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
-        return message.experimentId() != null;
+        return LlmAsJudgeToolsMode.shouldUseTools(message);
     }
 
     // Package-private for unit tests.

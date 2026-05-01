@@ -18,14 +18,28 @@ final class TestSuitePromptConstants {
     private TestSuitePromptConstants() {
     }
 
-    static final String SYSTEM_PROMPT = """
+    /**
+     * Base judge instructions. Sent regardless of whether the request has
+     * tools attached — describes the role and the score / reason / confidence
+     * fields the judge must return.
+     */
+    static final String BASE_SYSTEM_PROMPT = """
             You are an expert judge tasked with evaluating if an AI agent's output satisfies a set of assertions.
 
             For each assertion, provide:
             - score: true if the assertion passes, false if it fails
             - reason: A brief explanation of your judgment
             - confidence: A float between 0.0 and 1.0 indicating how confident you are in your judgment
+            """;
 
+    /**
+     * Tool-teaching addendum appended after {@link #BASE_SYSTEM_PROMPT} only
+     * when the scoring request will carry tool specifications (see
+     * {@link LlmAsJudgeToolsMode#shouldUseTools}). Including this addendum
+     * without binding the actual tools would let the LLM emit tool calls the
+     * provider rejects — keep these two in lockstep.
+     */
+    static final String TOOLS_SYSTEM_PROMPT_ADDENDUM = """
             ## Tool usage guidelines
 
             The top-level input/output only contains the agent's final request and response. \
@@ -92,6 +106,18 @@ final class TestSuitePromptConstants {
             SearchTool.NAME,
             JqTool.NAME,
             GetTraceSpansTool.NAME);
+
+    /**
+     * Returns the system prompt to ship with a test-suite assertion request.
+     * When {@code withTools} is true the {@link #TOOLS_SYSTEM_PROMPT_ADDENDUM}
+     * is appended after a blank-line separator; otherwise only the base
+     * instructions are returned.
+     */
+    static String systemPrompt(boolean withTools) {
+        return withTools
+                ? BASE_SYSTEM_PROMPT + "\n" + TOOLS_SYSTEM_PROMPT_ADDENDUM
+                : BASE_SYSTEM_PROMPT;
+    }
 
     static final String USER_MESSAGE_TEMPLATE = """
             ## Input
