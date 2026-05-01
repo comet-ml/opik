@@ -1083,6 +1083,25 @@ class OnlineScoringEngineTest {
         }
     }
 
+    @Test
+    @DisplayName("skip feedback scores whose value is null in the AI response")
+    void testToFeedbackScores__whenScoreValueIsNull__thenSkipsThatScore() {
+        var aiMessage = "{\"Relevance\":{\"score\":5,\"reason\":\"applies\"},"
+                + "\"Conciseness\":{\"score\":null,\"reason\":\"not applicable to this turn\"},"
+                + "\"Technical Accuracy\":{\"score\":4.0,\"reason\":\"good\"}}";
+        var chatResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.aiMessage(aiMessage))
+                .build();
+
+        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
+
+        assertThat(feedbackScores).hasSize(2);
+        assertThat(feedbackScores).extracting(FeedbackScoreBatchItem::name)
+                .containsExactlyInAnyOrder("Relevance", "Technical Accuracy");
+        assertThat(feedbackScores).extracting(FeedbackScoreBatchItem::name)
+                .doesNotContain("Conciseness");
+    }
+
     private JsonObjectSchema createTestSchema() {
         return JsonObjectSchema.builder()
                 .addProperty("Relevance", JsonObjectSchema.builder()

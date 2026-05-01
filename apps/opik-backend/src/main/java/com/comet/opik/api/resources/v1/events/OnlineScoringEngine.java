@@ -530,11 +530,15 @@ public class OnlineScoringEngine {
                         log.info("No score found for '{}' score in {}", scoreName, scoreNested);
                         return null;
                     }
+                    var actualScore = scoreNested.path(SCORE_FIELD_NAME);
+                    if (actualScore.isNull()) {
+                        log.info("Skipping '{}' score because the judge returned a null value", scoreName);
+                        return null;
+                    }
                     var resultBuilder = FeedbackScoreBatchItem.builder()
                             .name(scoreName)
                             .reason(scoreNested.path(REASON_FIELD_NAME).asText())
                             .source(ScoreSource.ONLINE_SCORING);
-                    var actualScore = scoreNested.path(SCORE_FIELD_NAME);
                     if (actualScore.isBoolean()) {
                         resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
                     } else {
