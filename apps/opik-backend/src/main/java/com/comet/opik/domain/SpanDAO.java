@@ -1511,6 +1511,10 @@ public class SpanDAO {
 
             Statement statement = connection.createStatement(template.render());
 
+            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
+            // the same timestamp — matches the prior server-side now64(6) semantics.
+            Instant nowForBatch = Instant.now();
+
             int i = 0;
             for (Span span : spans) {
                 String inputValue = TruncationUtils.toJsonString(span.input());
@@ -1554,7 +1558,7 @@ public class SpanDAO {
                 // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
                 // that would trip the FORMAT Values fast-path. See OPIK-5694.
                 statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : Instant.now()));
+                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 

@@ -3258,6 +3258,12 @@ class TraceDAOImpl implements TraceDAO {
 
             Statement statement = connection.createStatement(template.render());
 
+            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
+            // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
+            // it once per query) and avoids timing-sensitive ordering in downstream MAX(...)
+            // aggregations.
+            Instant nowForBatch = Instant.now();
+
             int i = 0;
             for (Trace trace : traces) {
                 statement.bind("id" + i, trace.id())
@@ -3282,7 +3288,7 @@ class TraceDAOImpl implements TraceDAO {
                 // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
                 // that would trip the FORMAT Values fast-path. See OPIK-5694.
                 statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
-                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : Instant.now()));
+                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
 
                 statement.bind("visibility_mode" + i, trace.visibilityMode() != null
                         ? trace.visibilityMode().getValue()
