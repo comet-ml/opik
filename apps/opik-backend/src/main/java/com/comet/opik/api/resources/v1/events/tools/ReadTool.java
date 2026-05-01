@@ -55,8 +55,24 @@ public class ReadTool implements ToolExecutor {
 
     public static final String NAME = "read";
 
-    /** ≈ 10 MB. Char count is a lower bound on UTF-8 byte count, so this is a safe cap. */
+    /**
+     * ~ 10 MB. The bound is on the JSON string {@code length()} (UTF-16 char
+     * units in the JVM); UTF-8 byte count for any string is at least the char
+     * count, so this also bounds on-wire byte size. JVM heap impact per cached
+     * entity is roughly 2× this since {@code String} stores UTF-16 internally.
+     */
     static final int CACHE_CAP_CHARS = 10 * 1024 * 1024;
+
+    /**
+     * Per-string truncation thresholds the cap fallback walks in order. We try
+     * the largest first and drop down only if the result is still over
+     * {@link #CACHE_CAP_CHARS}. The largest sits well above the LLM-facing
+     * MEDIUM-tier truncation length on purpose: the cap is a JVM-memory
+     * safety net, not a context-window budget — most strings can stay near
+     * full fidelity in cache and still fit in 10 MB.
+     */
+    static final int[] CAP_FALLBACK_LIMITS = {100_000, 10_000, 1_000};
+
     static final String CACHE_WARNING_MESSAGE = "Entity exceeded 10 MB; only MEDIUM-tier form was cached."
             + " jq queries against this entity will reflect truncated content.";
 
@@ -168,9 +184,11 @@ public class ReadTool implements ToolExecutor {
         }
 
         CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        if (cached.isEmpty()) {
-            ctx.cache(ref, outcome.cachedNode);
-        }
+        // Always replace the cache with outcome.cachedNode — even when the cache was
+        // pre-seeded (e.g. the active trace from OnlineScoringLlmAsJudgeScorer) we want
+        // to swap an oversize seed for the truncated form so JVM heap stays bounded.
+        // For under-cap entities outcome.cachedNode is the same node, so this is a no-op.
+        ctx.cache(ref, outcome.cachedNode);
 
         var result = traceCompressor.compress(fullJson, trace, spans, args.tier, suffixStyleFor(ref, ctx));
         return buildResponse(args, result, outcome.warning).toString();
@@ -208,9 +226,7 @@ public class ReadTool implements ToolExecutor {
         }
 
         CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        if (cached.isEmpty()) {
-            ctx.cache(ref, outcome.cachedNode);
-        }
+        ctx.cache(ref, outcome.cachedNode);
 
         var result = datasetCompressor.compress(dataset, sampleItems);
         return buildResponse(args, result, outcome.warning).toString();
@@ -224,9 +240,7 @@ public class ReadTool implements ToolExecutor {
         JsonNode fullJson = ctx.getCached(ref).orElseGet(fetcher::get);
 
         CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
-        if (ctx.getCached(ref).isEmpty()) {
-            ctx.cache(ref, outcome.cachedNode);
-        }
+        ctx.cache(ref, outcome.cachedNode);
 
         var result = genericCompressor.compress(fullJson, args.tier, suffixStyleFor(ref, ctx));
         return buildResponse(args, result, outcome.warning).toString();
@@ -341,11 +355,29 @@ public class ReadTool implements ToolExecutor {
         if (size <= CACHE_CAP_CHARS) {
             return new CacheOutcome(fullJson, null);
         }
-        JsonNode truncated = PathAwareTruncator.truncate(fullJson,
-                GenericCompressor.STRING_TRUNCATION_LENGTH,
-                PathAwareTruncator.SuffixStyle.BARE);
         ctx.markTruncated(ref);
-        return new CacheOutcome(truncated, CACHE_WARNING_MESSAGE);
+        return new CacheOutcome(fitWithinCap(fullJson), CACHE_WARNING_MESSAGE);
+    }
+
+    /**
+     * Walks {@link #CAP_FALLBACK_LIMITS} from largest to smallest, returning
+     * the first truncation result whose serialized size fits in
+     * {@link #CACHE_CAP_CHARS}. If even the tightest limit doesn't fit (truly
+     * pathological data: thousands of long strings), returns the tightest
+     * attempt anyway — over-cap by a small margin is better than not caching
+     * at all, since the alternative is making the agent error out.
+     */
+    private static JsonNode fitWithinCap(JsonNode fullJson) {
+        JsonNode last = null;
+        for (int limit : CAP_FALLBACK_LIMITS) {
+            JsonNode candidate = PathAwareTruncator.truncate(fullJson, limit,
+                    PathAwareTruncator.SuffixStyle.BARE);
+            if (candidate.toString().length() <= CACHE_CAP_CHARS) {
+                return candidate;
+            }
+            last = candidate;
+        }
+        return last;
     }
 
     /**

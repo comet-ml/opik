@@ -143,6 +143,63 @@ class ReadToolTest {
     }
 
     @Test
+    void capFallbackPrefersLargestThresholdWhenItFits() {
+        // Single huge string blows the cap. The 100K (largest) threshold easily
+        // brings the cache form well under 10 MB, so we expect the cached
+        // string to be at the 100K limit, not 10K or 1K.
+        var spanId = UUID.randomUUID();
+        var ref = new EntityRef(EntityType.SPAN, spanId.toString());
+        var ctx = newContextWithSeededTrace();
+
+        String huge = "x".repeat(ReadTool.CACHE_CAP_CHARS + 100); // > 10 MB
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        spanJson.put("input", huge);
+        ctx.cache(ref, spanJson);
+
+        // Trigger the cap path.
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+
+        assertThat(ctx.isTruncated(ref)).isTrue();
+        var cached = ctx.getCached(ref).orElseThrow();
+        var cachedInput = cached.get("input").asText();
+        // 100K kept + bare suffix, no jq hint.
+        assertThat(cachedInput).hasSizeBetween(100_000, 100_100);
+        assertThat(cachedInput).contains("[TRUNCATED").doesNotContain("use jq");
+    }
+
+    @Test
+    void capFallbackTightensWhenLargestThresholdStillOverflows() {
+        // Build many strings that fit through the 100K threshold without
+        // truncation (each is 60K, < 100K) but together remain over the 10 MB
+        // cap → ladder must drop to 10K. 250 fields × 60K chars each = ~15 MB
+        // raw; at 100K each, no truncation fires and the cache is still ~15 MB
+        // (over); at 10K each, ~2.5 MB (under).
+        var spanId = UUID.randomUUID();
+        var ref = new EntityRef(EntityType.SPAN, spanId.toString());
+        var ctx = newContextWithSeededTrace();
+
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        String filler = "y".repeat(60_000);
+        for (int i = 0; i < 250; i++) {
+            spanJson.put("field_" + i, filler);
+        }
+        ctx.cache(ref, spanJson);
+
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+
+        var cached = ctx.getCached(ref).orElseThrow();
+        var sampleField = cached.get("field_0").asText();
+        // 100K threshold would have kept ~100K — but the resulting cache was still
+        // over 10 MB, so the ladder must have dropped to 10K.
+        assertThat(sampleField).hasSizeBetween(10_000, 10_100);
+        assertThat(cached.toString().length())
+                .as("after multi-tier fallback the cached form must fit under the cap")
+                .isLessThanOrEqualTo(ReadTool.CACHE_CAP_CHARS);
+    }
+
+    @Test
     void responseIncludesCacheWarningWhenFullExceedsCap() {
         var ctx = newContextWithSeededTrace();
         var spanId = UUID.randomUUID();
