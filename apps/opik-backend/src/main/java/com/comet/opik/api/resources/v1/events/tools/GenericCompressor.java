@@ -27,14 +27,25 @@ import lombok.NonNull;
 public final class GenericCompressor {
 
     static final int FULL_TOKEN_LIMIT = 8_000;
-    static final int STRING_TRUNCATION_LENGTH = 200;
+    static final int STRING_TRUNCATION_LENGTH = 1_000;
 
     public CompressionResult compress(@NonNull JsonNode entityJson, CompressionTier forcedTier) {
+        return compress(entityJson, forcedTier, PathAwareTruncator.SuffixStyle.WITH_JQ_HINT);
+    }
+
+    /**
+     * Variant that lets the caller pick the truncation suffix style. Pass
+     * {@link PathAwareTruncator.SuffixStyle#BARE} when the cache itself was
+     * capped, since the {@code use jq(...) to see full} pointer would be a
+     * lie — the cache has no full value to recover.
+     */
+    CompressionResult compress(@NonNull JsonNode entityJson, CompressionTier forcedTier,
+            @NonNull PathAwareTruncator.SuffixStyle suffix) {
 
         CompressionTier tier = pickTier(entityJson, forcedTier);
         JsonNode data = tier == CompressionTier.FULL
                 ? entityJson
-                : PathAwareTruncator.truncate(entityJson, STRING_TRUNCATION_LENGTH);
+                : PathAwareTruncator.truncate(entityJson, STRING_TRUNCATION_LENGTH, suffix);
         return CompressionResult.builder()
                 .payload(data)
                 .tier(tier)

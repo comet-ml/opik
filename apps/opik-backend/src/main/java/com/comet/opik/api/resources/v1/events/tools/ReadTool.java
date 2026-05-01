@@ -172,7 +172,7 @@ public class ReadTool implements ToolExecutor {
             ctx.cache(ref, outcome.cachedNode);
         }
 
-        var result = traceCompressor.compress(fullJson, trace, spans, args.tier);
+        var result = traceCompressor.compress(fullJson, trace, spans, args.tier, suffixStyleFor(ref, ctx));
         return buildResponse(args, result, outcome.warning).toString();
     }
 
@@ -228,7 +228,7 @@ public class ReadTool implements ToolExecutor {
             ctx.cache(ref, outcome.cachedNode);
         }
 
-        var result = genericCompressor.compress(fullJson, args.tier);
+        var result = genericCompressor.compress(fullJson, args.tier, suffixStyleFor(ref, ctx));
         return buildResponse(args, result, outcome.warning).toString();
     }
 
@@ -325,6 +325,11 @@ public class ReadTool implements ToolExecutor {
      * has been capped (either now or on a prior read in this context), every
      * subsequent read keeps emitting the warning so the LLM doesn't silently
      * see {@code tier=FULL} again on a previously-truncated cache entry.
+     *
+     * <p>The cached form always uses {@link PathAwareTruncator.SuffixStyle#BARE}
+     * because the cache itself is the source of truth for follow-up jq queries —
+     * a {@code "use jq to see full"} pointer in the cache would lead the agent
+     * back into the same truncated value.
      */
     private static CacheOutcome applyCacheCap(JsonNode fullJson, EntityRef ref, TraceToolContext ctx) {
         if (ctx.isTruncated(ref)) {
@@ -336,9 +341,23 @@ public class ReadTool implements ToolExecutor {
         if (size <= CACHE_CAP_CHARS) {
             return new CacheOutcome(fullJson, null);
         }
-        JsonNode truncated = PathAwareTruncator.truncate(fullJson, GenericCompressor.STRING_TRUNCATION_LENGTH);
+        JsonNode truncated = PathAwareTruncator.truncate(fullJson,
+                GenericCompressor.STRING_TRUNCATION_LENGTH,
+                PathAwareTruncator.SuffixStyle.BARE);
         ctx.markTruncated(ref);
         return new CacheOutcome(truncated, CACHE_WARNING_MESSAGE);
+    }
+
+    /**
+     * Picks the truncation suffix style for compression output: {@code BARE}
+     * when the cache holds a capped form (the {@code use jq to see full}
+     * pointer would be a lie), otherwise {@code WITH_JQ_HINT} so the agent
+     * can drill into recoverable cached values.
+     */
+    private static PathAwareTruncator.SuffixStyle suffixStyleFor(EntityRef ref, TraceToolContext ctx) {
+        return ctx.isTruncated(ref)
+                ? PathAwareTruncator.SuffixStyle.BARE
+                : PathAwareTruncator.SuffixStyle.WITH_JQ_HINT;
     }
 
     private static ObjectNode buildResponse(ParsedArgs args, CompressionResult result, String cacheWarning) {

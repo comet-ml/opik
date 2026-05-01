@@ -11,15 +11,23 @@ import java.util.regex.Pattern;
 
 /**
  * Walks a {@link JsonNode} tree tracking the jq path of every visited node and
- * replaces over-length string values with a truncation marker that points the
- * agent at the exact jq expression to recover the full content.
+ * replaces over-length string values with a truncation marker.
  *
- * <p>Output suffix format ("compressed entity output" variant from design §3.5):
- * <pre>
- *   &lt;first maxLength chars&gt;[TRUNCATED N chars — use jq('&lt;jqPath&gt;') to see full]
- * </pre>
+ * <p>Two suffix styles are supported (per design §3.5):
+ * <ul>
+ *   <li>{@link SuffixStyle#WITH_JQ_HINT} — the default. Embeds the jq path so
+ *       the agent can recover the full value:
+ *       <pre>&lt;first maxLength chars&gt;[TRUNCATED N chars — use jq('&lt;jqPath&gt;') to see full]</pre>
+ *       Use this when the truncated tree will live in a cache that still holds
+ *       the full original under the same jq path.</li>
+ *   <li>{@link SuffixStyle#BARE} — drops the jq promise. Use when the source of
+ *       truth itself is being truncated (e.g. the 10 MB cache cap fallback) or
+ *       when the agent is going to read this snapshot through a cache that no
+ *       longer has the full value: pointing at jq would be a lie.
+ *       <pre>&lt;first maxLength chars&gt;[TRUNCATED N chars]</pre></li>
+ * </ul>
  *
- * <p>jq path conventions:
+ * <p>jq path conventions (used only by {@code WITH_JQ_HINT}):
  * <ul>
  *   <li>Top-level field {@code foo} → {@code .foo}</li>
  *   <li>Identifier-safe nested fields → {@code .foo.bar}</li>
@@ -30,21 +38,39 @@ import java.util.regex.Pattern;
 @UtilityClass
 final class PathAwareTruncator {
 
+    /** Style of the truncation suffix appended to over-length strings. */
+    enum SuffixStyle {
+        /** Includes a {@code — use jq('<path>') to see full} pointer. */
+        WITH_JQ_HINT,
+        /** Bare {@code [TRUNCATED N chars]} — no jq pointer. */
+        BARE
+    }
+
     private static final String ROOT_PATH = ".";
     private static final Pattern IDENTIFIER = Pattern.compile("[a-zA-Z_][a-zA-Z0-9_]*");
 
     /**
-     * Returns a deep copy of {@code node} with strings longer than
-     * {@code maxLength} replaced by truncation markers. The input tree is not
-     * mutated — callers can safely keep using the original.
+     * Convenience overload — returns a deep copy of {@code node} with strings
+     * longer than {@code maxLength} replaced by {@link SuffixStyle#WITH_JQ_HINT}
+     * markers. Use when the truncated output will be presented alongside a
+     * cache that still holds the full values.
      */
     static JsonNode truncate(@NonNull JsonNode node, int maxLength) {
+        return truncate(node, maxLength, SuffixStyle.WITH_JQ_HINT);
+    }
+
+    /**
+     * Returns a deep copy of {@code node} with strings longer than
+     * {@code maxLength} replaced by truncation markers in the requested
+     * {@link SuffixStyle}. The input tree is not mutated.
+     */
+    static JsonNode truncate(@NonNull JsonNode node, int maxLength, @NonNull SuffixStyle suffix) {
         JsonNode copy = node.deepCopy();
-        truncateInPlace(copy, maxLength, ROOT_PATH);
+        truncateInPlace(copy, maxLength, ROOT_PATH, suffix);
         return copy;
     }
 
-    private static void truncateInPlace(JsonNode node, int maxLength, String jqPath) {
+    private static void truncateInPlace(JsonNode node, int maxLength, String jqPath, SuffixStyle suffix) {
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;
             // Collect keys first to avoid concurrent-modification issues if a child becomes a fresh node.
@@ -55,10 +81,10 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        obj.set(key, new TextNode(truncatedString(text, maxLength, childPath)));
+                        obj.set(key, new TextNode(truncatedString(text, maxLength, childPath, suffix)));
                     }
                 } else if (child.isContainerNode()) {
-                    truncateInPlace(child, maxLength, childPath);
+                    truncateInPlace(child, maxLength, childPath, suffix);
                 }
             }
         } else if (node.isArray()) {
@@ -69,10 +95,10 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        arr.set(i, new TextNode(truncatedString(text, maxLength, childPath)));
+                        arr.set(i, new TextNode(truncatedString(text, maxLength, childPath, suffix)));
                     }
                 } else if (child.isContainerNode()) {
-                    truncateInPlace(child, maxLength, childPath);
+                    truncateInPlace(child, maxLength, childPath, suffix);
                 }
             }
         }
@@ -88,9 +114,13 @@ final class PathAwareTruncator {
         return ROOT_PATH.equals(parentPath) ? bracket : parentPath + bracket;
     }
 
-    private static String truncatedString(String original, int maxLength, String jqPath) {
+    private static String truncatedString(String original, int maxLength, String jqPath, SuffixStyle suffix) {
         int dropped = original.length() - maxLength;
-        return original.substring(0, maxLength)
-                + "[TRUNCATED %,d chars — use jq('%s') to see full]".formatted(dropped, jqPath);
+        String head = original.substring(0, maxLength);
+        return switch (suffix) {
+            case WITH_JQ_HINT -> head + "[TRUNCATED %,d chars — use jq('%s') to see full]"
+                    .formatted(dropped, jqPath);
+            case BARE -> head + "[TRUNCATED %,d chars]".formatted(dropped);
+        };
     }
 }

@@ -88,4 +88,29 @@ class PathAwareTruncatorTest {
         var truncated = out.get("input").asText();
         assertThat(truncated).contains("[TRUNCATED 4,000 chars — use jq('.input') to see full]");
     }
+
+    @Test
+    void bareSuffixStyleOmitsJqHint() {
+        var input = JsonUtils.getJsonNodeFromString(
+                "{\"input\":\"%s\"}".formatted("a".repeat(4_200)));
+
+        var out = PathAwareTruncator.truncate(input, 200, PathAwareTruncator.SuffixStyle.BARE);
+
+        var truncated = out.get("input").asText();
+        assertThat(truncated)
+                .startsWith("a".repeat(200))
+                .endsWith("[TRUNCATED 4,000 chars]")
+                .doesNotContain("use jq")
+                .doesNotContain("to see full");
+    }
+
+    @Test
+    void noArgOverloadDefaultsToWithJqHint() {
+        var input = JsonUtils.getJsonNodeFromString(
+                "{\"input\":\"%s\"}".formatted("a".repeat(50)));
+
+        var out = PathAwareTruncator.truncate(input, 10);
+
+        assertThat(out.get("input").asText()).contains("use jq('.input')");
+    }
 }

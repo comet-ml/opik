@@ -57,11 +57,25 @@ public final class TraceCompressor implements EntityCompressor {
             @NonNull Trace trace,
             @NonNull List<Span> spans,
             CompressionTier forcedTier) {
+        return compress(fullJson, trace, spans, forcedTier, PathAwareTruncator.SuffixStyle.WITH_JQ_HINT);
+    }
+
+    /**
+     * Variant that lets the caller pick the truncation suffix style. Pass
+     * {@link PathAwareTruncator.SuffixStyle#BARE} when the cache itself was
+     * capped, since the {@code use jq(...) to see full} pointer would be a
+     * lie — the cache has no full value to recover.
+     */
+    CompressionResult compress(@NonNull JsonNode fullJson,
+            @NonNull Trace trace,
+            @NonNull List<Span> spans,
+            CompressionTier forcedTier,
+            @NonNull PathAwareTruncator.SuffixStyle suffix) {
 
         CompressionTier tier = pickTier(fullJson, forcedTier);
         JsonNode payload = switch (tier) {
             case FULL -> fullJson;
-            case MEDIUM -> PathAwareTruncator.truncate(fullJson, STRING_TRUNCATION_LENGTH);
+            case MEDIUM -> PathAwareTruncator.truncate(fullJson, STRING_TRUNCATION_LENGTH, suffix);
             case SKELETON, SUMMARY -> buildSkeleton(trace, spans);
         };
         CompressionTier reportedTier = tier == CompressionTier.SUMMARY ? CompressionTier.SKELETON : tier;

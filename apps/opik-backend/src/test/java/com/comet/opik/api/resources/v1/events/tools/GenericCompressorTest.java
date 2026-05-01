@@ -46,13 +46,15 @@ class GenericCompressorTest {
 
     @Test
     void forcedMediumTierTruncatesEvenOnSmallInput() {
+        // Just over the 1000-char per-string truncation threshold so we get a
+        // deterministic dropped-chars count in the suffix.
         var json = JsonUtils.getJsonNodeFromString(
-                "{\"text\":\"%s\"}".formatted("a".repeat(300)));
+                "{\"text\":\"%s\"}".formatted("a".repeat(1_300)));
 
         var result = compressor.compress(json, CompressionTier.MEDIUM);
 
         assertThat(result.tier()).isEqualTo(CompressionTier.MEDIUM);
-        assertThat(result.payload().get("text").asText()).contains("[TRUNCATED 100 chars");
+        assertThat(result.payload().get("text").asText()).contains("[TRUNCATED 300 chars");
     }
 
     @Test

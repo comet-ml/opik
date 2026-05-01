@@ -204,6 +204,70 @@ class ReadToolTest {
                 .isEqualTo(CompressionTier.MEDIUM.name());
     }
 
+    @Test
+    void jqHintsAreStrippedFromTruncationSuffixesWhenCacheIsCapped() {
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        var ref = new EntityRef(EntityType.SPAN, spanId.toString());
+
+        // Pre-seed the cache with a value containing a long string AND already
+        // mark the entity as truncated. The compressor will produce truncation
+        // suffixes embedding `— use jq('.input') to see full`; ReadTool should
+        // strip that segment because the cache can't actually deliver the full
+        // value (cache_warning is the authoritative note).
+        String longInput = "y".repeat(2_000); // > GenericCompressor 1000-char threshold for MEDIUM
+        var json = JsonUtils.getMapper().createObjectNode();
+        json.put("id", spanId.toString());
+        json.put("input", longInput);
+        ctx.cache(ref, json);
+        ctx.markTruncated(ref);
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
+                        .formatted(spanId), ctx));
+
+        var inputText = result.get("data").get("input").asText();
+        assertThat(inputText)
+                .as("truncation suffix must keep the bare [TRUNCATED N chars] form")
+                .containsPattern("\\[TRUNCATED [0-9,]+ chars]");
+        assertThat(inputText)
+                .as("dishonest 'use jq to see full' segment must be stripped")
+                .doesNotContain("use jq")
+                .doesNotContain("to see full");
+        assertThat(result.has("cache_warning")).isTrue();
+    }
+
+    @Test
+    void jqHintsAreKeptWhenCacheIsNotCapped() {
+        // Counterpart to the above: when the cache is healthy, the per-string
+        // hints DO point at recoverable values and must be preserved so the
+        // agent knows where to drill in.
+        var trace = Trace.builder()
+                .id(UUID.randomUUID())
+                .projectId(UUID.randomUUID())
+                .name("active")
+                .startTime(Instant.now())
+                .build();
+        var ctx = new TraceToolContext(trace, List.of(), "ws", "user");
+
+        var spanId = UUID.randomUUID();
+        var ref = new EntityRef(EntityType.SPAN, spanId.toString());
+        String longInput = "z".repeat(2_000);
+        var json = JsonUtils.getMapper().createObjectNode();
+        json.put("id", spanId.toString());
+        json.put("input", longInput);
+        ctx.cache(ref, json);
+        // Note: NO markTruncated — cache is healthy.
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
+                        .formatted(spanId), ctx));
+
+        var inputText = result.get("data").get("input").asText();
+        assertThat(inputText).contains("use jq('.input') to see full");
+        assertThat(result.has("cache_warning")).isFalse();
+    }
+
     private static TraceToolContext newContextWithSeededTrace() {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
