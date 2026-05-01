@@ -1061,7 +1061,7 @@ class OnlineScoringEngineTest {
                 .aiMessage(AiMessage.aiMessage(aiMessage))
                 .build();
 
-        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
+        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse).scores();
 
         assertThat(feedbackScores).hasSize(expectedSize);
 
@@ -1085,7 +1085,7 @@ class OnlineScoringEngineTest {
 
     @Test
     @DisplayName("skip feedback scores whose value is null in the AI response")
-    void testToFeedbackScores__whenScoreValueIsNull__thenSkipsThatScore() {
+    void whenScoreValueIsNull_thenSkipsThatScoreAndReportsItAsSkipped() {
         var aiMessage = "{\"Relevance\":{\"score\":5,\"reason\":\"applies\"},"
                 + "\"Conciseness\":{\"score\":null,\"reason\":\"not applicable to this turn\"},"
                 + "\"Technical Accuracy\":{\"score\":4.0,\"reason\":\"good\"}}";
@@ -1093,13 +1093,12 @@ class OnlineScoringEngineTest {
                 .aiMessage(AiMessage.aiMessage(aiMessage))
                 .build();
 
-        var feedbackScores = OnlineScoringEngine.toFeedbackScores(chatResponse);
+        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
 
-        assertThat(feedbackScores).hasSize(2);
-        assertThat(feedbackScores).extracting(FeedbackScoreBatchItem::name)
+        assertThat(parsed.scores()).hasSize(2);
+        assertThat(parsed.scores()).extracting(FeedbackScoreBatchItem::name)
                 .containsExactlyInAnyOrder("Relevance", "Technical Accuracy");
-        assertThat(feedbackScores).extracting(FeedbackScoreBatchItem::name)
-                .doesNotContain("Conciseness");
+        assertThat(parsed.nullScoreNames()).containsExactly("Conciseness");
     }
 
     private JsonObjectSchema createTestSchema() {
