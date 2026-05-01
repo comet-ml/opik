@@ -162,6 +162,48 @@ class ReadToolTest {
         assertThat(result.get("cache_warning").asText()).contains("MEDIUM-tier");
     }
 
+    @Test
+    void cacheWarningPersistsOnSubsequentReadAfterTruncation() {
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        var ref = new EntityRef(EntityType.SPAN, spanId.toString());
+
+        // Empty cache. First read of an oversized fetched entity caches the
+        // truncated form and emits the warning.
+        String huge = "x".repeat(ReadTool.CACHE_CAP_CHARS + 100);
+        var oversized = JsonUtils.getJsonNodeFromString(
+                "{\"id\":\"%s\",\"input\":\"%s\"}".formatted(spanId, huge));
+        // Pre-populate the cache as if the (uncapped) fetch already completed,
+        // so we don't need to wire SpanService just to drive the cap path.
+        ctx.cache(ref, oversized);
+
+        var first = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+        assertThat(first.has("cache_warning")).isTrue();
+        assertThat(ctx.isTruncated(ref))
+                .as("cap must be sticky after first triggering call")
+                .isTrue();
+
+        // Simulate the cache now holding the truncated (under-cap) form, as it
+        // would after a real fetch path: ReadTool would have replaced the cache
+        // with outcome.cachedNode. We mirror that here.
+        ctx.cache(ref, JsonUtils.getJsonNodeFromString(
+                "{\"id\":\"%s\",\"input\":\"x[TRUNCATED ...]\"}".formatted(spanId)));
+
+        var second = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+        assertThat(second.has("cache_warning"))
+                .as("warning must persist on subsequent reads of a truncated cache")
+                .isTrue();
+        assertThat(second.get("cache_warning").asText()).contains("MEDIUM-tier");
+        // The compressor sees a small (truncated) cache and would autopick FULL;
+        // ReadTool must downgrade the reported tier to MEDIUM so the LLM doesn't
+        // see "tier=FULL" alongside a cache_warning.
+        assertThat(second.get("tier").asText())
+                .as("tier=FULL would lie about fidelity when cache is truncated")
+                .isEqualTo(CompressionTier.MEDIUM.name());
+    }
+
     private static TraceToolContext newContextWithSeededTrace() {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())

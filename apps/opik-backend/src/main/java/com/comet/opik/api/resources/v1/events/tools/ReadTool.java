@@ -167,7 +167,7 @@ public class ReadTool implements ToolExecutor {
             fullJson = traceCompressor.buildFullJson(trace, spans);
         }
 
-        CacheOutcome outcome = applyCacheCap(fullJson);
+        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
         if (cached.isEmpty()) {
             ctx.cache(ref, outcome.cachedNode);
         }
@@ -207,7 +207,7 @@ public class ReadTool implements ToolExecutor {
             fullJson = datasetCompressor.buildFullJson(dataset, sampleItems);
         }
 
-        CacheOutcome outcome = applyCacheCap(fullJson);
+        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
         if (cached.isEmpty()) {
             ctx.cache(ref, outcome.cachedNode);
         }
@@ -223,7 +223,7 @@ public class ReadTool implements ToolExecutor {
         EntityRef ref = new EntityRef(args.type, args.id);
         JsonNode fullJson = ctx.getCached(ref).orElseGet(fetcher::get);
 
-        CacheOutcome outcome = applyCacheCap(fullJson);
+        CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
         if (ctx.getCached(ref).isEmpty()) {
             ctx.cache(ref, outcome.cachedNode);
         }
@@ -319,18 +319,31 @@ public class ReadTool implements ToolExecutor {
         return result;
     }
 
-    private static CacheOutcome applyCacheCap(JsonNode fullJson) {
+    /**
+     * Decides what the cache should hold for {@code ref} on this call and whether
+     * to surface {@code cache_warning} on the response. Sticky: once an entity
+     * has been capped (either now or on a prior read in this context), every
+     * subsequent read keeps emitting the warning so the LLM doesn't silently
+     * see {@code tier=FULL} again on a previously-truncated cache entry.
+     */
+    private static CacheOutcome applyCacheCap(JsonNode fullJson, EntityRef ref, TraceToolContext ctx) {
+        if (ctx.isTruncated(ref)) {
+            // Cache already holds a capped form (set on a prior call). Don't re-cap;
+            // just keep the warning visible.
+            return new CacheOutcome(fullJson, CACHE_WARNING_MESSAGE);
+        }
         int size = fullJson.toString().length();
         if (size <= CACHE_CAP_CHARS) {
             return new CacheOutcome(fullJson, null);
         }
         JsonNode truncated = PathAwareTruncator.truncate(fullJson, GenericCompressor.STRING_TRUNCATION_LENGTH);
+        ctx.markTruncated(ref);
         return new CacheOutcome(truncated, CACHE_WARNING_MESSAGE);
     }
 
     private static ObjectNode buildResponse(ParsedArgs args, CompressionResult result, String cacheWarning) {
         ObjectNode envelope = JsonUtils.getMapper().createObjectNode();
-        envelope.put("tier", result.tier().name());
+        envelope.put("tier", effectiveTier(result.tier(), cacheWarning).name());
         envelope.put("type", args.type.name().toLowerCase());
         envelope.put("id", args.id);
         envelope.set("data", result.payload());
@@ -338,6 +351,21 @@ public class ReadTool implements ToolExecutor {
             envelope.put("cache_warning", cacheWarning);
         }
         return envelope;
+    }
+
+    /**
+     * When the cache holds a capped form, the compressor is operating on
+     * already-truncated input — so a {@code FULL} autopick would lie about
+     * fidelity. Downgrade {@code FULL} → {@code MEDIUM} (the honest "string
+     * fields path-aware-truncated" tier) when {@code cache_warning} is set.
+     * {@code MEDIUM}, {@code SKELETON}, {@code SUMMARY} are already accurate
+     * "less than FULL" labels and pass through unchanged.
+     */
+    private static CompressionTier effectiveTier(CompressionTier tier, String cacheWarning) {
+        if (cacheWarning != null && tier == CompressionTier.FULL) {
+            return CompressionTier.MEDIUM;
+        }
+        return tier;
     }
 
     private static String errorJson(String message) {
