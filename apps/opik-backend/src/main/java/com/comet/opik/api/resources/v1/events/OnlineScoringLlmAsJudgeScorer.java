@@ -118,7 +118,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             ChatRequest scoreRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
-                if (message.experimentId() != null) {
+                if (shouldUseTools(message)) {
                     // Assertion path: cap variable substitutions so huge trace input/output JSON
                     // doesn't pre-load context. The agent has read/jq tools to drill in on demand.
                     String drillDownHint = "use read(type=trace, id=%s, tier=FULL) to see full"
@@ -139,7 +139,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             ChatRequest structuredRequest = scoreRequest;
-            if (message.experimentId() != null) {
+            if (shouldUseTools(message)) {
                 scoreRequest = addToolSpecs(scoreRequest);
             }
 
@@ -161,7 +161,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 throw exception;
             }
 
-            if (message.experimentId() != null) {
+            if (shouldUseTools(message)) {
                 chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
             }
 
@@ -209,6 +209,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .messages(request.messages())
                 .parameters(parameters)
                 .build();
+    }
+
+    /**
+     * Single source of truth for whether the agentic tool path (read / jq / search / get_trace_spans)
+     * is enabled for this scoring run. Today: scoped to test-suite-assertion runs (i.e.
+     * {@code experimentId != null}); the assertion path uses capped variable substitutions on the
+     * prompt and lets the agent fetch the rest on demand. Extending tools to additional flows
+     * (preview rules, ad-hoc evaluations, etc.) is a one-line change here.
+     */
+    private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
+        return message.experimentId() != null;
     }
 
     // Package-private for unit tests.
