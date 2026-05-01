@@ -148,13 +148,13 @@ public class ReadTool implements ToolExecutor {
                 case DATASET -> readDataset(args, ctx);
                 case DATASET_ITEM -> readGeneric(args, ctx, () -> fetchDatasetItemJson(args.id, ctx));
                 case PROJECT -> readGeneric(args, ctx, () -> fetchProjectJson(args.id, ctx));
-                case THREAD -> errorJson("type=thread is not yet supported by the read tool");
+                case THREAD -> ToolArgs.errorJson("type=thread is not supported by the read tool");
             };
         } catch (NotFoundLikeException e) {
-            return errorJson(e.getMessage());
+            return ToolArgs.errorJson(e.getMessage());
         } catch (Exception e) {
             log.warn("read tool failed for ref ({}, {}): {}", args.type, args.id, e.getMessage(), e);
-            return errorJson("Failed to fetch entity: " + e.getMessage());
+            return ToolArgs.errorJson("Failed to fetch entity: " + e.getMessage());
         }
     }
 
@@ -419,56 +419,39 @@ public class ReadTool implements ToolExecutor {
         return tier;
     }
 
-    private static String errorJson(String message) {
-        return "{\"error\": %s}".formatted(JsonUtils.writeValueAsString(message));
-    }
-
     // ---------------- Argument parsing ----------------
 
     private static ParsedArgs parseArgs(String arguments) {
         if (arguments == null) {
-            return ParsedArgs.error(errorJson("Missing arguments"));
+            return ParsedArgs.error(ToolArgs.errorJson("Missing arguments"));
         }
         try {
             JsonNode node = JsonUtils.getJsonNodeFromString(arguments);
             if (node == null || !node.isObject()) {
-                return ParsedArgs.error(errorJson("Arguments must be a JSON object"));
+                return ParsedArgs.error(ToolArgs.errorJson("Arguments must be a JSON object"));
             }
-            String typeStr = textOrNull(node.get("type"));
-            String id = textOrNull(node.get("id"));
-            if (typeStr == null || typeStr.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: type"));
+            var typeRes = ToolArgs.parseType(node, NAME);
+            if (typeRes.isError()) {
+                return ParsedArgs.error(typeRes.error());
             }
-            if (id == null || id.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: id"));
-            }
-            EntityType type;
-            try {
-                type = EntityType.valueOf(typeStr.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
-            }
-            if (type == EntityType.THREAD) {
-                return ParsedArgs.error(errorJson("type=thread is not supported by the read tool"));
+            var idRes = ToolArgs.requireString(node, "id");
+            if (idRes.isError()) {
+                return ParsedArgs.error(idRes.error());
             }
             CompressionTier tier = null;
-            String tierStr = textOrNull(node.get("tier"));
+            String tierStr = ToolArgs.textOrNull(node.get("tier"));
             if (tierStr != null && !tierStr.isBlank()) {
                 try {
                     tier = CompressionTier.valueOf(tierStr.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    return ParsedArgs.error(errorJson("Unknown tier: " + tierStr));
+                    return ParsedArgs.error(ToolArgs.errorJson("Unknown tier: " + tierStr));
                 }
             }
-            return new ParsedArgs(type, id, tier, null);
+            return new ParsedArgs(typeRes.value(), idRes.value(), tier, null);
         } catch (Exception e) {
             log.warn("Failed to parse read tool arguments: '{}'", arguments, e);
-            return ParsedArgs.error(errorJson("Malformed arguments: " + e.getMessage()));
+            return ParsedArgs.error(ToolArgs.errorJson("Malformed arguments: " + e.getMessage()));
         }
-    }
-
-    private static String textOrNull(JsonNode n) {
-        return n == null || n.isNull() ? null : n.asText();
     }
 
     @FunctionalInterface

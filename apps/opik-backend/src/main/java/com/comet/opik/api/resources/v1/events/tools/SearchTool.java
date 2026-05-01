@@ -138,7 +138,7 @@ public class SearchTool implements ToolExecutor {
         EntityRef ref = new EntityRef(args.type, args.id);
         Optional<JsonNode> cached = ctx.getCached(ref);
         if (cached.isEmpty()) {
-            return cacheMiss(args.type, args.id);
+            return ToolArgs.cacheMiss(args.type, args.id);
         }
 
         return runSearch(cached.get(), args);
@@ -197,7 +197,7 @@ public class SearchTool implements ToolExecutor {
             JsonNode value = match.path("value");
             body.append(path).append(": ").append(renderValue(value));
         }
-        return capWithHint(body.toString(), OUTPUT_TRUNCATION_HINT);
+        return ToolArgs.capWithHint(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT);
     }
 
     private static String renderValue(JsonNode value) {
@@ -221,11 +221,6 @@ public class SearchTool implements ToolExecutor {
     private static String regexFailureMessage(Throwable t) {
         String message = t.getMessage();
         return "Regex failure: " + (message != null ? message : t.getClass().getSimpleName());
-    }
-
-    private static String cacheMiss(EntityType type, String id) {
-        return "Entity (type=%s, id=%s) not in cache. Call read first."
-                .formatted(type.name().toLowerCase(), id);
     }
 
     private static String successHeader(ParsedArgs args, int total, int shown) {
@@ -259,66 +254,35 @@ public class SearchTool implements ToolExecutor {
         return header.toString();
     }
 
-    /**
-     * Caps {@code body} at {@link #OUTPUT_CAP_CHARS}. When truncated, appends
-     * {@code [TRUNCATED N chars — <hint>]} so the agent can constrain via
-     * the {@code path} parameter.
-     */
-    static String capWithHint(String body, String hint) {
-        if (body.length() <= OUTPUT_CAP_CHARS) {
-            return body;
-        }
-        int dropped = body.length() - OUTPUT_CAP_CHARS;
-        return body.substring(0, OUTPUT_CAP_CHARS)
-                + "\n[TRUNCATED %s chars — %s]".formatted(String.format("%,d", dropped), hint);
-    }
-
     // ---------------- Argument parsing ----------------
 
     private static ParsedArgs parseArgs(String arguments) {
         if (arguments == null) {
-            return ParsedArgs.error(errorJson("Missing arguments"));
+            return ParsedArgs.error(ToolArgs.errorJson("Missing arguments"));
         }
         try {
             JsonNode node = JsonUtils.getJsonNodeFromString(arguments);
             if (node == null || !node.isObject()) {
-                return ParsedArgs.error(errorJson("Arguments must be a JSON object"));
+                return ParsedArgs.error(ToolArgs.errorJson("Arguments must be a JSON object"));
             }
-            String typeStr = textOrNull(node.get("type"));
-            String id = textOrNull(node.get("id"));
-            String pattern = textOrNull(node.get("pattern"));
-            String path = textOrNull(node.get("path"));
-            if (typeStr == null || typeStr.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: type"));
+            var typeRes = ToolArgs.parseType(node, NAME);
+            if (typeRes.isError()) {
+                return ParsedArgs.error(typeRes.error());
             }
-            if (id == null || id.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: id"));
+            var idRes = ToolArgs.requireString(node, "id");
+            if (idRes.isError()) {
+                return ParsedArgs.error(idRes.error());
             }
-            if (pattern == null || pattern.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: pattern"));
+            var patternRes = ToolArgs.requireString(node, "pattern");
+            if (patternRes.isError()) {
+                return ParsedArgs.error(patternRes.error());
             }
-            EntityType type;
-            try {
-                type = EntityType.valueOf(typeStr.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
-            }
-            if (type == EntityType.THREAD) {
-                return ParsedArgs.error(errorJson("type=thread is not supported by the search tool"));
-            }
-            return new ParsedArgs(type, id, pattern, path, null);
+            String path = ToolArgs.textOrNull(node.get("path"));
+            return new ParsedArgs(typeRes.value(), idRes.value(), patternRes.value(), path, null);
         } catch (Exception e) {
             log.warn("Failed to parse search tool arguments: '{}'", arguments, e);
-            return ParsedArgs.error(errorJson("Malformed arguments: " + e.getMessage()));
+            return ParsedArgs.error(ToolArgs.errorJson("Malformed arguments: " + e.getMessage()));
         }
-    }
-
-    private static String textOrNull(JsonNode n) {
-        return n == null || n.isNull() ? null : n.asText();
-    }
-
-    private static String errorJson(String message) {
-        return "{\"error\": %s}".formatted(JsonUtils.writeValueAsString(message));
     }
 
     private record ParsedArgs(EntityType type, String id, String pattern, String path, String error) {

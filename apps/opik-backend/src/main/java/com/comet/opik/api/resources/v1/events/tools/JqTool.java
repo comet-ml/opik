@@ -110,7 +110,7 @@ public class JqTool implements ToolExecutor {
         EntityRef ref = new EntityRef(args.type, args.id);
         Optional<JsonNode> cached = ctx.getCached(ref);
         if (cached.isEmpty()) {
-            return cacheMiss(args.type, args.id);
+            return ToolArgs.cacheMiss(args.type, args.id);
         }
 
         return evaluate(cached.get(), args);
@@ -175,7 +175,7 @@ public class JqTool implements ToolExecutor {
                 break;
             }
         }
-        String capped = capWithHint(body.toString(), OUTPUT_TRUNCATION_HINT);
+        String capped = ToolArgs.capWithHint(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT);
         return successHeader(args) + "\n" + capped;
     }
 
@@ -185,11 +185,6 @@ public class JqTool implements ToolExecutor {
             message = t.getClass().getSimpleName();
         }
         return errorHeader(args) + "\n" + message;
-    }
-
-    private static String cacheMiss(EntityType type, String id) {
-        return "Entity (type=%s, id=%s) not in cache. Call read first."
-                .formatted(type.name().toLowerCase(), id);
     }
 
     private static String successHeader(ParsedArgs args) {
@@ -202,65 +197,34 @@ public class JqTool implements ToolExecutor {
                 .formatted(args.type.name().toLowerCase(), args.id, args.expression);
     }
 
-    /**
-     * Caps {@code body} at {@link #OUTPUT_CAP_CHARS}. When truncated, appends
-     * a single line of the form {@code [TRUNCATED N chars — <hint>]} so the
-     * agent can act on the cap.
-     */
-    static String capWithHint(String body, String hint) {
-        if (body.length() <= OUTPUT_CAP_CHARS) {
-            return body;
-        }
-        int dropped = body.length() - OUTPUT_CAP_CHARS;
-        return body.substring(0, OUTPUT_CAP_CHARS)
-                + "\n[TRUNCATED %s chars — %s]".formatted(String.format("%,d", dropped), hint);
-    }
-
     // ---------------- Argument parsing ----------------
 
     private static ParsedArgs parseArgs(String arguments) {
         if (arguments == null) {
-            return ParsedArgs.error(errorJson("Missing arguments"));
+            return ParsedArgs.error(ToolArgs.errorJson("Missing arguments"));
         }
         try {
             JsonNode node = JsonUtils.getJsonNodeFromString(arguments);
             if (node == null || !node.isObject()) {
-                return ParsedArgs.error(errorJson("Arguments must be a JSON object"));
+                return ParsedArgs.error(ToolArgs.errorJson("Arguments must be a JSON object"));
             }
-            String typeStr = textOrNull(node.get("type"));
-            String id = textOrNull(node.get("id"));
-            String expression = textOrNull(node.get("expression"));
-            if (typeStr == null || typeStr.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: type"));
+            var typeRes = ToolArgs.parseType(node, NAME);
+            if (typeRes.isError()) {
+                return ParsedArgs.error(typeRes.error());
             }
-            if (id == null || id.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: id"));
+            var idRes = ToolArgs.requireString(node, "id");
+            if (idRes.isError()) {
+                return ParsedArgs.error(idRes.error());
             }
-            if (expression == null || expression.isBlank()) {
-                return ParsedArgs.error(errorJson("Missing required argument: expression"));
+            var exprRes = ToolArgs.requireString(node, "expression");
+            if (exprRes.isError()) {
+                return ParsedArgs.error(exprRes.error());
             }
-            EntityType type;
-            try {
-                type = EntityType.valueOf(typeStr.toUpperCase());
-            } catch (IllegalArgumentException e) {
-                return ParsedArgs.error(errorJson("Unknown type: " + typeStr));
-            }
-            if (type == EntityType.THREAD) {
-                return ParsedArgs.error(errorJson("type=thread is not supported by the jq tool"));
-            }
-            return new ParsedArgs(type, id, expression, null);
+            return new ParsedArgs(typeRes.value(), idRes.value(), exprRes.value(), null);
         } catch (Exception e) {
             log.warn("Failed to parse jq tool arguments: '{}'", arguments, e);
-            return ParsedArgs.error(errorJson("Malformed arguments: " + e.getMessage()));
+            return ParsedArgs.error(ToolArgs.errorJson("Malformed arguments: " + e.getMessage()));
         }
-    }
-
-    private static String textOrNull(JsonNode n) {
-        return n == null || n.isNull() ? null : n.asText();
-    }
-
-    private static String errorJson(String message) {
-        return "{\"error\": %s}".formatted(JsonUtils.writeValueAsString(message));
     }
 
     private record ParsedArgs(EntityType type, String id, String expression, String error) {
