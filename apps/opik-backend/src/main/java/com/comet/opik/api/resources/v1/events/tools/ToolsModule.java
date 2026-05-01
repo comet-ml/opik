@@ -16,5 +16,6 @@ public class ToolsModule extends AbstractModule {
         tools.addBinding().to(GetTraceSpansTool.class);
         tools.addBinding().to(ReadTool.class);
         tools.addBinding().to(JqTool.class);
+        tools.addBinding().to(SearchTool.class);
     }
 }

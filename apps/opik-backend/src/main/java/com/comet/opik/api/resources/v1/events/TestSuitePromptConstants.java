@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
 import com.comet.opik.api.resources.v1.events.tools.JqTool;
 import com.comet.opik.api.resources.v1.events.tools.ReadTool;
+import com.comet.opik.api.resources.v1.events.tools.SearchTool;
 
 /**
  * Holds the LLM-as-judge prompt templates used for test suite assertion evaluation.
@@ -61,6 +62,18 @@ final class TestSuitePromptConstants {
             footer. If you get `Entity (type=<t>, id=<id>) not in cache. Call read first.`, \
             call `%s` for that entity before retrying `%s`.
 
+            4. **`%s`** — Locate strings inside an already-cached entity by regex. Pass \
+            `{"type": "<type>", "id": "<id>", "pattern": "<regex>"}` — optionally add \
+            `"path": "<jq scope>"` (e.g. `".spans"`) to restrict the search to a sub-tree. \
+            The pattern is matched case-insensitively against every string value reachable \
+            under the scope; keys, numbers, booleans, and nulls are ignored. Returns up to \
+            50 `<path>: <value>` rows (each value truncated to 200 chars with the standard \
+            `[TRUNCATED N chars]` suffix); the header reports the true total, e.g. \
+            `... | 312 matches (showing 50)`. Each row's `<path>` is a jq expression you \
+            can feed straight into `%s` to extract the full original value. Typical \
+            workflow: see a skeleton or truncation hint → `%s` for the substring → `%s` \
+            with the matching path for the full value.
+
             **When to call tools:** Before judging ANY assertion that references tool usage, \
             function calls, model selection, intermediate behavior, or execution details, \
             you MUST call `%s` first. Do NOT assume the tool was or was not called \
@@ -73,6 +86,10 @@ final class TestSuitePromptConstants {
             ReadTool.NAME,
             JqTool.NAME,
             ReadTool.NAME,
+            JqTool.NAME,
+            SearchTool.NAME,
+            JqTool.NAME,
+            SearchTool.NAME,
             JqTool.NAME,
             GetTraceSpansTool.NAME);
 
