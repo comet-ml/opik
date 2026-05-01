@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.resources.v1.events.tools.GetTraceSpansTool;
+import com.comet.opik.api.resources.v1.events.tools.JqTool;
 import com.comet.opik.api.resources.v1.events.tools.ReadTool;
 
 /**
@@ -46,8 +47,19 @@ final class TestSuitePromptConstants {
             auto-picked size. Use `read(type=span, id=<id>, tier=FULL)` after reviewing \
             the trace overview to drill into a specific span. Returned content is sized \
             to fit a token budget; long string fields may include a truncation marker \
-            like `[TRUNCATED N chars — use jq('<path>') to see full]` — note that suffix \
-            is informational in this version.
+            like `[TRUNCATED N chars — use jq('<path>') to see full]` — when you see \
+            that hint, call `%s` with the suggested path to retrieve the full original value.
+
+            3. **`%s`** — Run a jq expression against an entity that is already in cache \
+            (the active trace is pre-cached; any entity you have called `%s` on is also \
+            cached). Pass `{"type": "<type>", "id": "<id>", "expression": "<jq expression>"}`. \
+            Use `%s` to recover a value flagged with a `[TRUNCATED ... — use jq('<path>') ...]` \
+            hint, to project specific fields from a large entity (e.g. \
+            `[.spans[].name]`), or to filter (e.g. `..|select(.error_info?)`). Output is \
+            text (jq's stdout, one value per line for multi-result expressions) and is \
+            capped at 16 KB — narrow your expression if you see a `[TRUNCATED ...]` \
+            footer. If you get `Entity (type=<t>, id=<id>) not in cache. Call read first.`, \
+            call `%s` for that entity before retrying `%s`.
 
             **When to call tools:** Before judging ANY assertion that references tool usage, \
             function calls, model selection, intermediate behavior, or execution details, \
@@ -56,6 +68,12 @@ final class TestSuitePromptConstants {
             """.formatted(
             GetTraceSpansTool.NAME,
             ReadTool.NAME,
+            JqTool.NAME,
+            JqTool.NAME,
+            ReadTool.NAME,
+            JqTool.NAME,
+            ReadTool.NAME,
+            JqTool.NAME,
             GetTraceSpansTool.NAME);
 
     static final String USER_MESSAGE_TEMPLATE = """

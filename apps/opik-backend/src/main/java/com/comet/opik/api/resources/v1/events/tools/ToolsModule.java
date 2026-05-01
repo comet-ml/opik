@@ -15,5 +15,6 @@ public class ToolsModule extends AbstractModule {
         Multibinder<ToolExecutor> tools = Multibinder.newSetBinder(binder(), ToolExecutor.class);
         tools.addBinding().to(GetTraceSpansTool.class);
         tools.addBinding().to(ReadTool.class);
+        tools.addBinding().to(JqTool.class);
     }
 }
