@@ -8579,12 +8579,12 @@ class DatasetsResourceTest {
             var tracesRaw = IntStream.range(0, sharedItemCount)
                     .mapToObj(i -> factory.manufacturePojo(Trace.class))
                     .toList();
-            var allTraces = new java.util.ArrayList<Trace>();
+            var allTraces = new ArrayList<Trace>();
             allTraces.addAll(tracesAggregated);
             allTraces.addAll(tracesRaw);
             traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
 
-            var experimentItems = new java.util.HashSet<ExperimentItem>();
+            var experimentItems = new HashSet<ExperimentItem>();
             for (int i = 0; i < sharedItemCount; i++) {
                 experimentItems.add(ExperimentItem.builder()
                         .experimentId(experimentAggregatedId)
