@@ -7,4 +7,5 @@ export interface ChatCompletionChoice {
     message?: OpikApi.AssistantMessage;
     delta?: OpikApi.Delta;
     finishReason?: string;
+    logprobs?: OpikApi.LogProbs;
 }

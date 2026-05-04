@@ -11286,6 +11286,8 @@ components:
           $ref: "#/components/schemas/Delta"
         finish_reason:
           type: string
+        logprobs:
+          $ref: "#/components/schemas/LogProbs"
     ChatCompletionResponse:
       type: object
       properties:
@@ -11334,6 +11336,26 @@ components:
           type: string
         arguments:
           type: string
+    LogProb:
+      type: object
+      properties:
+        token:
+          type: string
+        logprob:
+          type: number
+          format: double
+        bytes:
+          type: array
+          items:
+            type: integer
+            format: int32
+    LogProbs:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogProb"
     PromptTokensDetails:
       type: object
       properties:
@@ -11438,6 +11460,11 @@ components:
           type: string
         service_tier:
           type: string
+        logprobs:
+          type: boolean
+        top_logprobs:
+          type: integer
+          format: int32
         functions:
           type: array
           items:

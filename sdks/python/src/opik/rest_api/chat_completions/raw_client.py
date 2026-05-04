@@ -51,6 +51,8 @@ class RawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        logprobs: typing.Optional[bool] = OMIT,
+        top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -106,6 +108,10 @@ class RawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        logprobs : typing.Optional[bool]
+
+        top_logprobs : typing.Optional[int]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -153,6 +159,8 @@ class RawChatCompletionsClient:
                 "metadata": metadata,
                 "reasoning_effort": reasoning_effort,
                 "service_tier": service_tier,
+                "logprobs": logprobs,
+                "top_logprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(
                     object_=functions, annotation=typing.Sequence[Function], direction="write"
                 ),
@@ -212,6 +220,8 @@ class AsyncRawChatCompletionsClient:
         metadata: typing.Optional[typing.Dict[str, str]] = OMIT,
         reasoning_effort: typing.Optional[str] = OMIT,
         service_tier: typing.Optional[str] = OMIT,
+        logprobs: typing.Optional[bool] = OMIT,
+        top_logprobs: typing.Optional[int] = OMIT,
         functions: typing.Optional[typing.Sequence[Function]] = OMIT,
         function_call: typing.Optional[FunctionCall] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
@@ -267,6 +277,10 @@ class AsyncRawChatCompletionsClient:
 
         service_tier : typing.Optional[str]
 
+        logprobs : typing.Optional[bool]
+
+        top_logprobs : typing.Optional[int]
+
         functions : typing.Optional[typing.Sequence[Function]]
 
         function_call : typing.Optional[FunctionCall]
@@ -314,6 +328,8 @@ class AsyncRawChatCompletionsClient:
                 "metadata": metadata,
                 "reasoning_effort": reasoning_effort,
                 "service_tier": service_tier,
+                "logprobs": logprobs,
+                "top_logprobs": top_logprobs,
                 "functions": convert_and_respect_annotation_metadata(
                     object_=functions, annotation=typing.Sequence[Function], direction="write"
                 ),
