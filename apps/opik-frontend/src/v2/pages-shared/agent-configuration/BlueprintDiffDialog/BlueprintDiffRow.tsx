@@ -36,7 +36,7 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
   const diffText = diffValue ? formatBlueprintValue(diffValue) : "";
 
   return (
-    <TableRow className="border-border bg-white hover:bg-white">
+    <TableRow className="border-border bg-background">
       <TableCell className="w-[240px] border-r border-border p-1.5 align-top">
         <KeyCellContent label={key} type={type} mode={mode} />
       </TableCell>

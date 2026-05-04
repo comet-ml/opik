@@ -76,7 +76,7 @@ export const KeyCellContent: React.FC<{
 };
 
 const valueBoxClass = (mode: DiffMode) =>
-  cn("flex min-h-5 items-center rounded-md border px-2", tokenSurface(mode));
+  cn("flex min-h-6 items-center rounded-md border px-2", tokenSurface(mode));
 
 export const ValueCellContent: React.FC<{
   baseText: string;

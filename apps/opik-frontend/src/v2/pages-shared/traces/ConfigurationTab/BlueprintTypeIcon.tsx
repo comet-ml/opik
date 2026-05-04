@@ -26,9 +26,9 @@ const SIZE_CLASSES = {
   sm: { outer: "size-4", inner: "size-2.5" },
 } as const;
 
-const TONE_BG: Record<"added" | "removed", string> = {
-  added: "var(--diff-added-text)",
-  removed: "var(--diff-removed-text)",
+const TONE_COLORS: Record<"added" | "removed", { bg: string; fg: string }> = {
+  added: { bg: "var(--diff-added-text)", fg: "var(--diff-added-bg)" },
+  removed: { bg: "var(--diff-removed-text)", fg: "var(--diff-removed-bg)" },
 };
 
 type BlueprintTypeIconProps = {
@@ -47,11 +47,15 @@ const BlueprintTypeIcon: React.FC<BlueprintTypeIconProps> = ({
   const { icon: Icon, color } = TYPE_CONFIG[type] ?? FALLBACK_TYPE_CONFIG;
   const isSecondary = variant === "secondary";
   const bg = tone
-    ? TONE_BG[tone]
+    ? TONE_COLORS[tone].bg
     : isSecondary
       ? "hsl(var(--muted-disabled))"
       : color;
-  const fg = isSecondary ? "hsl(var(--muted-slate))" : "white";
+  const fg = tone
+    ? TONE_COLORS[tone].fg
+    : isSecondary
+      ? "hsl(var(--muted-slate))"
+      : "white";
   const sizeClasses = SIZE_CLASSES[size];
   return (
     <span

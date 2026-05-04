@@ -138,8 +138,8 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
         </TableHeader>
         <TableBody>
           {visiblePairs.length === 0 ? (
-            <TableRow className="hover:bg-white">
-              <TableCell colSpan={2} className="bg-white p-0">
+            <TableRow>
+              <TableCell colSpan={2} className="bg-background p-0">
                 <div className="flex h-60 flex-col items-center justify-center gap-1 text-muted-slate">
                   <GitCompareArrows className="size-4" />
                   <span className="comet-body-s">
