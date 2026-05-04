@@ -63,7 +63,7 @@ const MarkdownBody: React.FC<CodeBlockBodyProps> = ({ code, searchValue }) => {
   return (
     <div
       ref={containerRef}
-      className="comet-body-s min-h-[22px] px-3 text-foreground-secondary"
+      className="comet-body-s min-h-[22px] px-2 text-foreground-secondary"
     >
       {content}
     </div>
@@ -75,7 +75,7 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
   searchValue,
 }) => {
   const viewRef = useRef<EditorView | null>(null);
-  const theme = useCodemirrorTheme({});
+  const theme = useCodemirrorTheme({ transparent: true });
   const searchPanelTheme = useSearchPanelTheme();
 
   const { extension: searchExtension, initSearch } = useCodeMirrorSearch({
@@ -93,11 +93,15 @@ const CodeMirrorBody: React.FC<CodeBlockBodyProps> = ({
   };
 
   return (
-    <div className="px-3">
+    <div className="px-2">
       <CodeMirror
         theme={theme}
         value={code.message}
-        basicSetup={{ searchKeymap: false }}
+        basicSetup={{
+          searchKeymap: false,
+          lineNumbers: false,
+          foldGutter: false,
+        }}
         extensions={[
           EditorView.lineWrapping,
           EditorState.readOnly.of(true),

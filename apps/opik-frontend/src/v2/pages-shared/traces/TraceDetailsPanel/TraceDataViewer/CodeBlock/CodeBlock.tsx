@@ -66,7 +66,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
     >
       <div
         className={cn(
-          "flex h-8 items-center border-b px-3",
+          "flex h-8 items-center border-b px-2",
           isOpen ? "border-border" : "border-transparent",
         )}
       >
@@ -107,7 +107,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
           <CodeBlockCopy text={code.message} />
         </div>
       </div>
-      <div className={cn("pb-0.5 pt-2", !isOpen && "hidden")}>
+      <div className={cn("pt-2", !isOpen && "hidden")}>
         <CodeBlockBody code={code} searchValue={effectiveSearch} />
       </div>
     </div>

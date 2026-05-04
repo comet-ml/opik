@@ -257,7 +257,7 @@ const MessagesTab: React.FunctionComponent<MessagesTabProps> = ({
             {copyButton}
           </>
         }
-        bodyClassName="px-3 pb-3 pt-2"
+        bodyClassName="px-2 pb-2 pt-1"
       >
         {combinedMessages.length > 0 ? (
           <>

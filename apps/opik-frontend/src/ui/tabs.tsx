@@ -13,8 +13,7 @@ const TabsListVariants = cva(
       variant: {
         default: "gap-2 rounded-lg bg-muted p-1",
         underline: "gap-8 border-b px-1",
-        segmented:
-          "gap-1 rounded-md border border-border bg-soft-background p-1",
+        segmented: "gap-1 rounded-md border border-border p-1",
       },
     },
     defaultVariants: {

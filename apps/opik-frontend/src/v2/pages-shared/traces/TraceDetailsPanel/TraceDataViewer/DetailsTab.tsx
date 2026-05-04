@@ -29,7 +29,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
       <div className="flex flex-col gap-2">
         <AttachmentsList media={media} />
         {isLoading ? (
-          <CollapsibleSection title="Input" disabled bodyClassName="p-3">
+          <CollapsibleSection title="Input" disabled bodyClassName="p-2">
             <Loader />
           </CollapsibleSection>
         ) : (
@@ -43,7 +43,7 @@ const DetailsTab: React.FunctionComponent<DetailsTabProps> = ({
           />
         )}
         {isLoading ? (
-          <CollapsibleSection title="Output" disabled bodyClassName="p-3">
+          <CollapsibleSection title="Output" disabled bodyClassName="p-2">
             <Loader />
           </CollapsibleSection>
         ) : (

@@ -545,11 +545,6 @@
     }
   }
 
-  .static-code-gutter {
-    color: var(--codemirror-gutter);
-    background: transparent;
-  }
-
   .dark .static-code-highlight {
     .tok-string {
       color: var(--codemirror-syntax-string);

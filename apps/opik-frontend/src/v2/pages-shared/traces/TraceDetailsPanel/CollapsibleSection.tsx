@@ -40,7 +40,7 @@ const CollapsibleSection: React.FC<CollapsibleSectionProps> = ({
     >
       <div
         className={cn(
-          "flex h-8 w-full items-center px-3",
+          "flex h-8 w-full items-center px-2",
           isOpen && "border-b border-border",
         )}
       >
