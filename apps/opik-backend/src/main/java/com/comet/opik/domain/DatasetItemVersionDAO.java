@@ -2546,9 +2546,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             }
 
                             String query = template.render();
-                            log.info(
-                                    "=== OPIK-6177 DEBUG QUERY ===\n{}\n=== END ===\nbindings: workspace_id={}, datasetId={}, versionId={}, experiment_ids={}",
-                                    query, workspaceId, criteria.datasetId(), versionId, criteria.experimentIds());
 
                             var statement = connection.createStatement(query)
                                     .bind("workspace_id", workspaceId)
