@@ -14,6 +14,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import reactor.core.publisher.Mono;
 
 import java.util.List;
 import java.util.Map;
@@ -29,7 +30,7 @@ public class PythonEvaluatorService {
     private final @NonNull RetriableHttpClient client;
     private final @NonNull OpikConfiguration config;
 
-    public List<PythonScoreResult> evaluate(@NonNull String code, Map<String, String> data) {
+    public Mono<List<PythonScoreResult>> evaluate(@NonNull String code, Map<String, String> data) {
         Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
         var request = PythonEvaluatorRequest.builder()
                 .code(code)
@@ -39,7 +40,7 @@ public class PythonEvaluatorService {
         return executeWithRetry(Entity.json(request));
     }
 
-    public List<PythonScoreResult> evaluateThread(@NonNull String code, List<ChatMessage> context) {
+    public Mono<List<PythonScoreResult>> evaluateThread(@NonNull String code, List<ChatMessage> context) {
         Preconditions.checkArgument(CollectionUtils.isNotEmpty(context), "Argument 'context' must not be empty");
         TraceThreadPythonEvaluatorRequest request = TraceThreadPythonEvaluatorRequest.builder()
                 .code(code)
@@ -49,14 +50,19 @@ public class PythonEvaluatorService {
         return executeWithRetry(Entity.json(request));
     }
 
-    private List<PythonScoreResult> executeWithRetry(Entity<?> request) {
-        return RetriableHttpClient.newPost(c -> c.target(URL_TEMPLATE.formatted(config.getPythonEvaluator().getUrl())))
-                .withRetryPolicy(RetryUtils.handleHttpErrors(config.getPythonEvaluator().getMaxRetryAttempts(),
-                        config.getPythonEvaluator().getMinRetryDelay().toJavaDuration(),
-                        config.getPythonEvaluator().getMaxRetryDelay().toJavaDuration()))
-                .withRequestBody(request)
-                .withResponse(this::processResponse)
-                .execute(client);
+    private Mono<List<PythonScoreResult>> executeWithRetry(Entity<?> body) {
+        var pythonConfig = config.getPythonEvaluator();
+        var request = RetriableHttpClient.Request.<List<PythonScoreResult>>builder()
+                .requestFunction(client -> client.target(URL_TEMPLATE.formatted(pythonConfig.getUrl())))
+                .retryPolicy(RetryUtils.handleHttpErrors(pythonConfig.getMaxRetryAttempts(),
+                        pythonConfig.getMinRetryDelay().toJavaDuration(),
+                        pythonConfig.getMaxRetryDelay().toJavaDuration()))
+                .body(body)
+                .connectTimeout(pythonConfig.getConnectTimeout().toJavaDuration())
+                .readTimeout(pythonConfig.getReadTimeout().toJavaDuration())
+                .responseFunction(this::processResponse)
+                .build();
+        return client.executePostWithRetry(request);
     }
 
     private List<PythonScoreResult> processResponse(Response response) {

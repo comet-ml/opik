@@ -270,6 +270,9 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .environment import Environment
+from .environment_page_public import EnvironmentPagePublic
+from .environment_public import EnvironmentPublic
 from .error_count_with_deviation import ErrorCountWithDeviation
 from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .error_info import ErrorInfo
@@ -904,6 +907,9 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "Environment",
+    "EnvironmentPagePublic",
+    "EnvironmentPublic",
     "ErrorCountWithDeviation",
     "ErrorCountWithDeviationDetailed",
     "ErrorInfo",
