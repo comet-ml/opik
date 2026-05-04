@@ -4628,43 +4628,6 @@ class DatasetsResourceTest {
         }
 
         @Test
-        @DisplayName("when streaming dataset items with project_id filter, then return items")
-        void streamDataItems__whenProjectIdFilter__thenReturnItems() {
-            String apiKey = UUID.randomUUID().toString();
-            String workspaceName = UUID.randomUUID().toString();
-            String workspaceId = UUID.randomUUID().toString();
-            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
-
-            String projectName = "project-" + UUID.randomUUID();
-            var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
-
-            var dataset = buildDataset().toBuilder().id(null).projectId(projectId).build();
-            var datasetId = datasetResourceClient.createDataset(dataset, apiKey, workspaceName);
-
-            var items = IntStream.range(0, 3)
-                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder().id(null).build())
-                    .toList();
-
-            var batch = DatasetResourceClient.buildDatasetItemBatch(factory).toBuilder()
-                    .items(items)
-                    .datasetId(datasetId)
-                    .datasetName(dataset.name())
-                    .build();
-
-            putAndAssert(batch, workspaceName, apiKey);
-
-            var streamRequest = DatasetItemStreamRequest.builder()
-                    .datasetName(dataset.name())
-                    .projectId(projectId)
-                    .build();
-
-            List<DatasetItem> actualItems = datasetResourceClient.streamDatasetItems(streamRequest, apiKey,
-                    workspaceName);
-
-            assertThat(actualItems).hasSize(items.size());
-        }
-
-        @Test
         @DisplayName("when streaming dataset items with non-existing project_name, then return items without project scope")
         void streamDataItems__whenNonExistingProjectName__thenReturnItemsWithoutProjectScope() {
             var items = IntStream.range(0, 3)

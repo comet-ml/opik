@@ -84,7 +84,8 @@ class OptimizationsResourceProjectScopedDatasetCreationTest {
         var optimizationId = optimizationResourceClient.create(optimization, apiKey, workspaceName);
 
         var dataset = datasetResourceClient.getDatasetByIdentifier(
-                DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+                DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build(),
+                apiKey, workspaceName);
 
         assertThat(dataset.projectId()).isEqualTo(projectId);
 

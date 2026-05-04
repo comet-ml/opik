@@ -423,7 +423,7 @@ class DatasetServiceImpl implements DatasetService {
             deleteDatasetVersionData(handle, Set.of(dataset.id()), workspaceId);
 
             var datasetDao = handle.attach(DatasetDAO.class);
-            datasetDao.delete(workspaceId, identifier.datasetName());
+            datasetDao.delete(dataset.id(), workspaceId);
             return null;
         });
 

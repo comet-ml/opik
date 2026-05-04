@@ -12,6 +12,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
+import jakarta.ws.rs.core.Response;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -276,8 +277,182 @@ class DatasetsResourceProjectScopedTest {
         datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
 
         var dataset = datasetResourceClient.getDatasetByIdentifier(
-                DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
+                DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build(),
+                apiKey, workspaceName);
 
         assertThat(dataset.projectId()).isEqualTo(projectId);
+    }
+
+    @Test
+    @DisplayName("Same name across v1 and v2-in-project coexists in the same workspace (both insert orders)")
+    void v1AndV2NamesakesCoexist() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectAId = projectResourceClient.createProject("project-A-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        // v1 first, then v2 in Project A
+        String name1 = "shared-name-" + UUID.randomUUID();
+        var v1First = buildDataset().toBuilder().id(null).name(name1).projectId(null).build();
+        datasetResourceClient.createDataset(v1First, apiKey, workspaceName);
+        var v2Second = buildDataset().toBuilder().id(null).name(name1).projectId(projectAId).build();
+        datasetResourceClient.createDataset(v2Second, apiKey, workspaceName);
+
+        // Reverse order: v2 first, then v1
+        String name2 = "shared-name-" + UUID.randomUUID();
+        var v2First = buildDataset().toBuilder().id(null).name(name2).projectId(projectAId).build();
+        datasetResourceClient.createDataset(v2First, apiKey, workspaceName);
+        var v1Second = buildDataset().toBuilder().id(null).name(name2).projectId(null).build();
+        datasetResourceClient.createDataset(v1Second, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("Two v1 datasets with same name in same workspace still 409s")
+    void duplicateV1DatasetReturns409() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String name = "dup-v1-" + UUID.randomUUID();
+        var first = buildDataset().toBuilder().id(null).name(name).projectId(null).build();
+        datasetResourceClient.createDataset(first, apiKey, workspaceName);
+
+        var second = buildDataset().toBuilder().id(null).name(name).projectId(null).build();
+        try (var response = datasetResourceClient.callCreateDataset(second, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CONFLICT.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("Same name across two v2 projects in same workspace coexists")
+    void v2NamesakesAcrossProjectsCoexist() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectAId = projectResourceClient.createProject("project-A-" + UUID.randomUUID(), apiKey, workspaceName);
+        var projectBId = projectResourceClient.createProject("project-B-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        String name = "shared-v2-" + UUID.randomUUID();
+        var inA = buildDataset().toBuilder().id(null).name(name).projectId(projectAId).build();
+        datasetResourceClient.createDataset(inA, apiKey, workspaceName);
+
+        var inB = buildDataset().toBuilder().id(null).name(name).projectId(projectBId).build();
+        datasetResourceClient.createDataset(inB, apiKey, workspaceName);
+    }
+
+    @Test
+    @DisplayName("Two v2 datasets with same name in the same project still 409s")
+    void duplicateV2DatasetInSameProjectReturns409() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        String name = "dup-v2-" + UUID.randomUUID();
+        var first = buildDataset().toBuilder().id(null).name(name).projectId(projectId).build();
+        datasetResourceClient.createDataset(first, apiKey, workspaceName);
+
+        var second = buildDataset().toBuilder().id(null).name(name).projectId(projectId).build();
+        try (var response = datasetResourceClient.callCreateDataset(second, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.CONFLICT.getStatusCode());
+        }
+    }
+
+    @Test
+    @DisplayName("Deleting v2 dataset by name does not affect v1 namesake (case 5 regression)")
+    void deletingV2NamesakeDoesNotAffectV1() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        String name = "shared-name-" + UUID.randomUUID();
+        var v1Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(null).build(), apiKey, workspaceName);
+        var v2Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(projectId).build(), apiKey, workspaceName);
+
+        datasetResourceClient.deleteDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(name).projectName(projectName).build(),
+                apiKey, workspaceName);
+
+        // v2 row gone, v1 row survives
+        try (var response = datasetResourceClient.callGetDatasetById(v2Id, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
+        }
+        var survivingV1 = datasetResourceClient.getDatasetById(v1Id, apiKey, workspaceName);
+        assertThat(survivingV1.id()).isEqualTo(v1Id);
+        assertThat(survivingV1.projectId()).isNull();
+    }
+
+    @Test
+    @DisplayName("Deleting v1 dataset by name does not affect v2 namesake (case 5 reverse regression)")
+    void deletingV1NamesakeDoesNotAffectV2() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var projectId = projectResourceClient.createProject("project-" + UUID.randomUUID(), apiKey, workspaceName);
+
+        String name = "shared-name-" + UUID.randomUUID();
+        var v1Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(null).build(), apiKey, workspaceName);
+        var v2Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(projectId).build(), apiKey, workspaceName);
+
+        // No projectName -> resolves to v1 (project_id IS NULL) row
+        datasetResourceClient.deleteDatasetByName(name, apiKey, workspaceName);
+
+        try (var response = datasetResourceClient.callGetDatasetById(v1Id, apiKey, workspaceName)) {
+            assertThat(response.getStatus()).isEqualTo(Response.Status.NOT_FOUND.getStatusCode());
+        }
+        var survivingV2 = datasetResourceClient.getDatasetById(v2Id, apiKey, workspaceName);
+        assertThat(survivingV2.id()).isEqualTo(v2Id);
+        assertThat(survivingV2.projectId()).isEqualTo(projectId);
+    }
+
+    @Test
+    @DisplayName("findByName with projectId does not match a v1 row of the same name (case 7 regression)")
+    void findByNameInProjectDoesNotMatchV1Row() {
+        String apiKey = UUID.randomUUID().toString();
+        String workspaceName = UUID.randomUUID().toString();
+        String workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        String projectName = "project-" + UUID.randomUUID();
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        // v1 row only — no v2 namesake exists
+        String name = "v1-only-" + UUID.randomUUID();
+        var v1Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(null).build(), apiKey, workspaceName);
+
+        // Lookup with projectName falls back to workspace-level v1 row (existing behaviour preserved).
+        var resolved = datasetResourceClient.getDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(name).projectName(projectName).build(),
+                apiKey, workspaceName);
+        assertThat(resolved.id()).isEqualTo(v1Id);
+        assertThat(resolved.projectId()).isNull();
+
+        // Now create the v2 namesake; the project-scoped lookup must resolve to it, not the v1 row.
+        var v2Id = datasetResourceClient.createDataset(
+                buildDataset().toBuilder().id(null).name(name).projectId(projectId).build(), apiKey, workspaceName);
+
+        var resolvedV2 = datasetResourceClient.getDatasetByIdentifier(
+                DatasetIdentifier.builder().datasetName(name).projectName(projectName).build(),
+                apiKey, workspaceName);
+        assertThat(resolvedV2.id()).isEqualTo(v2Id);
+        assertThat(resolvedV2.projectId()).isEqualTo(projectId);
     }
 }
