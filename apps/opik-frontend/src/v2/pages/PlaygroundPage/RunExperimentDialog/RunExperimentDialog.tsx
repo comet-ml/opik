@@ -13,7 +13,7 @@ import {
   DialogTitle,
 } from "@/ui/dialog";
 import { Label } from "@/ui/label";
-import { ToggleGroup, ToggleGroupItem } from "@/ui/toggle-group";
+import { Tabs, TabsList, TabsTrigger } from "@/ui/tabs";
 import { DatasetVersionSelectBox } from "@/v2/pages-shared/DatasetVersionSelectBox";
 import MetricSelector from "@/v2/pages/PlaygroundPage/MetricSelector";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -357,22 +357,24 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
           </DialogHeader>
 
           <div className="flex flex-col gap-3 overflow-y-auto pb-2">
-            <ToggleGroup
-              type="single"
-              value={selectedType}
-              onValueChange={handleTypeChange}
-              variant="secondary"
-              className="w-fit"
-            >
-              <ToggleGroupItem value={DATASET_TYPE.DATASET} size="sm">
-                <Database className="mr-1.5 size-3.5" />
-                Dataset
-              </ToggleGroupItem>
-              <ToggleGroupItem value={DATASET_TYPE.TEST_SUITE} size="sm">
-                <ListChecks className="mr-1.5 size-3.5" />
-                Test suite
-              </ToggleGroupItem>
-            </ToggleGroup>
+            <Tabs value={selectedType} onValueChange={handleTypeChange}>
+              <TabsList variant="segmented" className="w-fit">
+                <TabsTrigger
+                  variant="segmented"
+                  value={DATASET_TYPE.DATASET}
+                >
+                  <Database className="size-3.5" />
+                  Dataset
+                </TabsTrigger>
+                <TabsTrigger
+                  variant="segmented"
+                  value={DATASET_TYPE.TEST_SUITE}
+                >
+                  <ListChecks className="size-3.5" />
+                  Test suite
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
 
             <DialogDescription className="mt-0">
               {config.description}
