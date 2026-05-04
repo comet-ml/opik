@@ -41,11 +41,10 @@ import usePlaygroundStore, {
 
 import { useToast } from "@/ui/use-toast";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import createLogPlaygroundProcessor, {
-  LogProcessor,
+import {
   LogProcessorArgs,
-  NOOP_LOG_PROCESSOR,
   TraceMapping,
+  buildLogProcessor,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
@@ -602,15 +601,12 @@ const useActionButtonActions = ({
     isToStopRef.current = false;
     setAllRunning(true);
 
-    const shouldLogPlaygroundData = datasetName
-      ? canLogTraceSpanThread && canCreateExperiments
-      : canLogTraceSpanThread;
-    const logProcessor: LogProcessor = shouldLogPlaygroundData
-      ? createLogPlaygroundProcessor({
-          ...logProcessorHandlers,
-          projectName,
-        })
-      : NOOP_LOG_PROCESSOR;
+    const logProcessor = buildLogProcessor({
+      datasetName,
+      canLogTraceSpanThread,
+      canCreateExperiments,
+      args: { ...logProcessorHandlers, projectName },
+    });
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
@@ -668,15 +664,12 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
 
-      const shouldLogPlaygroundData = datasetName
-        ? canLogTraceSpanThread && canCreateExperiments
-        : canLogTraceSpanThread;
-      const logProcessor: LogProcessor = shouldLogPlaygroundData
-        ? createLogPlaygroundProcessor({
-            ...logProcessorHandlers,
-            projectName,
-          })
-        : NOOP_LOG_PROCESSOR;
+      const logProcessor = buildLogProcessor({
+        datasetName,
+        canLogTraceSpanThread,
+        canCreateExperiments,
+        args: { ...logProcessorHandlers, projectName },
+      });
 
       const combinations: DatasetItemPromptCombination[] =
         datasetItems.length > 0

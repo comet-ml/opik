@@ -21,11 +21,10 @@ import {
 
 import { useToast } from "@/ui/use-toast";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import createLogPlaygroundProcessor, {
-  LogProcessor,
+import {
   LogProcessorArgs,
-  NOOP_LOG_PROCESSOR,
   TraceMapping,
+  buildLogProcessor,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
 import { useNavigateToExperiment } from "@/hooks/useNavigateToExperiment";
@@ -212,12 +211,12 @@ const useActionButtonActions = ({
     setIsRunning(true);
     clearCreatedExperiments();
 
-    const shouldLogPlaygroundData = datasetName
-      ? canLogTraceSpanThread && canCreateExperiments
-      : canLogTraceSpanThread;
-    const logProcessor: LogProcessor = shouldLogPlaygroundData
-      ? createLogPlaygroundProcessor(logProcessorHandlers)
-      : NOOP_LOG_PROCESSOR;
+    const logProcessor = buildLogProcessor({
+      datasetName,
+      canLogTraceSpanThread,
+      canCreateExperiments,
+      args: logProcessorHandlers,
+    });
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
