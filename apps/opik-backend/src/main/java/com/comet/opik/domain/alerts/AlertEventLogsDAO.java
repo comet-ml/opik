@@ -33,7 +33,7 @@ import static com.comet.opik.utils.template.TemplateUtils.getQueryItemPlaceHolde
 @ImplementedBy(AlertEventLogsDAOImpl.class)
 public interface AlertEventLogsDAO extends UserLogTableDAO {
 
-    List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id");
+    List<String> CUSTOM_MARKER_KEYS = List.of("event_id", "alert_id", "project_id");
 
     static AlertEventLogsDAO create(ConnectionFactory factory) {
         return new AlertEventLogsDAOImpl(factory);
@@ -185,13 +185,13 @@ class AlertEventLogsDAOImpl implements AlertEventLogsDAO {
                         String alertId = Optional.ofNullable(event.getMDCPropertyMap().get("alert_id"))
                                 .orElseThrow(() -> failWithMessage("alert_id is not set"));
 
-                        Map<String, String> makers = CUSTOM_MARKER_KEYS.stream()
+                        Map<String, String> markers = CUSTOM_MARKER_KEYS.stream()
                                 .map(key -> Map.entry(key, event.getMDCPropertyMap().getOrDefault(key, "")))
                                 .filter(entry -> !entry.getValue().isEmpty())
                                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
 
-                        String[] markerKeys = makers.keySet().toArray(String[]::new);
-                        String[] markerValues = makers.keySet().stream().map(makers::get).toArray(String[]::new);
+                        String[] markerKeys = markers.keySet().toArray(String[]::new);
+                        String[] markerValues = markers.keySet().stream().map(markers::get).toArray(String[]::new);
 
                         statement
                                 .bind("timestamp" + i, event.getInstant().toString())

@@ -5,6 +5,7 @@ import {
   ChartLine,
   Database,
   FlaskConical,
+  Home,
   LayoutDashboard,
   ListChecks,
   Rows3,
@@ -50,14 +51,22 @@ const getMenuItems = ({
     ...(showHome
       ? [
           {
-            id: "opik_connect_group",
+            id: "home_group",
             items: [
               {
-                id: "opik_connect",
+                id: "home",
                 path: projectPath("/home"),
                 type: MENU_ITEM_TYPE.router as const,
+                icon: Home,
+                label: "Home",
+                disabled: !projectPrefix,
+              },
+              {
+                id: "ollie",
+                path: projectPath("/ollie"),
+                type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
-                label: "Opik Connect",
+                label: "Ollie",
                 disabled: !projectPrefix,
               },
             ],
