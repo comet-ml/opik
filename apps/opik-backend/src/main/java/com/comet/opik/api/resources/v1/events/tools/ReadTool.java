@@ -320,7 +320,7 @@ public class ReadTool implements ToolExecutor {
         try {
             return JsonUtils.getMapper().treeToValue(node, type);
         } catch (Exception e) {
-            log.warn("Failed to deserialize cached node to '{}: {}'", type.getSimpleName(), e.getMessage());
+            log.warn("Failed to deserialize cached node to '{}: {}'", type.getSimpleName(), e.getMessage(), e);
             return null;
         }
     }
