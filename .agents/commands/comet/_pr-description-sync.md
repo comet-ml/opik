@@ -11,7 +11,7 @@ This sub-skill:
 - Reads the canonical structure from `.github/pull_request_template.md` and the validation rules from `.github/workflows/pr-lint.yml`.
 - Regenerates the description from the current `git diff origin/main...HEAD` and commit history using the same logic as `/comet:create-pr` Step 6/7.
 - Preserves all media (images, GIFs, video links, Loom embeds) verbatim, and uses a hidden section-hash marker to detect which `##` sections the user has hand-edited so those sections are kept as-is rather than overwritten.
-- Confirms the proposed update with the user via `AskUserQuestion`, with per-repo `Always` / `Never` mute options persisted to local memory.
+- Auto-applies by default — if the regenerated body differs and passes pr-lint, the sub-skill updates the PR description without prompting. Users can opt out per-repo via a one-line memory entry; opted-out repos are skipped silently.
 - Is a no-op when the branch has no open PR, when no PR matches the local HEAD, or when the regenerated body is semantically identical to the current body (sha1 of body excluding the marker).
 
 ## Inputs
@@ -82,9 +82,9 @@ Each value is `sha1(<section content with leading/trailing whitespace trimmed>)`
 
 This per-section decision is the merge algorithm. There is no "fuzzy match" or "append on conflict" — the marker is the source of truth.
 
-**Marker absent** (first run on a PR that pre-dates this skill, or a PR whose body was edited externally to strip the marker): regenerate every section per Step 3 — we have no way to know which sections the user touched, so the user reviews the full diff in Step 7 and decides. Their confirmation in Step 7 is the act of adopting managed mode; on `Update` / `Always`, Step 8 installs the marker, and subsequent runs use the per-section logic above.
+**Marker absent** (first run on a PR that pre-dates this skill, or a PR whose body was edited externally to strip the marker): regenerate every section per Step 3 — we have no way to know which sections the user touched, so the auto-apply in Step 7 will install the marker on this run and adopt managed mode. Subsequent runs use the per-section logic above. Users who don't want this implicit adoption can opt the repo out before the next push (see Step 8).
 
-This means the **first refresh of a managed-mode PR will be the most disruptive** — it proposes overwriting everything. After that, the marker tracks state and refreshes are surgical. The user can always decline the first prompt to opt out (one-shot `Skip` or per-repo `Never`).
+This means the **first refresh of a managed-mode PR is the most invasive** — it overwrites every section since none are flagged as user-edited yet. After that, the marker tracks state and refreshes are surgical: only sections whose hash still matches get regenerated. Users who don't want the first-run overwrite can opt the repo out by adding it to the `never` list before the next push.
 
 ### 4b. Preserve media (template-managed sections only)
 
@@ -114,27 +114,9 @@ Run the same checks as `/comet:create-pr` Step 8 against the regenerated body �
 
 **Placeholder check details**: a "leftover template placeholder" means the literal HTML comment block from `.github/pull_request_template.md` appearing as the *only* content of a section (i.e., the user replaced nothing). Match the comment text from the template, not arbitrary `<!-- REPLACE ME` substrings — bodies that legitimately quote the placeholder string while documenting the skill itself must pass.
 
-### 7. Confirm with user (unless silent mode is active)
+### 7. Apply (auto, no prompt)
 
-**Silent mode**: the per-repo mute memory says `always` for this repo's normalized remote URL. Skip the prompt and apply directly.
-
-**Otherwise**: emit an `AskUserQuestion` with:
-
-- **Question header**: `Refresh PR description?`
-- **Question body**: a unified diff (`diff -u`) between current and regenerated bodies, capped at ~80 lines (truncate the middle with `... [N lines elided] ...` if longer).
-- **Options**:
-  - `Update` — apply the change to this PR only.
-  - `Skip` — do nothing this time.
-  - `Always for this repo` — apply now, and silently apply on every future push to any PR in this repo.
-  - `Never for this repo` — do nothing now, and skip the prompt entirely on future pushes in this repo.
-
-**Media-stale reminder (conditional)**: if the *current* body contains at least one match from the media patterns in Step 4, append a one-line preface to the question body:
-
-> Heads up — this PR has screenshots/videos. Verify they still match the current behavior; you may need to re-record after this update.
-
-Do not show the reminder when there's no media — avoid noise.
-
-### 8. Apply
+The default is **silent auto-apply** — refreshing the PR description is a routine bookkeeping action, not a decision that needs user confirmation each time. By the time we reach this step, the body has already passed pr-lint (Step 6), preservation rules have already protected user edits (Step 4), and idempotence has already filtered out no-op cases (Step 5).
 
 Before writing, **append (or replace) the marker** at the bottom of the regenerated body:
 
@@ -145,18 +127,24 @@ Before writing, **append (or replace) the marker** at the bottom of the regenera
 
 The marker is computed from the *final* body that will be written (post Step 4 user-section preservation, post Step 4b media reinsertion). One marker per body; if a previous marker exists, replace it.
 
-Then:
+Then write the body to a `mktemp` file and:
 
-- On `Update` or under silent `Always` mode: write the body to a `mktemp` file, then `gh pr edit {pr_number} --repo {repo} --body-file <tmpfile>`.
-- On `Skip`: return without writing.
-- On `Always for this repo`: write the normalized remote URL into the `always` list of the memory file (Step 9), then apply.
-- On `Never for this repo`: write the normalized remote URL into the `never` list of the memory file, return without applying.
+```bash
+gh pr edit {pr_number} --repo {repo} --body-file <tmpfile>
+```
 
-After applying, log: `PR description refreshed in sync with HEAD ({headRefOid}).`
+After applying, log:
 
-### 9. Memory entry — `feedback_pr_description_auto_refresh.md`
+- `PR description refreshed in sync with HEAD ({headRefOid}).`
+- If the body contains any media (image / video / Loom embed), append: `Note: this PR has screenshots/videos — verify they still match the current behavior; you may need to re-record.` This is informational only; the apply has already happened.
 
-Persist `Always` / `Never` choices to a single memory file alongside the project's other feedback memories.
+**Opt-out**: if the user has previously added this repo to the `never` list of the memory file (Step 8), skip the apply silently. There is no `Always` list because auto-apply is the default — `Always` is the only mode.
+
+**Manual override**: a user who wants to inspect the proposed body before it lands can set the repo to `never` and run the diff manually, or revert via GitHub UI / `gh pr edit` after the auto-apply if a refresh produced something they don't want.
+
+### 8. Memory entry — `feedback_pr_description_auto_refresh.md`
+
+Per-repo opt-out is stored in a single memory file alongside the project's other feedback memories. The sub-skill only ever *reads* this file; users edit it (or ask the agent to) when they want to disable auto-refresh for a specific repo.
 
 **Path resolution** (in order, first hit wins):
 
@@ -168,18 +156,15 @@ Persist `Always` / `Never` choices to a single memory file alongside the project
 ```markdown
 ---
 name: PR description auto-refresh per-repo preference
-description: Per-repo opt-in/opt-out for the post-push PR-description sync prompt
+description: Per-repo opt-out list for the post-push PR-description sync
 type: feedback
 ---
 
-When the post-push PR description sync prompt fires, the user has chosen the following per-repo behaviors. Apply these without prompting on future pushes in those repos.
+The PR description sync auto-applies by default. Repos listed below have been opted out — the sub-skill returns silently without refreshing the PR description on those repos.
 
-**How to apply**: before invoking the sync prompt, normalize the current repo's `git config --get remote.origin.url` to `host/owner/repo` (lowercase, strip `git@`, `https://`, trailing `.git`). Look it up below.
+**How to apply**: before invoking the sub-skill's main flow, normalize the current repo's `git config --get remote.origin.url` to `host/owner/repo` (lowercase, strip `git@`, `https://`, trailing `.git`). If it appears in the list below, skip; otherwise auto-apply per Step 7.
 
-## Always (silent refresh, no prompt)
-- {host/owner/repo}
-
-## Never (skip entirely, no prompt)
+## Never (auto-refresh disabled)
 - {host/owner/repo}
 ```
 
@@ -190,7 +175,7 @@ Also add (or update) a one-line entry in the user's `MEMORY.md` index pointing a
 - `git@github.com:comet-ml/opik.git` → `github.com/comet-ml/opik`
 - `https://github.com/comet-ml/opik.git` → `github.com/comet-ml/opik`
 
-A repo can appear in `Always` *or* `Never`, never both. If the user picks the opposite later, move it.
+**Adding a repo to the list**: the sub-skill itself does not write to this file. To opt out, the user edits the file directly (or asks the agent to). This keeps the sub-skill side-effect-light: it only ever reads the list, never adds to it.
 
 ## Caller contract
 
@@ -200,8 +185,8 @@ Each caller invokes this sub-skill at the moment immediately after a successful 
 
 - **`gh` unavailable**: log `PR description sync skipped: gh CLI unavailable` and return. Do not attempt MCP fallback — refresh is a quality-of-life feature, not a correctness gate.
 - **PR description fetch fails (404, network)**: log the error and return. Don't block the caller.
-- **`gh pr edit` fails after user confirmation**: surface the error and prompt the user whether to retry. On retry-no, return without changing memory entries.
-- **Memory file write fails**: surface the error but still apply the description update if the user said `Update` / `Always`.
+- **`gh pr edit` fails**: surface the error in the log; the caller continues normally. The next push will re-attempt the sync.
+- **Memory file read fails**: treat as no opt-out and proceed with auto-apply. Don't block on a read error to a config-style file.
 
 ---
 
