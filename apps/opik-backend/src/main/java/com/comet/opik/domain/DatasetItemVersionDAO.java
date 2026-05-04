@@ -984,12 +984,45 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                   AND entity_id IN (SELECT trace_id FROM experiment_items_final)
                 GROUP BY entity_id
             )
+            <if(push_top_limit && !push_top_needs_div && dataset_item_filters)>
+            , dataset_items_filtered_ids AS (
+                SELECT id, row_id
+                FROM (
+                    SELECT
+                        dataset_item_id AS id,
+                        id AS row_id,
+                        data,
+                        description,
+                        source,
+                        trace_id,
+                        span_id,
+                        tags,
+                        evaluators,
+                        execution_policy,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    FROM dataset_item_versions FINAL
+                    WHERE workspace_id = :workspace_id
+                    AND dataset_id  = :datasetId
+                    AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
+                ) AS resolved
+                WHERE <dataset_item_filters>
+            )
+            <endif>
             <if(push_top_limit && !push_top_needs_div)>
             , top_dataset_items AS (
                 SELECT eia_t.dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
+                <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
+                <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
+                <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
+                <if(dataset_item_filters)>
+                AND eia_t.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)
+                <endif>
                 GROUP BY eia_t.dataset_item_id
                 ORDER BY <if(top_sorting)><top_sorting><else>eia_t.dataset_item_id DESC<endif>
                 LIMIT :top_limit OFFSET :top_offset
@@ -2417,27 +2450,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                             template.add("has_aggregated", hasAggregated);
                             template.add("has_raw", hasRaw);
 
-                            // Push-top-limit: only when all experiments are aggregated (single branch),
-                            // and only when no filters/search are present. The Top-N CTE selects items by
-                            // sort BEFORE filters are applied; with filters/search active the outer query
-                            // would strip items from the top-N and silently return short pages.
-                            boolean hasSortingFields = CollectionUtils.isNotEmpty(criteria.sortingFields());
-                            boolean hasFilters = CollectionUtils.isNotEmpty(criteria.filters());
-                            boolean hasSearch = StringUtils.isNotBlank(criteria.search());
-                            boolean pushTopLimit = hasAggregated && !hasRaw
-                                    && !hasFilters && !hasSearch
-                                    && (!hasSortingFields
-                                            || sortingFactory.supportsPushTopLimit(criteria.sortingFields()));
-
-                            if (pushTopLimit) {
-                                template.add("push_top_limit", true);
-                                if (hasSortingFields) {
-                                    template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
-                                    if (sortingFactory.pushTopLimitNeedsDivJoin(criteria.sortingFields())) {
-                                        template.add("push_top_needs_div", true);
-                                    }
-                                }
-                            }
+                            boolean pushTopLimit = applyPushTopLimit(template, criteria, hasAggregated,
+                                    hasRaw);
 
                             // Add filters and search criteria using helper method
                             addFiltersToTemplate(template, criteria);
@@ -3786,6 +3800,67 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 .collectList()
                 .doOnSuccess(itemCounts -> log.debug("Completed counting items for '{}' versions", itemCounts.size()))
                 .flatMapMany(Flux::fromIterable);
+    }
+
+    /**
+     * Conditionally enables the push-top-limit optimization on the aggregated branch of the
+     * dataset items + experiment items query, returning whether it was applied so the caller
+     * can bind {@code top_limit}/{@code top_offset} parameters accordingly.
+     *
+     * <p>The optimization wraps the result page in a {@code top_dataset_items} CTE that
+     * pre-resolves the page's {@code dataset_item_id}s, so the IN filter on
+     * {@code dataset_item_id} can prune both the EIA outer scan and the
+     * {@code dataset_items_aggr_resolved} dedup CTE via the existing minmax / bloom_filter
+     * skip indexes.
+     *
+     * <p>Aggregated-branch filters are folded into the Top-N CTE before its {@code LIMIT}:
+     * <ul>
+     *     <li>EIA-only filters ({@code experiment_item_filters},
+     *         {@code feedback_scores_filters_agg}, {@code feedback_scores_empty_filters_agg})
+     *         are inlined directly.</li>
+     *     <li>{@code dataset_item_filters} drives a slim {@code dataset_items_filtered_ids}
+     *         CTE; its ID set feeds the Top-N CTE via {@code arrayJoin([id, row_id]) IN}.</li>
+     * </ul>
+     *
+     * <p>The optimization is skipped when:
+     * <ul>
+     *     <li>The query is not on the aggregated-only branch ({@code !hasAggregated || hasRaw}).</li>
+     *     <li>Search is active — search references {@code di.data} and forces post-DI placement,
+     *         which was measured as a net regression in that placement.</li>
+     *     <li>Sort requires DI fields and any filter is present — the post-DI Top-N CTE
+     *         doesn't fold filters; folding them there duplicates the outer JOIN+GROUP BY.</li>
+     *     <li>The supplied sorting field is unsupported by
+     *         {@link SortingFactoryDatasets#supportsPushTopLimit}.</li>
+     * </ul>
+     *
+     * <p>Sets {@code push_top_limit}, {@code top_sorting}, and {@code push_top_needs_div}
+     * template variables as appropriate.
+     *
+     * @return {@code true} when the optimization was applied to the template, {@code false} otherwise.
+     */
+    private boolean applyPushTopLimit(ST template, DatasetItemSearchCriteria criteria,
+            boolean hasAggregated, boolean hasRaw) {
+        boolean hasSortingFields = CollectionUtils.isNotEmpty(criteria.sortingFields());
+        boolean hasFilters = CollectionUtils.isNotEmpty(criteria.filters());
+        boolean hasSearch = StringUtils.isNotBlank(criteria.search());
+        boolean isDiNeededForSort = hasSortingFields
+                && sortingFactory.pushTopLimitNeedsDivJoin(criteria.sortingFields());
+        boolean pushTopLimit = hasAggregated && !hasRaw
+                && !hasSearch
+                && !(isDiNeededForSort && hasFilters)
+                && (!hasSortingFields
+                        || sortingFactory.supportsPushTopLimit(criteria.sortingFields()));
+
+        if (pushTopLimit) {
+            template.add("push_top_limit", true);
+            if (hasSortingFields) {
+                template.add("top_sorting", buildTopItemsSorting(criteria.sortingFields()));
+                if (isDiNeededForSort) {
+                    template.add("push_top_needs_div", true);
+                }
+            }
+        }
+        return pushTopLimit;
     }
 
     /**

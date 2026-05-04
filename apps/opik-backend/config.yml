@@ -931,6 +931,12 @@ pythonEvaluator:
   # Default: 500ms
   # Description: Min delay between retry attempts
   minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: ${PYTHON_EVALUATOR_READ_TIMEOUT:-10s}
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: ${PYTHON_EVALUATOR_CONNECT_TIMEOUT:-5s}
 
 serviceToggles:
   # Default: true

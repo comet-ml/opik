@@ -492,6 +492,12 @@ pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: 10s
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: 5s
 
 serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
