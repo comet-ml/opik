@@ -11,4 +11,5 @@ CROSS JOIN (
     UNION ALL SELECT 'production', '#19A979', 2
 ) n;
 
---rollback DELETE FROM environments WHERE name IN ('development', 'staging', 'production');
+-- Backfilled defaults are indistinguishable from environments seeded for new workspaces; rollback is a no-op to avoid deleting user-visible data.
+--rollback empty
