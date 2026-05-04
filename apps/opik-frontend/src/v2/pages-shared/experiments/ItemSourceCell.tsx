@@ -54,21 +54,25 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     <CellWrapper
       metadata={context.column.columnDef.meta}
       tableMetadata={context.table.options.meta}
-      className="items-center gap-2 py-1.5"
+      className="items-center py-1.5"
     >
-      <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-slate">
-        <Icon className="size-3" />
-      </span>
-      {id ? (
-        <ResourceLink
-          id={id}
-          name={name}
-          resource={resource}
-          isDeleted={isDeleted}
-        />
-      ) : (
-        "-"
-      )}
+      <TooltipWrapper content={name}>
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-slate">
+            <Icon className="size-3" />
+          </span>
+          {id ? (
+            <ResourceLink
+              id={id}
+              name={name}
+              resource={resource}
+              isDeleted={isDeleted}
+            />
+          ) : (
+            "-"
+          )}
+        </div>
+      </TooltipWrapper>
     </CellWrapper>
   );
 };
