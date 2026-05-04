@@ -79,6 +79,7 @@ import com.comet.opik.api.sorting.SortingField;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
+import com.comet.opik.domain.experiments.aggregations.ExperimentAggregatesService;
 import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
@@ -98,6 +99,7 @@ import com.fasterxml.uuid.Generators;
 import com.fasterxml.uuid.impl.TimeBasedEpochGenerator;
 import com.github.tomakehurst.wiremock.client.WireMock;
 import com.google.common.collect.ImmutableMap;
+import com.google.inject.Injector;
 import com.redis.testcontainers.RedisContainer;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.client.WebTarget;
@@ -268,9 +270,10 @@ class DatasetsResourceTest {
     private TransactionTemplate mySqlTemplate;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectResourceClient projectResourceClient;
+    private ExperimentAggregatesService experimentAggregatesService;
 
     @BeforeAll
-    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate, Injector injector) {
 
         this.baseURI = TestUtils.getBaseUrl(client);
         this.client = client;
@@ -287,6 +290,7 @@ class DatasetsResourceTest {
         spanResourceClient = new SpanResourceClient(this.client, baseURI);
         optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         projectResourceClient = new ProjectResourceClient(client, baseURI, factory);
+        experimentAggregatesService = injector.getInstance(ExperimentAggregatesService.class);
     }
 
     @AfterAll
@@ -8531,6 +8535,99 @@ class DatasetsResourceTest {
             assertThat(summaryB.totalRuns()).isEqualTo(1);
             assertThat(summaryB.passedRuns()).isEqualTo(0);
             assertThat(summaryB.status()).isEqualTo(RunStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("OPIK-6177: when one experiment is in experiment_aggregates and another is not, then return single row with merged experiment items")
+        void find__oneExperimentAggregatedOneRaw__thenSingleMergedRow() {
+            var workspaceName = UUID.randomUUID().toString();
+            var apiKey = UUID.randomUUID().toString();
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var dataset = buildDataset();
+            var datasetId = createAndAssert(dataset, apiKey, workspaceName);
+
+            int sharedItemCount = 5;
+            var sharedItems = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> DatasetResourceClient.buildDatasetItem(factory).toBuilder()
+                            .datasetId(datasetId)
+                            .build())
+                    .toList();
+            datasetResourceClient.createDatasetItems(
+                    DatasetItemBatch.builder()
+                            .datasetName(dataset.name())
+                            .items(sharedItems)
+                            .build(),
+                    workspaceName, apiKey);
+
+            var experimentAggregated = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentAggregatedId = experimentResourceClient.create(experimentAggregated, apiKey, workspaceName);
+
+            var experimentRaw = experimentResourceClient.createPartialExperiment()
+                    .datasetName(dataset.name())
+                    .optimizationId(null)
+                    .build();
+            var experimentRawId = experimentResourceClient.create(experimentRaw, apiKey, workspaceName);
+
+            var tracesAggregated = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class))
+                    .toList();
+            var tracesRaw = IntStream.range(0, sharedItemCount)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class))
+                    .toList();
+            var allTraces = new java.util.ArrayList<Trace>();
+            allTraces.addAll(tracesAggregated);
+            allTraces.addAll(tracesRaw);
+            traceResourceClient.batchCreateTraces(allTraces, apiKey, workspaceName);
+
+            var experimentItems = new java.util.HashSet<ExperimentItem>();
+            for (int i = 0; i < sharedItemCount; i++) {
+                experimentItems.add(ExperimentItem.builder()
+                        .experimentId(experimentAggregatedId)
+                        .datasetItemId(sharedItems.get(i).id())
+                        .traceId(tracesAggregated.get(i).id())
+                        .build());
+                experimentItems.add(ExperimentItem.builder()
+                        .experimentId(experimentRawId)
+                        .datasetItemId(sharedItems.get(i).id())
+                        .traceId(tracesRaw.get(i).id())
+                        .build());
+            }
+            experimentResourceClient.createExperimentItem(experimentItems, apiKey, workspaceName);
+
+            // Move ONLY experimentAggregated into experiment_aggregates; experimentRaw stays raw.
+            // This is the cross-branch state hasAggregated=true && hasRaw=true.
+            experimentAggregatesService.populateAggregations(experimentAggregatedId)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            var actualPage = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                    datasetId, List.of(experimentAggregatedId, experimentRawId), apiKey, workspaceName);
+
+            // Without the outer GROUP BY across UNION ALL, each shared id surfaces twice
+            // (once per branch with one experiment_item each) → 2 * sharedItemCount rows.
+            // With the fix: sharedItemCount rows, each carrying both experiments' items.
+            assertThat(actualPage.total()).isEqualTo(sharedItemCount);
+            assertThat(actualPage.content()).hasSize(sharedItemCount);
+
+            var expectedIds = sharedItems.stream().map(DatasetItem::id).collect(toSet());
+            assertThat(actualPage.content())
+                    .extracting(DatasetItem::id)
+                    .containsExactlyInAnyOrderElementsOf(expectedIds);
+
+            for (var row : actualPage.content()) {
+                assertThat(row.experimentItems())
+                        .as("merged row should carry one item per experiment (aggregated + raw)")
+                        .hasSize(2)
+                        .extracting(ExperimentItem::experimentId)
+                        .containsExactlyInAnyOrder(experimentAggregatedId, experimentRawId);
+            }
         }
 
     }
