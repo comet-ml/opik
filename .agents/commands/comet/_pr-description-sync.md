@@ -11,7 +11,7 @@ This sub-skill:
 - Reads the canonical structure from `.github/pull_request_template.md` and the validation rules from `.github/workflows/pr-lint.yml`.
 - Regenerates the description from the current `git diff origin/main...HEAD` and commit history using the same logic as `/comet:create-pr` Step 6/7.
 - Preserves all media (images, GIFs, video links, Loom embeds) verbatim, and uses a hidden section-hash marker to detect which `##` sections the user has hand-edited so those sections are kept as-is rather than overwritten.
-- Auto-applies by default — if the regenerated body differs and passes pr-lint, the sub-skill updates the PR description without prompting. Users can opt out per-repo via a one-line memory entry; opted-out repos are skipped silently.
+- Auto-applies by default — if the regenerated body differs and passes pr-lint, the sub-skill updates the PR description without prompting. There is no opt-out flag; if a refresh ever produces unwanted content, the user edits the body in the GitHub UI or via `gh pr edit`, and the marker check (Step 4) leaves those edits alone on subsequent runs.
 - Is a no-op when the branch has no open PR, when no PR matches the local HEAD, or when the regenerated body is semantically identical to the current body (sha1 of body excluding the marker).
 
 ## Inputs
@@ -24,17 +24,13 @@ This sub-skill:
 
 ### 1. Locate and validate the PR (no-op gates)
 
-Return without prompting or making any API call when any of the failure conditions below are reached.
-
-**1a. PR resolution.** Determine which PR to operate on:
+Return without prompting or making any API call when any of the failure conditions below are reached. Determine which PR to operate on:
 
 - **If `pr_number` was passed**: run `gh pr view {pr_number} --repo {repo} --json number,headRefName,headRefOid,state`. Verify `state == "OPEN"` and `headRefName == branch`. If either check fails, **fail closed**: log `PR description sync skipped: pr_number={N} does not match branch={branch} (headRefName={X}, state={S}); refusing to switch PRs silently` and return. Do not fall through to the branch lookup — a caller passing a mismatching `pr_number` is a bug or stale state, not a request to switch PRs.
 - **Branch lookup**: run `gh pr list --repo {repo} --head {branch} --state open --json number,url,headRefName,headRefOid`. Filter to PRs whose `headRefOid` matches the local `git rev-parse HEAD`.
   - **0 matches**: no open PR for this exact HEAD — return silently.
   - **Exactly 1 match**: use it.
   - **More than 1 match** (e.g., multiple forks share the same head branch name): log `PR description sync skipped: {N} open PRs match branch={branch} and HEAD={oid}; refusing to guess` and return silently. Don't edit any of them.
-
-**1b. Mute memory check.** Read the per-user memory file (see "Memory entry" below). If the normalized remote URL is in the `never` list, return silently.
 
 ### 2. Fetch current state
 
@@ -82,9 +78,9 @@ Each value is `sha1(<section content with leading/trailing whitespace trimmed>)`
 
 This per-section decision is the merge algorithm. There is no "fuzzy match" or "append on conflict" — the marker is the source of truth.
 
-**Marker absent** (first run on a PR that pre-dates this skill, or a PR whose body was edited externally to strip the marker): regenerate every section per Step 3 — we have no way to know which sections the user touched, so the auto-apply in Step 7 will install the marker on this run and adopt managed mode. Subsequent runs use the per-section logic above. Users who don't want this implicit adoption can opt the repo out before the next push (see Step 8).
+**Marker absent** (first run on a PR that pre-dates this skill, or a PR whose body was edited externally to strip the marker): regenerate every section per Step 3 — we have no way to know which sections the user touched, so the auto-apply in Step 7 will install the marker on this run and adopt managed mode. Subsequent runs use the per-section logic above. Users who want specific sections preserved through that first overwrite can edit the body in the GitHub UI ahead of the next push; the post-edit content becomes the new baseline once the marker is reinstalled.
 
-This means the **first refresh of a managed-mode PR is the most invasive** — it overwrites every section since none are flagged as user-edited yet. After that, the marker tracks state and refreshes are surgical: only sections whose hash still matches get regenerated. Users who don't want the first-run overwrite can opt the repo out by adding it to the `never` list before the next push.
+This means the **first refresh of a managed-mode PR is the most invasive** — it overwrites every section since none are flagged as user-edited yet. After that, the marker tracks state and refreshes are surgical: only sections whose hash still matches get regenerated. Users who want to lock in specific content before the first auto-refresh can edit the body in the GitHub UI; the marker check leaves user-edited sections alone on subsequent runs.
 
 ### 4b. Preserve media (template-managed sections only)
 
@@ -138,44 +134,7 @@ After applying, log:
 - `PR description refreshed in sync with HEAD ({headRefOid}).`
 - If the body contains any media (image / video / Loom embed), append: `Note: this PR has screenshots/videos — verify they still match the current behavior; you may need to re-record.` This is informational only; the apply has already happened.
 
-**Opt-out**: if the user has previously added this repo to the `never` list of the memory file (Step 8), skip the apply silently. There is no `Always` list because auto-apply is the default — `Always` is the only mode.
-
-**Manual override**: a user who wants to inspect the proposed body before it lands can set the repo to `never` and run the diff manually, or revert via GitHub UI / `gh pr edit` after the auto-apply if a refresh produced something they don't want.
-
-### 8. Memory entry — `feedback_pr_description_auto_refresh.md`
-
-Per-repo opt-out is stored in a single memory file alongside the project's other feedback memories. The sub-skill only ever *reads* this file; users edit it (or ask the agent to) when they want to disable auto-refresh for a specific repo.
-
-**Path resolution** (in order, first hit wins):
-
-1. The directory containing the project's existing `MEMORY.md` index, if one exists. Discover by walking up from `cwd` looking for `**/memory/MEMORY.md` under `~/.claude/projects/<project-id>/`. If found, write next to it: `<that-dir>/feedback_pr_description_auto_refresh.md`.
-2. If no project `MEMORY.md` exists, fall back to `~/.claude/memory/feedback_pr_description_auto_refresh.md` (user-global). Note this in the log so the user knows the choice will apply across all projects until a project memory dir is established.
-
-**Format**:
-
-```markdown
----
-name: PR description auto-refresh per-repo preference
-description: Per-repo opt-out list for the post-push PR-description sync
-type: feedback
----
-
-The PR description sync auto-applies by default. Repos listed below have been opted out — the sub-skill returns silently without refreshing the PR description on those repos.
-
-**How to apply**: before invoking the sub-skill's main flow, normalize the current repo's `git config --get remote.origin.url` to `host/owner/repo` (lowercase, strip `git@`, `https://`, trailing `.git`). If it appears in the list below, skip; otherwise auto-apply per Step 7.
-
-## Never (auto-refresh disabled)
-- {host/owner/repo}
-```
-
-Also add (or update) a one-line entry in the user's `MEMORY.md` index pointing at this file.
-
-**Normalization rule** (applied identically when reading and writing): take the URL from `git config --get remote.origin.url`, strip `git@` / `https://` prefix, strip trailing `.git`, replace `:` with `/`, lowercase. Examples:
-
-- `git@github.com:comet-ml/opik.git` → `github.com/comet-ml/opik`
-- `https://github.com/comet-ml/opik.git` → `github.com/comet-ml/opik`
-
-**Adding a repo to the list**: the sub-skill itself does not write to this file. To opt out, the user edits the file directly (or asks the agent to). This keeps the sub-skill side-effect-light: it only ever reads the list, never adds to it.
+**Recovery**: if a refresh produces something the user didn't want, the body can be edited in the GitHub UI or via `gh pr edit`. The marker check in Step 4 then treats those edits as user-owned on subsequent runs and leaves them alone — no permanent opt-out is required.
 
 ## Caller contract
 
@@ -186,7 +145,6 @@ Each caller invokes this sub-skill at the moment immediately after a successful 
 - **`gh` unavailable**: log `PR description sync skipped: gh CLI unavailable` and return. Do not attempt MCP fallback — refresh is a quality-of-life feature, not a correctness gate.
 - **PR description fetch fails (404, network)**: log the error and return. Don't block the caller.
 - **`gh pr edit` fails**: surface the error in the log; the caller continues normally. The next push will re-attempt the sync.
-- **Memory file read fails**: treat as no opt-out and proceed with auto-apply. Don't block on a read error to a config-style file.
 
 ---
 
