@@ -2776,4 +2776,151 @@ class ExperimentAggregatesIntegrationTest {
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
+    @Test
+    @DisplayName("DatasetItemVersionDAO has_aggregated branch: dataset_item filter consistent across two experiments at distinct dataset versions")
+    void multiVersionExperimentsFilterConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        // Two experiments backed by separate dataset_items batches on the same dataset.
+        // Each helper call inserts a fresh batch first (emitting a new dataset_version),
+        // then creates the experiment so it auto-pins to that just-published version.
+        // Querying both experiments together ends up with two distinct
+        // resolved_dataset_version_id values in experiment_aggregated_scope_ids,
+        // which forces the dataset_items_filtered_ids CTE to span multiple version rows.
+        var experiment1 = createExperimentPinnedToFreshDatasetVersion(dataset, project, feedbackScoreNames, apiKey,
+                workspaceName);
+        var experiment2 = createExperimentPinnedToFreshDatasetVersion(dataset, project, feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment1.id(), experiment2.id());
+        // Filter on a DI-strategy field (`id`) with a tautology — `id != <random uuid>`
+        // matches every row. This forces the `dataset_items_filtered_ids` CTE to render
+        // and exercises the `FROM dataset_item_versions FINAL` dedup across multiple
+        // resolved versions, without relying on any per-item field generated randomly
+        // by PodamFactory.
+        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+                .field("id")
+                .type(FieldType.STRING_EXACT)
+                .operator(Operator.NOT_EQUAL)
+                .value(UUID.randomUUID().toString())
+                .build());
+        int pageSize = 25;
+
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, null, 1, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment1.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        experimentAggregatesService.populateAggregations(experiment2.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, null, 1, pageSize, apiKey, workspaceName);
+
+        assertThat(afterAggregation.total())
+                .as("Filtered total should match before/after aggregation across multiple dataset versions")
+                .isEqualTo(beforeAggregation.total());
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
+    private Experiment createExperimentPinnedToFreshDatasetVersion(Dataset dataset, Project project,
+            List<String> feedbackScoreNames, String apiKey, String workspaceName) {
+        var datasetItemIndex = new java.util.concurrent.atomic.AtomicInteger(0);
+        var datasetItems = PodamFactoryUtils.manufacturePojoList(factory, DatasetItem.class)
+                .stream()
+                .map(item -> {
+                    int dIdx = datasetItemIndex.getAndIncrement();
+                    return item.toBuilder()
+                            .datasetId(dataset.id())
+                            .traceId(null)
+                            .experimentItems(null)
+                            .spanId(null)
+                            .source(DatasetItemSource.SDK)
+                            .description("desc-" + (char) ('a' + dIdx) + "-" + UUID.randomUUID())
+                            .tags(Set.of("tag-" + (char) ('a' + dIdx) + "-" + UUID.randomUUID()))
+                            .build();
+                })
+                .toList();
+
+        datasetResourceClient.createDatasetItems(
+                DatasetItemBatch.builder().datasetId(dataset.id()).items(datasetItems).build(),
+                workspaceName, apiKey);
+
+        // Create the experiment AFTER the batch insert so it auto-pins to the just-emitted dataset_version.
+        var experiment = createExperiment(dataset, apiKey, workspaceName);
+
+        var traces = IntStream.range(0, datasetItems.size())
+                .mapToObj(idx -> {
+                    var outputNode = JsonUtils.getJsonNodeFromString(
+                            "{\"result\": \"output-" + (char) ('a' + idx) + "-" + UUID.randomUUID() + "\"}");
+                    var baseTrace = factory.manufacturePojo(Trace.class)
+                            .toBuilder()
+                            .projectName(project.name())
+                            .usage(null)
+                            .visibilityMode(null)
+                            .output(outputNode)
+                            .build();
+                    return baseTrace.toBuilder()
+                            .endTime(baseTrace.startTime().plusSeconds((idx + 1) * 10L))
+                            .build();
+                })
+                .toList();
+
+        traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+        var allSpans = traces.stream()
+                .flatMap(trace -> PodamFactoryUtils.manufacturePojoList(factory, Span.class)
+                        .stream()
+                        .map(span -> span.toBuilder()
+                                .projectName(project.name())
+                                .traceId(trace.id())
+                                .parentSpanId(null)
+                                .usage(spanResourceClient.getTokenUsage())
+                                .build()))
+                .toList();
+        spanResourceClient.batchCreateSpans(allSpans, apiKey, workspaceName);
+
+        var allFeedbackScoreItems = traces.stream()
+                .flatMap(trace -> feedbackScoreNames.stream()
+                        .map(name -> (FeedbackScoreBatchItem) factory
+                                .manufacturePojo(FeedbackScoreBatchItem.class).toBuilder()
+                                .id(trace.id())
+                                .projectName(project.name())
+                                .name(name)
+                                .value(BigDecimal.valueOf(Math.random() * 10))
+                                .source(ScoreSource.SDK)
+                                .build()))
+                .toList();
+        if (!allFeedbackScoreItems.isEmpty()) {
+            traceResourceClient.feedbackScores(allFeedbackScoreItems, apiKey, workspaceName);
+        }
+
+        var experimentItems = IntStream.range(0, datasetItems.size())
+                .mapToObj(i -> ExperimentItem.builder()
+                        .experimentId(experiment.id())
+                        .datasetItemId(datasetItems.get(i).id())
+                        .traceId(traces.get(i).id())
+                        .build())
+                .toList();
+        experimentResourceClient.createExperimentItem(Set.copyOf(experimentItems), apiKey, workspaceName);
+
+        return experiment;
+    }
+
 }
