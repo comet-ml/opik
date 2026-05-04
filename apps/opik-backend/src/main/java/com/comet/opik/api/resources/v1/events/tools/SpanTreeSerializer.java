@@ -25,8 +25,10 @@ class SpanTreeSerializer {
         node.put("id", span.id().toString());
         node.put("name", span.name());
         node.put("type", span.type() != null ? span.type().toString() : null);
-        node.put("input", truncate(jsonNodeToString(span.input())));
-        node.put("output", truncate(jsonNodeToString(span.output())));
+        node.put("input",
+                StringTruncator.truncate(jsonNodeToString(span.input()), OVERVIEW_TRUNCATION_LENGTH, null));
+        node.put("output",
+                StringTruncator.truncate(jsonNodeToString(span.output()), OVERVIEW_TRUNCATION_LENGTH, null));
         node.put("model", span.model());
         node.put("provider", span.provider());
 
@@ -37,18 +39,6 @@ class SpanTreeSerializer {
             node.put("duration_ms", span.duration());
         }
         return node;
-    }
-
-    private static String truncate(String value) {
-        if (value == null) {
-            return null;
-        }
-        if (value.length() <= OVERVIEW_TRUNCATION_LENGTH) {
-            return value;
-        }
-        int dropped = value.length() - OVERVIEW_TRUNCATION_LENGTH;
-        return value.substring(0, OVERVIEW_TRUNCATION_LENGTH)
-                + "[TRUNCATED %,d chars]".formatted(dropped);
     }
 
     private static String jsonNodeToString(JsonNode node) {

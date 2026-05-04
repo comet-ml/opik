@@ -3,9 +3,14 @@ package com.comet.opik.api.resources.v1.events.tools;
 import lombok.experimental.UtilityClass;
 
 /**
- * Single source of truth for the {@code [TRUNCATED N chars …]} suffix used to
- * mark over-length string values across the codebase (path-aware tree
- * truncation, prompt-variable capping, future call sites).
+ * Single-string counterpart to {@link PathAwareTruncator} — caps an individual
+ * string at {@code maxLength} characters and appends the canonical
+ * {@code [TRUNCATED N chars …]} marker. Strings within the cap are returned
+ * unchanged.
+ *
+ * <p>Single source of truth for the marker suffix shape across the codebase
+ * (path-aware tree truncation, prompt-variable capping, span-tree overviews,
+ * dataset summaries, future call sites).
  *
  * <p>Output shape:
  * <ul>
@@ -18,7 +23,7 @@ import lombok.experimental.UtilityClass;
  * scoring path passes a {@code read} tool drill-down hint.
  */
 @UtilityClass
-public final class TruncationMarker {
+public final class StringTruncator {
 
     /**
      * Returns {@code value} unchanged if it is null or no longer than
@@ -28,7 +33,7 @@ public final class TruncationMarker {
      * @param hint optional drill-down text appended after an em-dash; pass
      *             {@code null} for the bare {@code [TRUNCATED N chars]} form
      */
-    public static String apply(String value, int maxLength, String hint) {
+    public static String truncate(String value, int maxLength, String hint) {
         if (value == null || value.length() <= maxLength) {
             return value;
         }

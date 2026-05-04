@@ -52,7 +52,7 @@ final class PathAwareTruncator {
     /**
      * Convenience overload — returns a deep copy of {@code node} with strings
      * longer than {@code maxLength} replaced by {@link SuffixStyle#WITH_JQ_HINT}
-     * markers. Use when the truncated output will be presented alongside a
+     * markers. Use when the truncated output is presented alongside a
      * cache that still holds the full values.
      */
     static JsonNode truncate(@NonNull JsonNode node, int maxLength) {
@@ -81,7 +81,8 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        obj.set(key, new TextNode(TruncationMarker.apply(text, maxLength, hintFor(childPath, suffix))));
+                        obj.set(key,
+                                new TextNode(StringTruncator.truncate(text, maxLength, hintFor(childPath, suffix))));
                     }
                 } else if (child.isContainerNode()) {
                     truncateInPlace(child, maxLength, childPath, suffix);
@@ -95,7 +96,7 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        arr.set(i, new TextNode(TruncationMarker.apply(text, maxLength, hintFor(childPath, suffix))));
+                        arr.set(i, new TextNode(StringTruncator.truncate(text, maxLength, hintFor(childPath, suffix))));
                     }
                 } else if (child.isContainerNode()) {
                     truncateInPlace(child, maxLength, childPath, suffix);

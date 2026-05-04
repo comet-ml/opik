@@ -57,7 +57,7 @@ public final class DatasetCompressor implements EntityCompressor {
         var mapper = JsonUtils.getMapper();
         ObjectNode node = mapper.createObjectNode();
         node.put("name", dataset.name());
-        node.put("description", truncateString(dataset.description(), DESCRIPTION_TRUNCATION_LENGTH));
+        node.put("description", StringTruncator.truncate(dataset.description(), DESCRIPTION_TRUNCATION_LENGTH, null));
         node.put("visibility", dataset.visibility() != null ? dataset.visibility().toString() : null);
         node.put("created_at", dataset.createdAt() != null ? dataset.createdAt().toString() : null);
         node.put("total_item_count", dataset.datasetItemsCount());
@@ -89,7 +89,7 @@ public final class DatasetCompressor implements EntityCompressor {
                 return;
             }
             if (value.isTextual()) {
-                data.put(key, truncateString(value.asText(), DATA_FIELD_TRUNCATION_LENGTH));
+                data.put(key, StringTruncator.truncate(value.asText(), DATA_FIELD_TRUNCATION_LENGTH, null));
             } else {
                 data.set(key, PathAwareTruncator.truncate(value, DATA_FIELD_TRUNCATION_LENGTH));
             }
@@ -97,11 +97,4 @@ public final class DatasetCompressor implements EntityCompressor {
         return data;
     }
 
-    private static String truncateString(String value, int maxLength) {
-        if (value == null || value.length() <= maxLength) {
-            return value;
-        }
-        int dropped = value.length() - maxLength;
-        return value.substring(0, maxLength) + "[TRUNCATED %,d chars]".formatted(dropped);
-    }
 }

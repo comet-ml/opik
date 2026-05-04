@@ -8,7 +8,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
-import com.comet.opik.api.resources.v1.events.tools.TruncationMarker;
+import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -113,7 +113,7 @@ public class OnlineScoringEngine {
             int maxReplacementChars, String drillDownHint) {
         return replacements.entrySet().stream().collect(Collectors.toMap(
                 Map.Entry::getKey,
-                e -> TruncationMarker.apply(e.getValue(), maxReplacementChars, drillDownHint),
+                e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
                 (a, b) -> b,
                 java.util.LinkedHashMap::new));
     }
