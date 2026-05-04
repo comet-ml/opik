@@ -23,7 +23,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
+import org.redisson.api.options.PlainOptions;
+import org.slf4j.Logger;
+import reactor.core.publisher.Mono;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -71,7 +75,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
         // Mock the static UserFacingLoggingFactory.getLogger method
         mockedFactory = mockStatic(UserFacingLoggingFactory.class);
         mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
-                .thenReturn(mock(org.slf4j.Logger.class));
+                .thenReturn(mock(Logger.class));
 
         // Mock OnlineScoringConfig to return stream configuration for span_user_defined_metric_python
         OnlineScoringConfig.StreamConfiguration streamConfig = new OnlineScoringConfig.StreamConfiguration();
@@ -121,10 +125,9 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             // Given
             when(serviceTogglesConfig.isSpanUserDefinedMetricPythonEnabled()).thenReturn(true);
             // Mock Redis stream to avoid NullPointerException
-            org.redisson.api.RStreamReactive<Object, Object> mockStream = mock(org.redisson.api.RStreamReactive.class);
-            lenient().when(redissonClient.getStream(any(org.redisson.api.options.PlainOptions.class)))
-                    .thenReturn(mockStream);
-            lenient().when(mockStream.createGroup(any())).thenReturn(reactor.core.publisher.Mono.empty());
+            RStreamReactive<Object, Object> mockStream = mock(RStreamReactive.class);
+            lenient().when(redissonClient.getStream(any(PlainOptions.class))).thenReturn(mockStream);
+            lenient().when(mockStream.createGroup(any())).thenReturn(Mono.empty());
 
             // When
             scorer.start();
@@ -147,7 +150,7 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             // If no exception is thrown, the scorer handled the disabled state gracefully
             // The actual behavior is that super.start() is not called
             // Verify Redis stream was never accessed
-            verify(redissonClient, never()).getStream(any(org.redisson.api.options.PlainOptions.class));
+            verify(redissonClient, never()).getStream(any(PlainOptions.class));
         }
     }
 
@@ -194,12 +197,12 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .build();
 
             when(pythonEvaluatorService.evaluate(any(String.class), any(Map.class)))
-                    .thenReturn(List.of(scoreResult));
+                    .thenReturn(Mono.just(List.of(scoreResult)));
             when(feedbackScoreService.scoreBatchOfSpans(any(List.class)))
-                    .thenReturn(reactor.core.publisher.Mono.empty());
+                    .thenReturn(Mono.empty());
 
             // When
-            scorer.score(message);
+            scorer.score(message).block();
 
             // Then
             @SuppressWarnings("unchecked")
@@ -258,12 +261,12 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .build();
 
             when(pythonEvaluatorService.evaluate(any(String.class), any(Map.class)))
-                    .thenReturn(List.of(scoreResult1, scoreResult2));
+                    .thenReturn(Mono.just(List.of(scoreResult1, scoreResult2)));
             when(feedbackScoreService.scoreBatchOfSpans(any(List.class)))
-                    .thenReturn(reactor.core.publisher.Mono.empty());
+                    .thenReturn(Mono.empty());
 
             // When
-            scorer.score(message);
+            scorer.score(message).block();
 
             // Then
             @SuppressWarnings("unchecked")
@@ -311,12 +314,12 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
                     .build();
 
             when(pythonEvaluatorService.evaluate(any(String.class), any(Map.class)))
-                    .thenReturn(List.of());
+                    .thenReturn(Mono.just(List.of()));
             when(feedbackScoreService.scoreBatchOfSpans(any(List.class)))
-                    .thenReturn(reactor.core.publisher.Mono.empty());
+                    .thenReturn(Mono.empty());
 
             // When
-            scorer.score(message);
+            scorer.score(message).block();
 
             // Then
             @SuppressWarnings("unchecked")

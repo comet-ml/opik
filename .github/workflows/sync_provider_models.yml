@@ -84,7 +84,7 @@ jobs:
           git config --local user.name "Github Actions (${{ github.actor }})"
           git add apps/opik-backend/src/main/java/com/comet/opik/infrastructure/llm/
           git add apps/opik-frontend/src/types/providers.ts
-          git add apps/opik-frontend/src/hooks/useLLMProviderModelsData.ts
+          git add apps/opik-frontend/src/constants/providerModels.ts
           git add apps/opik-backend/src/main/resources/llm-models-default.yaml
           git commit -m "[NA] [BE][FE] chore: sync provider model definitions"
 

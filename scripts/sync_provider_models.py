@@ -1012,11 +1012,15 @@ def regenerate_llm_models_yaml(
                 model_id = entry.value
                 lines.append(f'  - id: "{model_id}"')
 
-            # Emit label only for dropdown-visible entries and only when it
-            # differs from the id — saves bytes on OpenRouter and matches the
-            # FE fallback (`label ?? id`).
+            # Emit a label for every dropdown-visible entry, even when it
+            # equals the id. The FE filter uses label-presence as the
+            # "is this dropdown-visible?" signal, so dropping labels for
+            # OpenRouter (where label == id by convention) made every
+            # OpenRouter model invisible in the picker (OPIK-6360). The
+            # extra ~30KB on the cold-cached YAML is a non-issue compared
+            # to the correctness fragility of the omit-when-equal rule.
             is_dropdown_entry = entry.value in dropdown_values
-            if is_dropdown_entry and entry.label and entry.label != model_id:
+            if is_dropdown_entry and entry.label:
                 escaped_label = entry.label.replace('"', '\\"')
                 lines.append(f'    label: "{escaped_label}"')
 

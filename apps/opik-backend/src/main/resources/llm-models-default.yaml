@@ -414,6 +414,7 @@ openrouter:
   - id: "gryphe/mythomax-l2-13b"
     structuredOutput: true
   - id: "ibm-granite/granite-4.0-h-micro"
+  - id: "ibm-granite/granite-4.1-8b"
   - id: "inception/mercury"
   - id: "inception/mercury-2"
   - id: "inception/mercury-coder"
@@ -677,6 +678,7 @@ openrouter:
     structuredOutput: true
   - id: "openrouter/healer-alpha"
   - id: "openrouter/hunter-alpha"
+  - id: "openrouter/owl-alpha"
   - id: "openrouter/pareto-code"
   - id: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"
@@ -809,6 +811,7 @@ openrouter:
   - id: "x-ai/grok-4.20-beta"
   - id: "x-ai/grok-4.20-multi-agent"
   - id: "x-ai/grok-4.20-multi-agent-beta"
+  - id: "x-ai/grok-4.3"
   - id: "x-ai/grok-code-fast-1"
   - id: "xiaomi/mimo-v2-flash"
   - id: "xiaomi/mimo-v2-omni"
