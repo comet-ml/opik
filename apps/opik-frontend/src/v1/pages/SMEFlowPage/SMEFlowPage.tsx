@@ -17,6 +17,7 @@ const SMEFlowContent: React.FunctionComponent = () => {
     isLoading,
     isItemsLoading,
     isError,
+    isItemsError,
   } = useSMEFlow();
 
   if (isLoading || isItemsLoading) {
@@ -28,8 +29,21 @@ const SMEFlowContent: React.FunctionComponent = () => {
     );
   }
 
-  if (!annotationQueue || isError) {
-    return <NoDataView hasQueueId={!!annotationQueue} />;
+  if (isError) {
+    return <NoDataView variant="queue-error" />;
+  }
+
+  if (!annotationQueue) {
+    return <NoDataView variant="no-queue" />;
+  }
+
+  if (isItemsError) {
+    return (
+      <NoDataView
+        variant="items-error"
+        onRetry={() => window.location.reload()}
+      />
+    );
   }
 
   switch (currentView) {
