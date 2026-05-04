@@ -2955,6 +2955,64 @@ class TracesResourceTest {
                 }
             }
         }
+
+        @Test
+        @DisplayName("when batch contains a trace with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
+        void batch__whenTraceHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+                TransactionTemplateAsync templateAsync) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+
+            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+
+            var traceWithNullLastUpdatedAt = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .endTime(null)
+                    .duration(null)
+                    .lastUpdatedAt(null)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var traceWithEndTime = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var traces = List.of(traceWithNullLastUpdatedAt, traceWithEndTime);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, workspaceName);
+
+            for (var trace : traces) {
+                Trace retrieved = traceResourceClient.getById(trace.id(), workspaceName, API_KEY);
+                assertThat(retrieved).as("trace %s should be persisted", trace.id()).isNotNull();
+                assertThat(retrieved.id()).isEqualTo(trace.id());
+            }
+
+            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
+
+            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
+                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
+                            + "into system.errors. Production sees ~30k of these per hour from this code path.")
+                    .isZero();
+        }
+
+        private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
+            return templateAsync.nonTransaction(connection -> {
+                var statement = connection.createStatement(
+                        "SELECT value FROM system.errors WHERE code = :code");
+                statement.bind("code", errorCode);
+                return Mono.from(statement.execute())
+                        .flatMap(result -> Mono.from(result.map((row, meta) -> {
+                            Long value = row.get("value", Long.class);
+                            return value != null ? value : 0L;
+                        })))
+                        .defaultIfEmpty(0L);
+            }).block();
+        }
     }
 
     private Stream<Arguments> getProjectNameModifierArgs() {

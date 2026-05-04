@@ -20,6 +20,7 @@ import useTraceById from "@/api/traces/useTraceById";
 import usePairingState from "@/hooks/usePairingState";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
@@ -68,6 +69,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   const isJobRunning =
     jobData?.status === SandboxJobStatus.RUNNING ||
     jobData?.status === SandboxJobStatus.PENDING;
+
+  const { DialogComponent: navigationBlockerDialog } = useNavigationBlocker({
+    condition: isJobRunning || createJobMutation.isPending,
+    title: "Agent execution in progress",
+    description:
+      "Your agent is currently running. Leaving now will interrupt the execution and may result in an incomplete trace. Are you sure you want to leave?",
+    confirmText: "Leave anyway",
+    cancelText: "Stay and wait",
+  });
 
   const { data: traceData } = useTraceById(
     { traceId, stripAttachments: true },
@@ -277,6 +287,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           refetchInterval={TRACE_POLL_INTERVAL}
         />
       )}
+      {navigationBlockerDialog}
     </div>
   );
 };
