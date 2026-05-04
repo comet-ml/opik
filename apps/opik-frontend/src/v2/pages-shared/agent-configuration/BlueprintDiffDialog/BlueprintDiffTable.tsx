@@ -65,21 +65,31 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
         const isPrompt = type === BlueprintValueType.PROMPT;
         const basePromptTemplate = base.promptTemplates?.[key];
         const diffPromptTemplate = diff.promptTemplates?.[key];
-        const promptCommitsMatch =
-          bv?.value === dv?.value && !basePromptTemplate && !diffPromptTemplate;
 
-        const changed = isPrompt
-          ? promptCommitsMatch
-            ? false
-            : undefined
-          : (bv ? formatBlueprintValue(bv) : undefined) !==
+        let mode: DiffPair["mode"];
+        if (!bv && dv) {
+          mode = "added";
+        } else if (bv && !dv) {
+          mode = "removed";
+        } else if (isPrompt) {
+          const sameCommit =
+            bv?.value === dv?.value &&
+            !basePromptTemplate &&
+            !diffPromptTemplate;
+          mode = sameCommit ? "unchanged" : "changed";
+        } else {
+          const sameValue =
+            (bv ? formatBlueprintValue(bv) : undefined) ===
             (dv ? formatBlueprintValue(dv) : undefined);
+          mode = sameValue ? "unchanged" : "changed";
+        }
+
         return {
           key,
           type,
+          mode,
           baseValue: bv,
           diffValue: dv,
-          changed,
           basePromptTemplate,
           diffPromptTemplate,
         };
@@ -90,7 +100,7 @@ const BlueprintDiffTable: React.FC<BlueprintDiffTableProps> = ({
     return <Loader />;
 
   const visiblePairs = onlyDiff
-    ? pairs.filter((p) => p.changed !== false)
+    ? pairs.filter((p) => p.mode !== "unchanged")
     : pairs;
 
   return (

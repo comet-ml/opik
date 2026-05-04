@@ -13,31 +13,24 @@ import {
 export type DiffPair = {
   key: string;
   type: BlueprintValueType;
+  mode: DiffMode;
   baseValue?: BlueprintValue;
   diffValue?: BlueprintValue;
-  changed?: boolean;
   basePromptTemplate?: string;
   diffPromptTemplate?: string;
-};
-
-const getDiffMode = (pair: DiffPair): DiffMode => {
-  if (!pair.baseValue && pair.diffValue) return "added";
-  if (pair.baseValue && !pair.diffValue) return "removed";
-  if (pair.changed === false) return "unchanged";
-  return "changed";
 };
 
 const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
   const {
     key,
     type,
+    mode,
     baseValue,
     diffValue,
     basePromptTemplate,
     diffPromptTemplate,
   } = pair;
   const isPrompt = type === BlueprintValueType.PROMPT;
-  const mode = getDiffMode(pair);
 
   const baseText = baseValue ? formatBlueprintValue(baseValue) : "";
   const diffText = diffValue ? formatBlueprintValue(diffValue) : "";
@@ -50,10 +43,14 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
       <TableCell className="p-1.5 align-top">
         {isPrompt ? (
           <PromptCellContent
-            baseCommit={baseValue?.value ?? ""}
-            diffCommit={diffValue?.value ?? ""}
-            baseTemplate={basePromptTemplate}
-            diffTemplate={diffPromptTemplate}
+            base={{
+              commit: baseValue?.value ?? "",
+              template: basePromptTemplate,
+            }}
+            diff={{
+              commit: diffValue?.value ?? "",
+              template: diffPromptTemplate,
+            }}
             mode={mode}
           />
         ) : (

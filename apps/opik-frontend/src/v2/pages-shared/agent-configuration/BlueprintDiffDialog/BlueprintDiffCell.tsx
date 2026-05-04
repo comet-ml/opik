@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  GitCommitVertical,
-  FileTerminal,
-  Hash,
-  Split,
-  Type,
-} from "lucide-react";
+import { GitCommitVertical } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import usePromptByCommit from "@/api/prompts/usePromptByCommit";
@@ -13,48 +7,42 @@ import Loader from "@/shared/Loader/Loader";
 import { Tag } from "@/ui/tag";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
 import { BlueprintValueType } from "@/types/agent-configs";
+import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 
 export type DiffMode = "unchanged" | "changed" | "added" | "removed";
 
-const TYPE_ICON: Record<
-  BlueprintValueType,
-  React.ComponentType<{ className?: string }>
+export type PromptSide = {
+  commit: string;
+  template?: string;
+};
+
+const MODE_TOKENS: Record<
+  Exclude<DiffMode, "unchanged" | "changed">,
+  { surface: string; text: string; lineThrough?: boolean }
 > = {
-  [BlueprintValueType.INT]: Hash,
-  [BlueprintValueType.FLOAT]: Hash,
-  [BlueprintValueType.BOOLEAN]: Split,
-  [BlueprintValueType.PROMPT]: FileTerminal,
-  [BlueprintValueType.STRING]: Type,
+  added: {
+    surface: "bg-diff-added-bg border-diff-added-border",
+    text: "text-diff-added-text",
+  },
+  removed: {
+    surface: "bg-diff-removed-bg border-diff-removed-border",
+    text: "text-diff-removed-text",
+    lineThrough: true,
+  },
 };
 
-const TYPE_BG_COLOR: Record<BlueprintValueType, string> = {
-  [BlueprintValueType.INT]: "var(--color-blue)",
-  [BlueprintValueType.FLOAT]: "var(--color-blue)",
-  [BlueprintValueType.BOOLEAN]: "var(--color-green)",
-  [BlueprintValueType.PROMPT]: "var(--color-burgundy)",
-  [BlueprintValueType.STRING]: "var(--color-violet)",
-};
+const tokenSurface = (mode: DiffMode) =>
+  mode === "added" || mode === "removed"
+    ? MODE_TOKENS[mode].surface
+    : "bg-primary-foreground border-border";
 
-export const DiffTypeIcon: React.FC<{
-  type: BlueprintValueType;
-  mode: DiffMode;
-}> = ({ type, mode }) => {
-  const Icon = TYPE_ICON[type] ?? Type;
-  const bgColor =
-    mode === "added"
-      ? "var(--diff-added-text)"
-      : mode === "removed"
-        ? "var(--diff-removed-text)"
-        : TYPE_BG_COLOR[type] ?? "var(--color-gray)";
-  return (
-    <span
-      className="flex size-4 shrink-0 items-center justify-center rounded text-white"
-      style={{ backgroundColor: bgColor }}
-    >
-      <Icon className="size-2.5" />
-    </span>
+const tokenText = (mode: DiffMode) =>
+  cn(
+    mode === "added" && MODE_TOKENS.added.text,
+    mode === "removed" && [MODE_TOKENS.removed.text, "line-through"],
+    mode === "changed" && "text-foreground",
+    mode === "unchanged" && "text-foreground",
   );
-};
 
 export const KeyCellContent: React.FC<{
   label: string;
@@ -64,21 +52,22 @@ export const KeyCellContent: React.FC<{
   const isAddedOrRemoved = mode === "added" || mode === "removed";
   const wrapperClass = cn(
     "flex min-w-0 items-center gap-1.5 rounded-md p-1",
-    isAddedOrRemoved && "border ",
-    mode === "removed" &&
-      "bg-[var(--diff-removed-bg)] border-[var(--diff-removed-border)]",
-    mode === "added" &&
-      "bg-[var(--diff-added-bg)] border-[var(--diff-added-border)]",
+    isAddedOrRemoved && ["border", MODE_TOKENS[mode].surface],
   );
   const labelClass = cn(
     "comet-body-xs truncate",
-    mode === "removed" && "text-[var(--diff-removed-text)] line-through",
-    mode === "added" && "text-[var(--diff-added-text)]",
-    !isAddedOrRemoved && "text-foreground",
+    isAddedOrRemoved
+      ? [
+          MODE_TOKENS[mode].text,
+          MODE_TOKENS[mode].lineThrough && "line-through",
+        ]
+      : "text-foreground",
   );
+  const tone =
+    mode === "added" ? "added" : mode === "removed" ? "removed" : undefined;
   return (
     <div className={wrapperClass}>
-      <DiffTypeIcon type={type} mode={mode} />
+      <BlueprintTypeIcon type={type} size="sm" tone={tone} />
       <span className={labelClass} title={label}>
         {label}
       </span>
@@ -87,44 +76,37 @@ export const KeyCellContent: React.FC<{
 };
 
 const valueBoxClass = (mode: DiffMode) =>
-  cn(
-    "flex min-h-5 items-center rounded-md border px-2",
-    mode === "removed" &&
-      "bg-[var(--diff-removed-bg)] border-[var(--diff-removed-border)]",
-    mode === "added" &&
-      "bg-[var(--diff-added-bg)] border-[var(--diff-added-border)]",
-    (mode === "changed" || mode === "unchanged") &&
-      "bg-primary-foreground border-border",
-  );
-
-const textColorClass = (mode: DiffMode) =>
-  cn(
-    "comet-body-xs whitespace-pre-wrap break-words",
-    mode === "removed" && "text-[var(--diff-removed-text)] line-through",
-    mode === "added" && "text-[var(--diff-added-text)]",
-    (mode === "changed" || mode === "unchanged") && "text-foreground",
-  );
+  cn("flex min-h-5 items-center rounded-md border px-2", tokenSurface(mode));
 
 export const ValueCellContent: React.FC<{
   baseText: string;
   diffText: string;
   mode: DiffMode;
 }> = ({ baseText, diffText, mode }) => {
-  const text = mode === "removed" ? baseText : diffText;
   if (mode === "changed") {
     return (
       <div className={valueBoxClass(mode)}>
-        <div className={textColorClass(mode)}>
+        <div
+          className={cn(
+            "comet-body-xs whitespace-pre-wrap break-words",
+            tokenText(mode),
+          )}
+        >
           <TextDiff content1={baseText} content2={diffText} mode="words" />
         </div>
       </div>
     );
   }
+  const text = mode === "removed" ? baseText : diffText;
   return (
-    <div className={valueBoxClass(mode)}>
-      <div className={textColorClass(mode)}>
-        {text || <span className="italic text-muted-slate">(empty)</span>}
-      </div>
+    <div
+      className={cn(
+        valueBoxClass(mode),
+        "comet-body-xs whitespace-pre-wrap break-words",
+        tokenText(mode),
+      )}
+    >
+      {text || <span className="italic text-muted-slate">(empty)</span>}
     </div>
   );
 };
@@ -136,10 +118,12 @@ const PromptCommitTag: React.FC<{ commit: string; mode: DiffMode }> = ({
   <Tag
     className={cn(
       "flex w-fit items-center gap-1",
-      mode === "removed" &&
-        "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)] line-through",
-      mode === "added" &&
-        "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
+      (mode === "added" || mode === "removed") && [
+        "border",
+        MODE_TOKENS[mode].surface,
+        MODE_TOKENS[mode].text,
+        MODE_TOKENS[mode].lineThrough && "line-through",
+      ],
     )}
     variant="gray"
     size="sm"
@@ -151,24 +135,22 @@ const PromptCommitTag: React.FC<{ commit: string; mode: DiffMode }> = ({
 );
 
 export const PromptCellContent: React.FC<{
-  baseCommit: string;
-  diffCommit: string;
-  baseTemplate?: string;
-  diffTemplate?: string;
+  base: PromptSide;
+  diff: PromptSide;
   mode: DiffMode;
-}> = ({ baseCommit, diffCommit, baseTemplate, diffTemplate, mode }) => {
+}> = ({ base, diff, mode }) => {
   const { data: basePrompt, isLoading: baseLoading } = usePromptByCommit(
-    { commitId: baseCommit },
-    { enabled: !!baseCommit && baseTemplate === undefined },
+    { commitId: base.commit },
+    { enabled: !!base.commit && base.template === undefined },
   );
   const { data: diffPrompt, isLoading: diffLoading } = usePromptByCommit(
-    { commitId: diffCommit },
-    { enabled: !!diffCommit && diffTemplate === undefined },
+    { commitId: diff.commit },
+    { enabled: !!diff.commit && diff.template === undefined },
   );
 
   const isLoading =
-    (baseTemplate === undefined && baseLoading) ||
-    (diffTemplate === undefined && diffLoading);
+    (base.template === undefined && baseLoading) ||
+    (diff.template === undefined && diffLoading);
 
   if (isLoading) {
     return (
@@ -179,28 +161,30 @@ export const PromptCellContent: React.FC<{
   }
 
   const baseText =
-    baseTemplate ?? basePrompt?.requested_version?.template ?? "";
+    base.template ?? basePrompt?.requested_version?.template ?? "";
   const diffText =
-    diffTemplate ?? diffPrompt?.requested_version?.template ?? "";
-  const commitsChanged = baseCommit !== diffCommit;
+    diff.template ?? diffPrompt?.requested_version?.template ?? "";
+  const commitsChanged = base.commit !== diff.commit;
 
   const renderTags = () => {
-    if (mode === "removed" && baseCommit) {
-      return <PromptCommitTag commit={baseCommit} mode="removed" />;
+    if (mode === "removed" && base.commit) {
+      return <PromptCommitTag commit={base.commit} mode="removed" />;
     }
-    if (mode === "added" && diffCommit) {
-      return <PromptCommitTag commit={diffCommit} mode="added" />;
+    if (mode === "added" && diff.commit) {
+      return <PromptCommitTag commit={diff.commit} mode="added" />;
     }
     if (commitsChanged) {
       return (
         <>
-          {baseCommit && <PromptCommitTag commit={baseCommit} mode="removed" />}
-          {diffCommit && <PromptCommitTag commit={diffCommit} mode="added" />}
+          {base.commit && (
+            <PromptCommitTag commit={base.commit} mode="removed" />
+          )}
+          {diff.commit && <PromptCommitTag commit={diff.commit} mode="added" />}
         </>
       );
     }
-    if (diffCommit) {
-      return <PromptCommitTag commit={diffCommit} mode="unchanged" />;
+    if (diff.commit) {
+      return <PromptCommitTag commit={diff.commit} mode="unchanged" />;
     }
     return null;
   };
@@ -212,7 +196,7 @@ export const PromptCellContent: React.FC<{
     <div className="flex flex-col gap-2">
       {tags && <div className="flex flex-wrap items-center gap-2">{tags}</div>}
       <div className={valueBoxClass(mode)}>
-        <div className={cn("comet-code", textColorClass(mode))}>
+        <div className={cn("comet-code", tokenText(mode))}>
           {mode === "changed" ? (
             <TextDiff content1={baseText} content2={diffText} mode="words" />
           ) : (
