@@ -18,6 +18,7 @@ import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
+import lombok.Builder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 
@@ -153,8 +154,13 @@ public class ReadTool implements ToolExecutor {
         } catch (NotFoundLikeException e) {
             return ToolArgs.errorJson(e.getMessage());
         } catch (Exception e) {
-            log.warn("read tool failed for ref ({}, {}): {}", args.type, args.id, e.getMessage(), e);
-            return ToolArgs.errorJson("Failed to fetch entity: " + e.getMessage());
+            // Don't echo the raw exception message to the LLM — it can include ClickHouse
+            // query fragments, stack-trace-like detail, or internal paths. Surface a short
+            // correlation id instead so an operator can grep the warn log to find the cause.
+            String correlationId = UUID.randomUUID().toString();
+            log.warn("read tool failed for ref ('{}', '{}'), correlationId='{}'",
+                    args.type, args.id, correlationId, e);
+            return ToolArgs.errorJson("Failed to fetch entity (ref: " + correlationId + ")");
         }
     }
 
@@ -314,7 +320,7 @@ public class ReadTool implements ToolExecutor {
         try {
             return JsonUtils.getMapper().treeToValue(node, type);
         } catch (Exception e) {
-            log.warn("Failed to deserialize cached node to {}: {}", type.getSimpleName(), e.getMessage());
+            log.warn("Failed to deserialize cached node to '{}: {}'", type.getSimpleName(), e.getMessage());
             return null;
         }
     }
@@ -349,14 +355,17 @@ public class ReadTool implements ToolExecutor {
         if (ctx.isTruncated(ref)) {
             // Cache already holds a capped form (set on a prior call). Don't re-cap;
             // just keep the warning visible.
-            return new CacheOutcome(fullJson, CACHE_WARNING_MESSAGE);
+            return CacheOutcome.builder().cachedNode(fullJson).warning(CACHE_WARNING_MESSAGE).build();
         }
         int size = fullJson.toString().length();
         if (size <= CACHE_CAP_CHARS) {
-            return new CacheOutcome(fullJson, null);
+            return CacheOutcome.builder().cachedNode(fullJson).build();
         }
         ctx.markTruncated(ref);
-        return new CacheOutcome(fitWithinCap(fullJson), CACHE_WARNING_MESSAGE);
+        return CacheOutcome.builder()
+                .cachedNode(fitWithinCap(fullJson))
+                .warning(CACHE_WARNING_MESSAGE)
+                .build();
     }
 
     /**
@@ -447,7 +456,11 @@ public class ReadTool implements ToolExecutor {
                     return ParsedArgs.error(ToolArgs.errorJson("Unknown tier: " + tierStr));
                 }
             }
-            return new ParsedArgs(typeRes.value(), idRes.value(), tier, null);
+            return ParsedArgs.builder()
+                    .type(typeRes.value())
+                    .id(idRes.value())
+                    .tier(tier)
+                    .build();
         } catch (Exception e) {
             log.warn("Failed to parse read tool arguments: '{}'", arguments, e);
             return ParsedArgs.error(ToolArgs.errorJson("Malformed arguments: " + e.getMessage()));
@@ -459,12 +472,14 @@ public class ReadTool implements ToolExecutor {
         JsonNode get();
     }
 
-    private record CacheOutcome(JsonNode cachedNode, String warning) {
+    @Builder(toBuilder = true)
+    private record CacheOutcome(@NonNull JsonNode cachedNode, String warning) {
     }
 
+    @Builder(toBuilder = true)
     private record ParsedArgs(EntityType type, String id, CompressionTier tier, String error) {
         static ParsedArgs error(String err) {
-            return new ParsedArgs(null, null, null, err);
+            return ParsedArgs.builder().error(err).build();
         }
     }
 

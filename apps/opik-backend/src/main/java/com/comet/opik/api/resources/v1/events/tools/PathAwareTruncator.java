@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  *   <li>{@link SuffixStyle#WITH_JQ_HINT} — the default. Embeds the jq path so
  *       the agent can recover the full value:
  *       <pre>&lt;first maxLength chars&gt;[TRUNCATED N chars — use jq('&lt;jqPath&gt;') to see full]</pre>
- *       Use this when the truncated tree will live in a cache that still holds
+ *       Use this when the truncated tree lives in a cache that still holds
  *       the full original under the same jq path.</li>
  *   <li>{@link SuffixStyle#BARE} — drops the jq promise. Use when the source of
  *       truth itself is being truncated (e.g. the 10 MB cache cap fallback) or
@@ -81,7 +81,7 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        obj.set(key, new TextNode(truncatedString(text, maxLength, childPath, suffix)));
+                        obj.set(key, new TextNode(TruncationMarker.apply(text, maxLength, hintFor(childPath, suffix))));
                     }
                 } else if (child.isContainerNode()) {
                     truncateInPlace(child, maxLength, childPath, suffix);
@@ -95,7 +95,7 @@ final class PathAwareTruncator {
                 if (child.isTextual()) {
                     String text = child.asText();
                     if (text.length() > maxLength) {
-                        arr.set(i, new TextNode(truncatedString(text, maxLength, childPath, suffix)));
+                        arr.set(i, new TextNode(TruncationMarker.apply(text, maxLength, hintFor(childPath, suffix))));
                     }
                 } else if (child.isContainerNode()) {
                     truncateInPlace(child, maxLength, childPath, suffix);
@@ -114,13 +114,10 @@ final class PathAwareTruncator {
         return ROOT_PATH.equals(parentPath) ? bracket : parentPath + bracket;
     }
 
-    private static String truncatedString(String original, int maxLength, String jqPath, SuffixStyle suffix) {
-        int dropped = original.length() - maxLength;
-        String head = original.substring(0, maxLength);
+    private static String hintFor(String jqPath, SuffixStyle suffix) {
         return switch (suffix) {
-            case WITH_JQ_HINT -> head + "[TRUNCATED %,d chars — use jq('%s') to see full]"
-                    .formatted(dropped, jqPath);
-            case BARE -> head + "[TRUNCATED %,d chars]".formatted(dropped);
+            case WITH_JQ_HINT -> "use jq('%s') to see full".formatted(jqPath);
+            case BARE -> null;
         };
     }
 }

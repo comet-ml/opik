@@ -8,6 +8,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.resources.v1.events.tools.TruncationMarker;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -94,7 +95,7 @@ public class OnlineScoringEngine {
      * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
      * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
      * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
-     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path so a 50K-token
+     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
      * trace's input/output doesn't get pasted verbatim into the prompt — the agent can pull the
      * full content via the {@code read} tool when it actually needs it.
      */
@@ -112,18 +113,9 @@ public class OnlineScoringEngine {
             int maxReplacementChars, String drillDownHint) {
         return replacements.entrySet().stream().collect(Collectors.toMap(
                 Map.Entry::getKey,
-                e -> capSingleReplacement(e.getValue(), maxReplacementChars, drillDownHint),
+                e -> TruncationMarker.apply(e.getValue(), maxReplacementChars, drillDownHint),
                 (a, b) -> b,
                 java.util.LinkedHashMap::new));
-    }
-
-    private static String capSingleReplacement(String value, int maxReplacementChars, String drillDownHint) {
-        if (value == null || value.length() <= maxReplacementChars) {
-            return value;
-        }
-        int dropped = value.length() - maxReplacementChars;
-        return value.substring(0, maxReplacementChars)
-                + "[TRUNCATED %,d chars — %s]".formatted(dropped, drillDownHint);
     }
 
     /**
