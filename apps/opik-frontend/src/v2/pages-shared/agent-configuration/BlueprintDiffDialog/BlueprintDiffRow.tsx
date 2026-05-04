@@ -2,23 +2,20 @@ import React from "react";
 
 import { TableCell, TableRow } from "@/ui/table";
 import { BlueprintValueType, BlueprintValue } from "@/types/agent-configs";
-import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { formatBlueprintValue } from "@/utils/agent-configurations";
 import {
-  type DiffSide,
-  DiffCellBox,
-  EmptyDiffCell,
-  PromptDiffPair,
+  DiffMode,
+  KeyCellContent,
+  PromptCellContent,
+  ValueCellContent,
 } from "./BlueprintDiffCell";
 
 export type DiffPair = {
   key: string;
   type: BlueprintValueType;
-  description?: string;
+  mode: DiffMode;
   baseValue?: BlueprintValue;
   diffValue?: BlueprintValue;
-  changed?: boolean;
   basePromptTemplate?: string;
   diffPromptTemplate?: string;
 };
@@ -27,64 +24,43 @@ const BlueprintDiffRow: React.FC<{ pair: DiffPair }> = ({ pair }) => {
   const {
     key,
     type,
-    description,
+    mode,
     baseValue,
     diffValue,
-    changed,
     basePromptTemplate,
     diffPromptTemplate,
   } = pair;
   const isPrompt = type === BlueprintValueType.PROMPT;
-  const hasPromptContent =
-    !!baseValue?.value ||
-    !!diffValue?.value ||
-    !!basePromptTemplate ||
-    !!diffPromptTemplate;
 
-  const baseText = baseValue ? formatBlueprintValue(baseValue) : undefined;
-  const diffText = diffValue ? formatBlueprintValue(diffValue) : undefined;
-
-  const renderCell = (
-    value: BlueprintValue | undefined,
-    text: string | undefined,
-    side: DiffSide,
-  ) => {
-    if (!value || text === undefined) return <EmptyDiffCell />;
-    return <DiffCellBox text={text} changed={changed ?? false} side={side} />;
-  };
+  const baseText = baseValue ? formatBlueprintValue(baseValue) : "";
+  const diffText = diffValue ? formatBlueprintValue(diffValue) : "";
 
   return (
-    <TableRow>
-      <TableCell className="w-[240px] px-1 py-3 align-top">
-        <TooltipWrapper content={key}>
-          <div className="flex min-w-0 items-center gap-2">
-            <BlueprintTypeIcon type={type} />
-            <span className="comet-body-xs-accented truncate text-foreground">
-              {key}
-            </span>
-          </div>
-        </TooltipWrapper>
-        {description && (
-          <p className="comet-body-xs mt-1 text-light-slate">{description}</p>
+    <TableRow className="border-border bg-background">
+      <TableCell className="w-[240px] border-r border-border p-1.5 align-top">
+        <KeyCellContent label={key} type={type} mode={mode} />
+      </TableCell>
+      <TableCell className="p-1.5 align-top">
+        {isPrompt ? (
+          <PromptCellContent
+            base={{
+              commit: baseValue?.value ?? "",
+              template: basePromptTemplate,
+            }}
+            diff={{
+              commit: diffValue?.value ?? "",
+              template: diffPromptTemplate,
+            }}
+            mode={mode}
+          />
+        ) : (
+          <ValueCellContent
+            baseText={baseText}
+            diffText={diffText}
+            mode={mode}
+          />
         )}
       </TableCell>
-      {isPrompt && hasPromptContent ? (
-        <PromptDiffPair
-          baseCommit={baseValue?.value ?? ""}
-          diffCommit={diffValue?.value ?? ""}
-          baseTemplate={basePromptTemplate}
-          diffTemplate={diffPromptTemplate}
-        />
-      ) : (
-        <>
-          <TableCell className="w-1/2 py-3 pr-2 align-top">
-            {renderCell(baseValue, baseText, "base")}
-          </TableCell>
-          <TableCell className="w-1/2 py-3 pl-2 align-top">
-            {renderCell(diffValue, diffText, "diff")}
-          </TableCell>
-        </>
-      )}
     </TableRow>
   );
 };
