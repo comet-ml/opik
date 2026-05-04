@@ -108,8 +108,8 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                         "Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
                         message.projectId(), message.ruleId(), message.workspaceId()))
                 .doOnError(error -> log.error(
-                        "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}': {}",
-                        message.projectId(), message.ruleId(), message.workspaceId(), error.getMessage(), error))
+                        "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}'",
+                        message.projectId(), message.ruleId(), message.workspaceId(), error))
                 .then();
     }
 
