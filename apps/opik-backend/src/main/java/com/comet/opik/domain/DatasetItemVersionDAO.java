@@ -422,11 +422,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LIMIT 1 BY id
             ),
             experiment_items_scope AS (
-            	SELECT ei.*, e.resolved_dataset_version_id
+            	SELECT
+            	    ei.id AS id,
+            	    ei.experiment_id AS experiment_id,
+            	    ei.dataset_item_id AS dataset_item_id,
+            	    ei.trace_id AS trace_id,
+            	    ei.workspace_id AS workspace_id,
+            	    ei.created_at AS created_at,
+            	    ei.last_updated_at AS last_updated_at,
+            	    ei.created_by AS created_by,
+            	    ei.last_updated_by AS last_updated_by,
+            	    ei.project_id AS project_id,
+            	    ei.execution_policy AS execution_policy,
+            	    e.resolved_dataset_version_id AS resolved_dataset_version_id,
+            	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
+            	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
-            	<if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
+            	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ),
@@ -523,15 +539,28 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             )
             , experiment_items_final AS (
-            	SELECT *
+            	SELECT
+            	    ei.id AS id,
+            	    ei.experiment_id AS experiment_id,
+            	    ei.dataset_item_id AS dataset_item_id,
+            	    ei.stable_dataset_item_id AS stable_dataset_item_id,
+            	    ei.trace_id AS trace_id,
+            	    ei.workspace_id AS workspace_id,
+            	    ei.created_at AS created_at,
+            	    ei.last_updated_at AS last_updated_at,
+            	    ei.created_by AS created_by,
+            	    ei.last_updated_by AS last_updated_by,
+            	    ei.project_id AS project_id,
+            	    ei.execution_policy AS execution_policy,
+            	    ei.resolved_dataset_version_id AS resolved_dataset_version_id
             	FROM experiment_items_scope ei
-            	WHERE workspace_id = :workspace_id
+            	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters || dataset_item_filters)>
-                AND trace_id IN (
+                AND ei.trace_id IN (
                     SELECT
                         id
                     FROM (
@@ -574,7 +603,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 )
                 <endif>
                 <if(dataset_item_filters)>
-                AND ei.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_resolved WHERE <dataset_item_filters>)
+                AND ei.stable_dataset_item_id IN (SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>)
                 <endif>
             	ORDER BY id DESC, last_updated_at DESC
             ), dataset_items_agg_resolved AS (
@@ -598,35 +627,37 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ), item_agg_count AS (
                 SELECT
-                    eia.id,
-                    eia.experiment_id,
-                    eia.dataset_item_id,
-                    eia.trace_id,
-                    eia.input,
-                    eia.output
+                    eia.id AS id,
+                    eia.experiment_id AS experiment_id,
+                    eia.dataset_item_id AS dataset_item_id,
+                    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id,
+                    eia.trace_id AS trace_id,
+                    eia.input AS input,
+                    eia.output AS output
                 FROM experiment_item_aggregates AS eia FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
                 <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                 <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                 <if(dataset_item_filters)>
-                AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_agg_resolved WHERE <dataset_item_filters>)
+                AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT id FROM dataset_items_agg_resolved WHERE <dataset_item_filters>)
                 <endif>
             )
             SELECT COUNT(DISTINCT di_id) AS count
             FROM (
                 <if(has_aggregated)>
-                SELECT eia.dataset_item_id AS di_id
+                SELECT eia.stable_dataset_item_id AS di_id
                 FROM item_agg_count AS eia
                 <if(search)>
-                INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = eia.experiment_id
-                LEFT JOIN dataset_items_agg_resolved di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                    AND di.dataset_version_id = eas.resolved_dataset_version_id
+                LEFT JOIN dataset_items_agg_resolved di ON di.id = eia.stable_dataset_item_id
                 WHERE multiSearchAnyCaseInsensitive(toString(COALESCE(di.data, map())), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(eia.input), :searchTerms) OR multiSearchAnyCaseInsensitive(toString(eia.output), :searchTerms)
                 <endif>
                 <endif>
@@ -634,10 +665,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(has_aggregated)><if(has_raw)>UNION ALL<endif><endif>
 
                 <if(has_raw)>
-                SELECT ei.dataset_item_id AS di_id
+                SELECT ei.stable_dataset_item_id AS di_id
                 FROM experiment_items_final AS ei
-                LEFT JOIN dataset_items_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = ei.resolved_dataset_version_id
+                LEFT JOIN dataset_items_resolved AS di ON di.id = ei.stable_dataset_item_id
                 <if(search)>
                 LEFT JOIN (
                     SELECT
@@ -743,11 +773,34 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_scope AS (
-            	SELECT ei.*, e.resolved_dataset_version_id
+            	-- OPIK-6177: Project stable_dataset_item_id by LEFT JOIN to dataset_item_versions
+            	-- on the per-version row id. Resolves legacy rows where ei.dataset_item_id holds
+            	-- a per-version dataset_item_versions.id (pre-OPIK-4518 BE cutover) to the stable
+            	-- dataset_item_id; for modern rows (where ei.dataset_item_id IS the stable id)
+            	-- the LEFT JOIN misses and the if() falls back to ei.dataset_item_id.
+            	-- (NOTE: a CTE-based lookup with materialized empty-result sets caused the LEFT JOIN
+            	-- to drop rows in deletion-cascade tests; direct table reference works correctly.)
+            	SELECT
+            	    ei.id AS id,
+            	    ei.experiment_id AS experiment_id,
+            	    ei.dataset_item_id AS dataset_item_id,
+            	    ei.trace_id AS trace_id,
+            	    ei.workspace_id AS workspace_id,
+            	    ei.created_at AS created_at,
+            	    ei.last_updated_at AS last_updated_at,
+            	    ei.created_by AS created_by,
+            	    ei.last_updated_by AS last_updated_by,
+            	    ei.project_id AS project_id,
+            	    ei.execution_policy AS execution_policy,
+            	    e.resolved_dataset_version_id AS resolved_dataset_version_id,
+            	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
+            	    ON lookup_div.workspace_id = ei.workspace_id
+            	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
-            	<if(experiment_ids)>AND experiment_id IN :experiment_ids<endif>
+            	<if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
             	ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
             	LIMIT 1 BY ei.id
             ), experiment_items_trace_scope AS (
@@ -803,7 +856,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_id  = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiments_resolved)
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ),
             feedback_scores_deduped AS (
@@ -904,11 +957,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             <endif>
             , experiment_items_final AS (
-            	SELECT *
+            	SELECT
+            	    ei.id AS id,
+            	    ei.experiment_id AS experiment_id,
+            	    ei.dataset_item_id AS dataset_item_id,
+            	    ei.stable_dataset_item_id AS stable_dataset_item_id,
+            	    ei.trace_id AS trace_id,
+            	    ei.workspace_id AS workspace_id,
+            	    ei.created_at AS created_at,
+            	    ei.last_updated_at AS last_updated_at,
+            	    ei.created_by AS created_by,
+            	    ei.last_updated_by AS last_updated_by,
+            	    ei.project_id AS project_id,
+            	    ei.execution_policy AS execution_policy,
+            	    ei.resolved_dataset_version_id AS resolved_dataset_version_id
             	FROM experiment_items_scope ei
-            	WHERE workspace_id = :workspace_id
+            	WHERE ei.workspace_id = :workspace_id
             	<if(experiment_item_filters || feedback_scores_filters || feedback_scores_empty_filters || dataset_item_filters)>
-                AND trace_id IN (
+                AND ei.trace_id IN (
                   SELECT
                     id
                   FROM (
@@ -947,7 +1013,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 )
                 <endif>
                 <if(dataset_item_filters)>
-                AND ei.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_resolved WHERE <dataset_item_filters>)
+                AND ei.stable_dataset_item_id IN (SELECT id FROM dataset_items_resolved WHERE <dataset_item_filters>)
                 <endif>
             )
             , comments_final AS (
@@ -986,12 +1052,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             <if(push_top_limit && !push_top_needs_div)>
             , top_dataset_items AS (
-                SELECT eia_t.dataset_item_id
+                SELECT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) AS dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia_t.workspace_id
+                    AND lookup_div.id = eia_t.dataset_item_id
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
-                GROUP BY eia_t.dataset_item_id
-                ORDER BY <if(top_sorting)><top_sorting><else>eia_t.dataset_item_id DESC<endif>
+                GROUP BY if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
+                ORDER BY <if(top_sorting)><top_sorting><else>if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) DESC<endif>
                 LIMIT :top_limit OFFSET :top_offset
             )
             <endif>
@@ -1022,29 +1091,63 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     AND dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items)
                     <endif>
                     ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                    LIMIT 1 BY id
+                    LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             )
             <if(push_top_limit && push_top_needs_div)>
             , top_dataset_items AS (
-                SELECT eia_t.dataset_item_id
+                SELECT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) AS dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
-                INNER JOIN experiment_aggregated_scope_ids eas_t ON eas_t.id = eia_t.experiment_id
-                LEFT JOIN dataset_items_aggr_resolved AS di_t ON (di_t.id = eia_t.dataset_item_id OR di_t.row_id = eia_t.dataset_item_id)
-                    AND di_t.dataset_version_id = eas_t.resolved_dataset_version_id
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia_t.workspace_id
+                    AND lookup_div.id = eia_t.dataset_item_id
+                LEFT JOIN dataset_items_aggr_resolved AS di_t
+                    ON di_t.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
-                GROUP BY eia_t.dataset_item_id
+                GROUP BY if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
                 ORDER BY <top_sorting>
                 LIMIT :top_limit OFFSET :top_offset
             )
             <endif>
+            -- OPIK-6177: outer GROUP BY collapses cross-branch duplicates when one
+            -- experiment is in experiment_aggregates (aggregated branch) and another
+            -- is not yet (raw branch). Each branch already groups by stable_dataset_item_id;
+            -- this layer merges across the UNION so a stable id appears once with a
+            -- flattened experiment_items_array. When a stable id appears in BOTH
+            -- branches and the branches resolved different dataset_version_ids, we
+            -- prefer the latest dataset_version_id (argMax on last_updated_at) so the
+            -- row shows the most recent version's data — matching single-branch behavior.
             SELECT
-                *
+                u.id AS id,
+                any(u.dataset_id) AS dataset_id,
+                argMax(u.data_final, u.last_updated_at) AS data_final,
+                argMax(u.data, u.last_updated_at) AS data,
+                argMax(u.description, u.last_updated_at) AS description,
+                argMax(u.trace_id, u.last_updated_at) AS trace_id,
+                argMax(u.span_id, u.last_updated_at) AS span_id,
+                argMax(u.source, u.last_updated_at) AS source,
+                argMax(u.tags, u.last_updated_at) AS tags,
+                argMax(u.evaluators, u.last_updated_at) AS evaluators,
+                argMax(u.execution_policy, u.last_updated_at) AS execution_policy,
+                argMax(u.created_at, u.last_updated_at) AS created_at,
+                max(u.last_updated_at) AS last_updated_at,
+                argMax(u.created_by, u.last_updated_at) AS created_by,
+                argMax(u.last_updated_by, u.last_updated_at) AS last_updated_by,
+                argMax(u.duration, u.last_updated_at) AS duration,
+                argMax(u.total_estimated_cost, u.last_updated_at) AS total_estimated_cost,
+                argMax(u.usage, u.last_updated_at) AS usage,
+                argMax(u.feedback_scores, u.last_updated_at) AS feedback_scores,
+                argMax(u.input, u.last_updated_at) AS input,
+                argMax(u.output, u.last_updated_at) AS output,
+                argMax(u.metadata, u.last_updated_at) AS metadata,
+                argMax(u.visibility_mode, u.last_updated_at) AS visibility_mode,
+                argMax(u.comments, u.last_updated_at) AS comments,
+                groupArrayArray(u.experiment_items_array) AS experiment_items_array
             FROM (
                 <if(has_aggregated)>
                 SELECT
-                    ei.dataset_item_id AS id,
+                    ei.stable_dataset_item_id AS id,
                     :datasetId AS dataset_id,
                     <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                     COALESCE(di.data, map()) AS data,
@@ -1071,7 +1174,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     groupArray(tuple(
                         ei.id,
                         ei.experiment_id,
-                        ei.dataset_item_id,
+                        ei.stable_dataset_item_id,
                         ei.trace_id,
                         <if(truncate)>replaceRegexpAll(if(notEmpty(ei.input_slim), ei.input_slim, ei.input), '<truncate>', '"[image]"')<else>ei.input<endif>,
                         <if(truncate)>replaceRegexpAll(if(notEmpty(ei.output_slim), ei.output_slim, ei.output), '<truncate>', '"[image]"')<else>ei.output<endif>,
@@ -1092,45 +1195,47 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     )) AS experiment_items_array
                 FROM (
                     SELECT
-                        eia.id,
-                        eia.trace_id,
-                        eia.dataset_item_id,
-                        eia.experiment_id,
-                        eia.project_id,
-                        eia.input,
-                        eia.output,
-                        eia.input_slim,
-                        eia.output_slim,
-                        eia.feedback_scores_array,
+                        eia.id AS id,
+                        eia.trace_id AS trace_id,
+                        eia.dataset_item_id AS dataset_item_id,
+                        if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id,
+                        eia.experiment_id AS experiment_id,
+                        eia.project_id AS project_id,
+                        eia.input AS input,
+                        eia.output AS output,
+                        eia.input_slim AS input_slim,
+                        eia.output_slim AS output_slim,
+                        eia.feedback_scores_array AS feedback_scores_array,
                         eia.duration AS duration,
-                        eia.total_estimated_cost,
-                        eia.usage,
-                        eia.visibility_mode,
-                        eia.created_at,
-                        eia.last_updated_at,
-                        eia.created_by,
-                        eia.last_updated_by,
-                        eia.metadata,
-                        eia.feedback_scores,
-                        eia.comments_array_agg,
-                        eia.execution_policy,
-                        eia.assertions_array
+                        eia.total_estimated_cost AS total_estimated_cost,
+                        eia.usage AS usage,
+                        eia.visibility_mode AS visibility_mode,
+                        eia.created_at AS created_at,
+                        eia.last_updated_at AS last_updated_at,
+                        eia.created_by AS created_by,
+                        eia.last_updated_by AS last_updated_by,
+                        eia.metadata AS metadata,
+                        eia.feedback_scores AS feedback_scores,
+                        eia.comments_array_agg AS comments_array_agg,
+                        eia.execution_policy AS execution_policy,
+                        eia.assertions_array AS assertions_array
                     FROM experiment_item_aggregates AS eia FINAL
+                    LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                        ON lookup_div.workspace_id = eia.workspace_id
+                        AND lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
-                    <if(push_top_limit)>AND eia.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items)<endif>
+                    <if(push_top_limit)>AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT dataset_item_id FROM top_dataset_items)<endif>
                     <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
                     <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                     <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                     <if(dataset_item_filters)>
-                    AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
+                    AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
                     <endif>
                 ) ei
-                INNER JOIN experiment_aggregated_scope_ids eas ON eas.id = ei.experiment_id
-                LEFT JOIN dataset_items_aggr_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = eas.resolved_dataset_version_id
+                LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = ei.stable_dataset_item_id
                 GROUP BY
-                    ei.dataset_item_id,
+                    ei.stable_dataset_item_id,
                     :datasetId,
                     COALESCE(di.data, map()),
                     di.trace_id,
@@ -1162,7 +1267,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 <if(has_raw)>
                 SELECT
-                    ei.dataset_item_id AS id,
+                    ei.stable_dataset_item_id AS id,
                     :datasetId AS dataset_id,
                     <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                     COALESCE(di.data, map()) AS data,
@@ -1189,7 +1294,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     groupArray(tuple(
                         ei.id,
                         ei.experiment_id,
-                        ei.dataset_item_id,
+                        ei.stable_dataset_item_id,
                         ei.trace_id,
                         tfs.input,
                         tfs.output,
@@ -1209,8 +1314,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         arp.assertions_array
                     )) AS experiment_items_array
                 FROM experiment_items_final AS ei
-                LEFT JOIN dataset_items_resolved AS di ON (di.id = ei.dataset_item_id OR di.row_id = ei.dataset_item_id)
-                    AND di.dataset_version_id = ei.resolved_dataset_version_id
+                LEFT JOIN dataset_items_resolved AS di ON di.id = ei.stable_dataset_item_id
                 LEFT JOIN (
                     SELECT
                         ei2.id AS item_id,
@@ -1346,7 +1450,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ) AS tfs ON ei.id = tfs.item_id
                 LEFT JOIN assertion_results_per_trace AS arp ON ei.trace_id = arp.entity_id
                 GROUP BY
-                    ei.dataset_item_id,
+                    ei.stable_dataset_item_id,
                     :datasetId,
                     COALESCE(di.data, map()),
                     di.trace_id,
@@ -1373,11 +1477,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 <endif>
                 <endif>
-            )
+            ) AS u
+            GROUP BY u.id
             <if(sorting)>
-            ORDER BY <sorting>, id DESC
+            ORDER BY <sorting>, u.id DESC
             <else>
-            ORDER BY id DESC
+            ORDER BY u.id DESC
             <endif>
             LIMIT :limit
             <if(!push_top_limit)>OFFSET :offset<endif>
@@ -1775,9 +1880,19 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_scope AS (
-                SELECT ei.*, e.resolved_version_id AS resolved_dataset_version_id
+                SELECT
+                    ei.id AS id,
+                    ei.experiment_id AS experiment_id,
+                    ei.dataset_item_id AS dataset_item_id,
+                    ei.trace_id AS trace_id,
+                    ei.workspace_id AS workspace_id,
+                    e.resolved_version_id AS resolved_dataset_version_id,
+                    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
                 FROM experiment_items ei
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = ei.workspace_id
+                    AND lookup_div.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
                 <if(experiment_ids)>AND ei.experiment_id IN :experiment_ids<endif>
                 ORDER BY (ei.workspace_id, ei.experiment_id, ei.dataset_item_id, ei.trace_id, ei.id) DESC, ei.last_updated_at DESC
@@ -1892,8 +2007,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                         LIMIT 1 BY div.id
                     ) div_dedup
-                ) dibv ON (dibv.dataset_item_id = ei.dataset_item_id OR dibv.row_id = ei.dataset_item_id)
-                    AND dibv.dataset_version_id = ei.resolved_dataset_version_id
+                ) dibv ON dibv.dataset_item_id = ei.stable_dataset_item_id
                 <if(experiment_item_filters)>
                 AND ei.trace_id IN (
                     SELECT
@@ -3801,14 +3915,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     return expr + " " + dir;
                 })
                 .collect(Collectors.joining(", "));
-        return primarySort + ", eia_t.dataset_item_id DESC";
+        return primarySort
+                + ", if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) DESC";
     }
 
     private String getTopSortExpression(com.comet.opik.api.sorting.SortingField sf) {
         String field = sf.field();
 
         if ("id".equals(field)) {
-            return "eia_t.dataset_item_id";
+            return "if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)";
         }
         if ("description".equals(field)) {
             return "any(di_t.description)";
