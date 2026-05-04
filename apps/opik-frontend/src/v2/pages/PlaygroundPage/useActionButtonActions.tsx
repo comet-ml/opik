@@ -44,6 +44,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import createLogPlaygroundProcessor, {
   LogProcessor,
   LogProcessorArgs,
+  NOOP_LOG_PROCESSOR,
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination, {
@@ -609,7 +610,7 @@ const useActionButtonActions = ({
           ...logProcessorHandlers,
           projectName,
         })
-      : { log: () => {}, finishLogging: () => {} };
+      : NOOP_LOG_PROCESSOR;
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
@@ -675,7 +676,7 @@ const useActionButtonActions = ({
             ...logProcessorHandlers,
             projectName,
           })
-        : { log: () => {}, finishLogging: () => {} };
+        : NOOP_LOG_PROCESSOR;
 
       const combinations: DatasetItemPromptCombination[] =
         datasetItems.length > 0

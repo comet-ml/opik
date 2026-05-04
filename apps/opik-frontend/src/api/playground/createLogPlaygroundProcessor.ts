@@ -67,6 +67,11 @@ export interface LogProcessor {
   finishLogging: () => void;
 }
 
+export const NOOP_LOG_PROCESSOR: LogProcessor = {
+  log: () => {},
+  finishLogging: () => {},
+};
+
 const createBatchTraces = async (traces: LogTrace[]) => {
   return api.post(`${TRACES_REST_ENDPOINT}batch`, {
     traces: traces.map(snakeCaseObj),

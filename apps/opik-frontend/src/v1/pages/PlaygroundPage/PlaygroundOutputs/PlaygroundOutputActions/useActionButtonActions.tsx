@@ -24,6 +24,7 @@ import { usePermissions } from "@/contexts/PermissionsContext";
 import createLogPlaygroundProcessor, {
   LogProcessor,
   LogProcessorArgs,
+  NOOP_LOG_PROCESSOR,
   TraceMapping,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination from "@/v1/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputActions/usePromptDatasetItemCombination";
@@ -216,7 +217,7 @@ const useActionButtonActions = ({
       : canLogTraceSpanThread;
     const logProcessor: LogProcessor = shouldLogPlaygroundData
       ? createLogPlaygroundProcessor(logProcessorHandlers)
-      : { log: () => {}, finishLogging: () => {} };
+      : NOOP_LOG_PROCESSOR;
 
     const combinations = createCombinations();
     const totalCombinations = combinations.length;
