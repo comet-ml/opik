@@ -1110,8 +1110,40 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LIMIT :top_limit OFFSET :top_offset
             )
             <endif>
+            -- OPIK-6177: outer GROUP BY collapses cross-branch duplicates when one
+            -- experiment is in experiment_aggregates (aggregated branch) and another
+            -- is not yet (raw branch). Each branch already groups by stable_dataset_item_id;
+            -- this layer merges across the UNION so a stable id appears once with a
+            -- flattened experiment_items_array. When a stable id appears in BOTH
+            -- branches and the branches resolved different dataset_version_ids, we
+            -- prefer the latest dataset_version_id (argMax on last_updated_at) so the
+            -- row shows the most recent version's data — matching single-branch behavior.
             SELECT
-                *
+                u.id AS id,
+                any(u.dataset_id) AS dataset_id,
+                argMax(u.data_final, u.last_updated_at) AS data_final,
+                argMax(u.data, u.last_updated_at) AS data,
+                argMax(u.description, u.last_updated_at) AS description,
+                argMax(u.trace_id, u.last_updated_at) AS trace_id,
+                argMax(u.span_id, u.last_updated_at) AS span_id,
+                argMax(u.source, u.last_updated_at) AS source,
+                argMax(u.tags, u.last_updated_at) AS tags,
+                argMax(u.evaluators, u.last_updated_at) AS evaluators,
+                argMax(u.execution_policy, u.last_updated_at) AS execution_policy,
+                argMax(u.created_at, u.last_updated_at) AS created_at,
+                max(u.last_updated_at) AS last_updated_at,
+                argMax(u.created_by, u.last_updated_at) AS created_by,
+                argMax(u.last_updated_by, u.last_updated_at) AS last_updated_by,
+                argMax(u.duration, u.last_updated_at) AS duration,
+                argMax(u.total_estimated_cost, u.last_updated_at) AS total_estimated_cost,
+                argMax(u.usage, u.last_updated_at) AS usage,
+                argMax(u.feedback_scores, u.last_updated_at) AS feedback_scores,
+                argMax(u.input, u.last_updated_at) AS input,
+                argMax(u.output, u.last_updated_at) AS output,
+                argMax(u.metadata, u.last_updated_at) AS metadata,
+                argMax(u.visibility_mode, u.last_updated_at) AS visibility_mode,
+                argMax(u.comments, u.last_updated_at) AS comments,
+                groupArrayArray(u.experiment_items_array) AS experiment_items_array
             FROM (
                 <if(has_aggregated)>
                 SELECT
@@ -1445,11 +1477,12 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
 
                 <endif>
                 <endif>
-            )
+            ) AS u
+            GROUP BY u.id
             <if(sorting)>
-            ORDER BY <sorting>, id DESC
+            ORDER BY <sorting>, u.id DESC
             <else>
-            ORDER BY id DESC
+            ORDER BY u.id DESC
             <endif>
             LIMIT :limit
             <if(!push_top_limit)>OFFSET :offset<endif>
