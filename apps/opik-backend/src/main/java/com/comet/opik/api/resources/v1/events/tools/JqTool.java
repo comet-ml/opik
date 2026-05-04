@@ -175,7 +175,7 @@ public class JqTool implements ToolExecutor {
                 break;
             }
         }
-        String capped = ToolArgs.capWithHint(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT);
+        String capped = StringTruncator.truncate(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT, "\n");
         return successHeader(args) + "\n" + capped;
     }
 

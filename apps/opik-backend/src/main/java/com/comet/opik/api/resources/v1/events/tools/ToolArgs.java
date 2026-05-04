@@ -6,11 +6,10 @@ import lombok.experimental.UtilityClass;
 
 /**
  * Static helpers shared across {@link ReadTool}, {@link JqTool}, and
- * {@link SearchTool}: argument JSON parsing primitives, the canonical cache-miss
- * hint, and the {@code [TRUNCATED N chars — hint]} suffix used by tool output
- * caps. Kept deliberately narrow — per-tool {@code parseArgs} flows and header
- * builders stay in their tool classes since required fields and header layouts
- * differ.
+ * {@link SearchTool}: argument JSON parsing primitives and the canonical
+ * cache-miss hint. Kept deliberately narrow — per-tool {@code parseArgs} flows
+ * and header builders stay in their tool classes since required fields and
+ * header layouts differ. Output truncation lives in {@link StringTruncator}.
  */
 @UtilityClass
 public final class ToolArgs {
@@ -29,20 +28,6 @@ public final class ToolArgs {
     public static String cacheMiss(EntityType type, String id) {
         return "Entity (type=%s, id=%s) not in cache. Call read first."
                 .formatted(type.name().toLowerCase(), id);
-    }
-
-    /**
-     * Caps {@code body} at {@code cap} chars. When truncated, appends a single
-     * line of the form {@code [TRUNCATED N chars — <hint>]} so the agent can
-     * act on the cap.
-     */
-    public static String capWithHint(String body, int cap, String hint) {
-        if (body.length() <= cap) {
-            return body;
-        }
-        int dropped = body.length() - cap;
-        return body.substring(0, cap)
-                + "\n[TRUNCATED %s chars — %s]".formatted(String.format("%,d", dropped), hint);
     }
 
     /**

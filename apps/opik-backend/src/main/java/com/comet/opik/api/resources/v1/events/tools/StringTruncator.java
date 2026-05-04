@@ -28,19 +28,29 @@ public final class StringTruncator {
     /**
      * Returns {@code value} unchanged if it is null or no longer than
      * {@code maxLength}; otherwise returns the first {@code maxLength}
-     * characters followed by a {@code [TRUNCATED N chars …]} suffix.
+     * characters followed directly by a {@code [TRUNCATED N chars …]} suffix.
      *
      * @param hint optional drill-down text appended after an em-dash; pass
      *             {@code null} for the bare {@code [TRUNCATED N chars]} form
      */
     public static String truncate(String value, int maxLength, String hint) {
+        return truncate(value, maxLength, hint, "");
+    }
+
+    /**
+     * Variant that inserts {@code separator} between the kept head and the
+     * marker suffix — used by line-oriented tool output where the marker
+     * should sit on its own line ({@code separator = "\n"}).
+     */
+    public static String truncate(String value, int maxLength, String hint, String separator) {
         if (value == null || value.length() <= maxLength) {
             return value;
         }
         int dropped = value.length() - maxLength;
         String head = value.substring(0, maxLength);
-        return hint == null
-                ? head + "[TRUNCATED %,d chars]".formatted(dropped)
-                : head + "[TRUNCATED %,d chars — %s]".formatted(dropped, hint);
+        String marker = hint == null
+                ? "[TRUNCATED %,d chars]".formatted(dropped)
+                : "[TRUNCATED %,d chars — %s]".formatted(dropped, hint);
+        return head + separator + marker;
     }
 }

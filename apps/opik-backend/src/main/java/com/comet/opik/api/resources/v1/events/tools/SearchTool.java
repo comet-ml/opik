@@ -197,7 +197,7 @@ public class SearchTool implements ToolExecutor {
             JsonNode value = match.path("value");
             body.append(path).append(": ").append(renderValue(value));
         }
-        return ToolArgs.capWithHint(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT);
+        return StringTruncator.truncate(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT, "\n");
     }
 
     private static String renderValue(JsonNode value) {
