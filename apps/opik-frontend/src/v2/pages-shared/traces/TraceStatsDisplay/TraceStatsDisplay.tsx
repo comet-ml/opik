@@ -15,7 +15,7 @@ type TraceStatsDisplayProps = {
   estimatedCost?: number;
 };
 
-const statClassName = "comet-body-xs flex items-center gap-1 text-muted-slate";
+const statClassName = "comet-body-s flex items-center gap-1 text-foreground";
 
 const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
   duration,
@@ -50,14 +50,16 @@ const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
       {isNumber(duration) && (
         <TooltipWrapper content={durationTooltip}>
           <div className={statClassName}>
-            <Clock className="size-3 shrink-0" /> {formattedDuration}
+            <Clock className="size-3.5 shrink-0 text-muted-slate" />{" "}
+            {formattedDuration}
           </div>
         </TooltipWrapper>
       )}
       {isNumber(totalTokens) && (
         <TooltipWrapper content={`Total amount of tokens: ${totalTokens}`}>
           <div className={statClassName}>
-            <Hash className="size-3 shrink-0" /> {totalTokens}
+            <Hash className="size-3.5 shrink-0 text-muted-slate" />{" "}
+            {totalTokens}
           </div>
         </TooltipWrapper>
       )}
@@ -68,7 +70,8 @@ const TraceStatsDisplay: React.FC<TraceStatsDisplayProps> = ({
           })}`}
         >
           <div className={statClassName}>
-            <Coins className="size-3 shrink-0" /> {formatCost(estimatedCost)}
+            <Coins className="size-3.5 shrink-0 text-muted-slate" />{" "}
+            {formatCost(estimatedCost)}
           </div>
         </TooltipWrapper>
       )}
