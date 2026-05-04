@@ -449,6 +449,8 @@ from .local_runner_type import LocalRunnerType
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
+from .log_prob import LogProb
+from .log_probs import LogProbs
 from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
@@ -1079,6 +1081,8 @@ __all__ = [
     "LogItem",
     "LogItemLevel",
     "LogPage",
+    "LogProb",
+    "LogProbs",
     "ManualEvaluationRequest",
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",
