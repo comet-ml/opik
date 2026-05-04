@@ -3,7 +3,7 @@ import React from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/ui/dialog";
 import BlueprintDiffTable, {
   type BlueprintVersionInfo,
-} from "./BlueprintDiffTable";
+} from "@/v2/pages-shared/agent-configuration/BlueprintDiffDialog/BlueprintDiffTable";
 
 type BlueprintDiffDialogProps = {
   open: boolean;
@@ -23,7 +23,7 @@ const BlueprintDiffDialog: React.FC<BlueprintDiffDialogProps> = ({
       <DialogContent className="max-w-lg sm:max-w-[1200px]">
         <DialogHeader>
           <DialogTitle>
-            Compare {base.label} → {diff.label}
+            Comparing {base.label} to {diff.label}
           </DialogTitle>
         </DialogHeader>
         {open && <BlueprintDiffTable base={base} diff={diff} />}
