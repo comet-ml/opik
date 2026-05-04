@@ -359,10 +359,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
           <div className="flex flex-col gap-3 overflow-y-auto pb-2">
             <Tabs value={selectedType} onValueChange={handleTypeChange}>
               <TabsList variant="segmented" className="w-fit">
-                <TabsTrigger
-                  variant="segmented"
-                  value={DATASET_TYPE.DATASET}
-                >
+                <TabsTrigger variant="segmented" value={DATASET_TYPE.DATASET}>
                   <Database className="size-3.5" />
                   Dataset
                 </TabsTrigger>
