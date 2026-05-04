@@ -37,7 +37,7 @@ const CodeBlockSearch: React.FC<CodeBlockSearchProps> = ({
         onClick={() => setIsExpanded(true)}
         aria-label="Search"
         className={cn(
-          "flex size-3.5 shrink-0 items-center justify-center text-light-slate transition-colors hover:text-foreground",
+          "flex size-3.5 shrink-0 items-center justify-center text-muted-slate transition-colors hover:text-foreground",
           isExpanded && "invisible",
         )}
       >
@@ -45,7 +45,7 @@ const CodeBlockSearch: React.FC<CodeBlockSearchProps> = ({
       </button>
       {isExpanded && (
         <div className="absolute right-0 top-1/2 z-10 flex h-6 w-40 -translate-y-1/2 items-center rounded border border-border bg-background">
-          <Search className="ml-1.5 size-3 shrink-0 text-light-slate" />
+          <Search className="ml-1.5 size-3 shrink-0 text-muted-slate" />
           <DebounceInput
             ref={inputRef}
             value={searchValue ?? ""}
@@ -58,7 +58,7 @@ const CodeBlockSearch: React.FC<CodeBlockSearchProps> = ({
             type="button"
             onClick={handleCollapse}
             aria-label="Close search"
-            className="mr-1 flex size-4 shrink-0 items-center justify-center text-light-slate transition-colors hover:text-foreground"
+            className="mr-1 flex size-4 shrink-0 items-center justify-center text-muted-slate transition-colors hover:text-foreground"
           >
             <X className="size-3" />
           </button>

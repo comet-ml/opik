@@ -30,7 +30,7 @@ const CodeBlockCopy: React.FC<CodeBlockCopyProps> = ({ text }) => {
         type="button"
         onClick={handleClick}
         tabIndex={-1}
-        className="flex size-3.5 shrink-0 items-center justify-center text-light-slate transition-colors hover:text-foreground"
+        className="flex size-3.5 shrink-0 items-center justify-center text-muted-slate transition-colors hover:text-foreground"
       >
         {copied ? (
           <Check className="size-2.5" />
