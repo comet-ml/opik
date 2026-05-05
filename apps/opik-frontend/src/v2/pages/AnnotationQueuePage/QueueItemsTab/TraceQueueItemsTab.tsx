@@ -42,7 +42,6 @@ import {
   generateSelectColumDef,
   getRowId,
 } from "@/shared/DataTable/utils";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
@@ -581,9 +580,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
     ];
   }, [scoresColumnsData, scoresColumnsOrder, setScoresColumnsOrder]);
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -665,7 +662,8 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
         }
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

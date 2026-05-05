@@ -21,7 +21,6 @@ import CompareExperimentsConfigCell, {
 } from "@/v2/pages-shared/experiments/CompareExperimentsConfigCell/CompareExperimentsConfigCell";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
 import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/PageBodyStickyTableWrapper";
-import Loader from "@/shared/Loader/Loader";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import { convertColumnDataToColumn } from "@/lib/table";
 import SearchInput from "@/shared/SearchInput/SearchInput";
@@ -194,9 +193,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
     [columnsWidth, setColumnsWidth],
   );
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending;
 
   return (
     <>
@@ -245,6 +242,7 @@ const ConfigurationTab: React.FunctionComponent<ConfigurationTabProps> = ({
         noData={<DataTableNoData title={noDataText} />}
         TableWrapper={PageBodyStickyTableWrapper}
         stickyHeader
+        showSkeleton={isTableLoading}
       />
       <PageBodyStickyContainer
         className="pb-6"
