@@ -32,7 +32,10 @@ import {
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import { Dataset, DATASET_TYPE } from "@/types/datasets";
-import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import {
+  parseDatasetVersionKey,
+  toPlainDatasetId,
+} from "@/utils/datasetVersionStorage";
 
 import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectBox/useDatasetVersionSelect";
 
@@ -162,18 +165,13 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
       const list =
         type === DATASET_TYPE.TEST_SUITE ? testSuitesOnly : datasetsOnly;
       const recent = recentDatasetIdByType[type] ?? null;
-      const plainRecent = recent
-        ? parseDatasetVersionKey(recent)?.datasetId ?? recent
-        : null;
-      const datasetId =
-        plainRecent && list.some((d) => d.id === plainRecent) ? recent : null;
-      const plainResolved = datasetId
-        ? parseDatasetVersionKey(datasetId)?.datasetId ?? datasetId
-        : null;
-      const stored = plainResolved
-        ? scoresByDatasetId[plainResolved]
-        : undefined;
-      return { datasetId, scores: stored !== undefined ? stored : null };
+      if (!recent) return { datasetId: null, scores: null };
+      const plainRecent = toPlainDatasetId(recent);
+      if (!list.some((d) => d.id === plainRecent)) {
+        return { datasetId: null, scores: null };
+      }
+      const stored = scoresByDatasetId[plainRecent];
+      return { datasetId: recent, scores: stored ?? null };
     },
     [datasetsOnly, testSuitesOnly, recentDatasetIdByType, scoresByDatasetId],
   );
@@ -226,7 +224,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
           if (!current) return;
           const list =
             type === DATASET_TYPE.TEST_SUITE ? testSuitesOnly : datasetsOnly;
-          const plain = parseDatasetVersionKey(current)?.datasetId ?? current;
+          const plain = toPlainDatasetId(current);
           if (!list.some((d) => d.id === plain)) {
             if (next === prev) next = { ...prev };
             next[type] = null;
@@ -298,7 +296,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
 
       // hydrate scores for the newly selected dataset
       if (value) {
-        const plain = parseDatasetVersionKey(value)?.datasetId ?? value;
+        const plain = toPlainDatasetId(value);
         const stored = scoresByDatasetId[plain];
         setScoresByType((prev) => ({
           ...prev,

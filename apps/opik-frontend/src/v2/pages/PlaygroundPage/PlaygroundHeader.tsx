@@ -31,7 +31,10 @@ import {
   buildDatasetFilterColumns,
   transformDataColumnFilters,
 } from "@/lib/filters";
-import { parseDatasetVersionKey } from "@/utils/datasetVersionStorage";
+import {
+  parseDatasetVersionKey,
+  toPlainDatasetId,
+} from "@/utils/datasetVersionStorage";
 import {
   usePromptMap,
   useSetPromptMap,
@@ -282,10 +285,8 @@ const PlaygroundHeader = ({
         ? `${params.datasetId}::${params.versionId}`
         : params.datasetId;
 
-      const previousPlainId =
-        parseDatasetVersionKey(datasetId)?.datasetId ?? datasetId;
-      const newPlainId =
-        parseDatasetVersionKey(params.datasetId)?.datasetId ?? params.datasetId;
+      const previousPlainId = toPlainDatasetId(datasetId);
+      const newPlainId = toPlainDatasetId(params.datasetId);
       const isDifferentDataset = previousPlainId !== newPlainId;
       onChangeDatasetId(datasetValue);
 
@@ -298,10 +299,7 @@ const PlaygroundHeader = ({
 
       setRecentDatasetForType(params.datasetType, datasetValue);
       if (params.datasetType === DATASET_TYPE.DATASET) {
-        const plainScoreKey =
-          parseDatasetVersionKey(params.datasetId)?.datasetId ??
-          params.datasetId;
-        setScoresForDataset(plainScoreKey, params.selectedRuleIds);
+        setScoresForDataset(newPlainId, params.selectedRuleIds);
       }
     },
     [
