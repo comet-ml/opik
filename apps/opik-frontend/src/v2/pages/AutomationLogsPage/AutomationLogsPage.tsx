@@ -6,7 +6,6 @@ import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import useRulesLogsList from "@/api/automations/useRulesLogsList";
 import NoData from "@/shared/NoData/NoData";
-import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -164,11 +163,9 @@ const AutomationLogsPage = () => {
     return <NoData message="No rule parameters set."></NoData>;
   }
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
-  if (rows.length === 0) {
+  if (!isTableLoading && rows.length === 0) {
     return <NoData message="There are no logs for this rule."></NoData>;
   }
 
@@ -207,7 +204,10 @@ const AutomationLogsPage = () => {
           getRowId={(row) => row.id}
           stickyHeader
           resizeConfig={resizeConfig}
-          showLoadingOverlay={isPlaceholderData && isFetching}
+          showSkeleton={isTableLoading}
+          showLoadingOverlay={
+            !isTableLoading && isPlaceholderData && isFetching
+          }
         />
       </PageBodyScrollContainer>
     </div>

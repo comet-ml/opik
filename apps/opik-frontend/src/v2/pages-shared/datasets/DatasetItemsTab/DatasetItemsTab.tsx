@@ -52,7 +52,6 @@ import {
   migrateSelectedColumns,
 } from "@/lib/table";
 import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
-import Loader from "@/shared/Loader/Loader";
 import {
   buildDatasetFilterColumns,
   mapDynamicColumnTypesToColumnType,
@@ -533,13 +532,7 @@ function DatasetItemsTab({
     selectedRows.length === rows.length &&
     selectedRows.length < totalCount;
 
-  if (isPending) {
-    return (
-      <div className="flex items-center justify-center pt-12">
-        <Loader />
-      </div>
-    );
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -665,7 +658,8 @@ function DatasetItemsTab({
         onRowClick={canEditDatasets ? handleRowClick : undefined}
         activeRowId={activeRowId ?? ""}
         resizeConfig={resizeConfig}
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
         selectionConfig={{
           rowSelection,
           setRowSelection: handleRowSelectionChange,
