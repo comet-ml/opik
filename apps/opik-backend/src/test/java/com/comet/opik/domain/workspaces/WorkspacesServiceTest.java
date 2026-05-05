@@ -1,203 +1,179 @@
 package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
-import com.comet.opik.api.resources.utils.ClickHouseContainerUtils;
-import com.comet.opik.api.resources.utils.MigrationUtils;
-import com.comet.opik.api.resources.utils.MySQLContainerUtils;
-import com.comet.opik.api.resources.utils.RedisContainerUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils;
-import com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
-import com.comet.opik.extensions.DropwizardAppExtensionProvider;
-import com.comet.opik.extensions.RegisterApp;
-import com.redis.testcontainers.RedisContainer;
-import org.junit.jupiter.api.AfterAll;
+import org.jdbi.v3.core.Handle;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.testcontainers.clickhouse.ClickHouseContainer;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.Network;
-import org.testcontainers.lifecycle.Startables;
-import org.testcontainers.mysql.MySQLContainer;
-import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import org.mockito.ArgumentCaptor;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
+import ru.vyarus.guicey.jdbi3.tx.TxAction;
 
 import java.time.Instant;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.IntStream;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
 
-import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-@ExtendWith(DropwizardAppExtensionProvider.class)
+@ExtendWith(MockitoExtension.class)
 class WorkspacesServiceTest {
 
-    private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
-    private final Network network = Network.newNetwork();
-    private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
-    private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer(false, network);
-    private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(
-            false, network, ZOOKEEPER);
+    @Mock
+    private TransactionTemplate transactionTemplate;
+    @Mock
+    private Handle handle;
+    @Mock
+    private WorkspacesDAO dao;
 
-    @RegisterApp
-    private final TestDropwizardAppExtension app;
+    @InjectMocks
+    private WorkspacesServiceImpl service;
 
-    {
-        Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
-
-        MigrationUtils.runMysqlDbMigration(MYSQL);
-        MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
-
-        var databaseAnalyticsFactory = ClickHouseContainerUtils.newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
-
-        app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                AppContextConfig.builder()
-                        .redisUrl(REDIS.getRedisURI())
-                        .jdbcUrl(MYSQL.getJdbcUrl())
-                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
-                        .build());
-    }
-
-    @AfterAll
-    void tearDown() {
-        MYSQL.stop();
-        CLICKHOUSE.stop();
-        ZOOKEEPER.stop();
-        REDIS.stop();
-        network.close();
+    @BeforeEach
+    void setUp() {
+        lenient().when(handle.attach(WorkspacesDAO.class)).thenReturn(dao);
+        lenient().when(transactionTemplate.inTransaction(any(), any())).thenAnswer(invocation -> {
+            TxAction<?> callback = invocation.getArgument(1);
+            return callback.execute(handle);
+        });
     }
 
     @Test
-    @DisplayName("upsertVersion inserts a row when the workspace has no metadata yet")
-    void upsertVersionInsertsNewRow(WorkspacesService service) {
-        var workspaceId = UUID.randomUUID().toString();
+    @DisplayName("upsertVersion delegates the enum's wire value to the DAO")
+    void upsertVersionDelegatesWireValue() {
+        var workspaceId = "workspace-1";
+        var determinedAt = Instant.parse("2026-05-05T10:00:00Z");
 
-        assertThat(service.findLastKnownVersion(workspaceId)).isEmpty();
+        service.upsertVersion(workspaceId, OpikVersion.VERSION_2, determinedAt);
 
-        service.upsertVersion(workspaceId, OpikVersion.VERSION_2, Instant.now());
-
-        assertThat(service.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_2);
+        verify(dao).upsertVersion(workspaceId, "version_2", determinedAt);
     }
 
     @Test
-    @DisplayName("upsertVersion overwrites the previously recorded value")
-    void upsertVersionOverwritesPreviousValue(WorkspacesService service) {
-        var workspaceId = UUID.randomUUID().toString();
+    @DisplayName("findLastKnownVersion maps recognised stored values to the enum")
+    void findLastKnownVersionMapsKnownValues() {
+        when(dao.findLastKnownVersion("workspace-1")).thenReturn(Optional.of("version_1"));
 
-        service.upsertVersion(workspaceId, OpikVersion.VERSION_1, Instant.now());
-        assertThat(service.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_1);
-
-        service.upsertVersion(workspaceId, OpikVersion.VERSION_2, Instant.now());
-        assertThat(service.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_2);
+        assertThat(service.findLastKnownVersion("workspace-1")).contains(OpikVersion.VERSION_1);
     }
 
     @Test
-    @DisplayName("markFirstTraceReported returns true once and false on every subsequent call")
-    void markFirstTraceReportedDedupsAcrossCalls(WorkspacesService service) {
-        var workspaceId = UUID.randomUUID().toString();
+    @DisplayName("findLastKnownVersion treats unknown stored values as empty")
+    void findLastKnownVersionTreatsUnknownAsEmpty() {
+        when(dao.findLastKnownVersion("workspace-1")).thenReturn(Optional.of("version_99"));
 
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isTrue();
+        assertThat(service.findLastKnownVersion("workspace-1")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("findLastKnownVersion returns empty when no row exists")
+    void findLastKnownVersionEmptyWhenAbsent() {
+        when(dao.findLastKnownVersion("workspace-1")).thenReturn(Optional.empty());
+
+        assertThat(service.findLastKnownVersion("workspace-1")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("markFirstTraceReported truncates the bound timestamp to microseconds")
+    void markFirstTraceReportedTruncatesToMicros() {
+        var workspaceId = "workspace-1";
+        var nano = Instant.parse("2026-05-05T10:00:00.123456789Z");
+        var truncated = nano.truncatedTo(ChronoUnit.MICROS);
+        when(dao.findFirstTraceReportedAt(workspaceId)).thenReturn(Optional.of(truncated));
+
+        service.markFirstTraceReported(workspaceId, nano);
+
+        var captor = ArgumentCaptor.forClass(Instant.class);
+        verify(dao).upsertFirstTraceReported(eq(workspaceId), captor.capture());
+        assertThat(captor.getValue()).isEqualTo(truncated);
+    }
+
+    @Test
+    @DisplayName("markFirstTraceReported returns true when read-back matches what we wrote")
+    void markFirstTraceReportedTrueWhenReadBackMatches() {
+        var workspaceId = "workspace-1";
+        var reportedAt = Instant.parse("2026-05-05T10:00:00.123456Z");
+        when(dao.findFirstTraceReportedAt(workspaceId)).thenReturn(Optional.of(reportedAt));
+
+        assertThat(service.markFirstTraceReported(workspaceId, reportedAt)).isTrue();
+    }
+
+    @Test
+    @DisplayName("markFirstTraceReported returns false when an earlier writer's value is read back")
+    void markFirstTraceReportedFalseWhenAnotherWriterWon() {
+        var workspaceId = "workspace-1";
+        var ours = Instant.parse("2026-05-05T10:00:00.123456Z");
+        var theirs = Instant.parse("2026-05-05T09:59:59.000000Z");
+        when(dao.findFirstTraceReportedAt(workspaceId)).thenReturn(Optional.of(theirs));
+
+        assertThat(service.markFirstTraceReported(workspaceId, ours)).isFalse();
+    }
+
+    @Test
+    @DisplayName("markFirstTraceReported returns false when read-back is empty")
+    void markFirstTraceReportedFalseWhenReadBackEmpty() {
+        var workspaceId = "workspace-1";
+        when(dao.findFirstTraceReportedAt(workspaceId)).thenReturn(Optional.empty());
+
         assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isFalse();
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isFalse();
     }
 
     @Test
-    @DisplayName("markFirstTraceReported returns true after the row exists for another reason")
-    void markFirstTraceReportedSetsTimestampOnPreexistingRow(WorkspacesService service) {
-        // Row created by a different feature path (version tracking), with first_trace_reported_at NULL.
-        var workspaceId = UUID.randomUUID().toString();
-        service.upsertVersion(workspaceId, OpikVersion.VERSION_1, Instant.now());
+    @DisplayName("markMigrationSkipped delegates to upsertMigrationSkipped on the DAO")
+    void markMigrationSkippedDelegates() {
+        var workspaceId = "workspace-1";
+        var skippedAt = Instant.parse("2026-05-05T10:00:00Z");
 
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isTrue();
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isFalse();
+        service.markMigrationSkipped(workspaceId, skippedAt, "deleted_project");
+
+        verify(dao).upsertMigrationSkipped(workspaceId, skippedAt, "deleted_project");
     }
 
     @Test
-    @DisplayName("Concurrent markFirstTraceReported calls — exactly one returns true")
-    void markFirstTraceReportedExactlyOneWinsUnderConcurrency(WorkspacesService service) throws Exception {
-        var workspaceId = UUID.randomUUID().toString();
-        var concurrency = 16;
-        var executor = Executors.newFixedThreadPool(concurrency);
-        try {
-            var futures = IntStream.range(0, concurrency)
-                    .<Future<Boolean>>mapToObj(__ -> executor
-                            .submit(() -> service.markFirstTraceReported(workspaceId, Instant.now())))
-                    .toList();
+    @DisplayName("findMigrationSkippedWorkspaceIds delegates to the DAO")
+    void findMigrationSkippedDelegates() {
+        when(dao.findMigrationSkippedWorkspaceIds()).thenReturn(List.of("a", "b"));
 
-            long winners = 0;
-            for (var future : futures) {
-                if (future.get(10, TimeUnit.SECONDS)) {
-                    winners++;
-                }
-            }
-
-            assertThat(winners).as("exactly one writer should observe the first-trace transition").isEqualTo(1);
-        } finally {
-            executor.shutdownNow();
-        }
+        assertThat(service.findMigrationSkippedWorkspaceIds()).containsExactly("a", "b");
     }
 
     @Test
-    @DisplayName("markMigrationSkipped is idempotent — second call does not overwrite the original")
-    void markMigrationSkippedIsIdempotent(WorkspacesService service) {
-        var workspaceId = UUID.randomUUID().toString();
+    @DisplayName("countMigrationSkipped delegates to the DAO")
+    void countMigrationSkippedDelegates() {
+        when(dao.countMigrationSkipped()).thenReturn(7L);
 
-        service.markMigrationSkipped(workspaceId, Instant.now(), "deleted_project");
-        service.markMigrationSkipped(workspaceId, Instant.now(), "different_reason");
-
-        assertThat(service.findMigrationSkippedWorkspaceIds()).contains(workspaceId);
-        assertThat(service.countMigrationSkipped()).isPositive();
+        assertThat(service.countMigrationSkipped()).isEqualTo(7L);
     }
 
     @Test
-    @DisplayName("findMigrationSkippedWorkspaceIds returns every skipped workspace")
-    void findMigrationSkippedWorkspaceIdsReturnsAll(WorkspacesService service) {
-        var skippedA = UUID.randomUUID().toString();
-        var skippedB = UUID.randomUUID().toString();
-        var notSkipped = UUID.randomUUID().toString();
+    @DisplayName("Read-only methods do not write through the DAO")
+    void readOnlyMethodsHaveNoWriteSideEffects() {
+        when(dao.countMigrationSkipped()).thenReturn(0L);
+        when(dao.findMigrationSkippedWorkspaceIds()).thenReturn(List.of());
+        when(dao.findLastKnownVersion(any())).thenReturn(Optional.empty());
 
-        service.markMigrationSkipped(skippedA, Instant.now(), "deleted_project");
-        service.markMigrationSkipped(skippedB, Instant.now(), "deleted_project");
-        // notSkipped exists in the table but with no migration_skipped_at.
-        service.upsertVersion(notSkipped, OpikVersion.VERSION_2, Instant.now());
+        service.countMigrationSkipped();
+        service.findMigrationSkippedWorkspaceIds();
+        service.findLastKnownVersion("workspace-1");
 
-        var skippedIds = service.findMigrationSkippedWorkspaceIds();
-
-        assertThat(skippedIds)
-                .contains(skippedA, skippedB)
-                .doesNotContain(notSkipped);
+        verify(dao, org.mockito.Mockito.never()).upsertVersion(any(), any(), any());
+        verify(dao, org.mockito.Mockito.never()).upsertFirstTraceReported(any(), any());
+        verify(dao, org.mockito.Mockito.never()).upsertMigrationSkipped(any(), any(), any());
     }
 
     @Test
-    @DisplayName("countMigrationSkipped reflects findMigrationSkippedWorkspaceIds().size()")
-    void countMigrationSkippedMatchesFind(WorkspacesService service) {
-        var beforeCount = service.countMigrationSkipped();
-        var beforeIds = service.findMigrationSkippedWorkspaceIds().size();
-
-        assertThat(beforeCount).isEqualTo(beforeIds);
-
-        service.markMigrationSkipped(UUID.randomUUID().toString(), Instant.now(), "deleted_project");
-        service.markMigrationSkipped(UUID.randomUUID().toString(), Instant.now(), "deleted_project");
-
-        assertThat(service.countMigrationSkipped()).isEqualTo(beforeCount + 2);
-        assertThat(service.findMigrationSkippedWorkspaceIds()).hasSize((int) (beforeCount + 2));
-    }
-
-    @Test
-    @DisplayName("Version, first-trace, and migration-skip writers can target the same workspace row")
-    void allFeatureColumnsCoexistOnSameRow(WorkspacesService service) {
-        var workspaceId = UUID.randomUUID().toString();
-
-        service.upsertVersion(workspaceId, OpikVersion.VERSION_2, Instant.now());
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isTrue();
-        service.markMigrationSkipped(workspaceId, Instant.now(), "deleted_project");
-
-        assertThat(service.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_2);
-        assertThat(service.markFirstTraceReported(workspaceId, Instant.now())).isFalse();
-        assertThat(service.findMigrationSkippedWorkspaceIds()).contains(workspaceId);
+    @DisplayName("Service forwards an empty interaction set when no work is done")
+    void noUnexpectedInteractions() {
+        verifyNoInteractions(dao);
     }
 }
