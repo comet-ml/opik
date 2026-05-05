@@ -1106,6 +1106,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE <dataset_item_filters>
             )
             <endif>
+            <if(!push_top_limit)>
             , eligible_dataset_item_lookup AS (
                 SELECT DISTINCT
                     div.dataset_item_id AS stable_id,
@@ -1115,6 +1116,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 AND div.dataset_id = :datasetId
                 AND div.dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
             )
+            <endif>
             <if(push_top_limit && !push_top_needs_div)>
             , top_dataset_items AS (
                 SELECT eia_t.dataset_item_id
@@ -1287,7 +1289,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                     <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                     <if(dataset_item_filters)>
-                    AND eia.dataset_item_id IN (SELECT lookup_id FROM eligible_dataset_item_lookup)
+                    <if(!push_top_limit)>AND eia.dataset_item_id IN (SELECT lookup_id FROM eligible_dataset_item_lookup)<endif>
                     AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
                         IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
                     <endif>
