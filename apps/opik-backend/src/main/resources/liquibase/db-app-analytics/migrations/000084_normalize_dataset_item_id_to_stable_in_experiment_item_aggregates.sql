@@ -77,3 +77,4 @@ WHERE notEmpty(lookup_div.dataset_item_id)
 --rollback -- Note: rewriting eia.dataset_item_id back to the per-version row_id requires
 --rollback -- knowing the original value, which was overwritten by this migration. Manual
 --rollback -- recovery would require restoring from backup.
+
