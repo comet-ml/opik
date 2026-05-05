@@ -10,7 +10,7 @@ export const LlmAsJudgeModelParametersWrite: core.serialization.ObjectSchema<
     OpikApi.LlmAsJudgeModelParametersWrite
 > = core.serialization.object({
     name: core.serialization.string(),
-    temperature: core.serialization.number(),
+    temperature: core.serialization.number().optional(),
     seed: core.serialization.number().optional(),
     customParameters: core.serialization.property("custom_parameters", JsonNodeWrite.optional()),
 });
@@ -18,7 +18,7 @@ export const LlmAsJudgeModelParametersWrite: core.serialization.ObjectSchema<
 export declare namespace LlmAsJudgeModelParametersWrite {
     export interface Raw {
         name: string;
-        temperature: number;
+        temperature?: number | null;
         seed?: number | null;
         custom_parameters?: JsonNodeWrite.Raw | null;
     }
