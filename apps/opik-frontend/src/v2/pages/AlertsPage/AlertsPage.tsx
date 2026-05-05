@@ -19,7 +19,6 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import StatusCell from "@/shared/DataTableCells/StatusCell";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Button } from "@/ui/button";
@@ -329,11 +328,9 @@ const AlertsPage: React.FunctionComponent = () => {
     });
   }, [navigate, workspaceName, activeProjectId]);
 
-  if (isPending || (isPlaceholderData && alerts.length === 0)) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && alerts.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && alerts.length === 0);
+  const isEmpty = !isTableLoading && noData && alerts.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -424,7 +421,10 @@ const AlertsPage: React.FunctionComponent = () => {
                   )}
                 </DataTableNoData>
               }
-              showLoadingOverlay={isPlaceholderData && isFetching}
+              showSkeleton={isTableLoading}
+              showLoadingOverlay={
+                !isTableLoading && isPlaceholderData && isFetching
+              }
             />
             <div className="py-4">
               <DataTablePagination
