@@ -48,19 +48,19 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
-    ...(showHome
-      ? [
-          {
-            id: "home_group",
-            items: [
-              {
-                id: "home",
-                path: projectPath("/home"),
-                type: MENU_ITEM_TYPE.router as const,
-                icon: Home,
-                label: "Home",
-                disabled: !projectPrefix,
-              },
+    {
+      id: "home_group",
+      items: [
+        {
+          id: "home",
+          path: projectPath("/home"),
+          type: MENU_ITEM_TYPE.router as const,
+          icon: Home,
+          label: "Home",
+          disabled: !projectPrefix,
+        },
+        ...(showHome
+          ? [
               {
                 id: "ollie",
                 path: projectPath("/ollie"),
@@ -69,10 +69,10 @@ const getMenuItems = ({
                 label: "Ollie",
                 disabled: !projectPrefix,
               },
-            ],
-          },
-        ]
-      : []),
+            ]
+          : []),
+      ],
+    },
     {
       id: "observability",
       label: "Observability",
