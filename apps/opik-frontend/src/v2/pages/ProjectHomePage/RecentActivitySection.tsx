@@ -9,8 +9,8 @@ import {
   ArrowRight,
   LucideIcon,
 } from "lucide-react";
-import activityCloudIcon from "@/icons/activity-cloud.svg";
 import dayjs from "dayjs";
+import activityCloudIcon from "@/icons/activity-cloud.svg";
 import { formatDate } from "@/lib/date";
 import { Skeleton } from "@/ui/skeleton";
 import useRecentActivity from "@/api/projects/useRecentActivity";
@@ -41,13 +41,13 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
     label: "Dataset updated",
     icon: Database,
     color: "text-chart-teal",
-    getLink: (item, base) => `${base}/datasets/${item.id}`,
+    getLink: (item, base) => `${base}/datasets/${item.id}/items`,
   },
   [ActivityType.TEST_SUITE_VERSION]: {
     label: "Test suite updated",
     icon: ListChecks,
     color: "text-chart-purple",
-    getLink: (item, base) => `${base}/test-suites/${item.id}`,
+    getLink: (item, base) => `${base}/test-suites/${item.id}/items`,
   },
   [ActivityType.AGENT_CONFIG_VERSION]: {
     label: "Agent configuration created",

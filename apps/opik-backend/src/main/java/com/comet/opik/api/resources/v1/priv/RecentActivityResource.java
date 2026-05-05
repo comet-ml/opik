@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
 import jakarta.inject.Provider;
+import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
@@ -42,7 +43,7 @@ public class RecentActivityResource {
     @RequiredPermissions(WorkspaceUserPermission.PROJECT_DATA_VIEW)
     public Response getRecentActivity(
             @PathParam("projectId") UUID projectId,
-            @QueryParam("size") @Min(1) @DefaultValue("10") int size) {
+            @QueryParam("size") @Min(1) @Max(100) @DefaultValue("10") int size) {
 
         var activity = recentActivityService.getRecentActivity(projectId, size)
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
