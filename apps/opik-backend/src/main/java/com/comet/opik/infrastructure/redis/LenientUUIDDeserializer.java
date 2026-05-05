@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
 import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.deser.std.UUIDDeserializer;
+import com.fasterxml.jackson.databind.jsontype.TypeDeserializer;
 
 import java.io.IOException;
 import java.util.UUID;
@@ -24,6 +25,14 @@ import java.util.UUID;
  * shim, {@code XAUTOCLAIM} fires {@code MismatchedInputException} every
  * {@code pending-message-duration} window for those stuck messages and never
  * makes progress on them.
+ * <p>
+ * {@link #deserializeWithType(JsonParser, DeserializationContext, TypeDeserializer)}
+ * is the load-bearing override: when the upstream {@link JsonJacksonCodec} enables
+ * default typing, the property deserializer invokes that method (not
+ * {@link #deserialize}) and the {@link com.fasterxml.jackson.databind.jsontype.impl.AsArrayTypeDeserializer}
+ * fails before ever delegating to the value deserializer if the token is a bare
+ * string. Intercepting the {@code VALUE_STRING} branch here is the only way to
+ * make plain-string inputs tolerated.
  */
 public class LenientUUIDDeserializer extends UUIDDeserializer {
 
@@ -42,5 +51,17 @@ public class LenientUUIDDeserializer extends UUIDDeserializer {
             return result;
         }
         return super.deserialize(p, ctxt);
+    }
+
+    @Override
+    public Object deserializeWithType(JsonParser p, DeserializationContext ctxt, TypeDeserializer typeDeserializer)
+            throws IOException {
+        // Default path delegates to typeDeserializer, which under As.WRAPPER_ARRAY expects
+        // START_ARRAY and rejects bare strings. Short-circuit when we see a VALUE_STRING so
+        // legacy plain-string UUIDs in the stream PEL still parse.
+        if (p.currentToken() == JsonToken.VALUE_STRING) {
+            return deserialize(p, ctxt);
+        }
+        return typeDeserializer.deserializeTypedFromAny(p, ctxt);
     }
 }
