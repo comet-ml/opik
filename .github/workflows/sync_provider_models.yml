@@ -3,7 +3,13 @@ name: Sync Provider Models Daily
 on:
   schedule:
     - cron: '30 0 * * 1-5' # 30 min after model prices sync, Monday to Friday
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
+    inputs:
+      force_regen:
+        description: 'Regenerate and re-upload YAML even if no new models were found'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -38,9 +44,10 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FORCE_REGEN_FLAG: ${{ inputs.force_regen == true && '--force-regen' || '' }}
         run: |
           set +e -o pipefail
-          python scripts/sync_provider_models.py 2>sync_stderr.txt | tee sync_summary.txt
+          python scripts/sync_provider_models.py $FORCE_REGEN_FLAG 2>sync_stderr.txt | tee sync_summary.txt
           EXIT_CODE=${PIPESTATUS[0]}
           set -e
           echo "exit_code=$EXIT_CODE" >> $GITHUB_OUTPUT
