@@ -11,11 +11,13 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.data.message.AiMessage;
@@ -68,6 +70,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final SpanService spanService;
     private final ToolRegistry toolRegistry;
     private final TraceCompressor traceCompressor;
+    private final WorkspaceNameService workspaceNameService;
+    private final OpikConfiguration opikConfiguration;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -79,7 +83,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             @NonNull LlmProviderFactory llmProviderFactory,
             @NonNull SpanService spanService,
             @NonNull ToolRegistry toolRegistry,
-            @NonNull TraceCompressor traceCompressor) {
+            @NonNull TraceCompressor traceCompressor,
+            @NonNull WorkspaceNameService workspaceNameService,
+            @NonNull OpikConfiguration opikConfiguration) {
         super(config, redisson, feedbackScoreService, traceService,
                 LLM_AS_JUDGE, Constants.LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -89,17 +95,48 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.spanService = spanService;
         this.toolRegistry = toolRegistry;
         this.traceCompressor = traceCompressor;
+        this.workspaceNameService = workspaceNameService;
+        this.opikConfiguration = opikConfiguration;
+    }
+
+    /**
+     * Resolves the workspaceName for the post-scoring chain. Needed because
+     * {@link com.comet.opik.domain.ExperimentService#finishExperiments(Set)} reads
+     * {@code WORKSPACE_NAME} from the reactive context, but {@link TraceToScoreLlmAsJudge}
+     * only carries {@code workspaceId}. {@link WorkspaceNameService#getWorkspaceName}
+     * is {@code @Cacheable} keyed on workspaceId, so subsequent calls per workspace
+     * are free. On lookup failure we fall back to {@code workspaceId} so the chain
+     * still completes — finishing the experiment matters more than the name being pretty.
+     */
+    private String resolveWorkspaceName(String workspaceId) {
+        try {
+            return workspaceNameService.getWorkspaceName(workspaceId,
+                    opikConfiguration.getAuthentication().getReactService().url());
+        } catch (Exception e) {
+            log.warn("Failed to resolve workspaceName for '{}', falling back to id: {}",
+                    workspaceId, e.getMessage());
+            return workspaceId;
+        }
     }
 
     @Override
     protected Mono<Void> processEvent(TraceToScoreLlmAsJudge message) {
         UUID experimentId = message.experimentId();
         if (experimentId != null) {
+            // Resolve workspaceName lazily on subscription. ExperimentService.finishExperiments
+            // (reached via decrementAndFinishIfComplete when the assertion counter hits zero) reads
+            // WORKSPACE_NAME from the reactive context; without it the post-scoring chain throws
+            // NoSuchElementException, the message isn't ack'd, and Redis Streams retries the whole
+            // scoring run — re-running the LLM and re-inserting assertion rows.
             return super.processEvent(message)
-                    .then(testSuiteAssertionCounterService.decrementAndFinishIfComplete(
-                            message.workspaceId(), experimentId)
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                    .put(RequestContext.USER_NAME, message.userName())));
+                    .then(Mono.fromCallable(() -> resolveWorkspaceName(message.workspaceId()))
+                            .subscribeOn(Schedulers.boundedElastic())
+                            .flatMap(workspaceName -> testSuiteAssertionCounterService
+                                    .decrementAndFinishIfComplete(message.workspaceId(), experimentId)
+                                    .contextWrite(ctx -> ctx
+                                            .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                            .put(RequestContext.WORKSPACE_NAME, workspaceName)
+                                            .put(RequestContext.USER_NAME, message.userName()))));
         }
         return super.processEvent(message);
     }

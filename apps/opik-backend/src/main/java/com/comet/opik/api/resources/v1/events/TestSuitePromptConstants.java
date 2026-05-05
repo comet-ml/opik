@@ -88,6 +88,30 @@ final class TestSuitePromptConstants {
             workflow: see a skeleton or truncation hint → `%s` for the substring → `%s` \
             with the matching path for the full value.
 
+            ## Path conventions for `%s` and `%s`
+
+            The `%s` tool returns a response shaped like:
+
+                {"tier": ..., "type": ..., "id": ..., "data": {<entity content>}, ...}
+
+            The `data` field is a presentation wrapper used ONLY in the `%s` response. \
+            It is NOT part of the cached entity that `%s` and `%s` operate on. When you \
+            craft a jq expression or a search `path`, address the entity content directly:
+
+            - For a trace, use `.trace.input`, `.spans[2].output`, `[.spans[].name]` — \
+              NOT `.data.trace.input`, NOT `.data.spans[2].output`.
+            - For a span / dataset_item / project, use the field path under the entity's \
+              own root (e.g. `.input.messages[0].content`) — NOT `.data.input.messages[...]`.
+            - The `%s` tool returns rows whose `path` already starts at the entity root \
+              (e.g. `spans[2].input`); feed it into `%s` by prepending `.` (e.g. \
+              `.spans[2].input`). Do not add a `data.` prefix.
+
+            Truncation hints embedded in compressed payloads (e.g. \
+            `[TRUNCATED N chars — use jq('.spans[2].input') to see full]`) follow this \
+            same convention — copy the path verbatim into `%s`. If you receive \
+            `keys is not applicable to NULL` or an empty result from a `.data.*` path, \
+            re-issue the query without the `data.` prefix.
+
             **When to call tools:** Before judging ANY assertion that references tool usage, \
             function calls, model selection, intermediate behavior, or execution details, \
             you MUST call `%s` first. Do NOT assume the tool was or was not called \
@@ -105,6 +129,17 @@ final class TestSuitePromptConstants {
             JqTool.NAME,
             SearchTool.NAME,
             JqTool.NAME,
+            // Path conventions section (9 placeholders).
+            JqTool.NAME, // header: jq
+            SearchTool.NAME, // header: search
+            ReadTool.NAME, // shape header: read returns ...
+            ReadTool.NAME, // wrapper note: only in read response
+            JqTool.NAME, // operate on cache: jq
+            SearchTool.NAME, // operate on cache: search
+            SearchTool.NAME, // search rows note
+            JqTool.NAME, // feed into jq
+            JqTool.NAME, // truncation hint goes into jq
+            // When to call tools paragraph.
             GetTraceSpansTool.NAME);
 
     /**
