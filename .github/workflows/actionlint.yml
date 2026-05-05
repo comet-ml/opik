@@ -1,4 +1,4 @@
-name: ':octocat: Lint Workflows'
+name: '🐙 Lint Workflows'
 
 on:
   pull_request:
