@@ -1141,13 +1141,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     LIMIT 1 BY div.id
                 ) AS div_dedup
             )
-            -- OPIK-6177: post-migration eia.dataset_item_id IS the stable id; references it
-            -- directly (no lookup_div LEFT JOIN, no if(notEmpty(...)) wrap), keeping skip
-            -- indexes applicable.
-            SELECT COUNT(DISTINCT eia.dataset_item_id) as count
+            SELECT COUNT(DISTINCT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)) as count
             FROM experiment_item_aggregates eia FINAL
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
             LEFT JOIN dataset_item_versions_resolved AS di
-                ON di.id = eia.dataset_item_id
+                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
@@ -1249,11 +1249,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            eia.execution_policy
                 )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
-            -- OPIK-6177: post-migration eia.dataset_item_id IS the stable id; references it
-            -- directly (no lookup_div LEFT JOIN, no if(notEmpty(...)) wrap), keeping skip
-            -- indexes applicable.
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
             LEFT JOIN dataset_item_versions_resolved AS di
-                ON di.id = eia.dataset_item_id
+                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>

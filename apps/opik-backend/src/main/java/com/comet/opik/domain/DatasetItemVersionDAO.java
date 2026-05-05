@@ -630,24 +630,25 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ), item_agg_count AS (
-                -- OPIK-6177: experiment_item_aggregates.dataset_item_id IS the stable id post-migration
-                -- (000084), so we reference it directly. No more lookup_div LEFT JOIN — keeps the
-                -- minmax skip index on idx_experiment_item_aggregates_dataset_item_id usable.
                 SELECT
                     eia.id AS id,
                     eia.experiment_id AS experiment_id,
-                    eia.dataset_item_id AS stable_dataset_item_id,
+                    eia.dataset_item_id AS dataset_item_id,
+                    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id,
                     eia.trace_id AS trace_id,
                     eia.input AS input,
                     eia.output AS output
                 FROM experiment_item_aggregates AS eia FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia.workspace_id
+                    AND lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
                 AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
                 <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                 <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                 <if(dataset_item_filters)>
-                AND eia.dataset_item_id IN (SELECT id FROM dataset_items_agg_resolved WHERE <dataset_item_filters>)
+                AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT id FROM dataset_items_agg_resolved WHERE <dataset_item_filters>)
                 <endif>
             )
             SELECT COUNT(DISTINCT di_id) AS count
@@ -1078,11 +1079,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             <endif>
             <if(push_top_limit && !push_top_needs_div)>
             , top_dataset_items AS (
-                -- OPIK-6177: post-migration, eia_t.dataset_item_id IS the stable id;
-                -- direct column reference keeps idx_experiment_item_aggregates_dataset_item_id
-                -- minmax skip index applicable.
-                SELECT eia_t.dataset_item_id AS dataset_item_id
+                SELECT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) AS dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia_t.workspace_id
+                    AND lookup_div.id = eia_t.dataset_item_id
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
                 <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
@@ -1091,8 +1092,8 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(dataset_item_filters)>
                 AND eia_t.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)
                 <endif>
-                GROUP BY eia_t.dataset_item_id
-                ORDER BY <if(top_sorting)><top_sorting><else>eia_t.dataset_item_id DESC<endif>
+                GROUP BY if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
+                ORDER BY <if(top_sorting)><top_sorting><else>if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) DESC<endif>
                 LIMIT :top_limit OFFSET :top_offset
             )
             <endif>
@@ -1128,13 +1129,16 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             )
             <if(push_top_limit && push_top_needs_div)>
             , top_dataset_items AS (
-                SELECT eia_t.dataset_item_id AS dataset_item_id
+                SELECT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) AS dataset_item_id
                 FROM experiment_item_aggregates AS eia_t FINAL
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                    ON lookup_div.workspace_id = eia_t.workspace_id
+                    AND lookup_div.id = eia_t.dataset_item_id
                 LEFT JOIN dataset_items_aggr_resolved AS di_t
-                    ON di_t.id = eia_t.dataset_item_id
+                    ON di_t.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
                 WHERE eia_t.workspace_id = :workspace_id
                 AND eia_t.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
-                GROUP BY eia_t.dataset_item_id
+                GROUP BY if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)
                 ORDER BY <top_sorting>
                 LIMIT :top_limit OFFSET :top_offset
             )
@@ -1144,43 +1148,40 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             -- is not yet (raw branch). Each branch already groups by stable_dataset_item_id;
             -- this layer merges across the UNION so a stable id appears once with a
             -- flattened experiment_items_array. When a stable id appears in BOTH
-            -- branches and the branches resolved different dataset_version_ids, we pick
-            -- the highest dataset_version_id (argMax). This matches single-branch dedup
-            -- semantics (dataset_items_(aggr_)resolved orders by dataset_version_id DESC,
-            -- LIMIT 1 BY dataset_item_id), so cross-branch and single-branch agree on
-            -- which version's metadata wins.
+            -- branches and the branches resolved different dataset_version_ids, we
+            -- prefer the latest dataset_version_id (argMax on last_updated_at) so the
+            -- row shows the most recent version's data — matching single-branch behavior.
             SELECT
                 u.id AS id,
                 any(u.dataset_id) AS dataset_id,
-                argMax(u.data_final, u.dataset_version_id) AS data_final,
-                argMax(u.data, u.dataset_version_id) AS data,
-                argMax(u.description, u.dataset_version_id) AS description,
-                argMax(u.trace_id, u.dataset_version_id) AS trace_id,
-                argMax(u.span_id, u.dataset_version_id) AS span_id,
-                argMax(u.source, u.dataset_version_id) AS source,
-                argMax(u.tags, u.dataset_version_id) AS tags,
-                argMax(u.evaluators, u.dataset_version_id) AS evaluators,
-                argMax(u.execution_policy, u.dataset_version_id) AS execution_policy,
-                argMax(u.created_at, u.dataset_version_id) AS created_at,
-                argMax(u.last_updated_at, u.dataset_version_id) AS last_updated_at,
-                argMax(u.created_by, u.dataset_version_id) AS created_by,
-                argMax(u.last_updated_by, u.dataset_version_id) AS last_updated_by,
-                argMax(u.duration, u.dataset_version_id) AS duration,
-                argMax(u.total_estimated_cost, u.dataset_version_id) AS total_estimated_cost,
-                argMax(u.usage, u.dataset_version_id) AS usage,
-                argMax(u.feedback_scores, u.dataset_version_id) AS feedback_scores,
-                argMax(u.input, u.dataset_version_id) AS input,
-                argMax(u.output, u.dataset_version_id) AS output,
-                argMax(u.metadata, u.dataset_version_id) AS metadata,
-                argMax(u.visibility_mode, u.dataset_version_id) AS visibility_mode,
-                argMax(u.comments, u.dataset_version_id) AS comments,
+                argMax(u.data_final, u.last_updated_at) AS data_final,
+                argMax(u.data, u.last_updated_at) AS data,
+                argMax(u.description, u.last_updated_at) AS description,
+                argMax(u.trace_id, u.last_updated_at) AS trace_id,
+                argMax(u.span_id, u.last_updated_at) AS span_id,
+                argMax(u.source, u.last_updated_at) AS source,
+                argMax(u.tags, u.last_updated_at) AS tags,
+                argMax(u.evaluators, u.last_updated_at) AS evaluators,
+                argMax(u.execution_policy, u.last_updated_at) AS execution_policy,
+                argMax(u.created_at, u.last_updated_at) AS created_at,
+                max(u.last_updated_at) AS last_updated_at,
+                argMax(u.created_by, u.last_updated_at) AS created_by,
+                argMax(u.last_updated_by, u.last_updated_at) AS last_updated_by,
+                argMax(u.duration, u.last_updated_at) AS duration,
+                argMax(u.total_estimated_cost, u.last_updated_at) AS total_estimated_cost,
+                argMax(u.usage, u.last_updated_at) AS usage,
+                argMax(u.feedback_scores, u.last_updated_at) AS feedback_scores,
+                argMax(u.input, u.last_updated_at) AS input,
+                argMax(u.output, u.last_updated_at) AS output,
+                argMax(u.metadata, u.last_updated_at) AS metadata,
+                argMax(u.visibility_mode, u.last_updated_at) AS visibility_mode,
+                argMax(u.comments, u.last_updated_at) AS comments,
                 groupArrayArray(u.experiment_items_array) AS experiment_items_array
             FROM (
                 <if(has_aggregated)>
                 SELECT
                     ei.stable_dataset_item_id AS id,
                     :datasetId AS dataset_id,
-                    di.dataset_version_id AS dataset_version_id,
                     <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                     COALESCE(di.data, map()) AS data,
                     di.description AS description,
@@ -1226,12 +1227,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         ei.assertions_array
                     )) AS experiment_items_array
                 FROM (
-                    -- OPIK-6177: post-migration eia.dataset_item_id IS the stable id;
-                    -- direct column reference preserves skip-index pushdown.
                     SELECT
                         eia.id AS id,
                         eia.trace_id AS trace_id,
-                        eia.dataset_item_id AS stable_dataset_item_id,
+                        eia.dataset_item_id AS dataset_item_id,
+                        if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) AS stable_dataset_item_id,
                         eia.experiment_id AS experiment_id,
                         eia.project_id AS project_id,
                         eia.input AS input,
@@ -1253,21 +1253,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.execution_policy AS execution_policy,
                         eia.assertions_array AS assertions_array
                     FROM experiment_item_aggregates AS eia FINAL
+                    LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                        ON lookup_div.workspace_id = eia.workspace_id
+                        AND lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
                     AND eia.experiment_id IN (SELECT id FROM experiment_aggregated_scope_ids)
-                    <if(push_top_limit)>AND eia.dataset_item_id IN (SELECT dataset_item_id FROM top_dataset_items)<endif>
+                    <if(push_top_limit)>AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT dataset_item_id FROM top_dataset_items)<endif>
                     <if(experiment_item_filters)> AND <experiment_item_filters> <endif>
                     <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                     <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                     <if(dataset_item_filters)>
-                    AND eia.dataset_item_id IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
+                    AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id) IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
                     <endif>
                 ) ei
                 LEFT JOIN dataset_items_aggr_resolved AS di ON di.id = ei.stable_dataset_item_id
                 GROUP BY
                     ei.stable_dataset_item_id,
                     :datasetId,
-                    di.dataset_version_id,
                     COALESCE(di.data, map()),
                     di.trace_id,
                     di.description,
@@ -1300,7 +1302,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT
                     ei.stable_dataset_item_id AS id,
                     :datasetId AS dataset_id,
-                    di.dataset_version_id AS dataset_version_id,
                     <if(truncate)> mapApply((k, v) -> (k, substring(replaceRegexpAll(v, '<truncate>', '"[image]"'), 1, <truncationSize>)), COALESCE(di.data, map())) <else> COALESCE(di.data, map()) <endif> AS data_final,
                     COALESCE(di.data, map()) AS data,
                     di.description AS description,
@@ -1484,7 +1485,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 GROUP BY
                     ei.stable_dataset_item_id,
                     :datasetId,
-                    di.dataset_version_id,
                     COALESCE(di.data, map()),
                     di.trace_id,
                     di.description,
@@ -3991,14 +3991,14 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 })
                 .collect(Collectors.joining(", "));
         return primarySort
-                + ", eia_t.dataset_item_id DESC";
+                + ", if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id) DESC";
     }
 
     private String getTopSortExpression(com.comet.opik.api.sorting.SortingField sf) {
         String field = sf.field();
 
         if ("id".equals(field)) {
-            return "eia_t.dataset_item_id";
+            return "if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia_t.dataset_item_id)";
         }
         if ("description".equals(field)) {
             return "any(di_t.description)";
