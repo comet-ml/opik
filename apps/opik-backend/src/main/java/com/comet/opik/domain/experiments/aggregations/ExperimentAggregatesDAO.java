@@ -1088,6 +1088,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    // OPIK-6177: same eligible_dataset_item_lookup CTE + direct lookup_div LEFT JOIN
+    // pattern as DatasetItemVersionDAO's compare query — see that class's
+    // SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS comment for the rationale.
+    // Used by countDatasetItemsWithExperimentItemsFromAggregates() (dev/test parity harness).
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             WITH dataset_item_versions_resolved AS (
                 SELECT
@@ -1136,7 +1140,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     LIMIT 1 BY div.id
                 ) AS div_dedup
             ),
-            -- OPIK-6177: see DatasetItemVersionDAO's eligible_dataset_item_lookup for rationale.
             eligible_dataset_item_lookup AS (
                 SELECT DISTINCT
                     div.dataset_item_id AS stable_id,
@@ -1177,6 +1180,8 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    // OPIK-6177: same shape as the _COUNT constant above. Used by
+    // getDatasetItemsWithExperimentItemsFromAggregates() (dev/test parity harness).
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH dataset_item_versions_resolved AS (
                 SELECT
@@ -1227,7 +1232,6 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     LIMIT 1 BY div.id
                 ) AS div_dedup
             ),
-            -- OPIK-6177 Alt 7: id-resolution CTE; same pattern as the count query above.
             eligible_dataset_item_lookup AS (
                 SELECT DISTINCT
                     div.dataset_item_id AS stable_id,

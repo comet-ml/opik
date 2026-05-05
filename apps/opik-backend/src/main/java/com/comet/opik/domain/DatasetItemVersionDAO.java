@@ -398,6 +398,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * Note: Uses simplified feedback scores processing (only aggregated values, not full details)
      * since we only need values for filtering in HAVING clauses, not for display.
      * This keeps the count query closer to the legacy pattern while supporting all required filters.
+     *
+     * <p>OPIK-6177: same stable-id resolution shape as
+     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
+     * for the rationale on the eligible_dataset_item_lookup CTE and the direct-table
+     * lookup_div LEFT JOIN.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             WITH experiment_aggregated_scope_ids AS (
@@ -630,9 +635,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ),
-            -- OPIK-6177: skip-index-friendly IN list for the EIA scan when DI filters are
-            -- active. NOT a JOIN target — a CTE-based LEFT JOIN drops rows on
-            -- deletion-cascade in ClickHouse (see experiment_items_scope's note further down).
             eligible_dataset_item_lookup AS (
                 SELECT DISTINCT
                     div.dataset_item_id AS stable_id,
@@ -765,7 +767,27 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             ;
             """;
 
-    // Query to fetch versioned dataset items with their associated experiment items
+    // Query to fetch versioned dataset items with their associated experiment items.
+    //
+    // OPIK-6177 stable-id resolution: experiment_items_scope LEFT JOINs dataset_item_versions
+    // on lookup_div.id = ei.dataset_item_id to project a stable_dataset_item_id. This resolves
+    // legacy rows (pre-OPIK-4518 BE cutover) where ei.dataset_item_id was a per-version
+    // dataset_item_versions.id; for modern rows it is already the stable id and the JOIN
+    // misses, falling back via if(notEmpty(...)) to the raw value.
+    //
+    // The JOIN uses the direct dataset_item_versions table — NOT a CTE-based lookup. A
+    // CTE-based LEFT JOIN drops rows in deletion-cascade scenarios in ClickHouse (known
+    // analyzer behavior; direct table reference works correctly).
+    //
+    // The eligible_dataset_item_lookup CTE used by the aggregated branch is for
+    // skip-index-friendly IN list pushdown when DI filters are active (preserves the
+    // idx_experiment_item_aggregates_dataset_item_id minmax skip index pushdown that
+    // drove the 5.86× speedup measured in #6567).
+    //
+    // The outer SELECT over the aggregated/raw UNION dedupes across branches so a stable
+    // id that appears in both branches yields one row with a flattened experiment_items_array.
+    // The argMax tiebreaker on dataset_version_id matches single-branch's "latest version
+    // wins" semantic (dataset_items_(aggr_)resolved orders by dataset_version_id DESC).
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH experiment_aggregated_scope_ids AS (
                 SELECT
@@ -787,13 +809,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ORDER BY (workspace_id, dataset_id, id) DESC, last_updated_at DESC
                 LIMIT 1 BY id
             ), experiment_items_scope AS (
-            	-- OPIK-6177: Project stable_dataset_item_id by LEFT JOIN to dataset_item_versions
-            	-- on the per-version row id. Resolves legacy rows where ei.dataset_item_id holds
-            	-- a per-version dataset_item_versions.id (pre-OPIK-4518 BE cutover) to the stable
-            	-- dataset_item_id; for modern rows (where ei.dataset_item_id IS the stable id)
-            	-- the LEFT JOIN misses and the if() falls back to ei.dataset_item_id.
-            	-- (NOTE: a CTE-based lookup with materialized empty-result sets caused the LEFT JOIN
-            	-- to drop rows in deletion-cascade tests; direct table reference works correctly.)
             	SELECT
             	    ei.id AS id,
             	    ei.experiment_id AS experiment_id,
@@ -1091,7 +1106,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 WHERE <dataset_item_filters>
             )
             <endif>
-            -- OPIK-6177: see item_agg_count CTE in the count query above for rationale.
             , eligible_dataset_item_lookup AS (
                 SELECT DISTINCT
                     div.dataset_item_id AS stable_id,
@@ -1161,10 +1175,6 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 LIMIT :top_limit OFFSET :top_offset
             )
             <endif>
-            -- OPIK-6177: dedupes across the UNION so a stable id that appears in both
-            -- branches yields one row with a flattened experiment_items_array. argMax key
-            -- is dataset_version_id to match single-branch's "latest version wins"
-            -- semantic (dataset_items_(aggr_)resolved orders by dataset_version_id DESC).
             SELECT
                 u.id AS id,
                 any(u.dataset_id) AS dataset_id,
