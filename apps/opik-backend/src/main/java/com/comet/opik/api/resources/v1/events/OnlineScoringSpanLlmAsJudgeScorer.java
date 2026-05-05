@@ -10,12 +10,13 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.model.chat.request.ChatRequest;
-import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
@@ -26,6 +27,7 @@ import java.util.Optional;
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.SPAN_LLM_AS_JUDGE;
+import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
 import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
@@ -72,18 +74,34 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
      * @param message a Redis message with the Span to score with an Evaluator code, workspace and username.
      */
     @Override
-    protected void score(@NonNull SpanToScoreLlmAsJudge message) {
+    protected Mono<Void> score(@NonNull SpanToScoreLlmAsJudge message) {
         var span = message.span();
         log.info("Message received with spanId '{}', userName '{}', to be scored in '{}'",
                 span.id(), message.userName(), message.llmAsJudgeCode().model().name());
 
-        // This is crucial for logging purposes to identify the rule and span
-        try (var logContext = wrapWithMdc(Map.of(
+        var mdc = Map.of(
                 UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
                 UserLog.WORKSPACE_ID, message.workspaceId(),
                 UserLog.SPAN_ID, span.id().toString(),
-                UserLog.RULE_ID, message.ruleId().toString()))) {
+                UserLog.RULE_ID, message.ruleId().toString());
 
+        return Mono.fromCallable(() -> evaluate(message, mdc))
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMap(scores -> storeSpanScores(scores, span, message.userName(), message.workspaceId()))
+                .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
+                        .info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores)))
+                .doOnError(withMdc(mdc, error -> userFacingLogger
+                        .error("Unexpected error while scoring spanId '{}' with rule '{}': \n\n{}",
+                                span.id(), message.ruleName(),
+                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
+                                        .orElse(error.getMessage()))))
+                .then();
+    }
+
+    private List<FeedbackScoreBatchItem> evaluate(SpanToScoreLlmAsJudge message, Map<String, String> mdc) {
+        var span = message.span();
+        // This is crucial for logging purposes to identify the rule and span
+        try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
 
             ChatRequest scoreRequest;
@@ -101,36 +119,17 @@ public class OnlineScoringSpanLlmAsJudgeScorer extends OnlineScoringBaseScorer<S
             userFacingLogger.info("Sending spanId '{}' to LLM using the following input:\n\n{}",
                     span.id(), scoreRequest);
 
-            ChatResponse score;
-            try {
-                // Reuse scoreTrace method as it's generic enough - it just takes a ChatRequest and calls the LLM
-                score = aiProxyService.scoreTrace(
-                        scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
-                userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
-            } catch (Exception exception) {
-                String errorMessage = Optional.ofNullable(exception.getCause())
-                        .map(Throwable::getMessage)
-                        .orElse(exception.getMessage());
+            var score = aiProxyService.scoreTrace(
+                    scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+            userFacingLogger.info("Received response for spanId '{}':\n\n{}", span.id(), score);
 
-                userFacingLogger.error("Unexpected error while scoring spanId '{}' with rule '{}': \n\n{}",
-                        span.id(), message.ruleName(), errorMessage);
-                throw exception;
-            }
-
-            try {
-                List<FeedbackScoreBatchItem> scores = OnlineScoringEngine.toFeedbackScores(score).stream()
-                        .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
-                                .id(span.id())
-                                .projectId(span.projectId())
-                                .projectName(span.projectName())
-                                .build())
-                        .toList();
-                var loggedScores = storeSpanScores(scores, span, message.userName(), message.workspaceId());
-                userFacingLogger.info("Scores for spanId '{}' stored successfully:\n\n{}", span.id(), loggedScores);
-            } catch (Exception exception) {
-                userFacingLogger.error("Unexpected error while storing scores for spanId '{}'", span.id());
-                throw exception;
-            }
+            return OnlineScoringEngine.toFeedbackScores(score).stream()
+                    .map(item -> (FeedbackScoreBatchItem) item.toBuilder()
+                            .id(span.id())
+                            .projectId(span.projectId())
+                            .projectName(span.projectName())
+                            .build())
+                    .toList();
         }
     }
 }

@@ -12,17 +12,16 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
-import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.tuple.Pair;
 import org.redisson.api.RedissonReactiveClient;
 import org.slf4j.Logger;
 import reactor.core.publisher.Flux;
@@ -31,10 +30,12 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
@@ -43,6 +44,8 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.TRACE_THREAD_USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.ChatMessage;
+import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
+import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
 @Slf4j
@@ -89,124 +92,166 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     }
 
     @Override
-    protected void score(@NonNull TraceThreadToScoreUserDefinedMetricPython message) {
+    protected Mono<Void> score(@NonNull TraceThreadToScoreUserDefinedMetricPython message) {
 
         log.info("Message received with projectId '{}', ruleId '{}' for workspace '{}'",
                 message.projectId(), message.ruleId(), message.workspaceId());
 
-        Flux.fromIterable(message.threadIds())
+        return Flux.fromIterable(message.threadIds())
                 .flatMap(threadId -> processThreadScores(message, threadId))
                 .then(Mono.defer(
                         () -> traceThreadService.setScoredAt(message.projectId(), message.threadIds(), Instant.now())))
                 .contextWrite(context -> context.put(RequestContext.WORKSPACE_ID, message.workspaceId())
                         .put(RequestContext.USER_NAME, message.userName())
                         .put(RequestContext.VISIBILITY, Visibility.PRIVATE))
-                .thenReturn(message)
-                .subscribe(
-                        unused -> log.info("Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
-                                message.projectId(), message.ruleId(), message.workspaceId()),
-                        error -> {
-                            log.error(
-                                    "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}': {}",
-                                    message.projectId(), message.ruleId(), message.workspaceId(), error.getMessage());
-                            log.error("Error processing trace thread scoring", error);
-                        });
+                .doOnSuccess(unused -> log.info(
+                        "Processed trace threads for projectId '{}', ruleId '{}' for workspace '{}'",
+                        message.projectId(), message.ruleId(), message.workspaceId()))
+                .doOnError(error -> log.error(
+                        "Error processing trace thread for projectId '{}', ruleId '{}' for workspace '{}'",
+                        message.projectId(), message.ruleId(), message.workspaceId(), error))
+                .then();
     }
 
-    private Mono<Void> processThreadScores(TraceThreadToScoreUserDefinedMetricPython message, String currentThreadId) {
+    private Mono<Void> processThreadScores(TraceThreadToScoreUserDefinedMetricPython message,
+            String currentThreadId) {
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, message.workspaceId(),
+                UserLog.RULE_ID, message.ruleId().toString());
         return retrieveFullThreadContext(currentThreadId, new AtomicReference<>(null), message.projectId())
                 .sort(Comparator.comparing(Trace::id))
                 .collectList()
-                .flatMap(traces -> traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
-                        .flatMap(threadModelId -> Mono.fromCallable(() -> {
-                            try (var logContext = LogContextAware.wrapWithMdc(Map.of(
-                                    UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
-                                    UserLog.WORKSPACE_ID, message.workspaceId(),
-                                    UserLog.THREAD_MODEL_ID, threadModelId.toString(),
-                                    UserLog.RULE_ID, message.ruleId().toString()))) {
-
-                                // Process python scoring for the thread
-                                processScoring(message, traces, threadModelId, currentThreadId);
-
-                                return threadModelId;
-                            }
-                        }).subscribeOn(Schedulers.boundedElastic())))
+                .flatMap(traces -> {
+                    if (traces.isEmpty()) {
+                        try (var logContext = wrapWithMdc(mdc)) {
+                            userFacingLogger.info(
+                                    "No traces found for threadId '{}' in projectId '{}'. Skipping scoring.",
+                                    currentThreadId, message.projectId());
+                        }
+                        return Mono.empty();
+                    }
+                    return traceThreadService.getThreadModelId(message.projectId(), currentThreadId)
+                            .switchIfEmpty(Mono.defer(() -> {
+                                try (var logContext = wrapWithMdc(mdc)) {
+                                    userFacingLogger.info(
+                                            "Thread model not found for threadId '{}' in projectId '{}'. Skipping scoring.",
+                                            currentThreadId, message.projectId());
+                                }
+                                return Mono.empty();
+                            }))
+                            .flatMap(threadModelId -> processScoring(message, traces, threadModelId,
+                                    currentThreadId));
+                })
                 .then();
     }
 
     /**
-     * Processes the scoring for a given thread using the Python evaluator.
-     *
-     * @param message the message containing project ID, rule ID, and other details
-     * @param traces the list of traces associated with the thread
-     * @param threadModelId the ID of the thread model
-     * @param threadId the ID of the thread
+     * Scores a single thread for a given rule and persists the resulting feedback scores.
      */
-    private void processScoring(TraceThreadToScoreUserDefinedMetricPython message, List<Trace> traces,
+    private Mono<Void> processScoring(TraceThreadToScoreUserDefinedMetricPython message, List<Trace> traces,
             UUID threadModelId, String threadId) {
+        var mdc = Map.of(
+                UserLog.MARKER, UserLog.AUTOMATION_RULE_EVALUATOR.name(),
+                UserLog.WORKSPACE_ID, message.workspaceId(),
+                UserLog.THREAD_MODEL_ID, threadModelId.toString(),
+                UserLog.RULE_ID, message.ruleId().toString());
+        return Mono.fromCallable(() -> findRule(message, threadId, mdc))
+                .subscribeOn(Schedulers.boundedElastic())
+                .doOnError(withMdc(mdc, error -> userFacingLogger
+                        .error("Unexpected error while looking up rule for threadId '{}': \n\n{}",
+                                threadId,
+                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
+                                        .orElse(error.getMessage()))))
+                .flatMap(maybeRule -> maybeRule
+                        .map(rule -> scoreThread(message, traces, threadModelId, threadId, rule, mdc))
+                        .orElseGet(Mono::empty));
+    }
 
-        final AutomationRuleEvaluator<?, ?> rule;
-
-        try {
-            rule = automationRuleEvaluatorService.findById(message.ruleId(), Set.of(message.projectId()),
-                    message.workspaceId());
-        } catch (NotFoundException ex) {
-            log.warn(
-                    "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
-                    message.ruleId(), message.projectId(), message.workspaceId(), threadId);
-            return;
-        }
-
-        Project project = projectService.get(message.projectId(), message.workspaceId());
-
-        if (traces.isEmpty()) {
-            userFacingLogger.info(
-                    "No traces found for threadId: '{}' in projectId; '{}', ruleName: '{}' for workspace '{}'",
-                    threadId, message.projectId(), rule.getName(), message.workspaceId());
-            return;
-        }
-
-        List<ChatMessage> context;
-        try {
-            context = OnlineScoringEngine.fromTraceToThread(traces);
-        } catch (Exception exception) {
-            userFacingLogger.error("Error preparing Python request for threadId: '{}': \n\n{}",
-                    threadId, exception.getMessage());
-            throw exception;
-        }
-
-        userFacingLogger.info("Sending threadId: '{}' to Python evaluator using the following context:\n\n{}",
-                threadId, context);
-
-        List<PythonScoreResult> scoreResults;
-        try {
-            scoreResults = pythonEvaluatorService.evaluateThread(message.code().metric(), context);
-            userFacingLogger.info("Received response for threadId: '{}':\n\n{}", threadId, scoreResults);
-        } catch (Exception exception) {
-            userFacingLogger.error("Unexpected error while scoring traceId: '{}' with ruleName: '{}': \n\n{}",
-                    threadId, rule.getName(), exception.getMessage());
-            throw exception;
-        }
-
-        List<FeedbackScoreBatchItemThread> scores = scoreResults.stream()
-                .map(scoreResult -> FeedbackScoresMapper.INSTANCE.map(
-                        scoreResult,
-                        threadModelId,
-                        threadId,
-                        message.projectId(),
-                        project.name(),
-                        ScoreSource.ONLINE_SCORING))
-                .toList();
-
-        try {
-            var loggedScores = storeThreadScores(scores, threadId, message.userName(), message.workspaceId());
-            userFacingLogger.info("Scores for threadId: '{}' stored successfully:\n\n{}", threadId,
-                    loggedScores);
-        } catch (Exception exception) {
-            userFacingLogger.error("Unexpected error while storing scores for traceId: '{}' with ruleName: '{}'",
-                    threadId, rule.getName());
-            throw exception;
+    /**
+     * Resolves the automation rule for this scoring run. Returns {@link Optional#empty()} if the rule
+     * has been deleted, signalling the caller to skip without throwing.
+     */
+    private Optional<AutomationRuleEvaluator<?, ?>> findRule(
+            TraceThreadToScoreUserDefinedMetricPython message, String threadId, Map<String, String> mdc) {
+        try (var logContext = wrapWithMdc(mdc)) {
+            try {
+                var rule = automationRuleEvaluatorService.findById(message.ruleId(),
+                        Set.of(message.projectId()), message.workspaceId());
+                return Optional.of(rule);
+            } catch (NotFoundException ex) {
+                log.warn(
+                        "Automation rule with ID '{}' not found in projectId '{}' for workspace '{}'. Skipping scoring for threadId '{}'.",
+                        message.ruleId(), message.projectId(), message.workspaceId(), threadId);
+                return Optional.empty();
+            }
         }
     }
 
+    /**
+     * Runs the scoring chain for a known rule and persists the resulting feedback scores. Caller
+     * guarantees {@code traces} is non-empty.
+     */
+    private Mono<Void> scoreThread(TraceThreadToScoreUserDefinedMetricPython message, List<Trace> traces,
+            UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+        return Mono.fromCallable(() -> prepareScoring(message, traces, threadId, rule, mdc))
+                .flatMap(context -> evaluateAndStore(message, threadModelId, threadId, context, mdc))
+                .doOnError(withMdc(mdc, error -> userFacingLogger
+                        .error("Unexpected error while scoring threadId '{}' with rule '{}': \n\n{}",
+                                threadId, rule.getName(),
+                                Optional.ofNullable(error.getCause()).map(Throwable::getMessage)
+                                        .orElse(error.getMessage()))))
+                .then();
+    }
+
+    /**
+     * Builds the Python evaluator request (project + chat messages) for the given thread. Caller
+     * guarantees {@code traces} is non-empty.
+     */
+    private Pair<Project, List<ChatMessage>> prepareScoring(TraceThreadToScoreUserDefinedMetricPython message,
+            List<Trace> traces, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+        try (var logContext = wrapWithMdc(mdc)) {
+            userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
+
+            Project project = projectService.get(message.projectId(), message.workspaceId());
+
+            List<ChatMessage> context;
+            try {
+                context = OnlineScoringEngine.fromTraceToThread(traces);
+            } catch (Exception exception) {
+                userFacingLogger.error("Error preparing Python request for threadId '{}': \n\n{}",
+                        threadId, exception.getMessage());
+                throw exception;
+            }
+
+            userFacingLogger.info("Sending threadId '{}' to Python evaluator using the following context:\n\n{}",
+                    threadId, context);
+
+            return Pair.of(project, context);
+        }
+    }
+
+    private Mono<Map<String, List<BigDecimal>>> evaluateAndStore(
+            TraceThreadToScoreUserDefinedMetricPython message, UUID threadModelId, String threadId,
+            Pair<Project, List<ChatMessage>> context, Map<String, String> mdc) {
+        var project = context.getLeft();
+        var chatMessages = context.getRight();
+        return pythonEvaluatorService.evaluateThread(message.code().metric(), chatMessages)
+                .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
+                        .info("Received response for threadId '{}':\n\n{}", threadId, scoreResults)))
+                .flatMap(scoreResults -> {
+                    List<FeedbackScoreBatchItemThread> scores = scoreResults.stream()
+                            .map(scoreResult -> FeedbackScoresMapper.INSTANCE.map(
+                                    scoreResult,
+                                    threadModelId,
+                                    threadId,
+                                    message.projectId(),
+                                    project.name(),
+                                    ScoreSource.ONLINE_SCORING))
+                            .toList();
+                    return storeThreadScores(scores, threadId, message.userName(), message.workspaceId());
+                })
+                .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
+                        .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)));
+    }
 }

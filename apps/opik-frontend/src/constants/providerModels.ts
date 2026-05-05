@@ -679,6 +679,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "ibm-granite/granite-4.0-h-micro",
     },
     {
+      value: PROVIDER_MODEL_TYPE.IBM_GRANITE_GRANITE_4_1_8B,
+      label: "ibm-granite/granite-4.1-8b",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY,
       label: "inception/mercury",
     },
@@ -993,6 +997,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3,
       label: "mistralai/mistral-medium-3",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_5,
+      label: "mistralai/mistral-medium-3-5",
     },
     {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_1,
@@ -1508,6 +1516,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "openrouter/hunter-alpha",
     },
     {
+      value: PROVIDER_MODEL_TYPE.OPENROUTER_OWL_ALPHA,
+      label: "openrouter/owl-alpha",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
     },
@@ -1974,6 +1986,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_20_MULTI_AGENT_BETA,
       label: "x-ai/grok-4.20-multi-agent-beta",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.X_AI_GROK_4_3,
+      label: "x-ai/grok-4.3",
     },
     {
       value: PROVIDER_MODEL_TYPE.X_AI_GROK_CODE_FAST_1,
