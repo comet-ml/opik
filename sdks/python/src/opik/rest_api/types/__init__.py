@@ -49,6 +49,9 @@ from .annotation_queue_scope import AnnotationQueueScope
 from .annotation_queue_write import AnnotationQueueWrite
 from .annotation_queue_write_scope import AnnotationQueueWriteScope
 from .assertion_result import AssertionResult
+from .assertion_result_batch_item import AssertionResultBatchItem
+from .assertion_result_batch_item_source import AssertionResultBatchItemSource
+from .assertion_result_batch_item_status import AssertionResultBatchItemStatus
 from .assertion_result_compare import AssertionResultCompare
 from .assertion_score_average import AssertionScoreAverage
 from .assertion_score_average_public import AssertionScoreAveragePublic
@@ -267,6 +270,9 @@ from .delete_attachments_request_entity_type import DeleteAttachmentsRequestEnti
 from .delete_feedback_score import DeleteFeedbackScore
 from .delete_ids_holder import DeleteIdsHolder
 from .delta import Delta
+from .environment import Environment
+from .environment_page_public import EnvironmentPagePublic
+from .environment_public import EnvironmentPublic
 from .error_count_with_deviation import ErrorCountWithDeviation
 from .error_count_with_deviation_detailed import ErrorCountWithDeviationDetailed
 from .error_info import ErrorInfo
@@ -443,6 +449,8 @@ from .local_runner_type import LocalRunnerType
 from .log_item import LogItem
 from .log_item_level import LogItemLevel
 from .log_page import LogPage
+from .log_prob import LogProb
+from .log_probs import LogProbs
 from .manual_evaluation_request import ManualEvaluationRequest
 from .manual_evaluation_request_entity_type import ManualEvaluationRequestEntityType
 from .manual_evaluation_response import ManualEvaluationResponse
@@ -716,6 +724,9 @@ __all__ = [
     "AnnotationQueueWrite",
     "AnnotationQueueWriteScope",
     "AssertionResult",
+    "AssertionResultBatchItem",
+    "AssertionResultBatchItemSource",
+    "AssertionResultBatchItemStatus",
     "AssertionResultCompare",
     "AssertionScoreAverage",
     "AssertionScoreAveragePublic",
@@ -898,6 +909,9 @@ __all__ = [
     "DeleteFeedbackScore",
     "DeleteIdsHolder",
     "Delta",
+    "Environment",
+    "EnvironmentPagePublic",
+    "EnvironmentPublic",
     "ErrorCountWithDeviation",
     "ErrorCountWithDeviationDetailed",
     "ErrorInfo",
@@ -1067,6 +1081,8 @@ __all__ = [
     "LogItem",
     "LogItemLevel",
     "LogPage",
+    "LogProb",
+    "LogProbs",
     "ManualEvaluationRequest",
     "ManualEvaluationRequestEntityType",
     "ManualEvaluationResponse",

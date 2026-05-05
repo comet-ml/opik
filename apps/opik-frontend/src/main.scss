@@ -20,12 +20,11 @@
     --muted-gray: 218 11% 65%;
     --muted-disabled: 220 14% 96%;
 
-    --muted-slate: 215 16%, 47%;
+    --muted-slate: 215 16% 47%;
     --light-slate: 215 20% 65%;
     --tree-line: 213 16% 88%;
     --slate-300: 213 27% 84%;
     --border: 214 32% 92%;
-    --breadcrumb-last: 216 20% 40%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --primary-foreground: 210 40% 98%;
 
@@ -43,6 +42,7 @@
 
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.6);
 
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
@@ -90,6 +90,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #ebf2f5;
+    --chart-gray-dark: #45575f;
 
     /* Template icon colors */
     --template-icon-metrics: #5899da;
@@ -120,6 +122,7 @@
     /* Feature/brand colors */
     --feature-experiment-management: #6c6ff7;
     --feature-llm: #52aea4;
+    --color-ollie: #f46e41;
 
     /* Config link icon color */
     --color-fuchsia: #db46ef;
@@ -279,7 +282,6 @@
     --tree-line: 0 0% 30%;
     --slate-300: 213 27% 84%;
     --border: 0, 0%, 16%;
-    --breadcrumb-last: 214, 32%, 91%;
     --secondary-foreground: 0, 0%, 10%;
     --primary-foreground: 0, 0%, 11%;
 
@@ -337,6 +339,7 @@
     /* Feature colors - Dark Mode */
     --feature-experiment-management: #3b70f6;
     --feature-llm: #20ac74;
+    --color-ollie: #f46e41;
 
     /* Config link icon color - Dark Mode */
     --color-fuchsia: #c850c0;
@@ -350,6 +353,7 @@
 
     /* Muted colors - Dark Mode */
     --muted: 0, 0%, 11%;
+    --skeleton-shimmer-highlight: hsl(0 0% 100% / 0.06);
 
     /* Toggle colors - Dark Mode */
     --toggle-outline-active: #2c3c56;
@@ -385,6 +389,8 @@
     --chart-pink: #ed4a7b;
     --chart-orange: #fb9341;
     --chart-teal: #12a4b4;
+    --chart-gray-light: #2e2e2e;
+    --chart-gray-dark: #e2e8f0;
 
     /* Template icon colors - Dark Mode */
     --template-icon-metrics: #5899da;
@@ -537,11 +543,6 @@
     .tok-punctuation {
       color: var(--codemirror-syntax-punctuation);
     }
-  }
-
-  .static-code-gutter {
-    color: var(--codemirror-gutter);
-    background: transparent;
   }
 
   .dark .static-code-highlight {

@@ -492,6 +492,12 @@ pythonEvaluator:
   # Default: http://localhost:8000
   # Description: URL of the Python evaluator service, generally the opik-python-backend service
   url: ${PYTHON_EVALUATOR_URL:-http://localhost:8000}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: 10s
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: 5s
 
 serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
@@ -573,6 +579,10 @@ serviceToggles:
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: "disabled"
+  # Default: 100
+  # Description: Deployment-level default rows-per-page for UI tables (experiments v1/v2).
+  #              Lower this value to reduce initial render cost for high-volume workspaces.
+  defaultPageSize: 100
 
 # Local Runner configuration
 localRunner:
@@ -665,6 +675,34 @@ datasetVersioningMigration:
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: 3600
+
+# Experiment Project Migration configuration
+# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+experimentProjectMigration:
+  # Master switch — disabled in tests by default
+  enabled: false
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: 20
+  # Number of experiments to update per ClickHouse INSERT batch
+  experimentBatchSize: 1000
+  # Interval between recurring job runs
+  interval: 5s
+  # Delay before first run after app startup
+  startupDelay: 0s
+  # Distributed lock timeout — prevents overlap across replicas. Must stay < jobTimeout.
+  # Short in tests so the lock releases between cycles and Awaitility windows can stay brief.
+  lockTimeout: 5s
+  # Max time to wait for the distributed lock when another replica holds it
+  lockWaitTime: 100ms
+  # Per-cycle timeout — short for tests so hangs fail fast
+  jobTimeout: 30s
+
+# Shared configuration for V1 → V2 entity project migration jobs
+# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
+migration:
+  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
+  excludedWorkspaceIds:
 
 # Job timeout configuration
 jobTimeout:

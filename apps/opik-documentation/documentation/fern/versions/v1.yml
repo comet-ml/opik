@@ -882,6 +882,9 @@ navigation:
           - page: Dataset versioning migration
             path: ../docs/self-host/configure/dataset_versioning_migration.mdx
             slug: dataset_versioning_migration
+          - page: LLM model registry
+            path: ../docs/self-host/configure/llm-model-registry.mdx
+            slug: llm-model-registry
   - tab: reference
     layout:
       - page: Overview

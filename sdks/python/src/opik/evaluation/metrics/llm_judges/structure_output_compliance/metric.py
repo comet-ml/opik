@@ -88,18 +88,18 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
             score_result.ScoreResult: An object containing the compliance score and reasons.
         """
         try:
-            llm_query = template.generate_query(
+            messages = template.build_messages(
                 output=output,
                 schema=schema,
                 few_shot_examples=self.few_shot_examples,
             )
 
-            model_output = self._model.generate_string(
-                input=llm_query,
+            message = self._model.generate_chat_completion(
+                messages=messages,
                 response_format=StructuredOutputComplianceResponseFormat,
             )
 
-            return parser.parse_model_output(content=model_output, name=self.name)
+            return parser.parse_model_output(content=message["content"], name=self.name)
 
         except Exception as e:
             LOGGER.error(
@@ -124,18 +124,18 @@ class StructuredOutputCompliance(base_metric.BaseMetric):
             score_result.ScoreResult: An object containing the compliance score and reasons.
         """
         try:
-            llm_query = template.generate_query(
+            messages = template.build_messages(
                 output=output,
                 schema=schema,
                 few_shot_examples=self.few_shot_examples,
             )
 
-            model_output = await self._model.agenerate_string(
-                input=llm_query,
+            message = await self._model.agenerate_chat_completion(
+                messages=messages,
                 response_format=StructuredOutputComplianceResponseFormat,
             )
 
-            return parser.parse_model_output(content=model_output, name=self.name)
+            return parser.parse_model_output(content=message["content"], name=self.name)
 
         except Exception as e:
             LOGGER.error(

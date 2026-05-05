@@ -1,5 +1,7 @@
 from typing import List, TypedDict
 
+from opik.evaluation.models import base_model
+
 
 class FewShotExampleWithContextAnswerRelevance(TypedDict):
     title: str
@@ -79,13 +81,107 @@ FEW_SHOT_EXAMPLES_NO_CONTEXT: List[FewShotExampleNoContextAnswerRelevance] = [
 ]
 
 
-def generate_query_with_context(
-    input: str,
-    output: str,
-    context: List[str],
+_WITH_CONTEXT_SYSTEM_PROMPT = """YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES
+PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM
+ANOTHER LLM BASED ON THE USER'S INPUT AND CONTEXT PROVIDED.
+
+###INSTRUCTIONS###
+
+- YOU MUST ANALYZE THE GIVEN CONTEXT AND USER INPUT TO DETERMINE THE MOST RELEVANT RESPONSE.
+- EVALUATE THE ANSWER FROM THE OTHER LLM BASED ON ITS ALIGNMENT WITH THE USER'S QUERY AND THE CONTEXT.
+- ASSIGN A RELEVANCE SCORE BETWEEN 0.0 (COMPLETELY IRRELEVANT) AND 1.0 (HIGHLY RELEVANT).
+- RETURN THE RESULT AS A JSON OBJECT, INCLUDING THE SCORE AND A BRIEF EXPLANATION OF THE RATING.
+
+###CHAIN OF THOUGHTS###
+
+1. **Understanding the Context and Input:**
+   1.1. READ AND COMPREHEND THE CONTEXT PROVIDED.
+   1.2. IDENTIFY THE KEY POINTS OR QUESTIONS IN THE USER'S INPUT THAT THE ANSWER SHOULD ADDRESS.
+
+2. **Evaluating the Answer:**
+   2.1. COMPARE THE CONTENT OF THE ANSWER TO THE CONTEXT AND USER INPUT.
+   2.2. DETERMINE WHETHER THE ANSWER DIRECTLY ADDRESSES THE USER'S QUERY OR PROVIDES RELEVANT INFORMATION.
+   2.3. CONSIDER ANY EXTRANEOUS OR OFF-TOPIC INFORMATION THAT MAY DECREASE RELEVANCE.
+
+3. **Assigning a Relevance Score:**
+   3.1. ASSIGN A SCORE BASED ON HOW WELL THE ANSWER MATCHES THE USER'S NEEDS AND CONTEXT.
+   3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.
+
+4. **Generating the JSON Output:**
+   4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "answer_relevance_score" FIELD AND AN "reason" FIELD.
+   4.2. ENSURE THE SCORE IS A FLOATING-POINT NUMBER BETWEEN 0.0 AND 1.0.
+
+###WHAT NOT TO DO###
+
+- DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING BOTH THE CONTEXT AND THE USER INPUT.
+- AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.
+- DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "answer_relevance_score" AND "reason."
+- NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.
+
+###EXAMPLE OUTPUT FORMAT###
+{{
+  "answer_relevance_score": 0.85,
+  "reason": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
+}}
+
+###FEW-SHOT EXAMPLES###
+
+{examples_str}
+"""
+
+
+_NO_CONTEXT_SYSTEM_PROMPT = """YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES
+PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM
+ANOTHER LLM BASED ON THE USER'S INPUT.
+
+###INSTRUCTIONS###
+
+- YOU MUST ANALYZE THE USER INPUT TO DETERMINE THE MOST RELEVANT RESPONSE.
+- EVALUATE THE ANSWER FROM THE OTHER LLM BASED ON ITS ALIGNMENT WITH THE USER'S QUERY.
+- ASSIGN A RELEVANCE SCORE BETWEEN 0.0 (COMPLETELY IRRELEVANT) AND 1.0 (HIGHLY RELEVANT).
+- RETURN THE RESULT AS A JSON OBJECT, INCLUDING THE SCORE AND A BRIEF EXPLANATION OF THE RATING.
+
+###CHAIN OF THOUGHTS###
+
+1. **Understanding the Input:**
+   1.1. IDENTIFY THE KEY POINTS OR QUESTIONS IN THE USER'S INPUT THAT THE ANSWER SHOULD ADDRESS.
+
+2. **Evaluating the Answer:**
+   2.1. COMPARE THE CONTENT OF THE ANSWER TO THE USER INPUT.
+   2.2. DETERMINE WHETHER THE ANSWER DIRECTLY ADDRESSES THE USER'S QUERY OR PROVIDES RELEVANT INFORMATION.
+   2.3. CONSIDER ANY EXTRANEOUS OR OFF-TOPIC INFORMATION THAT MAY DECREASE RELEVANCE.
+
+3. **Assigning a Relevance Score:**
+   3.1. ASSIGN A SCORE BASED ON HOW WELL THE ANSWER MATCHES THE USER'S NEEDS
+   3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.
+
+4. **Generating the JSON Output:**
+   4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "answer_relevance_score" FIELD AND AN "reason" FIELD.
+   4.2. ENSURE THE SCORE IS A FLOATING-POINT NUMBER BETWEEN 0.0 AND 1.0.
+
+###WHAT NOT TO DO###
+
+- DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING THE USER INPUT.
+- AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.
+- DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "answer_relevance_score" AND "reason."
+- NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.
+
+###EXAMPLE OUTPUT FORMAT###
+{{
+  "answer_relevance_score": 0.85,
+  "reason": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
+}}
+
+###FEW-SHOT EXAMPLES###
+
+{examples_str}
+"""
+
+
+def _format_examples_with_context(
     few_shot_examples: List[FewShotExampleWithContextAnswerRelevance],
 ) -> str:
-    examples_str = "\n\n".join(
+    return "\n\n".join(
         [
             f"#### Example {i + 1}: {example['title']}\n\n"
             f'- **Input:** "{example["input"]}"\n'
@@ -102,74 +198,11 @@ def generate_query_with_context(
         ]
     )
 
-    return f"""
-        YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES
-        PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM
-        ANOTHER LLM BASED ON THE USER'S INPUT AND CONTEXT PROVIDED.
 
-        ###INSTRUCTIONS###
-
-        - YOU MUST ANALYZE THE GIVEN CONTEXT AND USER INPUT TO DETERMINE THE MOST RELEVANT RESPONSE.
-        - EVALUATE THE ANSWER FROM THE OTHER LLM BASED ON ITS ALIGNMENT WITH THE USER'S QUERY AND THE CONTEXT.
-        - ASSIGN A RELEVANCE SCORE BETWEEN 0.0 (COMPLETELY IRRELEVANT) AND 1.0 (HIGHLY RELEVANT).
-        - RETURN THE RESULT AS A JSON OBJECT, INCLUDING THE SCORE AND A BRIEF EXPLANATION OF THE RATING.
-
-        ###CHAIN OF THOUGHTS###
-
-        1. **Understanding the Context and Input:**
-           1.1. READ AND COMPREHEND THE CONTEXT PROVIDED.
-           1.2. IDENTIFY THE KEY POINTS OR QUESTIONS IN THE USER'S INPUT THAT THE ANSWER SHOULD ADDRESS.
-
-        2. **Evaluating the Answer:**
-           2.1. COMPARE THE CONTENT OF THE ANSWER TO THE CONTEXT AND USER INPUT.
-           2.2. DETERMINE WHETHER THE ANSWER DIRECTLY ADDRESSES THE USER'S QUERY OR PROVIDES RELEVANT INFORMATION.
-           2.3. CONSIDER ANY EXTRANEOUS OR OFF-TOPIC INFORMATION THAT MAY DECREASE RELEVANCE.
-
-        3. **Assigning a Relevance Score:**
-           3.1. ASSIGN A SCORE BASED ON HOW WELL THE ANSWER MATCHES THE USER'S NEEDS AND CONTEXT.
-           3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.
-
-        4. **Generating the JSON Output:**
-           4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "answer_relevance_score" FIELD AND AN "reason" FIELD.
-           4.2. ENSURE THE SCORE IS A FLOATING-POINT NUMBER BETWEEN 0.0 AND 1.0.
-
-        ###WHAT NOT TO DO###
-
-        - DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING BOTH THE CONTEXT AND THE USER INPUT.
-        - AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.
-        - DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "answer_relevance_score" AND "reason."
-        - NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.
-
-        ###EXAMPLE OUTPUT FORMAT###
-        {{
-          "answer_relevance_score": 0.85,
-          "reason": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
-        }}
-
-        ###FEW-SHOT EXAMPLES###
-
-        {examples_str}
-
-        ###INPUTS:###
-        ***
-        Input:
-        {input}
-
-        Output:
-        {output}
-
-        Context:
-        {context}
-        ***
-    """
-
-
-def generate_query_no_context(
-    input: str,
-    output: str,
+def _format_examples_no_context(
     few_shot_examples: List[FewShotExampleNoContextAnswerRelevance],
 ) -> str:
-    examples_str = "\n\n".join(
+    return "\n\n".join(
         [
             f"#### Example {i + 1}: {example['title']}\n\n"
             f'- **Input:** "{example["input"]}"\n'
@@ -185,59 +218,40 @@ def generate_query_no_context(
         ]
     )
 
-    return f"""
-        YOU ARE AN EXPERT IN NLP EVALUATION METRICS, SPECIALLY TRAINED TO ASSESS ANSWER RELEVANCE IN RESPONSES
-        PROVIDED BY LANGUAGE MODELS. YOUR TASK IS TO EVALUATE THE RELEVANCE OF A GIVEN ANSWER FROM
-        ANOTHER LLM BASED ON THE USER'S INPUT.
 
-        ###INSTRUCTIONS###
+def build_messages_with_context(
+    input: str,
+    output: str,
+    context: List[str],
+    few_shot_examples: List[FewShotExampleWithContextAnswerRelevance],
+) -> List[base_model.ConversationDict]:
+    system_content = _WITH_CONTEXT_SYSTEM_PROMPT.format(
+        examples_str=_format_examples_with_context(few_shot_examples)
+    )
+    user_content = (
+        f"###INPUTS:###\n"
+        f"***\n"
+        f"Input:\n{input}\n\n"
+        f"Output:\n{output}\n\n"
+        f"Context:\n{context}\n"
+        f"***"
+    )
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]
 
-        - YOU MUST ANALYZE THE USER INPUT TO DETERMINE THE MOST RELEVANT RESPONSE.
-        - EVALUATE THE ANSWER FROM THE OTHER LLM BASED ON ITS ALIGNMENT WITH THE USER'S QUERY.
-        - ASSIGN A RELEVANCE SCORE BETWEEN 0.0 (COMPLETELY IRRELEVANT) AND 1.0 (HIGHLY RELEVANT).
-        - RETURN THE RESULT AS A JSON OBJECT, INCLUDING THE SCORE AND A BRIEF EXPLANATION OF THE RATING.
 
-        ###CHAIN OF THOUGHTS###
-
-        1. **Understanding the Input:**
-           1.1. IDENTIFY THE KEY POINTS OR QUESTIONS IN THE USER'S INPUT THAT THE ANSWER SHOULD ADDRESS.
-
-        2. **Evaluating the Answer:**
-           2.1. COMPARE THE CONTENT OF THE ANSWER TO THE USER INPUT.
-           2.2. DETERMINE WHETHER THE ANSWER DIRECTLY ADDRESSES THE USER'S QUERY OR PROVIDES RELEVANT INFORMATION.
-           2.3. CONSIDER ANY EXTRANEOUS OR OFF-TOPIC INFORMATION THAT MAY DECREASE RELEVANCE.
-
-        3. **Assigning a Relevance Score:**
-           3.1. ASSIGN A SCORE BASED ON HOW WELL THE ANSWER MATCHES THE USER'S NEEDS
-           3.2. JUSTIFY THE SCORE WITH A BRIEF EXPLANATION THAT HIGHLIGHTS THE STRENGTHS OR WEAKNESSES OF THE ANSWER.
-
-        4. **Generating the JSON Output:**
-           4.1. FORMAT THE OUTPUT AS A JSON OBJECT WITH A "answer_relevance_score" FIELD AND AN "reason" FIELD.
-           4.2. ENSURE THE SCORE IS A FLOATING-POINT NUMBER BETWEEN 0.0 AND 1.0.
-
-        ###WHAT NOT TO DO###
-
-        - DO NOT GIVE A SCORE WITHOUT FULLY ANALYZING THE USER INPUT.
-        - AVOID SCORES THAT DO NOT MATCH THE EXPLANATION PROVIDED.
-        - DO NOT INCLUDE ADDITIONAL FIELDS OR INFORMATION IN THE JSON OUTPUT BEYOND "answer_relevance_score" AND "reason."
-        - NEVER ASSIGN A PERFECT SCORE UNLESS THE ANSWER IS FULLY RELEVANT AND FREE OF ANY IRRELEVANT INFORMATION.
-
-        ###EXAMPLE OUTPUT FORMAT###
-        {{
-          "answer_relevance_score": 0.85,
-          "reason": "The answer addresses the user's query about the primary topic but includes some extraneous details that slightly reduce its relevance."
-        }}
-
-        ###FEW-SHOT EXAMPLES###
-
-        {examples_str}
-
-        ###INPUTS:###
-        ***
-        Input:
-        {input}
-
-        Output:
-        {output}
-        ***
-    """
+def build_messages_no_context(
+    input: str,
+    output: str,
+    few_shot_examples: List[FewShotExampleNoContextAnswerRelevance],
+) -> List[base_model.ConversationDict]:
+    system_content = _NO_CONTEXT_SYSTEM_PROMPT.format(
+        examples_str=_format_examples_no_context(few_shot_examples)
+    )
+    user_content = f"###INPUTS:###\n***\nInput:\n{input}\n\nOutput:\n{output}\n***"
+    return [
+        {"role": "system", "content": system_content},
+        {"role": "user", "content": user_content},
+    ]

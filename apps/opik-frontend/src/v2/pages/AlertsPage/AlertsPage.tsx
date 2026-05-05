@@ -19,7 +19,6 @@ import DataTablePagination from "@/shared/DataTablePagination/DataTablePaginatio
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import IdCell from "@/shared/DataTableCells/IdCell";
 import StatusCell from "@/shared/DataTableCells/StatusCell";
-import Loader from "@/shared/Loader/Loader";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import { Button } from "@/ui/button";
@@ -287,7 +286,7 @@ const AlertsPage: React.FunctionComponent = () => {
 
   const columns = useMemo(() => {
     return [
-      generateSelectColumDef<Alert>(),
+      ...(canUpdateAlerts ? [generateSelectColumDef<Alert>()] : []),
       ...convertColumnDataToColumn<Alert, Alert>(DEFAULT_COLUMNS, {
         columnsOrder,
         selectedColumns,
@@ -329,11 +328,9 @@ const AlertsPage: React.FunctionComponent = () => {
     });
   }, [navigate, workspaceName, activeProjectId]);
 
-  if (isPending || (isPlaceholderData && alerts.length === 0)) {
-    return <Loader />;
-  }
-
-  const isEmpty = noData && alerts.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && alerts.length === 0);
+  const isEmpty = !isTableLoading && noData && alerts.length === 0;
 
   return (
     <div className="flex min-h-full flex-col pt-4">
@@ -354,8 +351,10 @@ const AlertsPage: React.FunctionComponent = () => {
           description={
             "Monitor important events in your project and get notified when something needs your attention."
           }
-          primaryActionLabel="Create your first alert"
-          onPrimaryAction={handleNewAlertClick}
+          primaryActionLabel={
+            canUpdateAlerts ? "Create your first alert" : undefined
+          }
+          onPrimaryAction={canUpdateAlerts ? handleNewAlertClick : undefined}
           docsUrl={buildDocsUrl("/production/alerts/alerts")}
         />
       ) : (
@@ -383,8 +382,12 @@ const AlertsPage: React.FunctionComponent = () => {
                 />
               </div>
               <div className="flex items-center gap-2">
-                <AlertsActionsPanel alerts={selectedRows} />
-                <Separator orientation="vertical" className="mx-2 h-4" />
+                {canUpdateAlerts && (
+                  <>
+                    <AlertsActionsPanel alerts={selectedRows} />
+                    <Separator orientation="vertical" className="mx-2 h-4" />
+                  </>
+                )}
                 <ColumnsButton
                   columns={DEFAULT_COLUMNS}
                   selectedColumns={selectedColumns}
@@ -399,10 +402,14 @@ const AlertsPage: React.FunctionComponent = () => {
               data={alerts}
               resizeConfig={resizeConfig}
               sortConfig={sortConfig}
-              selectionConfig={{
-                rowSelection,
-                setRowSelection,
-              }}
+              selectionConfig={
+                canUpdateAlerts
+                  ? {
+                      rowSelection,
+                      setRowSelection,
+                    }
+                  : undefined
+              }
               getRowId={getRowId}
               columnPinning={DEFAULT_COLUMN_PINNING}
               noData={
@@ -414,7 +421,10 @@ const AlertsPage: React.FunctionComponent = () => {
                   )}
                 </DataTableNoData>
               }
-              showLoadingOverlay={isPlaceholderData && isFetching}
+              showSkeleton={isTableLoading}
+              showLoadingOverlay={
+                !isTableLoading && isPlaceholderData && isFetching
+              }
             />
             <div className="py-4">
               <DataTablePagination

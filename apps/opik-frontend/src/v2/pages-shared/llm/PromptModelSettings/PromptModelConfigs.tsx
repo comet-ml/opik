@@ -1,6 +1,5 @@
 import React from "react";
 import { Settings2 } from "lucide-react";
-import isEmpty from "lodash/isEmpty";
 
 import {
   LLMAnthropicConfigsType,
@@ -117,7 +116,7 @@ const PromptModelConfigs = ({
     return;
   };
 
-  const disabled = disabledProp || !composedProviderType || isEmpty(configs);
+  const disabled = disabledProp || !composedProviderType;
 
   return (
     <DropdownMenu>

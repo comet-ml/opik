@@ -2,12 +2,19 @@ import { describe, it, expect } from "vitest";
 import {
   convertOptimizationVariableFormat,
   checkIsTestSuite,
+  getOptimizationDefaultConfigByProvider,
 } from "./optimizations";
 import {
   Experiment,
   EXPERIMENT_TYPE,
   EVALUATION_METHOD,
 } from "@/types/datasets";
+import {
+  COMPOSED_PROVIDER_TYPE,
+  LLMAnthropicConfigsType,
+  PROVIDER_MODEL_TYPE,
+  PROVIDER_TYPE,
+} from "@/types/providers";
 
 const makeExperiment = (overrides: Partial<Experiment> = {}): Experiment => ({
   id: "exp-1",
@@ -361,5 +368,25 @@ describe("convertOptimizationVariableFormat", () => {
       const expected = "Line 1 {{var1}}\n\tLine 2 {{var2}}\r\nLine 3";
       expect(convertOptimizationVariableFormat(input)).toBe(expected);
     });
+  });
+});
+
+describe("getOptimizationDefaultConfigByProvider — Anthropic", () => {
+  it("seeds temperature for models that accept sampling params", () => {
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+    ) as LLMAnthropicConfigsType;
+
+    expect(config.temperature).toBe(0);
+  });
+
+  it("omits temperature for Claude Opus 4.7", () => {
+    const config = getOptimizationDefaultConfigByProvider(
+      PROVIDER_TYPE.ANTHROPIC as COMPOSED_PROVIDER_TYPE,
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_7,
+    ) as LLMAnthropicConfigsType;
+
+    expect(config.temperature).toBeUndefined();
   });
 });

@@ -42,6 +42,8 @@ tags:
   description: Alert resources
 - name: Annotation Queues
   description: Private annotation queue operations
+- name: Assertion Results
+  description: Assertion result related resources
 - name: Attachments
   description: Attachments related resources
 - name: Check
@@ -54,6 +56,8 @@ tags:
   description: Workspace Dashboard resources
 - name: Datasets
   description: Dataset resources
+- name: Environments
+  description: Environment related resources
 - name: Experiments
   description: Experiment resources
 - name: Feedback-definitions
@@ -1120,6 +1124,21 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/assertion-results:
+    put:
+      tags:
+      - Assertion Results
+      summary: Batch ingestion of assertion results
+      description: Batch ingestion of assertion results for traces or spans
+      operationId: storeAssertionsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssertionResultBatch"
+      responses:
+        "204":
+          description: No Content
   /v1/private/attachment/list:
     get:
       tags:
@@ -2826,6 +2845,124 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Public"
+  /v1/private/environments:
+    get:
+      tags:
+      - Environments
+      summary: Find environments
+      description: Find environments for the workspace. Capped at the workspace limit
+        (default 20).
+      operationId: findEnvironments
+      responses:
+        "200":
+          description: Environments page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnvironmentPage_Public"
+    post:
+      tags:
+      - Environments
+      summary: Create environment
+      description: Create environment
+      operationId: createEnvironment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/Environment_Write"
+      responses:
+        "201":
+          description: Created
+          headers:
+            Location:
+              required: true
+              style: simple
+              schema:
+                type: string
+              example: "${basePath}/v1/private/environments/{environmentId}"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+  /v1/private/environments/delete:
+    post:
+      tags:
+      - Environments
+      summary: Delete environments
+      description: Delete environments batch. Idempotent — missing ids are silently
+        ignored.
+      operationId: deleteEnvironmentsBatch
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDelete"
+      responses:
+        "204":
+          description: No Content
+  /v1/private/environments/{id}:
+    get:
+      tags:
+      - Environments
+      summary: Get environment by id
+      description: Get environment by id
+      operationId: getEnvironmentById
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: Environment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Environment_Public"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+    patch:
+      tags:
+      - Environments
+      summary: Update environment by id
+      description: Update environment by id
+      operationId: updateEnvironment
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnvironmentUpdate"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/experiments/batch:
     patch:
       tags:
@@ -9285,6 +9422,58 @@ components:
           items:
             minLength: 1
             type: string
+    AssertionResultBatch:
+      required:
+      - assertion_results
+      - entity_type
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum:
+          - TRACE
+          - SPAN
+          - THREAD
+        assertion_results:
+          maxItems: 1000
+          minItems: 1
+          type: array
+          items:
+            $ref: "#/components/schemas/AssertionResultBatchItem"
+    AssertionResultBatchItem:
+      required:
+      - entity_id
+      - name
+      - source
+      - status
+      type: object
+      properties:
+        entity_id:
+          type: string
+          format: uuid
+        project_name:
+          pattern: (?s)^\s*(\S.*\S|\S)\s*$
+          type: string
+          description: "If null, the default project is used"
+        project_id:
+          type: string
+          format: uuid
+        name:
+          minLength: 1
+          type: string
+        status:
+          type: string
+          enum:
+          - passed
+          - failed
+        reason:
+          type: string
+        source:
+          type: string
+          enum:
+          - ui
+          - sdk
+          - online_scoring
     Attachment:
       required:
       - file_name
@@ -9718,7 +9907,6 @@ components:
     LlmAsJudgeModelParameters:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10148,7 +10336,6 @@ components:
     LlmAsJudgeModelParameters_Write:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10603,7 +10790,6 @@ components:
     LlmAsJudgeModelParameters_Public:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -11097,6 +11283,8 @@ components:
           $ref: "#/components/schemas/Delta"
         finish_reason:
           type: string
+        logprobs:
+          $ref: "#/components/schemas/LogProbs"
     ChatCompletionResponse:
       type: object
       properties:
@@ -11145,6 +11333,26 @@ components:
           type: string
         arguments:
           type: string
+    LogProb:
+      type: object
+      properties:
+        token:
+          type: string
+        logprob:
+          type: number
+          format: double
+        bytes:
+          type: array
+          items:
+            type: integer
+            format: int32
+    LogProbs:
+      type: object
+      properties:
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/LogProb"
     PromptTokensDetails:
       type: object
       properties:
@@ -11249,6 +11457,11 @@ components:
           type: string
         service_tier:
           type: string
+        logprobs:
+          type: boolean
+        top_logprobs:
+          type: integer
+          format: int32
         functions:
           type: array
           items:
@@ -13536,6 +13749,145 @@ components:
             type: string
             description: Optional list of tags to add to this version
             example: "[\"production\",\"reviewed\"]"
+    Environment:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    Environment_Write:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+    EnvironmentPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/Environment_Public"
+        sortableBy:
+          type: array
+          items:
+            type: string
+    Environment_Public:
+      required:
+      - name
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          type: string
+          readOnly: true
+        last_updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        last_updated_by:
+          type: string
+          readOnly: true
+    EnvironmentUpdate:
+      type: object
+      properties:
+        name:
+          maxLength: 150
+          minLength: 0
+          pattern: "^[A-Za-z0-9_-]+$"
+          type: string
+        description:
+          maxLength: 500
+          minLength: 0
+          type: string
+        color:
+          maxLength: 20
+          minLength: 0
+          type: string
+        position:
+          type: integer
+          format: int32
     ExperimentBatchUpdate:
       required:
       - ids
@@ -18276,6 +18628,11 @@ components:
         forceWorkspaceVersion:
           minLength: 1
           type: string
+        defaultPageSize:
+          maximum: 100
+          minimum: 5
+          type: integer
+          format: int32
         v2WorkspaceAllowlist:
           type: string
           writeOnly: true

@@ -1,6 +1,9 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
-EVALUATION_PROMPT_TEMPLATE = """You are an expert evaluator of ReAct-style agent trajectories. Assess how effectively the agent reasoned through the problem and selected appropriate actions.
+from opik.evaluation.models import base_model
+
+
+_SYSTEM_PROMPT = """You are an expert evaluator of ReAct-style agent trajectories. Assess how effectively the agent reasoned through the problem and selected appropriate actions.
 
 Evaluation Criteria:
 1. Reasoning Quality: Logical, relevant thoughts that guide action selection
@@ -16,32 +19,28 @@ Scoring Guidelines:
 - 0.3-0.4: Poor performance, significant flaws but some progress
 - 0.0-0.2: Fundamentally flawed, fails to achieve goal
 
-GOAL: {goal}
-
-TRAJECTORY:
-{trajectory_steps}
-
-FINAL RESULT: {final_result}
-
 Respond in JSON format:
-{{
+{
     "score": <float between 0.0 and 1.0>,
     "explanation": "<specific evaluation referencing trajectory steps>"
-}}"""
+}"""
 
 
-def create_evaluation_prompt(example: Dict[str, Any]) -> str:
-    """Create the evaluation prompt for trajectory assessment."""
-
-    goal = example.get("goal", "No goal specified")
-    trajectory = example.get("trajectory", [])
-    final_result = example.get("final_result", "No result specified")
-
-    trajectory_steps = _format_trajectory_steps(trajectory)
-
-    return EVALUATION_PROMPT_TEMPLATE.format(
-        goal=goal, trajectory_steps=trajectory_steps, final_result=final_result
+def build_messages(
+    goal: str,
+    trajectory: List[Dict[str, Any]],
+    final_result: str,
+) -> List[base_model.ConversationDict]:
+    """Build the [system, user] message pair for trajectory accuracy assessment."""
+    user_content = (
+        f"GOAL: {goal}\n\n"
+        f"TRAJECTORY:\n{_format_trajectory_steps(trajectory)}\n\n"
+        f"FINAL RESULT: {final_result}"
     )
+    return [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
 
 
 def _format_trajectory_steps(trajectory: List[Dict[str, Any]]) -> str:

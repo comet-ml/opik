@@ -17,10 +17,10 @@ const AppNetworkStatus = () => {
   return (
     <div className="flex items-center gap-2">
       {isConnectedToBackend && (
-        <div className="flex items-center gap-2">
-          <SatelliteDishIcon className="size-5" />
+        <div className="flex items-center gap-1">
+          <SatelliteDishIcon className="size-4" />
           <TooltipWrapper content="Round-trip time (RTT) to ping backend server">
-            <span className="comet-body-s-accented">RTT: {rttInSeconds}s</span>
+            <span className="comet-body-xs-accented">RTT: {rttInSeconds}s</span>
           </TooltipWrapper>
         </div>
       )}
@@ -28,7 +28,7 @@ const AppNetworkStatus = () => {
         <div className="relative flex flex-col items-center justify-center">
           <div
             className={cn(
-              "absolute -top-2.5 left-1.75 size-2 rounded-full",
+              "absolute -top-2 left-1.5 size-1.5 rounded-full",
               isConnectedToBackend ? "bg-green-500" : "bg-red-500",
             )}
           />
@@ -40,7 +40,7 @@ const AppNetworkStatus = () => {
             }
           >
             <span>
-              <CometIcon className="size-5" />
+              <CometIcon className="size-4" />
             </span>
           </TooltipWrapper>
         </div>
@@ -48,7 +48,7 @@ const AppNetworkStatus = () => {
       <div className="relative flex flex-col items-center justify-center">
         <div
           className={cn(
-            "absolute -top-2.5 left-1.75 size-2 rounded-full",
+            "absolute -top-2 left-1/2 size-1.5 -translate-x-1/2 rounded-full",
             isNetworkOnline ? "bg-green-500" : "bg-red-500",
           )}
         />
@@ -60,9 +60,9 @@ const AppNetworkStatus = () => {
           }
         >
           {isNetworkOnline ? (
-            <WifiIcon className="size-5" />
+            <WifiIcon className="size-4" />
           ) : (
-            <WifiOffIcon className="size-5" />
+            <WifiOffIcon className="size-4" />
           )}
         </TooltipWrapper>
       </div>

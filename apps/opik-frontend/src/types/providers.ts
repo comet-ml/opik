@@ -74,6 +74,8 @@ export enum PROVIDER_MODEL_TYPE {
   GPT_5_4_MINI = "gpt-5.4-mini",
   GPT_5_4_NANO = "gpt-5.4-nano",
   GPT_5_4_PRO = "gpt-5.4-pro",
+  GPT_5_5 = "gpt-5.5",
+  GPT_5_5_PRO = "gpt-5.5-pro",
   GPT_IMAGE_1 = "gpt-image-1",
   GPT_IMAGE_1_MINI = "gpt-image-1-mini",
   GPT_IMAGE_1_5 = "gpt-image-1.5",
@@ -197,6 +199,8 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2 = "deepseek/deepseek-v3.2",
   DEEPSEEK_DEEPSEEK_V3_2_EXP = "deepseek/deepseek-v3.2-exp",
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
+  DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
+  DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
   GOOGLE_GEMINI_2_0_FLASH_001 = "google/gemini-2.0-flash-001",
@@ -237,10 +241,12 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_LYRIA_3_PRO_PREVIEW = "google/lyria-3-pro-preview",
   GRYPHE_MYTHOMAX_L2_13B = "gryphe/mythomax-l2-13b",
   IBM_GRANITE_GRANITE_4_0_H_MICRO = "ibm-granite/granite-4.0-h-micro",
+  IBM_GRANITE_GRANITE_4_1_8B = "ibm-granite/granite-4.1-8b",
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
+  INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
@@ -315,6 +321,7 @@ export enum PROVIDER_MODEL_TYPE {
   MISTRALAI_MISTRAL_LARGE_2411 = "mistralai/mistral-large-2411",
   MISTRALAI_MISTRAL_LARGE_2512 = "mistralai/mistral-large-2512",
   MISTRALAI_MISTRAL_MEDIUM_3 = "mistralai/mistral-medium-3",
+  MISTRALAI_MISTRAL_MEDIUM_3_5 = "mistralai/mistral-medium-3-5",
   MISTRALAI_MISTRAL_MEDIUM_3_1 = "mistralai/mistral-medium-3.1",
   MISTRALAI_MISTRAL_NEMO = "mistralai/mistral-nemo",
   MISTRALAI_MISTRAL_NEMO_FREE = "mistralai/mistral-nemo:free",
@@ -360,6 +367,7 @@ export enum PROVIDER_MODEL_TYPE {
   NVIDIA_LLAMA_3_3_NEMOTRON_SUPER_49B_V1_5 = "nvidia/llama-3.3-nemotron-super-49b-v1.5",
   NVIDIA_NEMOTRON_3_NANO_30B_A3B = "nvidia/nemotron-3-nano-30b-a3b",
   NVIDIA_NEMOTRON_3_NANO_30B_A3B_FREE = "nvidia/nemotron-3-nano-30b-a3b:free",
+  NVIDIA_NEMOTRON_3_NANO_OMNI_30B_A3B_REASONING_FREE = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
   NVIDIA_NEMOTRON_3_SUPER_120B_A12B = "nvidia/nemotron-3-super-120b-a12b",
   NVIDIA_NEMOTRON_3_SUPER_120B_A12B_FREE = "nvidia/nemotron-3-super-120b-a12b:free",
   NVIDIA_NEMOTRON_NANO_12B_V2_VL = "nvidia/nemotron-nano-12b-v2-vl",
@@ -415,6 +423,8 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_4_MINI = "openai/gpt-5.4-mini",
   OPENAI_GPT_5_4_NANO = "openai/gpt-5.4-nano",
   OPENAI_GPT_5_4_PRO = "openai/gpt-5.4-pro",
+  OPENAI_GPT_5_5 = "openai/gpt-5.5",
+  OPENAI_GPT_5_5_PRO = "openai/gpt-5.5-pro",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
   OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b",
@@ -440,6 +450,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_FREE = "openrouter/free",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
+  OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
   OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
   PERPLEXITY_SONAR = "perplexity/sonar",
   PERPLEXITY_SONAR_DEEP_RESEARCH = "perplexity/sonar-deep-research",
@@ -447,6 +458,8 @@ export enum PROVIDER_MODEL_TYPE {
   PERPLEXITY_SONAR_PRO_SEARCH = "perplexity/sonar-pro-search",
   PERPLEXITY_SONAR_REASONING = "perplexity/sonar-reasoning",
   PERPLEXITY_SONAR_REASONING_PRO = "perplexity/sonar-reasoning-pro",
+  POOLSIDE_LAGUNA_M_1_FREE = "poolside/laguna-m.1:free",
+  POOLSIDE_LAGUNA_XS_2_FREE = "poolside/laguna-xs.2:free",
   PRIME_INTELLECT_INTELLECT_3 = "prime-intellect/intellect-3",
   QWEN_QWEN_2_5_72B_INSTRUCT = "qwen/qwen-2.5-72b-instruct",
   QWEN_QWEN_2_5_72B_INSTRUCT_FREE = "qwen/qwen-2.5-72b-instruct:free",
@@ -504,6 +517,11 @@ export enum PROVIDER_MODEL_TYPE {
   QWEN_QWEN3_5_9B = "qwen/qwen3.5-9b",
   QWEN_QWEN3_5_FLASH_02_23 = "qwen/qwen3.5-flash-02-23",
   QWEN_QWEN3_5_PLUS_02_15 = "qwen/qwen3.5-plus-02-15",
+  QWEN_QWEN3_5_PLUS_20260420 = "qwen/qwen3.5-plus-20260420",
+  QWEN_QWEN3_6_27B = "qwen/qwen3.6-27b",
+  QWEN_QWEN3_6_35B_A3B = "qwen/qwen3.6-35b-a3b",
+  QWEN_QWEN3_6_FLASH = "qwen/qwen3.6-flash",
+  QWEN_QWEN3_6_MAX_PREVIEW = "qwen/qwen3.6-max-preview",
   QWEN_QWEN3_6_PLUS = "qwen/qwen3.6-plus",
   QWEN_QWEN3_6_PLUS_PREVIEW_FREE = "qwen/qwen3.6-plus-preview:free",
   QWEN_QWEN3_6_PLUS_FREE = "qwen/qwen3.6-plus:free",
@@ -550,6 +568,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_BETA = "x-ai/grok-4.20-beta",
   X_AI_GROK_4_20_MULTI_AGENT = "x-ai/grok-4.20-multi-agent",
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
+  X_AI_GROK_4_3 = "x-ai/grok-4.3",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
   XIAOMI_MIMO_V2_OMNI = "xiaomi/mimo-v2-omni",
@@ -570,7 +589,14 @@ export enum PROVIDER_MODEL_TYPE {
   Z_AI_GLM_5_TURBO = "z-ai/glm-5-turbo",
   Z_AI_GLM_5_1 = "z-ai/glm-5.1",
   Z_AI_GLM_5V_TURBO = "z-ai/glm-5v-turbo",
+  ANTHROPIC_CLAUDE_HAIKU_LATEST = "~anthropic/claude-haiku-latest",
   ANTHROPIC_CLAUDE_OPUS_LATEST = "~anthropic/claude-opus-latest",
+  ANTHROPIC_CLAUDE_SONNET_LATEST = "~anthropic/claude-sonnet-latest",
+  GOOGLE_GEMINI_FLASH_LATEST = "~google/gemini-flash-latest",
+  GOOGLE_GEMINI_PRO_LATEST = "~google/gemini-pro-latest",
+  MOONSHOTAI_KIMI_LATEST = "~moonshotai/kimi-latest",
+  OPENAI_GPT_LATEST = "~openai/gpt-latest",
+  OPENAI_GPT_MINI_LATEST = "~openai/gpt-mini-latest",
 
   //   <----- gemini
   AQA = "aqa",
@@ -627,6 +653,12 @@ export interface ProviderKeyConfiguration {
   models?: string;
   /** For free model: the display label showing actual provider/model (e.g., "openai/gpt-4o-mini") */
   model_label?: string;
+  /** Custom LLM (OPIK-4551): JSON-encoded Map<string,string> appended to every outbound request URL */
+  url_query_params?: string;
+  /** Custom LLM (OPIK-4551): custom auth header name; sent alongside Authorization: Bearer unless suppressed */
+  auth_header_name?: string;
+  /** Custom LLM (OPIK-4551): "true" to drop the default Authorization: Bearer header */
+  suppress_default_auth?: string;
 }
 
 export interface BaseProviderKey {
@@ -692,10 +724,11 @@ export type AnthropicThinkingEffort =
   | "low"
   | "medium"
   | "high"
+  | "xhigh"
   | "max";
 
 export interface LLMAnthropicConfigsType {
-  temperature: number;
+  temperature?: number;
   maxCompletionTokens: number;
   topP?: number;
   seed?: number | null;

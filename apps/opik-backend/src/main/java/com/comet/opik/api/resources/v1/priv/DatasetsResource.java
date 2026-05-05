@@ -190,6 +190,7 @@ public class DatasetsResource {
                     @Header(name = "Location", required = true, example = "${basePath}/api/v1/private/datasets/{id}", schema = @Schema(implementation = String.class))
             })
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_CREATE)
     @RateLimited
     public Response createDataset(
             @RequestBody(content = @Content(schema = @Schema(implementation = Dataset.class))) @JsonView(Dataset.View.Write.class) @NotNull @Valid Dataset dataset,
@@ -219,6 +220,7 @@ public class DatasetsResource {
     @Operation(operationId = "updateDataset", summary = "Update dataset by id", description = "Update dataset by id", responses = {
             @ApiResponse(responseCode = "204", description = "No content"),
     })
+    @RequiredPermissions(WorkspaceUserPermission.DATASET_EDIT)
     @RateLimited
     public Response updateDataset(@PathParam("id") UUID id,
             @RequestBody(content = @Content(schema = @Schema(implementation = DatasetUpdate.class))) @NotNull @Valid DatasetUpdate datasetUpdate) {

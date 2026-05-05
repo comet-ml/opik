@@ -29,7 +29,7 @@ const PrettyLLMMessageHeader: React.FC<PrettyLLMMessageHeaderProps> =
             <Icon className={cn("size-3 shrink-0", roleConfig.iconColor)} />
           </div>
 
-          <div className="comet-body-s-accented text-light-slate">
+          <div className="comet-body-xs-accented text-muted-slate">
             {roleConfig.label}
           </div>
         </div>

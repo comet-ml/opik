@@ -25,5 +25,6 @@ export interface ServiceTogglesConfig {
     collaboratorsTabEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
+    defaultPageSize?: number;
     v2WorkspaceAllowlist?: string;
 }

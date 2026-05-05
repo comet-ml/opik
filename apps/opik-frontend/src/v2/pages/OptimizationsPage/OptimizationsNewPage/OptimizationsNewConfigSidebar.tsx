@@ -58,7 +58,7 @@ const OptimizationsNewConfigSidebar: React.FC<
   getFirstMetricParamsError,
 }) => {
   return (
-    <div className="w-[500px] shrink-0 space-y-6">
+    <div className="w-full space-y-6 xl:w-[500px] xl:shrink-0">
       <FormField
         control={form.control}
         name="optimizerType"
@@ -107,7 +107,7 @@ const OptimizationsNewConfigSidebar: React.FC<
           render={({ field }) => (
             <FormItem>
               <FormLabel className="comet-body-s-accented flex items-center gap-1">
-                Test suite
+                Dataset
                 <ExplainerIcon
                   {...EXPLAINERS_MAP[EXPLAINER_ID.whats_the_test_suite_section]}
                 />
@@ -117,6 +117,7 @@ const OptimizationsNewConfigSidebar: React.FC<
                   value={field.value}
                   onValueChange={(id) => onDatasetChange(id)}
                   projectId={projectId}
+                  placeholder="Select a dataset"
                   className="h-10 w-full"
                 />
               </FormControl>

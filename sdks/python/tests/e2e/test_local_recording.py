@@ -5,7 +5,20 @@ from opik.api_objects import opik_client
 from opik.message_processing.emulation.models import TraceModel, SpanModel
 from opik.message_processing.processors import message_processors_chain
 
+from .. import testlib
 from ..testlib import assert_equal, ANY_BUT_NONE
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _local_recording_default_project():
+    """Override the e2e default-project env patch for this module.
+
+    `record_traces_locally()` captures traces in-process and tests assert
+    against the SDK's hardcoded "Default Project" fallback. The autouse
+    `configure_e2e_tests_env` fixture in conftest.py would otherwise set
+    OPIK_PROJECT_NAME to the per-module backend project."""
+    with testlib.patch_environ({}, remove_keys=["OPIK_PROJECT_NAME"]):
+        yield
 
 
 @opik.track

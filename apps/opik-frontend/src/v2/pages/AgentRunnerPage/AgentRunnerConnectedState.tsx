@@ -34,6 +34,7 @@ type AgentRunnerConnectedStateProps = {
   ) => void;
   isRunning: boolean;
   resetKey: number;
+  onValidityChange?: (hasAllRequired: boolean) => void;
 };
 
 const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
@@ -42,6 +43,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
   onRun,
   isRunning,
   resetKey,
+  onValidityChange,
 }) => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -199,6 +201,7 @@ const AgentRunnerConnectedState: React.FC<AgentRunnerConnectedStateProps> = ({
               fields={inputFields}
               onSubmit={handleRun}
               isRunning={isRunning}
+              onValidityChange={onValidityChange}
             />
           ) : (
             <AgentRunnerLoading runnerId={runner.id} />

@@ -415,16 +415,91 @@ class TracesResourceTest {
         }
 
         @Test
-        @DisplayName("Add trace comment returns 403 when COMMENT_WRITE permission is denied")
+        @DisplayName("Add trace comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
         void addTraceCommentReturnsForbiddenWhenPermissionDenied() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = "test-workspace-" + UUID.randomUUID();
 
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
-                    WorkspaceUserPermission.COMMENT_WRITE.getValue());
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
 
             try (var response = traceResourceClient.callAddTraceComment(
                     UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update trace comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void updateTraceCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callUpdateTraceComment(
+                    UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete trace comments returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void deleteTraceCommentsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callDeleteTraceComments(
+                    new BatchDelete(Set.of(UUID.randomUUID())), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Add thread comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void addThreadCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callAddThreadComment(
+                    UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Update thread comment returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void updateThreadCommentReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callUpdateThreadComment(
+                    UUID.randomUUID(), factory.manufacturePojo(Comment.class), apiKey, workspaceName)) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
+            }
+        }
+
+        @Test
+        @DisplayName("Delete thread comments returns 403 when TRACE_SPAN_THREAD_ANNOTATE permission is denied")
+        void deleteThreadCommentsReturnsForbiddenWhenPermissionDenied() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = "test-workspace-" + UUID.randomUUID();
+
+            AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
+                    WorkspaceUserPermission.TRACE_SPAN_THREAD_ANNOTATE.getValue());
+
+            try (var response = traceResourceClient.callDeleteThreadComments(
+                    new BatchDelete(Set.of(UUID.randomUUID())), apiKey, workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
@@ -2879,6 +2954,64 @@ class TracesResourceTest {
                         break;
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when batch contains a trace with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
+        void batch__whenTraceHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+                TransactionTemplateAsync templateAsync) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(API_KEY, workspaceName, workspaceId);
+
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(16);
+
+            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+
+            var traceWithNullLastUpdatedAt = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .endTime(null)
+                    .duration(null)
+                    .lastUpdatedAt(null)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            var traceWithEndTime = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            var traces = List.of(traceWithNullLastUpdatedAt, traceWithEndTime);
+
+            traceResourceClient.batchCreateTraces(traces, API_KEY, workspaceName);
+
+            for (var trace : traces) {
+                Trace retrieved = traceResourceClient.getById(trace.id(), workspaceName, API_KEY);
+                assertThat(retrieved).as("trace %s should be persisted", trace.id()).isNotNull();
+                assertThat(retrieved.id()).isEqualTo(trace.id());
+            }
+
+            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
+
+            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
+                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
+                            + "into system.errors. Production sees ~30k of these per hour from this code path.")
+                    .isZero();
+        }
+
+        private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
+            return templateAsync.nonTransaction(connection -> {
+                var statement = connection.createStatement(
+                        "SELECT value FROM system.errors WHERE code = :code");
+                statement.bind("code", errorCode);
+                return Mono.from(statement.execute())
+                        .flatMap(result -> Mono.from(result.map((row, meta) -> {
+                            Long value = row.get("value", Long.class);
+                            return value != null ? value : 0L;
+                        })))
+                        .defaultIfEmpty(0L);
+            }).block();
         }
     }
 

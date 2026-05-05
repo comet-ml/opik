@@ -67,7 +67,7 @@ jobs:
           pip list
 
       - name: Running SDK Unit Tests
-        run: python -m pytest --cov=src/opik -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
+        run: python -m pytest -vv tests/unit/ --junitxml=${{ github.workspace }}/test_results.xml
 
       - name: Publish Test Report
         uses: EnricoMi/publish-unit-test-result-action/linux@v2

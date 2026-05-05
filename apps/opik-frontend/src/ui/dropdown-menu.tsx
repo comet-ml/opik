@@ -1,10 +1,64 @@
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { cva, type VariantProps } from "class-variance-authority";
 import { Check, ChevronRight, Circle } from "lucide-react";
 
 import { Checkbox } from "@/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { usePortalContainer } from "@/lib/portal-container";
+
+const dropdownMenuItemVariants = cva(
+  "comet-body-s relative flex cursor-pointer select-none items-center outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[selected]:bg-primary-100 data-[disabled]:text-muted-gray data-[selected]:text-primary data-[selected]:focus:bg-secondary data-[selected]:focus:text-primary",
+  {
+    variants: {
+      variant: {
+        default: "focus:bg-primary-foreground focus:text-foreground",
+        destructive:
+          "text-destructive focus:bg-destructive/10 focus:text-destructive",
+      },
+      size: {
+        default: "rounded-sm px-4 py-2",
+        sm: "h-8 rounded-md px-3",
+      },
+    },
+    defaultVariants: { variant: "default", size: "default" },
+  },
+);
+
+type DropdownMenuItemVariants = VariantProps<typeof dropdownMenuItemVariants>;
+
+const dropdownMenuLabelVariants = cva("comet-body-s-accented", {
+  variants: {
+    size: {
+      default: "min-h-10 px-4 py-2.5",
+      sm: "flex h-8 items-center px-3",
+    },
+  },
+  defaultVariants: { size: "default" },
+});
+
+type DropdownMenuLabelVariants = VariantProps<typeof dropdownMenuLabelVariants>;
+
+const dropdownMenuSubTriggerVariants = cva(
+  "flex cursor-default select-none items-center outline-none focus:bg-primary-foreground data-[state=open]:bg-primary-foreground",
+  {
+    variants: {
+      variant: {
+        default: "text-sm",
+        menu: "comet-body-s-accented text-foreground [&>svg]:size-3.5 [&>svg]:text-light-slate",
+      },
+      size: {
+        default: "rounded-sm px-4 py-2",
+        sm: "h-8 rounded-md px-3",
+      },
+    },
+    defaultVariants: { variant: "default", size: "default" },
+  },
+);
+
+type DropdownMenuSubTriggerVariants = VariantProps<
+  typeof dropdownMenuSubTriggerVariants
+>;
 
 const DropdownMenu = DropdownMenuPrimitive.Root;
 
@@ -29,14 +83,15 @@ const DropdownMenuRadioGroup = DropdownMenuPrimitive.RadioGroup;
 
 const DropdownMenuSubTrigger = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & {
-    inset?: boolean;
-  }
->(({ className, inset, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> &
+    DropdownMenuSubTriggerVariants & {
+      inset?: boolean;
+    }
+>(({ className, inset, variant, size, children, ...props }, ref) => (
   <DropdownMenuPrimitive.SubTrigger
     ref={ref}
     className={cn(
-      "flex cursor-default select-none items-center rounded-sm px-4 py-2 text-sm outline-none focus:bg-primary-foreground data-[state=open]:bg-primary-foreground",
+      dropdownMenuSubTriggerVariants({ variant, size }),
       inset && "pl-8",
       className,
     )}
@@ -93,18 +148,17 @@ DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean;
-    variant?: "default" | "destructive";
-  }
->(({ className, inset, variant = "default", ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> &
+    DropdownMenuItemVariants & {
+      inset?: boolean;
+      selected?: boolean;
+    }
+>(({ className, inset, variant, size, selected, ...props }, ref) => (
   <DropdownMenuPrimitive.Item
     ref={ref}
+    data-selected={selected ? "" : undefined}
     className={cn(
-      "comet-body-s relative flex cursor-pointer select-none items-center rounded-sm px-4 py-2 outline-none transition-colors data-[disabled]:pointer-events-none data-[disabled]:bg-muted-disabled data-[disabled]:text-muted-gray",
-      variant === "destructive"
-        ? "text-destructive focus:bg-destructive/10 focus:text-destructive"
-        : "focus:bg-primary-foreground focus:text-foreground",
+      dropdownMenuItemVariants({ variant, size }),
       inset && "pl-8",
       className,
     )}
@@ -183,14 +237,15 @@ DropdownMenuRadioItem.displayName = DropdownMenuPrimitive.RadioItem.displayName;
 
 const DropdownMenuLabel = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Label>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & {
-    inset?: boolean;
-  }
->(({ className, inset, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> &
+    DropdownMenuLabelVariants & {
+      inset?: boolean;
+    }
+>(({ className, inset, size, ...props }, ref) => (
   <DropdownMenuPrimitive.Label
     ref={ref}
     className={cn(
-      "comet-body-s-accented min-h-10 px-4 py-2.5",
+      dropdownMenuLabelVariants({ size }),
       inset && "pl-8",
       className,
     )}

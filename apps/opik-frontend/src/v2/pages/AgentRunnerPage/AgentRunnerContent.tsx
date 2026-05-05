@@ -20,6 +20,7 @@ import useTraceById from "@/api/traces/useTraceById";
 import usePairingState from "@/hooks/usePairingState";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
+import useNavigationBlocker from "@/hooks/useNavigationBlocker";
 import AgentRunnerEmptyState from "./AgentRunnerEmptyState";
 import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
@@ -35,6 +36,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
 }) => {
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
+  const [hasAllRequiredParams, setHasAllRequiredParams] = useState(false);
   const [tracePanelSpanId, setTracePanelSpanId] = useState<
     string | null | undefined
   >("");
@@ -67,6 +69,15 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
   const isJobRunning =
     jobData?.status === SandboxJobStatus.RUNNING ||
     jobData?.status === SandboxJobStatus.PENDING;
+
+  const { DialogComponent: navigationBlockerDialog } = useNavigationBlocker({
+    condition: isJobRunning || createJobMutation.isPending,
+    title: "Agent execution in progress",
+    description:
+      "Your agent is currently running. Leaving now will interrupt the execution and may result in an incomplete trace. Are you sure you want to leave?",
+    confirmText: "Leave anyway",
+    cancelText: "Stay and wait",
+  });
 
   const { data: traceData } = useTraceById(
     { traceId, stripAttachments: true },
@@ -170,16 +181,30 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
                   Stop run
                 </Button>
               ) : (
-                <Button
-                  size="2xs"
-                  onClick={handleSubmitForm}
-                  disabled={createJobMutation.isPending || !isReady}
+                <TooltipWrapper
+                  content={
+                    !hasAllRequiredParams
+                      ? "Some required parameters are missing"
+                      : undefined
+                  }
                 >
-                  <Play className="mr-1 size-3.5" />
-                  Run
-                  <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
-                  <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
-                </Button>
+                  <span>
+                    <Button
+                      size="2xs"
+                      onClick={handleSubmitForm}
+                      disabled={
+                        createJobMutation.isPending ||
+                        !isReady ||
+                        !hasAllRequiredParams
+                      }
+                    >
+                      <Play className="mr-1 size-3.5" />
+                      Run
+                      <HotkeyDisplay hotkey="⇧" size="2xs" className="ml-1.5" />
+                      <HotkeyDisplay hotkey="⏎" size="2xs" className="ml-1" />
+                    </Button>
+                  </span>
+                </TooltipWrapper>
               )}
               <Button variant="ghost" size="2xs" onClick={handleReset}>
                 <RotateCcw className="mr-1 size-3.5" />
@@ -225,6 +250,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
               onRun={handleRun}
               isRunning={createJobMutation.isPending}
               resetKey={resetKey}
+              onValidityChange={setHasAllRequiredParams}
             />
           </ResizablePanel>
 
@@ -261,6 +287,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
           refetchInterval={TRACE_POLL_INTERVAL}
         />
       )}
+      {navigationBlockerDialog}
     </div>
   );
 };

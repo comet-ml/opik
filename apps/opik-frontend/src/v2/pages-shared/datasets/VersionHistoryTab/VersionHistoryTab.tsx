@@ -10,7 +10,6 @@ import TimeCell from "@/shared/DataTableCells/TimeCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
 import { DatasetVersion } from "@/types/datasets";
 import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
-import Loader from "@/shared/Loader/Loader";
 import { convertColumnDataToColumn } from "@/lib/table";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import { usePermissions } from "@/contexts/PermissionsContext";
@@ -118,13 +117,7 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
   const data = versionsData?.content || [];
   const total = versionsData?.total ?? 0;
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center pt-12">
-        <Loader />
-      </div>
-    );
-  }
+  const isTableLoading = isLoading || (isPlaceholderData && data.length === 0);
 
   return (
     <div className="flex flex-col gap-4 pt-4">
@@ -140,7 +133,8 @@ const VersionHistoryTab: React.FC<VersionHistoryTabProps> = ({ datasetId }) => {
             </div>
           </DataTableNoData>
         }
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <DataTablePagination
         page={page}

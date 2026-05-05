@@ -116,6 +116,31 @@ class BatchFeedbackScoreDict(TypedDict):
     """An optional explanation or justification for the given score."""
 
 
+class BatchAssertionResultDict(TypedDict):
+    """
+    A TypedDict representing an assertion result for batch operations.
+    """
+
+    id: Required[str]
+    """The trace id this assertion is attached to."""
+
+    name: Required[str]
+    """The assertion text."""
+
+    status: Required[Literal["passed", "failed"]]
+    """Whether the assertion passed or failed."""
+
+    project_name: NotRequired[Optional[StrictStr]]
+    """
+    The name of the project for this specific assertion.
+    If not provided, falls back to the project_name parameter in the method call,
+    or the default project name configured in the Opik instance.
+    """
+
+    reason: NotRequired[Optional[str]]
+    """An optional explanation produced by the evaluator."""
+
+
 class ErrorInfoDict(TypedDict):
     """
     A TypedDict representing the information about the error occurred.

@@ -13,6 +13,7 @@ const TabsListVariants = cva(
       variant: {
         default: "gap-2 rounded-lg bg-muted p-1",
         underline: "gap-8 border-b px-1",
+        segmented: "gap-1 rounded-md border border-border p-1",
       },
     },
     defaultVariants: {
@@ -30,6 +31,8 @@ const TabsTriggerVariants = cva(
           "comet-body-s-accented justify-center rounded-md bg-transparent p-2 ring-offset-background hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:hover:bg-primary-hover data-[state=active]:hover:text-primary-foreground data-[state=active]:dark:text-primary-active",
         underline:
           "comet-body-s-accented border-b-2 border-transparent py-2 hover:text-foreground disabled:opacity-50 data-[state=active]:border-primary data-[state=active]:text-primary hover:data-[state=active]:text-primary-hover data-[state=active]:dark:border-primary-active data-[state=active]:dark:text-primary-active",
+        segmented:
+          "comet-body-s justify-center gap-2 rounded px-2 py-1 text-foreground hover:text-foreground disabled:opacity-50 data-[state=active]:bg-slate-300/40 data-[state=active]:text-foreground",
       },
       size: {
         default: "",

@@ -711,6 +711,7 @@ SUPPORTED_MESSAGE_TYPES = {
     messages.CreateTraceBatchMessage.message_type: messages.CreateTraceBatchMessage,
     messages.GuardrailBatchMessage.message_type: messages.GuardrailBatchMessage,
     messages.CreateExperimentItemsBatchMessage.message_type: messages.CreateExperimentItemsBatchMessage,
+    messages.AddAssertionResultsBatchMessage.message_type: messages.AddAssertionResultsBatchMessage,
     messages.CreateAttachmentMessage.message_type: messages.CreateAttachmentMessage,
 }
 

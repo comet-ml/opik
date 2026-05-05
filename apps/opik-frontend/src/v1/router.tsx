@@ -14,6 +14,7 @@ import DatasetsPageGuard from "@/v1/layout/DatasetsPageGuard";
 import DashboardsPageGuard from "@/v1/layout/DashboardsPageGuard";
 import PlaygroundPageGuard from "@/v1/layout/PlaygroundPageGuard";
 import OptimizationStudioPageGuard from "@/v1/layout/OptimizationStudioPageGuard";
+import OptimizationsPageGuard from "@/v1/layout/OptimizationsPageGuard";
 import SMEPageLayout from "@/v1/layout/SMEPageLayout/SMEPageLayout";
 import ExperimentsPage from "@/v1/pages/ExperimentsPage/ExperimentsPage";
 const CompareExperimentsPage = lazy(
@@ -273,6 +274,7 @@ const compareExperimentsRoute = createRoute({
 const optimizationsRoute = createRoute({
   path: "/optimizations",
   getParentRoute: () => workspaceRoute,
+  component: OptimizationsPageGuard,
   staticData: {
     title: "Optimization studio",
   },

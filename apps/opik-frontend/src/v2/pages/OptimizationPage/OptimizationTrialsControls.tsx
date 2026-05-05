@@ -1,14 +1,13 @@
 import React from "react";
-import { RotateCw } from "lucide-react";
-import { Button } from "@/ui/button";
 import { ColumnData, ROW_HEIGHT } from "@/types/shared";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import { AggregatedCandidate } from "@/types/optimizations";
 
 interface OptimizationTrialsControlsProps {
   onRefresh: () => void;
+  isFetching?: boolean;
   rowHeight: ROW_HEIGHT;
   onRowHeightChange: (height: ROW_HEIGHT) => void;
   columnsDef: ColumnData<AggregatedCandidate>[];
@@ -20,6 +19,7 @@ interface OptimizationTrialsControlsProps {
 
 const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
   onRefresh,
+  isFetching,
   rowHeight,
   onRowHeightChange,
   columnsDef,
@@ -30,16 +30,11 @@ const OptimizationTrialsControls: React.FC<OptimizationTrialsControlsProps> = ({
 }) => {
   return (
     <div className="flex items-center gap-2">
-      <TooltipWrapper content="Refresh trials list">
-        <Button
-          variant="outline"
-          size="icon-sm"
-          className="shrink-0"
-          onClick={onRefresh}
-        >
-          <RotateCw />
-        </Button>
-      </TooltipWrapper>
+      <RefreshButton
+        tooltip="Refresh trials list"
+        isFetching={isFetching}
+        onRefresh={onRefresh}
+      />
       <DataTableRowHeightSelector
         type={rowHeight}
         setType={onRowHeightChange}
