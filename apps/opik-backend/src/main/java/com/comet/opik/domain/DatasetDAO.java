@@ -209,13 +209,14 @@ public interface DatasetDAO {
     /**
      * When {@code projectId} is null the lookup is workspace-wide and may now match multiple rows
      * (one v1 + one v2 per project) since the relaxed unique constraint. ORDER BY + LIMIT 1
-     * collapses to a single deterministic result, preferring the v1 (workspace-level) row.
+     * collapses to a single deterministic result, preferring the v1 (workspace-level) row;
+     * {@code id ASC} is a tie-breaker for rows that share a microsecond timestamp.
      */
     @SqlQuery("""
             SELECT * FROM datasets
             WHERE workspace_id = :workspace_id AND name = :name
             <if(project_id)> AND project_id = :project_id <endif>
-            ORDER BY (project_id IS NOT NULL) ASC, created_at ASC
+            ORDER BY (project_id IS NOT NULL) ASC, created_at ASC, id ASC
             LIMIT 1
             """)
     @UseStringTemplateEngine
