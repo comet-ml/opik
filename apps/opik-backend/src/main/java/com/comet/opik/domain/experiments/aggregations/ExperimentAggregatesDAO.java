@@ -665,23 +665,35 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     /**
      * Get experiment items with cursor pagination
      */
+    // OPIK-6177: resolve experiment_items.dataset_item_id to the stable dataset_item_id at
+    // aggregation time so experiment_item_aggregates carries the stable id directly. For legacy
+    // pre-OPIK-4518 writes ei.dataset_item_id is a per-version DIV row id; for modern writes
+    // it is already the stable id. The LEFT JOIN finds the DIV row (when ei.dataset_item_id
+    // happens to be a DIV row id) and projects its dataset_item_id; if the join misses, fall
+    // back to ei.dataset_item_id (already-stable modern writes, or orphaned legacy rows).
+    // This lets the compare query reference eia.dataset_item_id directly, restoring skip-index
+    // pushdown that the read-time lookup_div approach broke (~11x regression measured by
+    // thiagohora; see PR #6507).
     private static final String GET_EXPERIMENT_ITEMS = """
             SELECT
-                id,
-                experiment_id,
-                trace_id,
-                dataset_item_id,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                execution_policy
-            FROM experiment_items
-            WHERE workspace_id = :workspace_id
-            AND experiment_id = :experiment_id
-            <if(cursor)>AND id > :cursor<endif>
-            ORDER BY (workspace_id, experiment_id, id) ASC, last_updated_at DESC
-            LIMIT 1 BY id
+                ei.id AS id,
+                ei.experiment_id AS experiment_id,
+                ei.trace_id AS trace_id,
+                if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS dataset_item_id,
+                ei.created_at AS created_at,
+                ei.last_updated_at AS last_updated_at,
+                ei.created_by AS created_by,
+                ei.last_updated_by AS last_updated_by,
+                ei.execution_policy AS execution_policy
+            FROM experiment_items AS ei
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = ei.workspace_id
+                AND lookup_div.id = ei.dataset_item_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id = :experiment_id
+            <if(cursor)>AND ei.id > :cursor<endif>
+            ORDER BY (ei.workspace_id, ei.experiment_id, ei.id) ASC, ei.last_updated_at DESC
+            LIMIT 1 BY ei.id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1129,11 +1141,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     LIMIT 1 BY div.id
                 ) AS div_dedup
             )
+            -- OPIK-6177: post-migration eia.dataset_item_id IS the stable id; references it
+            -- directly (no lookup_div LEFT JOIN, no if(notEmpty(...)) wrap), keeping skip
+            -- indexes applicable.
             SELECT COUNT(DISTINCT eia.dataset_item_id) as count
             FROM experiment_item_aggregates eia FINAL
-            INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
-            LEFT JOIN dataset_item_versions_resolved AS di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                AND di.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+            LEFT JOIN dataset_item_versions_resolved AS di
+                ON di.id = eia.dataset_item_id
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
@@ -1235,9 +1249,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            eia.execution_policy
                 )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
-            INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
-            LEFT JOIN dataset_item_versions_resolved AS di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                AND di.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+            -- OPIK-6177: post-migration eia.dataset_item_id IS the stable id; references it
+            -- directly (no lookup_div LEFT JOIN, no if(notEmpty(...)) wrap), keeping skip
+            -- indexes applicable.
+            LEFT JOIN dataset_item_versions_resolved AS di
+                ON di.id = eia.dataset_item_id
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
