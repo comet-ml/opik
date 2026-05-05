@@ -20,8 +20,8 @@ const BlueprintDiffDialog: React.FC<BlueprintDiffDialogProps> = ({
 }) => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-lg sm:max-w-[1200px]">
-        <DialogHeader>
+      <DialogContent className="max-w-lg p-5 sm:max-w-[1200px] [&>button]:right-5 [&>button]:top-5">
+        <DialogHeader className="pb-0">
           <DialogTitle>
             Comparing {base.label} to {diff.label}
           </DialogTitle>

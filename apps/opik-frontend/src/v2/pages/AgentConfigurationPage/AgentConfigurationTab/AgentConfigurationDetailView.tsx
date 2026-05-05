@@ -16,7 +16,7 @@ import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
-import DiffVersionPopover from "./DiffVersionPopover";
+import DiffVersionMenu from "./DiffVersionMenu";
 import AgentConfigTagList from "./AgentConfigTagList";
 import SingleLineExpandableText from "@/shared/SingleLineExpandableText/SingleLineExpandableText";
 import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
@@ -66,12 +66,14 @@ const AgentConfigurationDetailView: React.FC<
   const [comparedVersion, setComparedVersion] = useState<{
     label: string;
     blueprintId: string;
+    createdAt: string;
   } | null>(null);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setComparedVersion({
       label: versionItem.name,
       blueprintId: versionItem.id,
+      createdAt: versionItem.created_at,
     });
     setDiffOpen(true);
   };
@@ -98,7 +100,7 @@ const AgentConfigurationDetailView: React.FC<
             <h2 className="comet-title-m">{item.name}</h2>
             <AgentConfigTagList tags={item.tags} maxWidth={200} />
             {versions.length > 1 && (
-              <DiffVersionPopover
+              <DiffVersionMenu
                 currentItemId={item.id}
                 versions={versions}
                 onSelectVersion={handleSelectDiffVersion}
@@ -196,20 +198,27 @@ const AgentConfigurationDetailView: React.FC<
         )}
       </Card>
 
-      {comparedVersion && (
-        <BlueprintDiffDialog
-          open={diffOpen}
-          setOpen={setDiffOpen}
-          base={{
+      {comparedVersion &&
+        (() => {
+          const currentVersion = {
             label: item.name,
             blueprintId: item.id,
-          }}
-          diff={{
+          };
+          const selectedVersion = {
             label: comparedVersion.label,
             blueprintId: comparedVersion.blueprintId,
-          }}
-        />
-      )}
+          };
+          const isSelectedOlder =
+            new Date(comparedVersion.createdAt) < new Date(item.created_at);
+          return (
+            <BlueprintDiffDialog
+              open={diffOpen}
+              setOpen={setDiffOpen}
+              base={isSelectedOlder ? selectedVersion : currentVersion}
+              diff={isSelectedOlder ? currentVersion : selectedVersion}
+            />
+          );
+        })()}
     </>
   );
 };
