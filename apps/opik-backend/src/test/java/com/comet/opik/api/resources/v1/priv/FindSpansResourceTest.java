@@ -3933,7 +3933,14 @@ class FindSpansResourceTest {
                     Arguments.of(errorInfoComparator,
                             SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
                     Arguments.of(errorInfoComparator.reversed(),
-                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment)
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment).reversed()
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @Test

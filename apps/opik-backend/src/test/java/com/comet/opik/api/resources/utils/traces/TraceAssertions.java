@@ -102,6 +102,7 @@ public class TraceAssertions {
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.EXPERIMENT, it -> it.toBuilder().experiment(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.TTFT, it -> it.toBuilder().ttft(null).build());
         EXCLUDE_FUNCTIONS.put(Trace.TraceField.SOURCE, it -> it.toBuilder().source(null).build());
+        EXCLUDE_FUNCTIONS.put(Trace.TraceField.ENVIRONMENT, it -> it.toBuilder().environment(null).build());
     }
 
     public static void assertErrorResponse(Response actualResponse, String message, int expectedStatus) {

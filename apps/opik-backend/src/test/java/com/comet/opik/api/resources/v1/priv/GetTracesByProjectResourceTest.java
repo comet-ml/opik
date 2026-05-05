@@ -4608,7 +4608,12 @@ class GetTracesByProjectResourceTest {
                     Arguments.of(usageComparator,
                             SortingField.builder().field("usage.completion_tokens").direction(Direction.ASC).build()),
                     Arguments.of(usageComparator.reversed(),
-                            SortingField.builder().field("usage.completion_tokens").direction(Direction.DESC).build()));
+                            SortingField.builder().field("usage.completion_tokens").direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Trace::environment),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Trace::environment).reversed(),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @Test

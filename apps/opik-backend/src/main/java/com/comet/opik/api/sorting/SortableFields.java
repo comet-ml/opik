@@ -58,4 +58,5 @@ public class SortableFields {
     public static final String COMMIT = "commit";
     public static final String TEMPLATE = "template";
     public static final String CHANGE_DESCRIPTION = "change_description";
+    public static final String ENVIRONMENT = "environment";
 }

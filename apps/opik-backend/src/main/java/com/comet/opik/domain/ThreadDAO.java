@@ -170,7 +170,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -350,6 +351,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 tt.tags as tags,
+                tt.environment as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -489,7 +491,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -748,7 +751,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -893,6 +897,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 tt.tags as tags,
+                tt.environment as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -1054,7 +1059,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_by,
                         last_updated_by,
                         created_at,
-                        last_updated_at
+                        last_updated_at,
+                        environment
                     FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -1494,6 +1500,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
+                .environment(row.get("environment", String.class))
                 .build());
     }
 }

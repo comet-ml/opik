@@ -37,5 +37,6 @@ public record TraceUpdate(
         ErrorInfo errorInfo,
         String threadId,
         @PositiveOrZero Double ttft,
-        Source source) implements TagUpdatable {
+        Source source,
+        @Size(max = 150, message = "cannot exceed 150 characters") String environment) implements TagUpdatable {
 }

@@ -442,6 +442,7 @@ class FindTraceThreadsResourceTest {
                     .createdAt(trace.createdAt())
                     .lastUpdatedAt(trace.lastUpdatedAt())
                     .status(TraceThreadStatus.ACTIVE)
+                    .environment(traces.getFirst().environment())
                     .build());
 
             Map<String, String> queryParams = Map.of("page", "1", "size", "5", "truncate", String.valueOf(truncate));
@@ -1255,6 +1256,8 @@ class FindTraceThreadsResourceTest {
                         .lastUpdatedAt(
                                 expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
                                         .lastUpdatedAt())
+                        .environment(expectedTraces.stream().min(Comparator.comparing(Trace::id)).orElseThrow()
+                                .environment())
                         .build());
     }
 

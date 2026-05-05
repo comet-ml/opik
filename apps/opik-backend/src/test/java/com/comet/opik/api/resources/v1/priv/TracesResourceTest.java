@@ -1383,6 +1383,8 @@ class TracesResourceTest {
                         .lastUpdatedAt(
                                 expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
                                         .lastUpdatedAt())
+                        .environment(expectedTraces.stream().min(Comparator.comparing(Trace::id)).orElseThrow()
+                                .environment())
                         .build());
     }
 
@@ -3476,6 +3478,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
@@ -3502,9 +3505,12 @@ class TracesResourceTest {
                     .build();
             traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
 
-            // The update arrives first and sets source; when the create arrives, the existing non-unknown
-            // source is preserved (INSERT SQL: if old.source != 'unknown', keep old.source)
+            // The update arrives first and sets source/environment; when the create arrives, the existing
+            // non-default values are preserved (INSERT SQL: keep old values when present)
             var effectiveSource = traceUpdate.source() != null ? traceUpdate.source() : newTrace.source();
+            var effectiveEnvironment = traceUpdate.environment() != null
+                    ? traceUpdate.environment()
+                    : newTrace.environment();
             var expectedTrace = newTrace.toBuilder()
                     .name(traceUpdate.name())
                     .endTime(traceUpdate.endTime())
@@ -3518,6 +3524,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(effectiveSource)
+                    .environment(effectiveEnvironment)
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3591,6 +3598,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3795,6 +3803,7 @@ class TracesResourceTest {
                             traceUpdate.endTime()))
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
@@ -3934,6 +3943,30 @@ class TracesResourceTest {
             Trace finalTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
             assertThat(finalTrace).isNotNull();
             assertThat(finalTrace.id()).isEqualTo(traceId);
+        }
+
+        @Test
+        @DisplayName("when patch omits environment, then existing environment is preserved")
+        void update__whenPatchOmitsEnvironment__thenExistingEnvironmentPreserved() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .environment("production")
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
+
+            // Patch with name only — no environment — should preserve "production"
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(projectName)
+                    .name("updated-name")
+                    .build();
+            traceResourceClient.updateTrace(newTrace.id(), traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actual = traceResourceClient.getById(newTrace.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actual.environment()).isEqualTo("production");
+            assertThat(actual.name()).isEqualTo("updated-name");
         }
     }
 
@@ -5629,7 +5662,16 @@ class TracesResourceTest {
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
                     Arguments.of(
                             tagsComparator.reversed(),
-                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::environment)
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::environment).reversed()
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @ParameterizedTest
@@ -5763,7 +5805,8 @@ class TracesResourceTest {
                     SortableFields.CREATED_BY,
                     SortableFields.CREATED_AT,
                     SortableFields.TOTAL_ESTIMATED_COST,
-                    SortableFields.USAGE);
+                    SortableFields.USAGE,
+                    SortableFields.ENVIRONMENT);
         }
 
         @Test

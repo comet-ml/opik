@@ -115,7 +115,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -147,7 +148,8 @@ public class SpanDAO {
                         :input_slim<item.index>,
                         :output_slim<item.index>,
                         :ttft<item.index>,
-                        :source<item.index>
+                        :source<item.index>,
+                        :environment<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -187,7 +189,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 new_span.id as id,
@@ -288,7 +291,11 @@ public class SpanDAO {
                 multiIf(
                     notEquals(old_span.source, 'unknown'), old_span.source,
                     new_span.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(old_span.environment), old_span.environment,
+                    new_span.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -317,7 +324,8 @@ public class SpanDAO {
                     :input_slim as input_slim,
                     :output_slim as output_slim,
                     :ttft as ttft,
-                    :source as source
+                    :source as source,
+                    :environment as environment
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -365,7 +373,8 @@ public class SpanDAO {
             	input_slim,
             	output_slim,
             	ttft,
-            	source
+            	source,
+            	environment
             )
             SELECT
             	id,
@@ -394,7 +403,8 @@ public class SpanDAO {
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source
+                <if(source)> :source <else> source <endif> as source,
+                <if(environment)> :environment <else> environment <endif> as environment
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -418,7 +428,7 @@ public class SpanDAO {
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
-                created_by, last_updated_by, truncation_threshold, input_slim, output_slim, ttft, source
+                created_by, last_updated_by, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
                 new_span.id as id,
@@ -535,7 +545,12 @@ public class SpanDAO {
                 multiIf(
                     notEquals(old_span.source, 'unknown'), old_span.source,
                     new_span.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(new_span.environment), new_span.environment,
+                    notEmpty(old_span.environment), old_span.environment,
+                    new_span.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -564,7 +579,8 @@ public class SpanDAO {
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
                     <if(ttft)> :ttft <else> null <endif> as ttft,
-                    :source as source
+                    :source as source,
+                    <if(environment)> :environment <else> '' <endif> as environment
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -1431,7 +1447,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 s.id,
@@ -1463,7 +1480,8 @@ public class SpanDAO {
                         <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
                         <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
                         <if(ttft)> :ttft <else> s.ttft <endif> as ttft,
-                        s.source
+                        s.source,
+                        <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
                     ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
@@ -1581,6 +1599,8 @@ public class SpanDAO {
                     statement.bindNull("source" + i, String.class);
                 }
 
+                statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
+
                 i++;
             }
 
@@ -1667,6 +1687,8 @@ public class SpanDAO {
                 statement.bindNull("source", String.class);
             }
 
+            statement.bind("environment", StringUtils.defaultString(span.environment()));
+
             bindUserNameAndWorkspace(statement, userName, workspaceId);
 
             Segment segment = startSegment("spans", "Clickhouse", "insert");
@@ -1720,6 +1742,8 @@ public class SpanDAO {
                     } else {
                         statement.bindNull("source", String.class);
                     }
+
+                    statement.bind("environment", StringUtils.defaultString(spanUpdate.environment()));
 
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -1824,6 +1848,9 @@ public class SpanDAO {
 
         Optional.ofNullable(spanUpdate.source())
                 .ifPresent(source -> statement.bind("source", source.getValue()));
+
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
@@ -1865,6 +1892,8 @@ public class SpanDAO {
                 .ifPresent(ttft -> template.add("ttft", ttft));
         Optional.ofNullable(spanUpdate.source())
                 .ifPresent(source -> template.add("source", source.getValue()));
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
         return template;
     }
 
@@ -2128,6 +2157,7 @@ public class SpanDAO {
                         getValue(exclude, SpanField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
                         .orElse(null))
+                .environment(getValue(exclude, SpanField.ENVIRONMENT, row, "environment", String.class))
                 .build();
     }
 
@@ -2653,6 +2683,8 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
         return template;
     }
 
@@ -2707,6 +2739,9 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
+
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {

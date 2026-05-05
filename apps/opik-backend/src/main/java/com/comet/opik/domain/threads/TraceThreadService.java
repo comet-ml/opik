@@ -118,7 +118,8 @@ class TraceThreadServiceImpl implements TraceThreadService {
                             .getOrCreateTraceThreadId(workspaceId, projectId, threadId, earliestTraceTimestamp)
                             .map(traceThreadId -> TraceThreadMapper.INSTANCE.mapFromThreadIdModel(
                                     traceThreadId, userName, TraceThreadStatus.ACTIVE,
-                                    timestamps.maxLastUpdatedAt(), timestamps.firstTraceSource()));
+                                    timestamps.maxLastUpdatedAt(), timestamps.firstTraceSource(),
+                                    timestamps.firstTraceEnvironment()));
                 }));
     }
 
@@ -480,6 +481,7 @@ class TraceThreadServiceImpl implements TraceThreadService {
                 .lastUpdatedBy(userName)
                 .createdAt(traceThread.createdAt())
                 .lastUpdatedAt(Instant.now())
+                .environment(traceThread.environment())
                 .build());
 
         return traceThreadDAO
