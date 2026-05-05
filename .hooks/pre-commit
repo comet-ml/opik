@@ -77,3 +77,19 @@ fi
 run_precommit_scope "Python SDK" '^sdks/python/' 'sdks/python/.pre-commit-config.yaml'
 run_precommit_scope "Optimizer SDK" '^sdks/opik_optimizer/' 'sdks/opik_optimizer/.pre-commit-config.yaml'
 run_precommit_scope "Guardrails backend" '^apps/opik-guardrails-backend/' 'apps/opik-guardrails-backend/.pre-commit-config.yaml'
+
+# Workflow files: validate staged ones with actionlint when available
+workflow_files=$(staged_files | grep -E '^\.github/workflows/.+\.(yml|yaml)$' || true)
+if [ -z "$workflow_files" ]; then
+  echo "No workflow files changed. Skipping actionlint."
+elif ! command -v actionlint >/dev/null 2>&1; then
+  echo "Workflow files changed but actionlint is not installed. Skipping local validation."
+  echo "Install: brew install actionlint  (or see https://github.com/rhysd/actionlint#installation)"
+else
+  echo "Workflow files have been changed. Running actionlint..."
+  # Match CI: suppress info-level shellcheck noise (SC2086 backlog tracked in OPIK-6323).
+  if ! printf '%s\n' "$workflow_files" | SHELLCHECK_OPTS="--severity=warning" xargs actionlint --; then
+    echo "actionlint found issues. Please fix them before committing."
+    exit 1
+  fi
+fi

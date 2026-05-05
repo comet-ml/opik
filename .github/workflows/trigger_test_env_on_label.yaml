@@ -61,19 +61,24 @@ jobs:
 
       - name: Comment on PR - Deployment Started
         uses: actions/github-script@v7
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          BASE_VERSION: ${{ steps.get-tag.outputs.version }}
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const headRef = process.env.HEAD_REF;
+            const baseVersion = process.env.BASE_VERSION;
             await github.rest.issues.createComment({
               issue_number: Number('${{ github.event.number }}'),
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: `🔄 **Test environment deployment process has started**
-              
-              **Phase 1**: Deploying base version \`${{ steps.get-tag.outputs.version }}\` (from main branch) if environment doesn't exist
-              **Phase 2**: Building new images from PR branch \`${{ github.event.pull_request.head.ref }}\`
+
+              **Phase 1**: Deploying base version \`${baseVersion}\` (from main branch) if environment doesn't exist
+              **Phase 2**: Building new images from PR branch \`${headRef}\`
               **Phase 3**: Will deploy newly built version after build completes
-              
+
               You can monitor the progress [here](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).`
             });
 

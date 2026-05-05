@@ -1,0 +1,40 @@
+name: ':octocat: Lint Workflows'
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install actionlint
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          sudo mv actionlint /usr/local/bin/
+          actionlint --version
+
+      - name: Run actionlint on changed workflow files
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          # Suppress info-level shellcheck noise (SC2086 backlog tracked in OPIK-6323).
+          # Real issues at warning+ severity still gate.
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          mapfile -t CHANGED < <(git diff --name-only --diff-filter=d "origin/${BASE_REF}...HEAD" -- '.github/workflows/*.yml' '.github/workflows/*.yaml')
+          if [ ${#CHANGED[@]} -eq 0 ]; then
+            echo "No workflow files changed."
+            exit 0
+          fi
+          printf 'Changed workflow files:\n'
+          printf '  %s\n' "${CHANGED[@]}"
+          echo
+          actionlint -- "${CHANGED[@]}"
