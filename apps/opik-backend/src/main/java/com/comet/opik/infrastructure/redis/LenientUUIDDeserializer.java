@@ -43,11 +43,17 @@ public class LenientUUIDDeserializer extends UUIDDeserializer {
         if (p.currentToken() == JsonToken.START_ARRAY) {
             // Wrapper-array form produced when Jackson default-typing wraps the value as
             // ["java.util.UUID", "<uuid>"]. Skip the type-id token, parse the value, then
-            // advance past the closing END_ARRAY so the parent reader stays positioned.
+            // require the closing END_ARRAY so a malformed shape like
+            // ["...", "<uuid>", "extra"] is rejected instead of leaving the parser
+            // misaligned for the next field.
             p.nextToken();
             p.nextToken();
             UUID result = super.deserialize(p, ctxt);
-            p.nextToken();
+            JsonToken next = p.nextToken();
+            if (next != JsonToken.END_ARRAY) {
+                throw ctxt.wrongTokenException(p, UUID.class, JsonToken.END_ARRAY,
+                        "Expected end of UUID wrapper array, found " + next);
+            }
             return result;
         }
         return super.deserialize(p, ctxt);

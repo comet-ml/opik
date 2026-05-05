@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure.redis;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.exc.MismatchedInputException;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -12,6 +13,7 @@ import org.junit.jupiter.api.Test;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @DisplayName("LenientUUIDDeserializer accepts both plain-string and WRAPPER_ARRAY forms")
 class LenientUUIDDeserializerTest {
@@ -47,6 +49,15 @@ class LenientUUIDDeserializerTest {
         var json = mapper.writeValueAsString(original);
         var roundTrip = mapper.readValue(json, Holder.class);
         assertThat(roundTrip.experimentId).isEqualTo(original.experimentId);
+    }
+
+    @Test
+    @DisplayName("wrapper array with extra trailing elements is rejected, not silently accepted")
+    void wrapperArrayWithExtraElementsIsRejected() {
+        var json = "{\"experimentId\":[\"java.util.UUID\",\"6caf374f-6568-4c6f-aad0-257e0c7296a4\",\"extra\"]}";
+        assertThatThrownBy(() -> mapper.readValue(json, Holder.class))
+                .isInstanceOf(MismatchedInputException.class)
+                .hasMessageContaining("Expected end of UUID wrapper array");
     }
 
     @Data
