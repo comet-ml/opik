@@ -42,18 +42,13 @@ setup(
         "httpx",  # some older version of openai/litellm are broken with httpx>=0.28.0
         "rapidfuzz>=3.0.0,<4.0.0",
         # LiteLLM dependency comments:
-        # - Exclude litellm 1.75.0-1.75.5 (broken callbacks system)
-        # - Exclude versions 1.77.2-1.77.4: introduce C++ compiler dependency (madoka), fixed in 1.77.5
-        #   See: https://github.com/BerriAI/litellm/issues/14762
-        # - Exclude versions 1.77.5-1.79.1: remove trace_id/parent_span_id passthrough, fixed in 1.79.2+
-        #   See: https://github.com/BerriAI/litellm/pull/15529
         # Please keep this list in sync with the one in sdks/opik_optimizer/pyproject.toml
         # - Exclude 1.82.7, 1.82.8: compromised in supply chain attack (TeamPCP)
         #   See: https://docs.litellm.ai/blog/security-update-march-2026
         # - Exclude 1.81.*, 1.82.*, 1.83.0-1.83.6: CVE-2026-42208 (SQL injection in proxy auth path,
         #   affects 1.81.16-1.83.6, fixed in 1.83.7).
         #   See: https://docs.litellm.ai/blog/cve-2026-42208-litellm-proxy-sql-injection
-        "litellm>=1.79.2,!=1.75.0,!=1.75.1,!=1.75.2,!=1.75.3,!=1.75.4,!=1.75.5,!=1.77.3,!=1.77.4,!=1.77.5,!=1.77.7,!=1.78.0,!=1.78.2,!=1.78.3,!=1.78.4,!=1.78.5,!=1.78.6,!=1.78.7,!=1.79.0,!=1.79.1,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6",
+        "litellm>=1.79.2,!=1.81.*,!=1.82.*,!=1.83.0,!=1.83.1,!=1.83.2,!=1.83.3,!=1.83.4,!=1.83.5,!=1.83.6",
         "openai",
         "pydantic-settings>=2.0.0,<3.0.0,!=2.9.0",
         "pydantic>=2.0.0,<3.0.0",
