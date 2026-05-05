@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Clock, FilePen, Pencil, User } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
@@ -16,7 +16,7 @@ import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
-import DiffVersionPopover from "./DiffVersionPopover";
+import DiffVersionMenu from "./DiffVersionMenu";
 import AgentConfigTagList from "./AgentConfigTagList";
 import SingleLineExpandableText from "@/shared/SingleLineExpandableText/SingleLineExpandableText";
 import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
@@ -31,6 +31,43 @@ type AgentConfigurationDetailViewProps = {
   projectId: string;
   versions: ConfigHistoryItem[];
   onEdit: () => void;
+};
+
+type DiffVersionInfo = {
+  label: string;
+  blueprintId: string;
+};
+
+type ComparedVersionState = DiffVersionInfo & {
+  createdAt: string;
+};
+
+const parseTimestamp = (value: string | undefined | null): number | null => {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const getDiffDialogProps = (
+  current: ConfigHistoryItem,
+  selected: ComparedVersionState,
+): { base: DiffVersionInfo; diff: DiffVersionInfo } => {
+  const currentVersion: DiffVersionInfo = {
+    label: current.name,
+    blueprintId: current.id,
+  };
+  const selectedVersion: DiffVersionInfo = {
+    label: selected.label,
+    blueprintId: selected.blueprintId,
+  };
+  const currentMs = parseTimestamp(current.created_at);
+  const selectedMs = parseTimestamp(selected.createdAt);
+  if (currentMs === null || selectedMs === null) {
+    return { base: currentVersion, diff: selectedVersion };
+  }
+  return selectedMs < currentMs
+    ? { base: selectedVersion, diff: currentVersion }
+    : { base: currentVersion, diff: selectedVersion };
 };
 
 const AgentConfigurationDetailView: React.FC<
@@ -63,15 +100,19 @@ const AgentConfigurationDetailView: React.FC<
   const hasTraces = (tracesData?.total ?? 0) > 0;
 
   const [diffOpen, setDiffOpen] = useState(false);
-  const [comparedVersion, setComparedVersion] = useState<{
-    label: string;
-    blueprintId: string;
-  } | null>(null);
+  const [comparedVersion, setComparedVersion] =
+    useState<ComparedVersionState | null>(null);
+
+  useEffect(() => {
+    setComparedVersion(null);
+    setDiffOpen(false);
+  }, [item.id]);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setComparedVersion({
       label: versionItem.name,
       blueprintId: versionItem.id,
+      createdAt: versionItem.created_at,
     });
     setDiffOpen(true);
   };
@@ -98,7 +139,7 @@ const AgentConfigurationDetailView: React.FC<
             <h2 className="comet-title-m">{item.name}</h2>
             <AgentConfigTagList tags={item.tags} maxWidth={200} />
             {versions.length > 1 && (
-              <DiffVersionPopover
+              <DiffVersionMenu
                 currentItemId={item.id}
                 versions={versions}
                 onSelectVersion={handleSelectDiffVersion}
@@ -200,14 +241,7 @@ const AgentConfigurationDetailView: React.FC<
         <BlueprintDiffDialog
           open={diffOpen}
           setOpen={setDiffOpen}
-          base={{
-            label: item.name,
-            blueprintId: item.id,
-          }}
-          diff={{
-            label: comparedVersion.label,
-            blueprintId: comparedVersion.blueprintId,
-          }}
+          {...getDiffDialogProps(item, comparedVersion)}
         />
       )}
     </>
