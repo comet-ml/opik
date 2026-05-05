@@ -199,7 +199,13 @@ public class SearchTool implements ToolExecutor {
             JsonNode value = match.path("value");
             body.append(path).append(": ").append(renderValue(value));
         }
-        return StringTruncator.truncate(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT, "\n");
+        boolean truncated = body.length() > OUTPUT_CAP_CHARS;
+        String response = StringTruncator.truncate(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT, "\n");
+        log.debug(
+                "search summary: type={}, id={}, pattern='{}', path='{}', totalMatches={}, returned={}, outputBytes={}, truncated={}",
+                args.type.name().toLowerCase(), args.id, args.pattern, args.path,
+                total, shown, response.length(), truncated);
+        return response;
     }
 
     private static String renderValue(JsonNode value) {

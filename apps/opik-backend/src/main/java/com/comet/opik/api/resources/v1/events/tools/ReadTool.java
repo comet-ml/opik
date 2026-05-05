@@ -419,6 +419,11 @@ public class ReadTool implements ToolExecutor {
         if (cacheWarning != null) {
             envelope.put("cache_warning", cacheWarning);
         }
+        if (log.isDebugEnabled()) {
+            log.debug("read summary: type={}, id={}, requestedTier={}, chosenTier={}, renderedBytes={}, cacheWarning={}",
+                    args.type.name().toLowerCase(), args.id, args.tier,
+                    envelope.get("tier").asText(), envelope.toString().length(), cacheWarning != null);
+        }
         return envelope;
     }
 

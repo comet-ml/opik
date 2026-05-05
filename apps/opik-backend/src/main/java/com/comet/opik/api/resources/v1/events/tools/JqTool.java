@@ -177,8 +177,13 @@ public class JqTool implements ToolExecutor {
                 break;
             }
         }
+        boolean truncated = body.length() > OUTPUT_CAP_CHARS;
         String capped = StringTruncator.truncate(body.toString(), OUTPUT_CAP_CHARS, OUTPUT_TRUNCATION_HINT, "\n");
-        return successHeader(args) + "\n" + capped;
+        String response = successHeader(args) + "\n" + capped;
+        log.debug("jq summary: type={}, id={}, expression='{}', resultCount={}, outputBytes={}, truncated={}",
+                args.type.name().toLowerCase(), args.id, args.expression,
+                results.size(), response.length(), truncated);
+        return response;
     }
 
     private static String errorResponse(ParsedArgs args, Throwable t) {
