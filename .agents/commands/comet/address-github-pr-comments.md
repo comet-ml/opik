@@ -196,7 +196,8 @@ When the user opts to fix an item, **defer the reply** until the fix is pushed t
 1. Track items that need deferred replies. For inline: comment ID + description. For PR-level: reviewer login + review id + raw review body (the quote is regenerated at post time via `normalize(body)` from the "Quote-body normalization" rule above) + description of fix.
 2. After all fixes are applied, prompt the user to commit and push
 3. Once `git push` completes, capture the commit SHA from the push output
-4. Post deferred replies referencing the commit:
+4. **Sync PR description**: invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) with `branch = git rev-parse --abbrev-ref HEAD` and `pr_number = {pr_number}` from Step 2. This is the highest-drift moment in the PR lifecycle: review feedback often reshapes the API, method names, or events after the description was first written. The sub-skill is a no-op when the description is already in sync or when the user has opted out of refreshes for this repo.
+5. Post deferred replies referencing the commit:
 
    For inline (threaded):
    ```
