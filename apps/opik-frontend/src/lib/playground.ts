@@ -14,6 +14,7 @@ import {
   supportsGeminiThinkingLevel,
   supportsVertexAIThinkingLevel,
   supportsAnthropicThinkingEffort,
+  supportsSamplingParams,
 } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
@@ -61,15 +62,17 @@ export const getDefaultConfigByProvider = (
   }
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
+    const acceptsSamplingParams = supportsSamplingParams(model);
     const config: LLMAnthropicConfigsType = {
-      temperature: DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE,
+      temperature: acceptsSamplingParams
+        ? DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE
+        : undefined,
       maxCompletionTokens: DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS,
       topP: undefined,
       throttling: DEFAULT_ANTHROPIC_CONFIGS.THROTTLING,
       maxConcurrentRequests: DEFAULT_ANTHROPIC_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add thinkingEffort default for Anthropic thinking models (Opus 4.6)
     if (supportsAnthropicThinkingEffort(model)) {
       config.thinkingEffort = "high";
     }
