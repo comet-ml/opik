@@ -1086,6 +1086,7 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
 def main():
     parser = argparse.ArgumentParser(description="Sync LLM provider model definitions")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
+    parser.add_argument("--force-regen", action="store_true", help="Regenerate and write files even when no new models were found")
     args = parser.parse_args()
 
     print("## Provider Model Sync\n")
@@ -1261,12 +1262,15 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0:
+    if total_added == 0 and not args.force_regen:
         if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")
         sys.exit(1)
+
+    if total_added == 0 and args.force_regen:
+        print("No new models found, but --force-regen set: regenerating files anyway.")
 
     if args.dry_run:
         print(f"\n**Dry run**: {total_added} added. No files written.")
