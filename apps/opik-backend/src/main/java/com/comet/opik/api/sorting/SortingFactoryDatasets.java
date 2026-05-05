@@ -41,7 +41,7 @@ public class SortingFactoryDatasets extends SortingFactory {
     private static final Set<String> PUSH_TOP_SUPPORTED = Set.of(
             ID, DESCRIPTION, TAGS, CREATED_AT, LAST_UPDATED_AT, CREATED_BY, LAST_UPDATED_BY,
             DURATION, FEEDBACK_SCORES, DATA, OUTPUT_WILDCARD, INPUT_WILDCARD, METADATA_WILDCARD,
-            TOTAL_ESTIMATED_COST, USAGE);
+            TOTAL_ESTIMATED_COST, USAGE, COMMENTS);
 
     // Fields that require JOIN with dataset_items_aggr_resolved in the CTE
     private static final Set<String> PUSH_TOP_NEEDS_DIV_JOIN = Set.of(

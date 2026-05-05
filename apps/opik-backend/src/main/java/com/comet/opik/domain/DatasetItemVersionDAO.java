@@ -3909,6 +3909,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         if ("total_estimated_cost".equals(field)) {
             return "avg(eia_t.total_estimated_cost)";
         }
+        if ("comments".equals(field)) {
+            // comments_array_agg is a String holding toJSONString(groupUniqArray(Tuple(...))).
+            // Project the array of comment texts and sort lexicographically as Array(String);
+            // ClickHouse compares element-wise. Picked from the highest-id experiment item
+            // in the group to match the outer projection (argMax(ei.comments_array_agg, ei.id)).
+            return "arrayMap(elem -> JSONExtractString(elem, 'text'), JSONExtractArrayRaw(argMax(eia_t.comments_array_agg, eia_t.id)))";
+        }
         if (field.startsWith("data.")) {
             return "any(di_t.data)[:%s]".formatted(sf.bindKey());
         }

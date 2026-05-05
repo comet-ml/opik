@@ -1204,6 +1204,12 @@ public class FilterQueryBuilder {
                 String key = fieldName.substring(METADATA_FIELD_PREFIX.length());
                 fieldMapping.put(fieldName,
                         JSON_EXTRACT_RAW_TEMPLATE.formatted("metadata", key));
+            } else if ("comments".equals(fieldName)) {
+                // The outer projection exposes `comments` as a JSON-string alias. Map it to the
+                // array of comment texts so ClickHouse can ORDER BY element-wise — matching the
+                // push-top-limit CTE expression in DatasetItemVersionDAO#getTopSortExpression.
+                fieldMapping.put(fieldName,
+                        "arrayMap(elem -> JSONExtractString(elem, 'text'), JSONExtractArrayRaw(comments))");
             }
             // For other fields (including feedback_scores, data, etc.), use default dbField()
         }

@@ -8608,7 +8608,13 @@ class DatasetsResourceTest {
                     Arguments
                             .of(SortingField.builder().field("metadata.task_type").direction(Direction.DESC).build()),
                     Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.ASC).build()),
-                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.DESC).build()));
+                    Arguments.of(SortingField.builder().field("metadata.model").direction(Direction.DESC).build()),
+
+                    // Comments field sorting (sorts by first comment's text)
+                    Arguments
+                            .of(SortingField.builder().field(SortableFields.COMMENTS).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            SortingField.builder().field(SortableFields.COMMENTS).direction(Direction.DESC).build()));
         }
 
         @Test
