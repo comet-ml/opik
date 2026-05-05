@@ -16,59 +16,23 @@ import java.util.Optional;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 
-/**
- * Persistence service for the {@code workspaces} state-DB table.
- *
- * <p>The table is intentionally generic; this service only exposes the operations
- * required by the three current consumers (workspace version tracking, first-trace
- * analytics dedup, and the experiment project migration job). All mutations are
- * idempotent so concurrent writers across replicas are safe.</p>
- */
 @ImplementedBy(WorkspacesServiceImpl.class)
 public interface WorkspacesService {
 
-    /**
-     * Upserts the last known Opik version for a workspace, overwriting any prior value.
-     * Intended to be invoked only after a real determination — never for allowlist
-     * or feature-flag overrides.
-     */
+    /** Must only be called after a real determination — not on allowlist / forced-version overrides. */
     void upsertVersion(String workspaceId, OpikVersion version, Instant determinedAt);
 
-    /**
-     * Returns the previously-recorded version for the workspace, if any.
-     * Used to compute {@code version_changed} on the analytics event.
-     *
-     * <p>An unrecognised stored value (e.g. a future Opik version not present in the
-     * current {@link OpikVersion} enum) is silently treated as "no previous version".
-     * This is intentional — failing closed here would break the analytics emission
-     * flow, which must remain non-blocking.
-     */
+    /** Stored values not matching the current {@link OpikVersion} enum are treated as empty. */
     Optional<OpikVersion> findLastKnownVersion(String workspaceId);
 
-    /**
-     * Records the first-trace timestamp for a workspace using first-writer-wins semantics.
-     * Returns {@code true} if this caller was the first to set the timestamp (the row
-     * was created or {@code first_trace_reported_at} transitioned from NULL); {@code false}
-     * if the timestamp was already set.
-     */
+    /** Returns {@code true} only for the writer that transitioned {@code first_trace_reported_at} from NULL. */
     boolean markFirstTraceReported(String workspaceId, Instant reportedAt);
 
-    /**
-     * Marks a workspace as skipped by the experiment project migration job. Idempotent —
-     * subsequent calls do not overwrite the original timestamp/reason.
-     */
+    /** Idempotent: subsequent calls do not overwrite the original timestamp/reason. */
     void markMigrationSkipped(String workspaceId, Instant skippedAt, String reason);
 
-    /**
-     * Returns workspace IDs currently skipped by the experiment project migration job.
-     * Used to assemble the per-cycle exclusion set.
-     */
     List<String> findMigrationSkippedWorkspaceIds();
 
-    /**
-     * Counts workspaces currently skipped by the experiment project migration job.
-     * Backs the {@code cycleTrappedWorkspaces} OpenTelemetry gauge.
-     */
     long countMigrationSkipped();
 }
 
@@ -96,24 +60,8 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     /**
-     * Single-statement upsert with COALESCE + same-transaction read-back-equality.
-     * The upsert serialises concurrent writers via the InnoDB row X lock that the
-     * INSERT/ON-DUPLICATE-KEY-UPDATE acquires on the PK, so only one writer's value
-     * survives in the row; the read-back tells us whether that value matches what
-     * we wrote.
-     *
-     * <p><b>Trade-off:</b> two callers whose {@link Instant#now()} truncated to
-     * microseconds collide will both observe their own value in the row and both
-     * return {@code true}. The probability is roughly {@code N²/(2·1e6)} per
-     * concurrent burst of size {@code N} on a single workspace; acceptable for the
-     * best-effort analytics-dedup use case. The alternative patterns considered
-     * (two-step INSERT-then-UPDATE, three-step SELECT FOR UPDATE) deadlock in
-     * practice under contention because of InnoDB lock-upgrade semantics on
-     * shared INSERT-IGNORE locks.
-     *
-     * <p>Microsecond truncation is required because the column is {@code TIMESTAMP(6)}
-     * and MySQL truncates nanoseconds on store, so the read-back equality must be
-     * performed at the persisted precision.
+     * Microsecond truncation is required: the column is {@code TIMESTAMP(6)}, so the
+     * read-back equality must be performed at the persisted precision.
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull Instant reportedAt) {

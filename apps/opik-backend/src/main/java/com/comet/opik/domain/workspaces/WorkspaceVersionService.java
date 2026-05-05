@@ -166,18 +166,9 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     }
 
     /**
-     * Records the determined version into the {@code workspaces} table and emits a
-     * {@code workspace_version_determined} analytics event. Truly fire-and-forget: the
-     * blocking work is dispatched via {@link Schedulers#boundedElastic()} so the user's
-     * response never waits on the DB write or the analytics call, and any exception is
-     * caught and logged inside the scheduled runnable so nothing propagates.
-     *
-     * <p>Skipped on allowlist/forced-version overrides because those bypass
-     * {@link #computeVersion} entirely; skipped on fallback paths because callers route
-     * around this method via {@code onErrorResume}. The auth one-way V2 gate inside
-     * {@link #computeVersion} <i>does</i> reach this method, so {@code last_known_version}
-     * for those workspaces reflects the auth-state, not an entity-scan result — that is
-     * intentional, since the auth gate is the authoritative source for those workspaces.
+     * Fire-and-forget persistence + analytics emission. Reaches this method on the auth
+     * one-way V2 gate too, so {@code last_known_version} for those workspaces reflects
+     * the auth-state, not an entity-scan result.
      */
     private void persistAndEmit(String workspaceId, WorkspaceVersion response) {
         Schedulers.boundedElastic().schedule(() -> {
