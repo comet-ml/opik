@@ -14,7 +14,7 @@ const getRecentActivity = async (
   { projectId, size = 10 }: UseRecentActivityParams,
 ) => {
   const { data } = await api.get<RecentActivityResponse>(
-    `${PROJECTS_REST_ENDPOINT}${projectId}/recent-activity`,
+    `${PROJECTS_REST_ENDPOINT}${projectId}/activities`,
     {
       signal,
       params: { size },

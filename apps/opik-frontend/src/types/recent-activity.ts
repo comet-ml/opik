@@ -13,8 +13,13 @@ export interface RecentActivityItem {
   name: string;
   created_at: string;
   resource_id?: string;
+  created_by?: string;
 }
 
 export interface RecentActivityResponse {
-  items: RecentActivityItem[];
+  page: number;
+  size: number;
+  total: number;
+  project_id: string;
+  content: RecentActivityItem[];
 }

@@ -119,7 +119,7 @@ export default function RecentActivitySection() {
 
   const { data, isPending } = useRecentActivity({ projectId });
 
-  const items = data?.items ?? [];
+  const items = data?.content ?? [];
 
   return (
     <section>

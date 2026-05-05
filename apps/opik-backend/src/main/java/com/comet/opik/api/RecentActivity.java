@@ -1,6 +1,8 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
@@ -11,24 +13,39 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
-@JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record RecentActivity(List<RecentActivityItem> items) {
+public class RecentActivity {
 
-    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record RecentActivityItem(
-            ActivityType type,
-            UUID id,
-            String name,
-            Instant createdAt,
-            UUID resourceId) {
-
-        public RecentActivityItem(ActivityType type, UUID id, String name, Instant createdAt) {
-            this(type, id, name, createdAt, null);
+    public static class View {
+        public static class Public {
         }
     }
 
     @Builder(toBuilder = true)
-    public record RecentDatasetVersion(UUID datasetId, String datasetName, String datasetType, Instant createdAt) {
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RecentActivityPage(
+            @JsonView(View.Public.class) int page,
+            @JsonView(View.Public.class) int size,
+            @JsonView(View.Public.class) long total,
+            @JsonView(View.Public.class) UUID projectId,
+            @JsonView(View.Public.class) List<RecentActivityItem> content) {
+    }
+
+    @Builder(toBuilder = true)
+    @JsonIgnoreProperties(ignoreUnknown = true)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RecentActivityItem(
+            @JsonView(View.Public.class) ActivityType type,
+            @JsonView(View.Public.class) UUID id,
+            @JsonView(View.Public.class) String name,
+            @JsonView(View.Public.class) Instant createdAt,
+            @JsonView(View.Public.class) UUID resourceId,
+            @JsonView(View.Public.class) String createdBy) {
+    }
+
+    @Builder(toBuilder = true)
+    public record RecentDatasetVersion(UUID datasetId, String datasetName, String datasetType, Instant createdAt,
+            String createdBy) {
     }
 
     @RequiredArgsConstructor

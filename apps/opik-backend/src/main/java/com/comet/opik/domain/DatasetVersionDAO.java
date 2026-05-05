@@ -448,21 +448,21 @@ public interface DatasetVersionDAO {
             @Bind("workspace_id") String workspaceId);
 
     @SqlQuery("""
-            SELECT dataset_id, dataset_name, dataset_type, created_at FROM (
-                SELECT id AS dataset_id, name AS dataset_name, type AS dataset_type, created_at
+            SELECT dataset_id, dataset_name, dataset_type, created_at, created_by FROM (
+                SELECT id AS dataset_id, name AS dataset_name, type AS dataset_type, created_at, created_by
                 FROM datasets
                 WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
-                    AND type = :dataset_type
+                    AND id >= :min_id
 
                 UNION ALL
 
-                SELECT d.id, d.name, d.type, dv.created_at
+                SELECT d.id, d.name, d.type, dv.created_at, dv.created_by
                 FROM dataset_versions dv
                 INNER JOIN datasets d ON dv.dataset_id = d.id AND dv.workspace_id = d.workspace_id
                 WHERE d.workspace_id = :workspace_id
                     AND d.project_id = :project_id
-                    AND d.type = :dataset_type
+                    AND dv.id >= :min_id
                     AND dv.created_at > d.created_at
                     AND dv.items_total > 0
             ) combined
@@ -473,7 +473,7 @@ public interface DatasetVersionDAO {
     List<RecentActivity.RecentDatasetVersion> findRecentActivityByProjectId(
             @Bind("workspace_id") String workspaceId,
             @Bind("project_id") UUID projectId,
-            @Bind("dataset_type") String datasetType,
+            @Bind("min_id") UUID minId,
             @Bind("limit") int limit);
 
     @SqlUpdate("DELETE FROM dataset_version_tags WHERE dataset_id IN (<dataset_ids>) AND workspace_id = :workspace_id")

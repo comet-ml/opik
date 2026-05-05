@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import reactor.core.publisher.Mono;
 import reactor.util.retry.Retry;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
@@ -70,7 +71,7 @@ public class WebhookHttpClient {
     }
 
     private Map<String, String> buildMdcMap(WebhookEvent<?> event, String workspaceId) {
-        var mdc = new java.util.HashMap<>(Map.of(
+        var mdc = new HashMap<>(Map.of(
                 UserLog.MARKER, UserLog.ALERT_EVENT.name(),
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
