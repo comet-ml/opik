@@ -6,7 +6,9 @@ import {
   UI_EVALUATORS_RULE_TYPE,
   EVALUATORS_RULE_TYPE,
 } from "@/types/automations";
-import { PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
+import { updateProviderConfig } from "@/lib/modelUtils";
+import { getProviderFromModel } from "@/lib/provider";
 import {
   LLM_JUDGE,
   LLM_MESSAGE_ROLE,
@@ -135,7 +137,7 @@ const LLMJudgeBaseSchema = z.object({
     })
     .min(1, { message: "Model is required" }),
   config: z.object({
-    temperature: z.number(),
+    temperature: z.number().optional(),
     seed: z
       .number()
       .int()
@@ -488,13 +490,25 @@ const convertProviderToLLMMessages = (
   }));
 
 export const convertLLMJudgeObjectToLLMJudgeData = (data: LLMJudgeObject) => {
+  const model = data.model?.name ?? "";
+  const rawConfig = {
+    temperature: data.model?.temperature,
+    seed: data.model?.seed ?? null,
+    custom_parameters: data.model?.custom_parameters ?? null,
+  };
+  // Normalize stale persisted configs (e.g. Opus 4.7 with `temperature: 0`
+  // saved before this PR) so an unedited submit doesn't 400 on Anthropic.
+  const config = model
+    ? updateProviderConfig(rawConfig, {
+        model: model as PROVIDER_MODEL_TYPE,
+        provider: getProviderFromModel(
+          model as PROVIDER_MODEL_TYPE,
+        ) as COMPOSED_PROVIDER_TYPE,
+      }) ?? rawConfig
+    : rawConfig;
   return {
-    model: data.model?.name ?? "",
-    config: {
-      temperature: data.model?.temperature ?? 0,
-      seed: data.model?.seed ?? null,
-      custom_parameters: data.model?.custom_parameters ?? null,
-    },
+    model,
+    config,
     template: LLM_JUDGE.custom,
     messages: convertProviderToLLMMessages(data.messages),
     variables: data.variables ?? {},
@@ -512,8 +526,11 @@ export const convertLLMJudgeDataToLLMJudgeObject = (
   const { temperature, seed, custom_parameters } = data.config;
   const model: LLMJudgeObject["model"] = {
     name: data.model as PROVIDER_MODEL_TYPE,
-    temperature,
   };
+
+  if (temperature != null) {
+    model.temperature = temperature;
+  }
 
   if (seed != null) {
     model.seed = seed;

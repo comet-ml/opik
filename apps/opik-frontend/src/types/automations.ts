@@ -24,7 +24,7 @@ export enum UI_EVALUATORS_RULE_TYPE {
 
 export interface LLMJudgeModel {
   name: PROVIDER_MODEL_TYPE;
-  temperature: number;
+  temperature?: number;
   seed?: number | null;
   custom_parameters?: Record<string, unknown> | null;
 }

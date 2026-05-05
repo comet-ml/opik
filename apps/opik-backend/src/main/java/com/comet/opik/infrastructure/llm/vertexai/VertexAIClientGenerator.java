@@ -132,9 +132,9 @@ public class VertexAIClientGenerator implements LlmProviderClientGenerator<ChatM
     public ChatModel generateChat(@NonNull LlmProviderClientApiConfig apiKey,
             @NonNull LlmAsJudgeModelParameters modelParameters) {
         var requestBuilder = ChatCompletionRequest.builder()
-                .model(modelParameters.name())
-                .temperature(modelParameters.temperature());
+                .model(modelParameters.name());
 
+        Optional.ofNullable(modelParameters.temperature()).ifPresent(requestBuilder::temperature);
         Optional.ofNullable(modelParameters.seed()).ifPresent(requestBuilder::seed);
 
         return newVertexAIClient(apiKey, requestBuilder.build());
