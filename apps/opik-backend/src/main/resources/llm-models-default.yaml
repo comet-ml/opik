@@ -724,6 +724,8 @@ openrouter:
     label: "mistralai/mistral-large-2512"
   - id: "mistralai/mistral-medium-3"
     label: "mistralai/mistral-medium-3"
+  - id: "mistralai/mistral-medium-3-5"
+    label: "mistralai/mistral-medium-3-5"
   - id: "mistralai/mistral-medium-3.1"
     label: "mistralai/mistral-medium-3.1"
   - id: "mistralai/mistral-nemo"

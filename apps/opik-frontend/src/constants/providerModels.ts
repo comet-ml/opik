@@ -999,6 +999,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "mistralai/mistral-medium-3",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_5,
+      label: "mistralai/mistral-medium-3-5",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MISTRALAI_MISTRAL_MEDIUM_3_1,
       label: "mistralai/mistral-medium-3.1",
     },

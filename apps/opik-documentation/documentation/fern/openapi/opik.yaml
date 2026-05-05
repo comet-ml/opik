@@ -9907,7 +9907,6 @@ components:
     LlmAsJudgeModelParameters:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10337,7 +10336,6 @@ components:
     LlmAsJudgeModelParameters_Write:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
@@ -10792,7 +10790,6 @@ components:
     LlmAsJudgeModelParameters_Public:
       required:
       - name
-      - temperature
       type: object
       properties:
         name:
