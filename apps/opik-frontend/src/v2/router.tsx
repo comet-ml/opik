@@ -62,6 +62,7 @@ import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage
 import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
 
 import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
+import OlliePage from "@/v2/pages/OlliePage/OlliePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
@@ -215,6 +216,13 @@ const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
   component: ProjectHomePage,
+});
+
+// ----------- ollie (project-scoped)
+const ollieRoute = createRoute({
+  path: "/ollie",
+  getParentRoute: () => projectScopedRoute,
+  component: OlliePage,
 });
 
 // ----------- logs (project-scoped)
@@ -606,6 +614,7 @@ const routeTree = rootRoute.addChildren([
         projectsListRoute,
         projectScopedRoute.addChildren([
           projectHomeRoute,
+          ollieRoute,
           logsRoute,
           projectDashboardsRoute.addChildren([projectDashboardsIndexRoute]),
           tracesRedirectRoute,
