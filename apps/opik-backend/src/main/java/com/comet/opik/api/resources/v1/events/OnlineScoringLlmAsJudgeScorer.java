@@ -20,6 +20,7 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -135,6 +136,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
             ChatRequest scoreRequest;
+            ChatRequest structuredRequest;
             try {
                 String modelName = message.llmAsJudgeCode().model().name();
                 if (shouldUseTools(message)) {
@@ -145,11 +147,21 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
                             message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
+                    // The post-tool-loop wrap-up must use the provider-native structured-output
+                    // strategy (e.g. response_format=json_schema on OpenAI). InstructionStrategy
+                    // is a soft prompt and Anthropic in particular often returns conversational
+                    // prose at the wrap-up turn ("Now let me check..."), which then fails JSON
+                    // parsing in toFeedbackScores and yields zero scores.
+                    structuredRequest = OnlineScoringEngine.prepareLlmRequest(
+                            message.llmAsJudgeCode(), trace,
+                            llmProviderFactory.getStructuredOutputStrategy(modelName),
+                            message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
                 } else {
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace,
                             llmProviderFactory.getStructuredOutputStrategy(modelName),
                             message.promptType());
+                    structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
@@ -157,7 +169,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 throw exception;
             }
 
-            ChatRequest structuredRequest = scoreRequest;
             if (shouldUseTools(message)) {
                 scoreRequest = addToolSpecs(scoreRequest);
             }
@@ -256,6 +267,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             chatResponse = aiProxyService.scoreTrace(
                     followUp, message.llmAsJudgeCode().model(), message.workspaceId());
         }
+
+        // Force closure of the tool-using phase. Without this, the model can return prose
+        // that continues the investigation ("Now let me check...") instead of the required
+        // JSON, even when the request carries no tool specs. Combined with the provider-native
+        // structured-output strategy on `structuredRequest`, this gives both a soft and a
+        // hard signal: "stop calling tools, emit only JSON now".
+        messages.add(UserMessage.from(
+                "You have completed your investigation using the available tools."
+                        + " Now respond with ONLY the JSON object specified in the original instructions."
+                        + " Do not call any more tools. Do not include any prose, commentary, or markdown"
+                        + " fences — emit only the raw JSON object."));
 
         var finalRequest = structuredRequest.toBuilder()
                 .messages(messages)
