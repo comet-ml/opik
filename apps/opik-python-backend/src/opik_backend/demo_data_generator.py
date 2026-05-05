@@ -109,6 +109,21 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
     make_http_request(base_url, request, workspace_name, comet_api_key)
 
 
+def create_default_environments(base_url, workspace_name, comet_api_key):
+    defaults = [
+        {"name": "development", "position": 0, "color": "#EF6868"},
+        {"name": "staging", "position": 1, "color": "#F4B400"},
+        {"name": "production", "position": 2, "color": "#19A979"},
+    ]
+    for payload in defaults:
+        request = {
+            "url": "/v1/private/environments",
+            "method": "POST",
+            "payload": payload,
+        }
+        make_http_request(base_url, request, workspace_name, comet_api_key)
+
+
 def create_project(base_url, workspace_name, comet_api_key, project_name):
     request = {
         "url": "/v1/private/projects",
@@ -939,6 +954,7 @@ def create_demo_data(base_url: str, workspace_name, comet_api_key):
         try:
             chatbot_seeded = create_demo_chatbot_project(context, base_url, workspace_name, comet_api_key)
             create_feedback_scores_definition(base_url, workspace_name, comet_api_key)
+            create_default_environments(base_url, workspace_name, comet_api_key)
             # Only run the test-suite seed when the chatbot project was freshly created.
             # If the chatbot flow short-circuited on 409 (project already exists), the
             # suite/prompt/blueprints/experiments were seeded on the prior run too —
