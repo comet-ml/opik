@@ -357,6 +357,8 @@ export * from "./LocalRunnerType.js";
 export * from "./LogItem.js";
 export * from "./LogItemLevel.js";
 export * from "./LogPage.js";
+export * from "./LogProb.js";
+export * from "./LogProbs.js";
 export * from "./ManualEvaluationRequest.js";
 export * from "./ManualEvaluationRequestEntityType.js";
 export * from "./ManualEvaluationResponse.js";
