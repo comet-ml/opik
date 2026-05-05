@@ -68,6 +68,9 @@ export const formatRelativeDateTime = (value: string): string => {
   if (!date.isValid()) return "";
 
   const now = dayjs();
+
+  if (date.isAfter(now)) return formatDate(value);
+
   const time = date.format("h:mm A");
 
   if (date.isSame(now, "day")) return `Today, ${time}`;
