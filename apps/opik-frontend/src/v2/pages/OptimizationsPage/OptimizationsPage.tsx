@@ -318,10 +318,10 @@ const OptimizationsPage: React.FunctionComponent = () => {
     isPending || (isPlaceholderData && optimizations.length === 0);
   const isEmpty = !isTableLoading && noData && optimizations.length === 0;
 
-  const handleClearFilters = () => {
+  const handleClearFilters = useCallback(() => {
     setSearch(undefined);
     setFilters([]);
-  };
+  }, [setSearch, setFilters]);
 
   return (
     <div className="flex min-h-full flex-col pt-4">
