@@ -5,6 +5,7 @@ import {
   ChartLine,
   Database,
   FlaskConical,
+  Home,
   LayoutDashboard,
   ListChecks,
   Rows3,
@@ -29,7 +30,7 @@ const getMenuItems = ({
   canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
-  showHome,
+  showOlliePage,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
@@ -37,7 +38,7 @@ const getMenuItems = ({
   canViewDashboards: boolean;
   canUsePlayground: boolean;
   canViewOptimizationRuns: boolean;
-  showHome: boolean;
+  showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -47,23 +48,31 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
-    ...(showHome
-      ? [
-          {
-            id: "opik_connect_group",
-            items: [
+    {
+      id: "home_group",
+      items: [
+        {
+          id: "home",
+          path: projectPath("/home"),
+          type: MENU_ITEM_TYPE.router as const,
+          icon: Home,
+          label: "Home",
+          disabled: !projectPrefix,
+        },
+        ...(showOlliePage
+          ? [
               {
-                id: "opik_connect",
-                path: projectPath("/home"),
+                id: "ollie",
+                path: projectPath("/ollie"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
-                label: "Opik Connect",
+                label: "Ollie",
                 disabled: !projectPrefix,
               },
-            ],
-          },
-        ]
-      : []),
+            ]
+          : []),
+      ],
+    },
     {
       id: "observability",
       label: "Observability",
