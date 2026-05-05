@@ -284,7 +284,9 @@ const PlaygroundHeader = ({
 
       const previousPlainId =
         parseDatasetVersionKey(datasetId)?.datasetId ?? datasetId;
-      const isDifferentDataset = previousPlainId !== params.datasetId;
+      const newPlainId =
+        parseDatasetVersionKey(params.datasetId)?.datasetId ?? params.datasetId;
+      const isDifferentDataset = previousPlainId !== newPlainId;
       onChangeDatasetId(datasetValue);
 
       setSelectedRuleIds(params.selectedRuleIds);

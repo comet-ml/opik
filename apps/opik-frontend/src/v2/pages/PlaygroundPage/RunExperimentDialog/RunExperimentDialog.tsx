@@ -93,7 +93,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
   const scoresByDatasetId = useScoresByDatasetId();
 
   const {
-    permissions: { canCreateProjects },
+    permissions: { canCreateDatasets, canUsePlayground },
   } = usePermissions();
 
   const [selectedType, setSelectedType] = useState<DATASET_TYPE>(
@@ -156,17 +156,53 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     setSelectedType(initialDatasetType ?? DATASET_TYPE.DATASET);
   }, [open, initialDatasetId, initialDatasetType, initialSelectedRuleIds]);
 
-  // Apply smart default + recents once datasets list is loaded
-  useEffect(() => {
-    if (!open || didApplyDefaults || initialDatasetType) return;
-    if (!datasetsData) return;
+  // Resolves the dataset id + scores for a segment, validated against the current list.
+  const resolveSlotForType = useCallback(
+    (type: DATASET_TYPE) => {
+      const list =
+        type === DATASET_TYPE.TEST_SUITE ? testSuitesOnly : datasetsOnly;
+      const recent = recentDatasetIdByType[type] ?? null;
+      const plainRecent = recent
+        ? parseDatasetVersionKey(recent)?.datasetId ?? recent
+        : null;
+      const datasetId =
+        plainRecent && list.some((d) => d.id === plainRecent) ? recent : null;
+      const plainResolved = datasetId
+        ? parseDatasetVersionKey(datasetId)?.datasetId ?? datasetId
+        : null;
+      const stored = plainResolved
+        ? scoresByDatasetId[plainResolved]
+        : undefined;
+      return { datasetId, scores: stored !== undefined ? stored : null };
+    },
+    [datasetsOnly, testSuitesOnly, recentDatasetIdByType, scoresByDatasetId],
+  );
 
+  // Writes the resolved slot only if the segment hasn't already been hydrated.
+  const hydrateSlot = useCallback(
+    (type: DATASET_TYPE) => {
+      const { datasetId, scores } = resolveSlotForType(type);
+      setDatasetIdByType((prev) =>
+        prev[type] !== undefined ? prev : { ...prev, [type]: datasetId },
+      );
+      setScoresByType((prev) =>
+        prev[type] !== undefined ? prev : { ...prev, [type]: scores },
+      );
+    },
+    [resolveSlotForType],
+  );
+
+  // One-shot init: apply smart default and hydrate its slot once datasets are loaded.
+  useEffect(() => {
+    if (!open || didApplyDefaults || initialDatasetType || !datasetsData)
+      return;
     const next = selectDefaultType({
       hasDatasets,
       hasTestSuites,
       currentDatasetType: null,
     });
     setSelectedType(next);
+    hydrateSlot(next);
     setDidApplyDefaults(true);
   }, [
     open,
@@ -175,31 +211,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     datasetsData,
     hasDatasets,
     hasTestSuites,
-  ]);
-
-  // When user switches type, hydrate dataset+scores from recents/per-dataset map
-  useEffect(() => {
-    if (!open || !datasetsData) return;
-    setDatasetIdByType((prev) => {
-      if (prev[selectedType] !== undefined) return prev;
-      const recent = recentDatasetIdByType[selectedType] ?? null;
-      const list =
-        selectedType === DATASET_TYPE.TEST_SUITE
-          ? testSuitesOnly
-          : datasetsOnly;
-      const plainRecent = recent
-        ? parseDatasetVersionKey(recent)?.datasetId ?? recent
-        : null;
-      const stillExists = plainRecent && list.some((d) => d.id === plainRecent);
-      return { ...prev, [selectedType]: stillExists ? recent : null };
-    });
-  }, [
-    open,
-    selectedType,
-    recentDatasetIdByType,
-    datasetsOnly,
-    testSuitesOnly,
-    datasetsData,
+    hydrateSlot,
   ]);
 
   const datasetId = datasetIdByType[selectedType] ?? null;
@@ -283,11 +295,18 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     [selectedType],
   );
 
-  const handleTypeChange = useCallback((value: string) => {
-    if (!value) return;
-    setSelectedType(value as DATASET_TYPE);
-    setExperimentPrefix("");
-  }, []);
+  const handleTypeChange = useCallback(
+    (value: string) => {
+      if (!value) return;
+      const next = value as DATASET_TYPE;
+      setSelectedType(next);
+      setExperimentPrefix("");
+      // Mark defaults applied so an in-flight smart-default effect won't override the user's manual toggle
+      setDidApplyDefaults(true);
+      hydrateSlot(next);
+    },
+    [hydrateSlot],
+  );
 
   const handleEmptyDatasetCreated = useCallback(
     (created: { id: string }) => {
@@ -390,7 +409,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
               <EmptyDatasetState
                 type={selectedType}
                 onCreated={handleEmptyDatasetCreated}
-                canCreate={!!activeProjectId || canCreateProjects}
+                canCreate={canCreateDatasets}
               />
             ) : (
               <>
@@ -416,7 +435,7 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
                       onCreateRuleClick={() => setIsRuleDialogOpen(true)}
                       workspaceName={workspaceName}
                       projectId={activeProjectId ?? undefined}
-                      canUsePlayground={!!activeProjectId || canCreateProjects}
+                      canUsePlayground={canUsePlayground}
                     />
                   </div>
                 )}
