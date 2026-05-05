@@ -231,6 +231,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     MISTRALAI_MISTRAL_LARGE_2411("mistralai/mistral-large-2411"),
     MISTRALAI_MISTRAL_LARGE_2512("mistralai/mistral-large-2512"),
     MISTRALAI_MISTRAL_MEDIUM_3("mistralai/mistral-medium-3"),
+    MISTRALAI_MISTRAL_MEDIUM_3_5("mistralai/mistral-medium-3-5"),
     MISTRALAI_MISTRAL_MEDIUM_3_1("mistralai/mistral-medium-3.1"),
     MISTRALAI_MISTRAL_NEMO("mistralai/mistral-nemo"),
     MISTRALAI_MISTRAL_NEMO_FREE("mistralai/mistral-nemo:free"),
