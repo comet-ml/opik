@@ -12,6 +12,7 @@ import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
 import org.apache.commons.lang3.StringUtils;
@@ -22,6 +23,8 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
@@ -104,19 +107,25 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected final ServiceTogglesConfig serviceTogglesConfig;
     protected final CacheManager cacheManager;
     protected final CacheConfiguration cacheConfiguration;
+    protected final WorkspacesService workspacesService;
+    protected final AnalyticsService analyticsService;
 
     protected AbstractWorkspaceVersionService(@NonNull TransactionTemplate transactionTemplate,
             @NonNull ExperimentDAO experimentDAO,
             @NonNull OptimizationDAO optimizationDAO,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             @NonNull CacheManager cacheManager,
-            @NonNull CacheConfiguration cacheConfiguration) {
+            @NonNull CacheConfiguration cacheConfiguration,
+            @NonNull WorkspacesService workspacesService,
+            @NonNull AnalyticsService analyticsService) {
         this.transactionTemplate = transactionTemplate;
         this.experimentDAO = experimentDAO;
         this.optimizationDAO = optimizationDAO;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.cacheManager = cacheManager;
         this.cacheConfiguration = cacheConfiguration;
+        this.workspacesService = workspacesService;
+        this.analyticsService = analyticsService;
     }
 
     @Override
@@ -139,10 +148,12 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                         return Mono.empty();
                     })
                     .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
+                            .flatMap(response -> persistAndEmit(workspaceId, response))
                             .flatMap(response -> cacheResult(workspaceId, response))
                             .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
         }
         return computeVersion(workspaceId, authSuggestedVersion)
+                .flatMap(response -> persistAndEmit(workspaceId, response))
                 .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
     }
 
@@ -152,6 +163,38 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
             Throwable throwable) {
         log.warn("Version 1 entity check failed, returning fallback, workspaceId '{}'", workspaceId, throwable);
         return Mono.just(buildResponse(getFallbackVersion(workspaceId, authSuggestedVersion)));
+    }
+
+    /**
+     * Records the determined version into the {@code workspaces} table and emits a
+     * {@code workspace_version_determined} analytics event. Fire-and-forget: errors
+     * are logged but never propagate, mirroring {@link #cacheResult}. Skipped on
+     * allowlist/forced-version overrides because those bypass {@link #computeVersion}
+     * entirely; skipped on fallback paths because callers route around this method
+     * via {@code onErrorResume}.
+     */
+    private Mono<WorkspaceVersion> persistAndEmit(String workspaceId, WorkspaceVersion response) {
+        return Mono.fromRunnable(() -> persistAndEmitBlocking(workspaceId, response))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(throwable -> {
+                    log.warn("Failed to persist workspace version determination, workspaceId '{}'",
+                            workspaceId, throwable);
+                    return Mono.empty();
+                })
+                .thenReturn(response);
+    }
+
+    private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response) {
+        var newVersion = response.opikVersion();
+        var previousVersion = workspacesService.findLastKnownVersion(workspaceId);
+        workspacesService.upsertVersion(workspaceId, newVersion, Instant.now());
+        var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
+        analyticsService.trackEvent("workspace_version_determined", Map.of(
+                "workspace_id", workspaceId,
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("none"),
+                "new_version", newVersion.getValue(),
+                "version_changed", String.valueOf(versionChanged),
+                "date", Instant.now().toString()));
     }
 
     private Mono<WorkspaceVersion> cacheResult(String workspaceId, WorkspaceVersion response) {
