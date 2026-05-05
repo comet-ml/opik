@@ -1,5 +1,5 @@
 aiohappyeyeballs==2.6.1
-aiohttp==3.13.5
+aiohttp==3.13.4
 aiosignal==1.4.0
 annotated-types==0.7.0
 anyio==4.13.0
@@ -25,13 +25,13 @@ Jinja2==3.1.6
 jiter==0.13.0
 jsonschema==4.23.0
 jsonschema-specifications==2025.9.1
-litellm==1.83.7
+litellm==1.83.14
 markdown-it-py==4.0.0
 MarkupSafe==3.0.3
 mdurl==0.1.2
 multidict==6.7.1
 mypy-boto3-bedrock-runtime==1.42.42
-openai==2.30.0
+openai==2.24.0
 opik==1.11.10
 packaging==26.0
 pluggy==1.6.0
@@ -41,7 +41,7 @@ pydantic-settings==2.13.1
 pydantic_core==2.41.5
 Pygments==2.20.0
 pytest==9.0.2
-python-dotenv==1.0.1
+python-dotenv==1.2.2
 PyYAML==6.0.3
 RapidFuzz==3.14.3
 referencing==0.37.0
