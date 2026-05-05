@@ -24,11 +24,13 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.PromptResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
@@ -47,9 +49,11 @@ import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
 import uk.co.jemos.podam.api.PodamFactory;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
@@ -146,6 +150,28 @@ class WorkspaceVersionResourceTest {
 
             // If workspace ID in allow list will return V2, otherwise forcing to return V1
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(expectedVersion);
+        }
+
+        @Test
+        void overridePaths__doNotPersistRowToWorkspacesTable(WorkspacesService workspacesService) {
+            // Both override paths (allowlist → V2, forceWorkspaceVersion → V1) must skip
+            // persistAndEmit so the workspaces table is not polluted with non-determined values.
+            var allowlistedId = ALLOWLISTED_WORKSPACE_ID_1;
+            var forcedId = UUID.randomUUID().toString();
+            var allowlistedName = mockWorkspace(wireMock, allowlistedId, null);
+            var forcedName = mockWorkspace(wireMock, forcedId, null);
+
+            workspaceClient.getWorkspaceVersion(API_KEY, allowlistedName);
+            workspaceClient.getWorkspaceVersion(API_KEY, forcedName);
+
+            // Background persist would surface within ~1s if it ran; assert it stays absent.
+            Awaitility.await()
+                    .pollDelay(1, TimeUnit.SECONDS)
+                    .atMost(3, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        assertThat(workspacesService.findLastKnownVersion(allowlistedId)).isEmpty();
+                        assertThat(workspacesService.findLastKnownVersion(forcedId)).isEmpty();
+                    });
         }
     }
 
@@ -494,6 +520,36 @@ class WorkspaceVersionResourceTest {
                     AlertResourceTest.generateAlert(podamFactory),
                     API_KEY, workspaceName, 201);
             assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
+        }
+
+        @Test
+        void versionDetermination__persistsDeterminedVersionToWorkspacesTable(WorkspacesService workspacesService) {
+            // A real (non-override) determination should land in the workspaces table.
+            // Persistence is fire-and-forget on bounded-elastic, so we await the row.
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = mockWorkspace(wireMock, workspaceId, null);
+
+            var determined = workspaceClient.getWorkspaceVersion(API_KEY, workspaceName);
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                    workspacesService.findLastKnownVersion(workspaceId)).contains(determined.opikVersion()));
+        }
+
+        @Test
+        void versionDetermination__updatesPersistedRowWhenVersionChanges(WorkspacesService workspacesService) {
+            // Pre-populate the workspaces row with VERSION_1; a subsequent fresh determination
+            // (no V1 entities seeded) should compute VERSION_2 and overwrite the persisted value.
+            // Implicitly verifies the analytics event would carry version_changed=true.
+            var workspaceId = UUID.randomUUID().toString();
+            var workspaceName = mockWorkspace(wireMock, workspaceId, null);
+            workspacesService.upsertVersion(workspaceId, OpikVersion.VERSION_1, Instant.now());
+            assertThat(workspacesService.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_1);
+
+            // Empty workspace → entity check returns VERSION_2.
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V2_WORKSPACE_VERSION);
+
+            Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> assertThat(
+                    workspacesService.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_2));
         }
     }
 
