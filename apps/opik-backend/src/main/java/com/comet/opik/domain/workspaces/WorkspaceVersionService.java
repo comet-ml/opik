@@ -148,12 +148,12 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                         return Mono.empty();
                     })
                     .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
-                            .flatMap(response -> persistAndEmit(workspaceId, response))
+                            .doOnNext(response -> persistAndEmit(workspaceId, response))
                             .flatMap(response -> cacheResult(workspaceId, response))
                             .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
         }
         return computeVersion(workspaceId, authSuggestedVersion)
-                .flatMap(response -> persistAndEmit(workspaceId, response))
+                .doOnNext(response -> persistAndEmit(workspaceId, response))
                 .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
     }
 
@@ -167,34 +167,41 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     /**
      * Records the determined version into the {@code workspaces} table and emits a
-     * {@code workspace_version_determined} analytics event. Fire-and-forget: errors
-     * are logged but never propagate, mirroring {@link #cacheResult}. Skipped on
-     * allowlist/forced-version overrides because those bypass {@link #computeVersion}
-     * entirely; skipped on fallback paths because callers route around this method
-     * via {@code onErrorResume}.
+     * {@code workspace_version_determined} analytics event. Truly fire-and-forget: the
+     * blocking work is dispatched via {@link Schedulers#boundedElastic()} so the user's
+     * response never waits on the DB write or the analytics call, and any exception is
+     * caught and logged inside the scheduled runnable so nothing propagates.
+     *
+     * <p>Skipped on allowlist/forced-version overrides because those bypass
+     * {@link #computeVersion} entirely; skipped on fallback paths because callers route
+     * around this method via {@code onErrorResume}. The auth one-way V2 gate inside
+     * {@link #computeVersion} <i>does</i> reach this method, so {@code last_known_version}
+     * for those workspaces reflects the auth-state, not an entity-scan result — that is
+     * intentional, since the auth gate is the authoritative source for those workspaces.
      */
-    private Mono<WorkspaceVersion> persistAndEmit(String workspaceId, WorkspaceVersion response) {
-        return Mono.fromRunnable(() -> persistAndEmitBlocking(workspaceId, response))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(throwable -> {
-                    log.warn("Failed to persist workspace version determination, workspaceId '{}'",
-                            workspaceId, throwable);
-                    return Mono.empty();
-                })
-                .thenReturn(response);
+    private void persistAndEmit(String workspaceId, WorkspaceVersion response) {
+        Schedulers.boundedElastic().schedule(() -> {
+            try {
+                persistAndEmitBlocking(workspaceId, response);
+            } catch (RuntimeException exception) {
+                log.warn("Failed to persist workspace version determination, workspaceId '{}'",
+                        workspaceId, exception);
+            }
+        });
     }
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response) {
         var newVersion = response.opikVersion();
+        var now = Instant.now();
         var previousVersion = workspacesService.findLastKnownVersion(workspaceId);
-        workspacesService.upsertVersion(workspaceId, newVersion, Instant.now());
+        workspacesService.upsertVersion(workspaceId, newVersion, now);
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
                 "previous_version", previousVersion.map(OpikVersion::getValue).orElse("none"),
                 "new_version", newVersion.getValue(),
                 "version_changed", String.valueOf(versionChanged),
-                "date", Instant.now().toString()));
+                "date", now.toString()));
     }
 
     private Mono<WorkspaceVersion> cacheResult(String workspaceId, WorkspaceVersion response) {

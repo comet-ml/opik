@@ -37,6 +37,11 @@ public interface WorkspacesService {
     /**
      * Returns the previously-recorded version for the workspace, if any.
      * Used to compute {@code version_changed} on the analytics event.
+     *
+     * <p>An unrecognised stored value (e.g. a future Opik version not present in the
+     * current {@link OpikVersion} enum) is silently treated as "no previous version".
+     * This is intentional — failing closed here would break the analytics emission
+     * flow, which must remain non-blocking.
      */
     Optional<OpikVersion> findLastKnownVersion(String workspaceId);
 
@@ -91,13 +96,24 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     /**
-     * Single-statement upsert + read-back-equality. Avoids the unreliable row-count semantics of
-     * {@code ON DUPLICATE KEY UPDATE} ("matched" vs "changed" rows depends on the
-     * {@code useAffectedRows} connector flag) and avoids the deadlock risk of a two-step
-     * INSERT-then-UPDATE under high concurrency. The {@code COALESCE} keeps the earliest writer's
-     * timestamp; reading the row back inside the same transaction tells us whether we were that
-     * writer. Microsecond truncation is required because the column is {@code TIMESTAMP(6)} and
-     * MySQL truncates nanoseconds on store, so equality must be performed at the persisted precision.
+     * Single-statement upsert with COALESCE + same-transaction read-back-equality.
+     * The upsert serialises concurrent writers via the InnoDB row X lock that the
+     * INSERT/ON-DUPLICATE-KEY-UPDATE acquires on the PK, so only one writer's value
+     * survives in the row; the read-back tells us whether that value matches what
+     * we wrote.
+     *
+     * <p><b>Trade-off:</b> two callers whose {@link Instant#now()} truncated to
+     * microseconds collide will both observe their own value in the row and both
+     * return {@code true}. The probability is roughly {@code N²/(2·1e6)} per
+     * concurrent burst of size {@code N} on a single workspace; acceptable for the
+     * best-effort analytics-dedup use case. The alternative patterns considered
+     * (two-step INSERT-then-UPDATE, three-step SELECT FOR UPDATE) deadlock in
+     * practice under contention because of InnoDB lock-upgrade semantics on
+     * shared INSERT-IGNORE locks.
+     *
+     * <p>Microsecond truncation is required because the column is {@code TIMESTAMP(6)}
+     * and MySQL truncates nanoseconds on store, so the read-back equality must be
+     * performed at the persisted precision.
      */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull Instant reportedAt) {
@@ -115,7 +131,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public void markMigrationSkipped(@NonNull String workspaceId, @NonNull Instant skippedAt,
             @NonNull String reason) {
         transactionTemplate.inTransaction(WRITE, handle -> {
-            handle.attach(WorkspacesDAO.class).markMigrationSkipped(workspaceId, skippedAt, reason);
+            handle.attach(WorkspacesDAO.class).upsertMigrationSkipped(workspaceId, skippedAt, reason);
             return null;
         });
     }

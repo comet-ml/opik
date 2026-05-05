@@ -43,7 +43,7 @@ public interface WorkspacesDAO {
                 migration_skipped_at = COALESCE(migration_skipped_at, :skippedAt),
                 migration_skipped_reason = COALESCE(migration_skipped_reason, :reason)
             """)
-    int markMigrationSkipped(@Bind("workspaceId") String workspaceId,
+    int upsertMigrationSkipped(@Bind("workspaceId") String workspaceId,
             @Bind("skippedAt") Instant skippedAt,
             @Bind("reason") String reason);
 
