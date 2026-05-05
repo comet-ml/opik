@@ -131,13 +131,15 @@ public class SearchTool implements ToolExecutor {
     public String execute(String arguments, TraceToolContext ctx) {
         ParsedArgs args = parseArgs(arguments);
         if (args.error != null) {
-            log.debug("search tool received invalid arguments: '{}' -> {}", arguments, args.error);
+            log.debug("search tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
             return args.error;
         }
+        log.debug("search tool call with valid arguments: '{}' -> '{}'", arguments, args);
 
         EntityRef ref = new EntityRef(args.type, args.id);
         Optional<JsonNode> cached = ctx.getCached(ref);
         if (cached.isEmpty()) {
+            log.debug("search tool cache miss for id={}, ref={}", args.id, ref);
             return ToolArgs.cacheMiss(args.type, args.id);
         }
 

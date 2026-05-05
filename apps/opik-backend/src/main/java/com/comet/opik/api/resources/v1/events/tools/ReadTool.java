@@ -170,6 +170,8 @@ public class ReadTool implements ToolExecutor {
         UUID id = parseUuid(args.id);
         EntityRef ref = new EntityRef(EntityType.TRACE, args.id);
 
+        log.debug("readTrace: id={}, ref={}", id, ref);
+
         // Cache pre-seeded by OnlineScoringLlmAsJudgeScorer for the active trace; reuse if present.
         Optional<JsonNode> cached = ctx.getCached(ref);
 
@@ -205,6 +207,8 @@ public class ReadTool implements ToolExecutor {
     private String readDataset(ParsedArgs args, TraceToolContext ctx) throws NotFoundLikeException {
         UUID id = parseUuid(args.id);
         EntityRef ref = new EntityRef(EntityType.DATASET, args.id);
+
+        log.debug("readDataset: id={}, ref={}", id, ref);
 
         Optional<JsonNode> cached = ctx.getCached(ref);
 
@@ -244,6 +248,8 @@ public class ReadTool implements ToolExecutor {
             throws NotFoundLikeException {
         EntityRef ref = new EntityRef(args.type, args.id);
         JsonNode fullJson = ctx.getCached(ref).orElseGet(fetcher::get);
+
+        log.debug("readGeneric (span / dataset_item / project): id={}, ref={}", args.id, ref);
 
         CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
         ctx.cache(ref, outcome.cachedNode);
@@ -361,6 +367,7 @@ public class ReadTool implements ToolExecutor {
         if (size <= CACHE_CAP_CHARS) {
             return CacheOutcome.builder().cachedNode(fullJson).build();
         }
+        log.debug("Entity {} exceeds {} chars; capping to maximum of {} chars before caching", ref, size, CACHE_CAP_CHARS);
         ctx.markTruncated(ref);
         return CacheOutcome.builder()
                 .cachedNode(fitWithinCap(fullJson))
@@ -382,10 +389,12 @@ public class ReadTool implements ToolExecutor {
             JsonNode candidate = PathAwareTruncator.truncate(fullJson, limit,
                     PathAwareTruncator.SuffixStyle.BARE);
             if (candidate.toString().length() <= CACHE_CAP_CHARS) {
+                log.debug("Entity capped to {} chars with ceiling at {} limit", candidate.toString().length(), limit);
                 return candidate;
             }
             last = candidate;
         }
+        log.debug("Entity exceeds {} chars with ceiling at {} limit; returning tightest limit", CACHE_CAP_CHARS, CAP_FALLBACK_LIMITS[0]);
         return last;
     }
 

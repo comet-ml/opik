@@ -106,10 +106,12 @@ public class JqTool implements ToolExecutor {
             log.debug("jq tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
             return args.error;
         }
+        log.debug("jq tool call with valid arguments: '{}' -> '{}'", arguments, args);
 
         EntityRef ref = new EntityRef(args.type, args.id);
         Optional<JsonNode> cached = ctx.getCached(ref);
         if (cached.isEmpty()) {
+            log.debug("jq tool cache miss for id={}, ref={}", args.id, ref);
             return ToolArgs.cacheMiss(args.type, args.id);
         }
 

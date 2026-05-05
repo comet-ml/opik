@@ -3,8 +3,10 @@ package com.comet.opik.api.resources.v1.events.tools;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.extern.slf4j.Slf4j;
 
 @Singleton
+@Slf4j
 public class GetTraceSpansTool implements ToolExecutor {
 
     public static final String NAME = "get_trace_spans";
@@ -30,6 +32,7 @@ public class GetTraceSpansTool implements ToolExecutor {
 
     @Override
     public String execute(String arguments, TraceToolContext ctx) {
+        log.debug("get_trace_spans tool call with arguments: '{}' for trace={}", arguments, ctx.getTrace().id());
         return SpanTreeSerializer.serializeOverview(ctx.getSpans());
     }
 }
