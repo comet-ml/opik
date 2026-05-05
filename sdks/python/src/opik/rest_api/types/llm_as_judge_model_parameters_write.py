@@ -9,7 +9,7 @@ from .json_node_write import JsonNodeWrite
 
 class LlmAsJudgeModelParametersWrite(UniversalBaseModel):
     name: str
-    temperature: float
+    temperature: typing.Optional[float] = None
     seed: typing.Optional[int] = None
     custom_parameters: typing.Optional[JsonNodeWrite] = None
 

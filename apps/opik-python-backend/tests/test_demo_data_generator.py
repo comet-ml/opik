@@ -28,6 +28,8 @@ def test_create_demo_data_structure(httpserver):
     })
     httpserver.expect_request("/v1/private/feedback-definitions", method="POST").respond_with_data(status=201)
 
+    httpserver.expect_request("/v1/private/environments", method="POST").respond_with_data(status=201)
+
     httpserver.expect_request("/v1/private/prompts", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/datasets", method="POST").respond_with_data(status=201)
     httpserver.expect_request("/v1/private/datasets/retrieve", method="POST").respond_with_json({
@@ -127,6 +129,8 @@ def test_create_demo_data_idempotence(httpserver):
         "total": 1
     })
     httpserver.expect_request("/v1/private/feedback-definitions", method="POST").respond_with_data(status=409)
+
+    httpserver.expect_request("/v1/private/environments", method="POST").respond_with_data(status=409)
 
     httpserver.expect_request("/v1/private/prompts", method="POST").respond_with_handler(fail_on_request)
     httpserver.expect_request("/v1/private/datasets", method="POST").respond_with_handler(fail_on_request)
