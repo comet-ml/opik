@@ -69,22 +69,26 @@ public class WebhookHttpClient {
                                 throwable)));
     }
 
-    private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
-        try (var logContext = wrapWithMdc(Map.of(
+    private Map<String, String> buildMdcMap(WebhookEvent<?> event, String workspaceId) {
+        var mdc = new java.util.HashMap<>(Map.of(
                 UserLog.MARKER, UserLog.ALERT_EVENT.name(),
                 UserLog.WORKSPACE_ID, workspaceId,
                 UserLog.EVENT_ID, event.getId(),
-                UserLog.ALERT_ID, event.getAlertId().toString()))) {
+                UserLog.ALERT_ID, event.getAlertId().toString()));
+        if (event.getProjectId() != null) {
+            mdc.put(UserLog.PROJECT_ID, event.getProjectId().toString());
+        }
+        return mdc;
+    }
+
+    private void logInfo(WebhookEvent<?> event, String workspaceId, String message, Object... args) {
+        try (var logContext = wrapWithMdc(buildMdcMap(event, workspaceId))) {
             userFacingLog.info(message, args);
         }
     }
 
     private void logError(WebhookEvent<?> event, String workspaceId, String message, Throwable throwable) {
-        try (var logContext = wrapWithMdc(Map.of(
-                UserLog.MARKER, UserLog.ALERT_EVENT.name(),
-                UserLog.WORKSPACE_ID, workspaceId,
-                UserLog.EVENT_ID, event.getId(),
-                UserLog.ALERT_ID, event.getAlertId().toString()))) {
+        try (var logContext = wrapWithMdc(buildMdcMap(event, workspaceId))) {
             userFacingLog.error(message, throwable);
         }
     }

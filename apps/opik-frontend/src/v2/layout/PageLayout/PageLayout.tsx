@@ -50,11 +50,11 @@ const PageLayout = () => {
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
   const matchRoute = useMatchRoute();
-  const isProjectHome = !!matchRoute({
-    to: "/$workspaceName/projects/$projectId/home",
+  const isOlliePage = !!matchRoute({
+    to: "/$workspaceName/projects/$projectId/ollie",
   });
 
-  const showAssistantSidebar = !!AssistantSidebar && !isProjectHome;
+  const showAssistantSidebar = !!AssistantSidebar && !isOlliePage;
 
   const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
   const { isPhone } = useIsPhone();
