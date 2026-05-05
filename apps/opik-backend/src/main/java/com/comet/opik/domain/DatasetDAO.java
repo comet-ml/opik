@@ -206,8 +206,18 @@ public interface DatasetDAO {
             @Define("filters") String filters,
             @BindMap Map<String, Object> filterMapping);
 
-    @SqlQuery("SELECT * FROM datasets WHERE workspace_id = :workspace_id AND name = :name" +
-            " <if(project_id)> AND project_id = :project_id <else> AND project_id IS NULL <endif>")
+    /**
+     * When {@code projectId} is null the lookup is workspace-wide and may now match multiple rows
+     * (one v1 + one v2 per project) since the relaxed unique constraint. ORDER BY + LIMIT 1
+     * collapses to a single deterministic result, preferring the v1 (workspace-level) row.
+     */
+    @SqlQuery("""
+            SELECT * FROM datasets
+            WHERE workspace_id = :workspace_id AND name = :name
+            <if(project_id)> AND project_id = :project_id <endif>
+            ORDER BY (project_id IS NOT NULL) ASC, created_at ASC
+            LIMIT 1
+            """)
     @UseStringTemplateEngine
     @AllowUnusedBindings
     Optional<Dataset> findByName(@Bind("workspace_id") String workspaceId, @Bind("name") String name,

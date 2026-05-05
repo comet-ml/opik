@@ -277,8 +277,7 @@ class DatasetsResourceProjectScopedTest {
         datasetResourceClient.createDatasetItems(batch, workspaceName, apiKey);
 
         var dataset = datasetResourceClient.getDatasetByIdentifier(
-                DatasetIdentifier.builder().datasetName(datasetName).projectName(projectName).build(),
-                apiKey, workspaceName);
+                DatasetIdentifier.builder().datasetName(datasetName).build(), apiKey, workspaceName);
 
         assertThat(dataset.projectId()).isEqualTo(projectId);
     }
