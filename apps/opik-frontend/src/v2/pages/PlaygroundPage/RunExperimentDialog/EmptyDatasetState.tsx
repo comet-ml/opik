@@ -4,7 +4,10 @@ import { Button } from "@/ui/button";
 import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import { DATASET_TYPE } from "@/types/datasets";
-import emptyDatasetOrSuiteUrl from "/images/empty-dataset-or-suite.svg";
+import { useTheme } from "@/contexts/theme-provider";
+import { THEME_MODE } from "@/constants/theme";
+import emptyDatasetOrSuiteLightUrl from "/images/empty-dataset-or-suite-light.svg";
+import emptyDatasetOrSuiteDarkUrl from "/images/empty-dataset-or-suite-dark.svg";
 
 interface EmptyDatasetStateProps {
   type: DATASET_TYPE;
@@ -30,11 +33,16 @@ const EmptyDatasetState: React.FC<EmptyDatasetStateProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const copy = COPY[type];
+  const { themeMode } = useTheme();
+  const imageUrl =
+    themeMode === THEME_MODE.DARK
+      ? emptyDatasetOrSuiteDarkUrl
+      : emptyDatasetOrSuiteLightUrl;
 
   return (
     <>
       <div className="flex min-h-[160px] flex-col items-center justify-center gap-1 px-4 py-2 text-center">
-        <img src={emptyDatasetOrSuiteUrl} alt="" className="h-8 w-7 shrink-0" />
+        <img src={imageUrl} alt="" className="h-8 w-7 shrink-0" />
         <div className="comet-body-xs-accented pb-1 text-foreground">
           {copy.title}
         </div>
