@@ -30,7 +30,7 @@ const getMenuItems = ({
   canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
-  showHome,
+  showOlliePage,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
@@ -38,7 +38,7 @@ const getMenuItems = ({
   canViewDashboards: boolean;
   canUsePlayground: boolean;
   canViewOptimizationRuns: boolean;
-  showHome: boolean;
+  showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -59,7 +59,7 @@ const getMenuItems = ({
           label: "Home",
           disabled: !projectPrefix,
         },
-        ...(showHome
+        ...(showOlliePage
           ? [
               {
                 id: "ollie",

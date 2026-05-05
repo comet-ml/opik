@@ -33,7 +33,7 @@ const SideBarMenuItems: React.FC<SideBarMenuItemsProps> = ({ expanded }) => {
     canViewDashboards,
     canUsePlayground,
     canViewOptimizationRuns,
-    showHome: !!AssistantSidebar,
+    showOlliePage: !!AssistantSidebar,
   });
 
   const renderItems = (items: MenuItem[]) => {

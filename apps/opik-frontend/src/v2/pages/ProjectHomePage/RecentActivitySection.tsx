@@ -1,4 +1,4 @@
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import {
   FlaskConical,
   Database,
@@ -9,9 +9,8 @@ import {
   ArrowRight,
   LucideIcon,
 } from "lucide-react";
-import dayjs from "dayjs";
 import activityCloudIcon from "@/icons/activity-cloud.svg";
-import { formatDate } from "@/lib/date";
+import { formatRelativeDateTime } from "@/lib/date";
 import { Skeleton } from "@/ui/skeleton";
 import useRecentActivity from "@/api/projects/useRecentActivity";
 import { ActivityType, RecentActivityItem } from "@/types/recent-activity";
@@ -63,35 +62,20 @@ const ACTIVITY_CONFIG: Record<ActivityType, ActivityConfigEntry> = {
   },
 };
 
-function formatActivityDate(dateStr: string): string {
-  const date = dayjs(dateStr);
-  const now = dayjs();
-  const time = date.format("h:mm A");
-
-  if (date.isSame(now, "day")) return `Today, ${time}`;
-  if (date.isSame(now.subtract(1, "day"), "day")) return `Yesterday, ${time}`;
-
-  const diffDays = now.diff(date, "day");
-  if (diffDays <= 7) return `${diffDays} days ago, ${time}`;
-
-  return formatDate(dateStr);
-}
-
 function ActivityItem({ item }: { item: RecentActivityItem }) {
   const { workspaceName, projectId } = useParams({ strict: false }) as {
     workspaceName: string;
     projectId: string;
   };
-  const navigate = useNavigate();
 
   const config = ACTIVITY_CONFIG[item.type];
   const Icon = config.icon;
   const base = `/${workspaceName}/projects/${projectId}`;
 
   return (
-    <button
+    <Link
+      to={config.getLink(item, base)}
       className="group flex w-full items-center gap-3 rounded-md border border-transparent px-3 py-2 text-left hover:border-primary hover:bg-primary/5"
-      onClick={() => navigate({ to: config.getLink(item, base) })}
     >
       <Icon className={`size-4 shrink-0 ${config.color}`} />
       <span className="comet-body-xs min-w-0 flex-1 truncate">
@@ -99,10 +83,10 @@ function ActivityItem({ item }: { item: RecentActivityItem }) {
         <span className="text-muted-foreground">{item.name}</span>
       </span>
       <span className="shrink-0 text-xs text-muted-foreground">
-        {formatActivityDate(item.created_at)}
+        {formatRelativeDateTime(item.created_at)}
       </span>
       <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100" />
-    </button>
+    </Link>
   );
 }
 

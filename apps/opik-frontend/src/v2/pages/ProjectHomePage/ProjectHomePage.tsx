@@ -1,6 +1,6 @@
-import { useNavigate, useParams } from "@tanstack/react-router";
+import { Link, useParams } from "@tanstack/react-router";
 import { ArrowUpRight } from "lucide-react";
-import { Button } from "@/ui/button";
+import { buttonVariants } from "@/ui/button";
 import { useLoggedInUserName } from "@/store/AppStore";
 import RecentActivitySection from "./RecentActivitySection";
 
@@ -8,7 +8,6 @@ const ProjectHomePage = () => {
   const { workspaceName, projectId } = useParams({
     strict: false,
   }) as { workspaceName: string; projectId: string };
-  const navigate = useNavigate();
   const userName = useLoggedInUserName();
 
   return (
@@ -18,32 +17,22 @@ const ProjectHomePage = () => {
           Hi{userName ? `, ${userName}` : ""}
         </h1>
         <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() =>
-              navigate({
-                to: "/$workspaceName/projects/$projectId/logs",
-                params: { workspaceName, projectId },
-              })
-            }
+          <Link
+            to="/$workspaceName/projects/$projectId/logs"
+            params={{ workspaceName, projectId }}
+            className={buttonVariants({ variant: "outline", size: "xs" })}
           >
             View logs
             <ArrowUpRight className="ml-1 size-3.5" />
-          </Button>
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={() =>
-              navigate({
-                to: "/$workspaceName/projects/$projectId/dashboards",
-                params: { workspaceName, projectId },
-              })
-            }
+          </Link>
+          <Link
+            to="/$workspaceName/projects/$projectId/dashboards"
+            params={{ workspaceName, projectId }}
+            className={buttonVariants({ variant: "outline", size: "xs" })}
           >
             View dashboards
             <ArrowUpRight className="ml-1 size-3.5" />
-          </Button>
+          </Link>
         </div>
       </div>
 
