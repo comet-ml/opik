@@ -214,6 +214,29 @@ const RunExperimentDialog: React.FC<RunExperimentDialogProps> = ({
     hydrateSlot,
   ]);
 
+  // Drop a stored dataset id if it no longer exists in the list (e.g. it was deleted
+  // server-side while the dialog was open) so we never run with a stale selection.
+  useEffect(() => {
+    if (!datasetsData) return;
+    setDatasetIdByType((prev) => {
+      let next = prev;
+      ([DATASET_TYPE.DATASET, DATASET_TYPE.TEST_SUITE] as const).forEach(
+        (type) => {
+          const current = prev[type];
+          if (!current) return;
+          const list =
+            type === DATASET_TYPE.TEST_SUITE ? testSuitesOnly : datasetsOnly;
+          const plain = parseDatasetVersionKey(current)?.datasetId ?? current;
+          if (!list.some((d) => d.id === plain)) {
+            if (next === prev) next = { ...prev };
+            next[type] = null;
+          }
+        },
+      );
+      return next;
+    });
+  }, [datasetsData, datasetsOnly, testSuitesOnly]);
+
   const datasetId = datasetIdByType[selectedType] ?? null;
 
   const parsedDatasetId = parseDatasetVersionKey(datasetId);
