@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -166,9 +167,9 @@ class WorkspacesServiceTest {
         service.findMigrationSkippedWorkspaceIds();
         service.findLastKnownVersion("workspace-1");
 
-        verify(dao, org.mockito.Mockito.never()).upsertVersion(any(), any(), any());
-        verify(dao, org.mockito.Mockito.never()).upsertFirstTraceReported(any(), any());
-        verify(dao, org.mockito.Mockito.never()).upsertMigrationSkipped(any(), any(), any());
+        verify(dao, never()).upsertVersion(any(), any(), any());
+        verify(dao, never()).upsertFirstTraceReported(any(), any());
+        verify(dao, never()).upsertMigrationSkipped(any(), any(), any());
     }
 
     @Test
