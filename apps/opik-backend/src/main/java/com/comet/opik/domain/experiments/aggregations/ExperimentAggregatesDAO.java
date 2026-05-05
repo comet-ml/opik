@@ -665,15 +665,10 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     /**
      * Get experiment items with cursor pagination
      */
-    // OPIK-6177: resolve experiment_items.dataset_item_id to the stable dataset_item_id at
-    // aggregation time so experiment_item_aggregates carries the stable id directly. For legacy
-    // pre-OPIK-4518 writes ei.dataset_item_id is a per-version DIV row id; for modern writes
-    // it is already the stable id. The LEFT JOIN finds the DIV row (when ei.dataset_item_id
-    // happens to be a DIV row id) and projects its dataset_item_id; if the join misses, fall
-    // back to ei.dataset_item_id (already-stable modern writes, or orphaned legacy rows).
-    // This lets the compare query reference eia.dataset_item_id directly, restoring skip-index
-    // pushdown that the read-time lookup_div approach broke (~11x regression measured by
-    // thiagohora; see PR #6507).
+    // OPIK-6177: resolves ei.dataset_item_id (legacy per-version DIV row id or modern
+    // stable id) to the stable dataset_item_id at aggregation time. Compare reads still
+    // resolve at read time too (see DatasetItemVersionDAO), so this is best-effort hygiene
+    // — over time it phases out legacy values from EIA without a backfill migration.
     private static final String GET_EXPERIMENT_ITEMS = """
             SELECT
                 ei.id AS id,
@@ -1140,6 +1135,20 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                     LIMIT 1 BY div.id
                 ) AS div_dedup
+            ),
+            -- OPIK-6177: see DatasetItemVersionDAO's eligible_dataset_item_lookup for rationale.
+            eligible_dataset_item_lookup AS (
+                SELECT DISTINCT
+                    div.dataset_item_id AS stable_id,
+                    arrayJoin([div.id, div.dataset_item_id]) AS lookup_id
+                FROM dataset_item_versions AS div FINAL
+                INNER JOIN experiment_aggregates ea FINAL ON
+                    ea.workspace_id = div.workspace_id
+                    AND ea.dataset_id = div.dataset_id
+                    AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+                WHERE div.workspace_id = :workspace_id
+                AND div.dataset_id = :dataset_id
+                <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
             )
             SELECT COUNT(DISTINCT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)) as count
             FROM experiment_item_aggregates eia FINAL
@@ -1217,6 +1226,20 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     ORDER BY (div.workspace_id, div.dataset_id, div.dataset_version_id, div.id) DESC, div.last_updated_at DESC
                     LIMIT 1 BY div.id
                 ) AS div_dedup
+            ),
+            -- OPIK-6177 Alt 7: id-resolution CTE; same pattern as the count query above.
+            eligible_dataset_item_lookup AS (
+                SELECT DISTINCT
+                    div.dataset_item_id AS stable_id,
+                    arrayJoin([div.id, div.dataset_item_id]) AS lookup_id
+                FROM dataset_item_versions AS div FINAL
+                INNER JOIN experiment_aggregates ea FINAL ON
+                    ea.workspace_id = div.workspace_id
+                    AND ea.dataset_id = div.dataset_id
+                    AND div.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+                WHERE div.workspace_id = :workspace_id
+                AND div.dataset_id = :dataset_id
+                <if(experiment_ids)>AND ea.id IN :experiment_ids<endif>
             )
             SELECT
                 di.id AS id,
