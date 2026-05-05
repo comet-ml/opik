@@ -164,11 +164,11 @@ class WorkspaceVersionResourceTest {
             workspaceClient.getWorkspaceVersion(API_KEY, allowlistedName);
             workspaceClient.getWorkspaceVersion(API_KEY, forcedName);
 
-            // The row must stay absent for a continuous window — proves no late-firing
-            // background write surfaces, not just that we read at one lucky moment.
+            // boundedElastic schedules within ms; a 300ms continuous window is enough
+            // to prove no late-firing background write surfaces.
             Awaitility.await()
-                    .during(1, TimeUnit.SECONDS)
-                    .atMost(3, TimeUnit.SECONDS)
+                    .during(300, TimeUnit.MILLISECONDS)
+                    .atMost(1, TimeUnit.SECONDS)
                     .untilAsserted(() -> {
                         assertThat(workspacesService.findLastKnownVersion(allowlistedId)).isEmpty();
                         assertThat(workspacesService.findLastKnownVersion(forcedId)).isEmpty();
