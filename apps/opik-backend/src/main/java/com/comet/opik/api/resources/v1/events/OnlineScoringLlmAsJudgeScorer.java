@@ -25,6 +25,7 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -207,7 +208,15 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             if (shouldUseTools(message)) {
-                scoreRequest = addToolSpecs(scoreRequest);
+                // REQUIRED on the FIRST call only: forces ≥1 tool call before the model can
+                // emit an answer. OpenAI judges with tool_choice=AUTO consistently skip the
+                // tool loop and answer from visible context, even with explicit "you MUST
+                // call tools first" guidance in the system prompt — see SupportedJudgeProvider
+                // for the empirical asymmetry. Follow-up rounds in handleToolCalls switch to
+                // AUTO so the model can decide when it has enough info to stop investigating;
+                // a uniform REQUIRED would loop forever because the wrap-up turn would also
+                // be forced to call a tool.
+                scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
             }
 
             userFacingLogger.info("Sending traceId '{}' to LLM using the following input:\n\n{}",
@@ -241,7 +250,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     }
 
     // Package-private for unit tests.
-    ChatRequest addToolSpecs(ChatRequest request) {
+    ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice) {
         // Preserve all the original request's tunables (response format, temperature, etc.) and
         // only layer the tool specifications on top. ChatRequest rejects setting both
         // `parameters` and `toolSpecifications` directly because tool specs live inside
@@ -254,6 +263,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         var parameters = ChatRequestParameters.builder()
                 .overrideWith(request.parameters())
                 .toolSpecifications(toolRegistry.specs())
+                .toolChoice(toolChoice)
                 .build();
         return ChatRequest.builder()
                 .messages(request.messages())
@@ -282,6 +292,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 traceCompressor.buildFullJson(trace, spans));
         var messages = new ArrayList<>(toolRequest.messages());
 
+        // Subsequent rounds use tool_choice=AUTO so the model can decide when it has enough
+        // information to stop investigating. The initial call uses REQUIRED to force ≥1 tool
+        // call (see evaluate() — overcomes OpenAI's bias against calling tools when it can
+        // satisfy the output schema from visible context). If we kept REQUIRED on follow-ups,
+        // the wrap-up turn would loop forever, since every round would be forced to invoke
+        // a tool even after the model is ready to emit the final JSON.
+        var followUpParameters = ChatRequestParameters.builder()
+                .overrideWith(toolRequest.parameters())
+                .toolChoice(ToolChoice.AUTO)
+                .build();
+
         for (int round = 0; round < MAX_TOOL_CALL_ROUNDS; round++) {
             if (!chatResponse.aiMessage().hasToolExecutionRequests()) {
                 break;
@@ -299,6 +320,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
             var followUp = toolRequest.toBuilder()
                     .messages(messages)
+                    .parameters(followUpParameters)
                     .build();
 
             chatResponse = aiProxyService.scoreTrace(

@@ -14,9 +14,11 @@ import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TestSuiteAssertionCounterService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.WorkspaceNameService;
 import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -25,6 +27,7 @@ import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
@@ -74,6 +77,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
     private LlmProviderFactory llmProviderFactory;
     @Mock
     private SpanService spanService;
+    @Mock
+    private WorkspaceNameService workspaceNameService;
+    @Mock
+    private OpikConfiguration opikConfiguration;
 
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
     private OnlineScoringLlmAsJudgeScorer scorer;
@@ -119,7 +126,9 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 llmProviderFactory,
                 spanService,
                 toolRegistry,
-                traceCompressor);
+                traceCompressor,
+                workspaceNameService,
+                opikConfiguration);
     }
 
     @AfterEach
@@ -142,7 +151,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = scorer.addToolSpecs(original);
+        ChatRequest withTools = scorer.addToolSpecs(original, ToolChoice.REQUIRED);
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())
@@ -153,6 +162,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
         // Original parameters survive — this is the regression guard for the addToolSpecs fix.
         assertThat(withTools.parameters().temperature()).isEqualTo(0.42);
         assertThat(withTools.parameters().maxOutputTokens()).isEqualTo(123);
+        // Tool choice is propagated.
+        assertThat(withTools.parameters().toolChoice()).isEqualTo(ToolChoice.REQUIRED);
     }
 
     @Test
@@ -223,20 +234,33 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         List<ChatRequest> sent = requests.getAllValues();
 
-        // Round-1 follow-up: keeps tool specs, adds the AI tool-call message + its result message.
+        // Round-1 follow-up: keeps tool specs (the distinguishing feature of in-loop calls).
+        // Note on size: handleToolCalls reuses the same `messages` ArrayList for the round-1
+        // follow-up and the final re-issue, then appends the forcing UserMessage after the
+        // loop. ArgumentCaptor captures the request by reference, so by assertion time the
+        // captured round-1 messages list reflects the final 4-element state (original
+        // UserMessage + AiMessage + ToolExecutionResultMessage + forcing UserMessage). We
+        // assert the shape that's still distinguishable: tool specs presence + ordering of
+        // the first three message types.
         ChatRequest roundOne = sent.getFirst();
         assertThat(roundOne.toolSpecifications())
                 .extracting(ToolSpecification::name)
                 .containsExactly(GetTraceSpansTool.NAME);
-        assertThat(roundOne.messages()).hasSize(3); // original UserMessage + AiMessage + ToolExecutionResultMessage
+        assertThat(roundOne.messages()).hasSize(4);
+        assertThat(roundOne.messages().get(0)).isInstanceOf(UserMessage.class);
         assertThat(roundOne.messages().get(1)).isInstanceOf(AiMessage.class);
         assertThat(roundOne.messages().get(2)).isInstanceOf(ToolExecutionResultMessage.class);
 
-        // Final re-issue: uses structuredRequest's shape (no tool specs) with the accumulated messages.
+        // Final re-issue: uses structuredRequest's shape (no tool specs). The forcing
+        // UserMessage is the last accumulated message — soft signal "stop calling tools,
+        // emit only JSON now" that complements the provider-native structured output.
         ChatRequest finalSent = sent.get(1);
         assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
-        assertThat(finalSent.messages()).hasSize(3);
+        assertThat(finalSent.messages()).hasSize(4);
         assertThat(finalSent.messages()).isEqualTo(roundOne.messages());
+        assertThat(finalSent.messages().get(3)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) finalSent.messages().get(3)).singleText())
+                .contains("Now respond with ONLY the JSON object");
     }
 
     private static ToolSpecification stubSpec(String name) {
