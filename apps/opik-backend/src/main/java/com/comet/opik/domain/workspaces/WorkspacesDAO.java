@@ -30,20 +30,30 @@ public interface WorkspacesDAO {
             @Bind("userName") String userName);
 
     /**
-     * First-writer-wins semantics on {@code first_trace_reported_at}. Returns row count:
-     * {@code 1} when a new row was inserted, {@code 2} when an existing row's column transitioned
-     * NULL → timestamp, {@code 0} when the column was already non-null and the upsert was a no-op
-     * (Connector/J default {@code useAffectedRows=false}). Caller treats {@code rowCount > 0} as
-     * "this caller was the first writer".
+     * Atomic NULL → timestamp transition. Returns 1 when this caller flipped an existing
+     * row's {@code first_trace_reported_at} from NULL to {@code :reportedAt}; returns 0 if
+     * no row exists or the column was already non-null. Pair with {@link #insertFirstTrace}
+     * for the missing-row case.
+     */
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET first_trace_reported_at = :reportedAt,
+                last_updated_by = :userName
+            WHERE id = :id AND first_trace_reported_at IS NULL
+            """)
+    int updateFirstTraceIfNull(@Bind("id") String id,
+            @Bind("reportedAt") Instant reportedAt,
+            @Bind("userName") String userName);
+
+    /**
+     * Plain INSERT (no upsert). Throws on duplicate-key — caller catches and reads the
+     * existing row's first-trace state to decide if it was the first writer.
      */
     @SqlUpdate("""
             INSERT INTO workspaces (id, first_trace_reported_at, created_by, last_updated_by)
             VALUES (:id, :reportedAt, :userName, :userName)
-            ON DUPLICATE KEY UPDATE
-                last_updated_by = IF(first_trace_reported_at IS NULL, :userName, last_updated_by),
-                first_trace_reported_at = COALESCE(first_trace_reported_at, :reportedAt)
             """)
-    int upsertFirstTraceReported(@Bind("id") String id,
+    void insertFirstTrace(@Bind("id") String id,
             @Bind("reportedAt") Instant reportedAt,
             @Bind("userName") String userName);
 

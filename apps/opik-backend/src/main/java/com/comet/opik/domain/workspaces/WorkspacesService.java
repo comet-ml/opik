@@ -8,8 +8,10 @@ import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import org.apache.commons.lang3.StringUtils;
+import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
+import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -42,6 +44,8 @@ public interface WorkspacesService {
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspacesServiceImpl implements WorkspacesService {
 
+    private static final String SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION = "23000";
+
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
@@ -59,10 +63,33 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 handle -> handle.attach(WorkspacesDAO.class).findById(workspaceId));
     }
 
+    /**
+     * UPDATE-then-INSERT, single transaction. We can't use a single-statement upsert with
+     * a ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
+     * ({@code CLIENT_FOUND_ROWS=on}), which makes a matched-but-unchanged upsert return
+     * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives
+     * keeps the detection unambiguous: the UPDATE's row count is exact, and a duplicate-key
+     * exception on the INSERT means another writer beat us to it.
+     */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId) {
-        return transactionTemplate.inTransaction(WRITE, handle -> handle.attach(WorkspacesDAO.class)
-                .upsertFirstTraceReported(workspaceId, Instant.now(), SYSTEM_USER) > 0);
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateFirstTraceIfNull(workspaceId, now, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertFirstTrace(workspaceId, now, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return false;
+                }
+                throw exception;
+            }
+        });
     }
 
     @Override
