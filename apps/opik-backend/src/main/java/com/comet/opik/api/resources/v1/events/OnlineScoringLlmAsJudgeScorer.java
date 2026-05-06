@@ -232,7 +232,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
-            return OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+            var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+            OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "traceId", trace.id());
+            return parsed.scores().stream()
                     .map(item -> {
                         String scoreName = item.name();
                         if (message.scoreNameMapping().containsKey(scoreName)) {

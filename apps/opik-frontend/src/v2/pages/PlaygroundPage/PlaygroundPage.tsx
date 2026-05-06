@@ -5,10 +5,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import Loader from "@/shared/Loader/Loader";
 import { keepPreviousData } from "@tanstack/react-query";
 
 import { Separator } from "@/ui/separator";
+import { Skeleton } from "@/ui/skeleton";
 import PlaygroundOutputs from "@/v2/pages/PlaygroundPage/PlaygroundOutputs/PlaygroundOutputs";
 import PlaygroundAddVariant from "@/v2/pages/PlaygroundPage/PlaygroundAddVariant";
 import { usePlaygroundDataset } from "@/hooks/usePlaygroundDataset";
@@ -49,6 +49,29 @@ import { DEFAULT_LOADED_DATASETS } from "@/v2/pages-shared/DatasetVersionSelectB
 
 const EMPTY_ITEMS: DatasetItem[] = [];
 const EMPTY_DATASETS: Dataset[] = [];
+
+const renderPlaygroundLoadingSkeleton = () => (
+  <div className="flex min-h-0 flex-1">
+    <div className="flex flex-1 flex-col">
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-r bg-soft-background px-4">
+        <Skeleton className="h-4 w-[85px]" />
+        <Skeleton className="h-4 w-[69px]" />
+      </div>
+      <div className="flex h-[calc(50vh-40px)] shrink-0 flex-col gap-2 border-b border-r bg-soft-background p-4">
+        <Skeleton className="h-[116px] w-full" />
+        <Skeleton className="h-[62px] w-full" />
+        <Skeleton className="h-4 w-[84px]" />
+      </div>
+      <div className="flex flex-1 flex-col border-r bg-background p-4">
+        <Skeleton className="h-[213px] w-full" />
+      </div>
+    </div>
+    <div className="flex w-[var(--add-variant-width)] shrink-0 flex-col items-center gap-2 pt-[170px]">
+      <Skeleton className="size-7 rounded-md" />
+      <Skeleton className="h-4 w-[66px]" />
+    </div>
+  </div>
+);
 
 const PlaygroundPage = () => {
   const workspaceName = useAppStore((state) => state.activeWorkspaceName);
@@ -216,11 +239,9 @@ const PlaygroundPage = () => {
     return () => stopAll();
   }, [stopAll]);
 
-  if (isPendingProviderKeys) {
-    return <Loader />;
-  }
-
-  const headerMaxWidth = `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
+  const headerMaxWidth = isPendingProviderKeys
+    ? undefined
+    : `calc(${promptCount} * var(--max-prompt-width) + var(--add-variant-width))`;
 
   return (
     <div
@@ -252,7 +273,9 @@ const PlaygroundPage = () => {
 
         <Separator />
 
-        {isExperimentMode ? (
+        {isPendingProviderKeys ? (
+          renderPlaygroundLoadingSkeleton()
+        ) : isExperimentMode ? (
           <>
             <div className="flex h-[50vh] shrink-0 overflow-x-auto">
               <div

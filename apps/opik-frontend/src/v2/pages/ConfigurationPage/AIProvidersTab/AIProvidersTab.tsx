@@ -14,7 +14,6 @@ import { PROVIDERS, LEGACY_CUSTOM_PROVIDER_NAME } from "@/constants/providers";
 import AIProviderCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProviderCell";
 import { generateActionsColumDef } from "@/shared/DataTable/utils";
 import AIProvidersRowActionsCell from "@/v2/pages/ConfigurationPage/AIProvidersTab/AIProvidersRowActionsCell";
-import Loader from "@/shared/Loader/Loader";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import SearchInput from "@/shared/SearchInput/SearchInput";
 import { Button } from "@/ui/button";
@@ -121,9 +120,7 @@ const AIProvidersTab = () => {
     setOpenDialog(true);
   };
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending;
 
   return (
     <div>
@@ -150,6 +147,7 @@ const AIProvidersTab = () => {
         columns={columns}
         data={filteredProviderKeys}
         columnPinning={DEFAULT_COLUMN_PINNING}
+        showSkeleton={isTableLoading}
         noData={
           search === "" ? (
             <DataTableEmptyContent

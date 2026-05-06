@@ -646,6 +646,8 @@ openrouter:
     label: "microsoft/phi-3.5-mini-128k-instruct"
   - id: "microsoft/phi-4"
     label: "microsoft/phi-4"
+  - id: "microsoft/phi-4-mini-instruct"
+    label: "microsoft/phi-4-mini-instruct"
   - id: "microsoft/phi-4-multimodal-instruct"
     label: "microsoft/phi-4-multimodal-instruct"
   - id: "microsoft/phi-4-reasoning-plus"
@@ -958,6 +960,8 @@ openrouter:
     label: "openai/gpt-audio"
   - id: "openai/gpt-audio-mini"
     label: "openai/gpt-audio-mini"
+  - id: "openai/gpt-chat-latest"
+    label: "openai/gpt-chat-latest"
   - id: "openai/gpt-oss-120b"
     label: "openai/gpt-oss-120b"
     structuredOutput: true

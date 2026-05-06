@@ -33,7 +33,6 @@ import TrialScoreCell from "./TrialScoreCell";
 import TraceDetailsPanel from "@/v2/pages-shared/traces/TraceDetailsPanel/TraceDetailsPanel";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
-import Loader from "@/shared/Loader/Loader";
 import ExplainerCallout from "@/shared/ExplainerCallout/ExplainerCallout";
 import useCompareExperimentsList from "@/api/datasets/useCompareExperimentsList";
 import useAppStore from "@/store/AppStore";
@@ -594,9 +593,10 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
     setScoresColumnsOrder,
   ]);
 
-  if (isPending || isExperimentsOutputPending) {
-    return <Loader />;
-  }
+  const isTableLoading =
+    isPending ||
+    isExperimentsOutputPending ||
+    (isPlaceholderData && rows.length === 0);
 
   return (
     <>
@@ -668,7 +668,8 @@ const TrialItemsTab: React.FC<TrialItemsTabProps> = ({
         TableWrapper={PageBodyStickyTableWrapper}
         TableBody={DataTableVirtualBody}
         stickyHeader
-        showLoadingOverlay={isPlaceholderData && isFetching}
+        showSkeleton={isTableLoading}
+        showLoadingOverlay={!isTableLoading && isPlaceholderData && isFetching}
       />
       <PageBodyStickyContainer
         className="py-4"

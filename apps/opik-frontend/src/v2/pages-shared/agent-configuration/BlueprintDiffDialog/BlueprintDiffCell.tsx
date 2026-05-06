@@ -5,159 +5,205 @@ import { cn } from "@/lib/utils";
 import usePromptByCommit from "@/api/prompts/usePromptByCommit";
 import Loader from "@/shared/Loader/Loader";
 import { Tag } from "@/ui/tag";
-import { TableCell } from "@/ui/table";
 import TextDiff from "@/shared/CodeDiff/TextDiff";
+import { BlueprintValueType } from "@/types/agent-configs";
+import BlueprintTypeIcon from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintTypeIcon";
 
-export type DiffSide = "base" | "diff";
+export type DiffMode = "unchanged" | "changed" | "added" | "removed";
 
-const SIDE_STYLES = {
-  base: "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
-  diff: "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
-} as const;
+export type PromptSide = {
+  commit: string;
+  template?: string;
+};
 
-export const DiffCellBox: React.FC<{
-  text: string;
-  changed: boolean;
-  side: DiffSide;
-  className?: string;
-}> = ({ text, changed, side, className }) => (
-  <div
+const MODE_TOKENS: Record<
+  Exclude<DiffMode, "unchanged" | "changed">,
+  { surface: string; text: string; lineThrough?: boolean }
+> = {
+  added: {
+    surface: "bg-diff-added-bg border-diff-added-border",
+    text: "text-diff-added-text",
+  },
+  removed: {
+    surface: "bg-diff-removed-bg border-diff-removed-border",
+    text: "text-diff-removed-text",
+    lineThrough: true,
+  },
+};
+
+const tokenSurface = (mode: DiffMode) =>
+  mode === "added" || mode === "removed"
+    ? MODE_TOKENS[mode].surface
+    : "bg-primary-foreground border-border";
+
+const tokenText = (mode: DiffMode) =>
+  cn(
+    mode === "added" && MODE_TOKENS.added.text,
+    mode === "removed" && [MODE_TOKENS.removed.text, "line-through"],
+    mode === "changed" && "text-foreground",
+    mode === "unchanged" && "text-foreground",
+  );
+
+export const KeyCellContent: React.FC<{
+  label: string;
+  type: BlueprintValueType;
+  mode: DiffMode;
+}> = ({ label, type, mode }) => {
+  const isAddedOrRemoved = mode === "added" || mode === "removed";
+  const wrapperClass = cn(
+    "flex min-w-0 items-center gap-1.5 rounded-md p-1",
+    isAddedOrRemoved && ["border", MODE_TOKENS[mode].surface],
+  );
+  const labelClass = cn(
+    "comet-body-xs truncate",
+    isAddedOrRemoved
+      ? [
+          MODE_TOKENS[mode].text,
+          MODE_TOKENS[mode].lineThrough && "line-through",
+        ]
+      : "text-foreground",
+  );
+  const tone =
+    mode === "added" ? "added" : mode === "removed" ? "removed" : undefined;
+  return (
+    <div className={wrapperClass}>
+      <BlueprintTypeIcon type={type} size="sm" tone={tone} />
+      <span className={labelClass} title={label}>
+        {label}
+      </span>
+    </div>
+  );
+};
+
+const valueBoxClass = (mode: DiffMode) =>
+  cn("flex min-h-6 items-center rounded-md border px-2", tokenSurface(mode));
+
+export const ValueCellContent: React.FC<{
+  baseText: string;
+  diffText: string;
+  mode: DiffMode;
+}> = ({ baseText, diffText, mode }) => {
+  if (mode === "changed") {
+    return (
+      <div className={valueBoxClass(mode)}>
+        <div
+          className={cn(
+            "comet-body-xs whitespace-pre-wrap break-words",
+            tokenText(mode),
+          )}
+        >
+          <TextDiff content1={baseText} content2={diffText} mode="words" />
+        </div>
+      </div>
+    );
+  }
+  const text = mode === "removed" ? baseText : diffText;
+  return (
+    <div
+      className={cn(
+        valueBoxClass(mode),
+        "comet-body-xs whitespace-pre-wrap break-words",
+        tokenText(mode),
+      )}
+    >
+      {text || <span className="italic text-muted-slate">(empty)</span>}
+    </div>
+  );
+};
+
+const PromptCommitTag: React.FC<{ commit: string; mode: DiffMode }> = ({
+  commit,
+  mode,
+}) => (
+  <Tag
     className={cn(
-      "comet-body-s whitespace-pre-wrap break-words rounded-md border p-2 text-sm",
-      changed
-        ? SIDE_STYLES[side]
-        : "bg-primary-foreground text-muted-foreground",
-      className,
+      "flex w-fit items-center gap-1",
+      (mode === "added" || mode === "removed") && [
+        "border",
+        MODE_TOKENS[mode].surface,
+        MODE_TOKENS[mode].text,
+        MODE_TOKENS[mode].lineThrough && "line-through",
+      ],
     )}
+    variant="gray"
+    size="sm"
+    title={commit}
   >
-    {text || "(empty)"}
-  </div>
+    <GitCommitVertical className="size-3.5 shrink-0" />
+    {commit.slice(0, 8)}
+  </Tag>
 );
 
-export const EmptyDiffCell: React.FC = () => (
-  <span className="comet-body-xs italic text-muted-slate">—</span>
-);
-
-export const PromptDiffPair: React.FC<{
-  baseCommit: string;
-  diffCommit: string;
-  baseTemplate?: string;
-  diffTemplate?: string;
-}> = ({ baseCommit, diffCommit, baseTemplate, diffTemplate }) => {
+export const PromptCellContent: React.FC<{
+  base: PromptSide;
+  diff: PromptSide;
+  mode: DiffMode;
+}> = ({ base, diff, mode }) => {
   const { data: basePrompt, isLoading: baseLoading } = usePromptByCommit(
-    { commitId: baseCommit },
-    { enabled: !!baseCommit && baseTemplate === undefined },
+    { commitId: base.commit },
+    { enabled: !!base.commit && base.template === undefined },
   );
   const { data: diffPrompt, isLoading: diffLoading } = usePromptByCommit(
-    { commitId: diffCommit },
-    { enabled: !!diffCommit && diffTemplate === undefined },
+    { commitId: diff.commit },
+    { enabled: !!diff.commit && diff.template === undefined },
   );
 
   const isLoading =
-    (baseTemplate === undefined && baseLoading) ||
-    (diffTemplate === undefined && diffLoading);
+    (base.template === undefined && baseLoading) ||
+    (diff.template === undefined && diffLoading);
 
   if (isLoading) {
     return (
-      <>
-        <TableCell className="w-1/2 py-3 pr-2 align-top">
-          <Loader />
-        </TableCell>
-        <TableCell className="w-1/2 py-3 pl-2 align-top">
-          <Loader />
-        </TableCell>
-      </>
+      <div className={valueBoxClass(mode)}>
+        <Loader />
+      </div>
     );
   }
 
   const baseText =
-    baseTemplate ?? basePrompt?.requested_version?.template ?? "";
+    base.template ?? basePrompt?.requested_version?.template ?? "";
   const diffText =
-    diffTemplate ?? diffPrompt?.requested_version?.template ?? "";
-  const changed = baseText !== diffText;
-  const commitsChanged = baseCommit !== diffCommit;
-  const hasBase = !!baseCommit || baseTemplate !== undefined;
-  const hasDiff = !!diffCommit || diffTemplate !== undefined;
+    diff.template ?? diffPrompt?.requested_version?.template ?? "";
+  const commitsChanged = base.commit !== diff.commit;
 
-  const renderDiffContent = (text: string, isBase: boolean) => {
-    if (isBase ? !hasDiff : !hasBase) {
+  const renderTags = () => {
+    if (mode === "removed" && base.commit) {
+      return <PromptCommitTag commit={base.commit} mode="removed" />;
+    }
+    if (mode === "added" && diff.commit) {
+      return <PromptCommitTag commit={diff.commit} mode="added" />;
+    }
+    if (commitsChanged) {
       return (
-        <div
-          className={cn(
-            "comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border p-2 text-sm",
-            isBase ? SIDE_STYLES.base : SIDE_STYLES.diff,
+        <>
+          {base.commit && (
+            <PromptCommitTag commit={base.commit} mode="removed" />
           )}
-        >
-          {text || "(empty)"}
-        </div>
+          {diff.commit && <PromptCommitTag commit={diff.commit} mode="added" />}
+        </>
       );
     }
-
-    if (!changed) {
-      return (
-        <div className="comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-primary-foreground p-2 text-sm text-muted-foreground">
-          {text || "(empty)"}
-        </div>
-      );
+    if (diff.commit) {
+      return <PromptCommitTag commit={diff.commit} mode="unchanged" />;
     }
-
-    return (
-      <div className="comet-code max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-primary-foreground px-2.5 py-1.5 text-sm">
-        <TextDiff content1={baseText} content2={isBase ? baseText : diffText} />
-      </div>
-    );
+    return null;
   };
 
+  const tags = renderTags();
+  const text = mode === "removed" ? baseText : diffText;
+
   return (
-    <>
-      <TableCell className="w-1/2 py-3 pr-2 align-top">
-        {hasBase ? (
-          <div className="flex flex-col gap-1">
-            {baseCommit && (
-              <Tag
-                className={cn(
-                  "flex w-fit items-center gap-1",
-                  commitsChanged &&
-                    "border-[var(--diff-removed-border)] bg-[var(--diff-removed-bg)] text-[var(--diff-removed-text)]",
-                )}
-                variant="gray"
-                size="sm"
-                title={baseCommit}
-              >
-                <GitCommitVertical className="size-3.5 shrink-0" />
-                {baseCommit.slice(0, 8)}
-              </Tag>
-            )}
-            {renderDiffContent(baseText, true)}
-          </div>
-        ) : (
-          <EmptyDiffCell />
-        )}
-      </TableCell>
-      <TableCell className="w-1/2 py-3 pl-2 align-top">
-        {hasDiff ? (
-          <div className="flex flex-col gap-1">
-            {diffCommit && (
-              <Tag
-                className={cn(
-                  "flex w-fit items-center gap-1",
-                  commitsChanged &&
-                    "border-[var(--diff-added-border)] bg-[var(--diff-added-bg)] text-[var(--diff-added-text)]",
-                )}
-                variant="gray"
-                size="sm"
-                title={diffCommit}
-              >
-                <GitCommitVertical className="size-3.5 shrink-0" />
-                {diffCommit.slice(0, 8)}
-              </Tag>
-            )}
-            {renderDiffContent(diffText, false)}
-          </div>
-        ) : (
-          <EmptyDiffCell />
-        )}
-      </TableCell>
-    </>
+    <div className="flex flex-col gap-2">
+      {tags && <div className="flex flex-wrap items-center gap-2">{tags}</div>}
+      <div className={valueBoxClass(mode)}>
+        <div className={cn("comet-code", tokenText(mode))}>
+          {mode === "changed" ? (
+            <TextDiff content1={baseText} content2={diffText} mode="words" />
+          ) : (
+            text || <span className="italic text-muted-slate">(empty)</span>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
