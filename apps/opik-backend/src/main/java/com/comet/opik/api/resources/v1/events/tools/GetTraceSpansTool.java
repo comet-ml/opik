@@ -33,6 +33,11 @@ public class GetTraceSpansTool implements ToolExecutor {
     @Override
     public String execute(String arguments, TraceToolContext ctx) {
         log.debug("get_trace_spans tool call with arguments: '{}' for trace={}", arguments, ctx.getTrace().id());
-        return SpanTreeSerializer.serializeOverview(ctx.getSpans());
+        String result = SpanTreeSerializer.serializeOverview(ctx.getSpans());
+        if (log.isDebugEnabled()) {
+            log.debug("get_trace_spans summary: traceId={}, spanCount={}, outputBytes={}",
+                    ctx.getTrace().id(), ctx.getSpans().size(), result.length());
+        }
+        return result;
     }
 }
