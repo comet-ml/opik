@@ -457,8 +457,8 @@ class GetTracesByProjectResourceTest {
                                                 .value(getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
-                                case LIST -> {
-                                    // For LIST fields, skip invalid value tests for NO_VALUE_OPERATORS
+                                case LIST, ENUM -> {
+                                    // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
                                     if (Operator.NO_VALUE_OPERATORS.contains(operator)) {
                                         yield Stream.empty();
