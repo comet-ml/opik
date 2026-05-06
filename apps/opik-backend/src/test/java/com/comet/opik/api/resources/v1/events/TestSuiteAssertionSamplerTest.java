@@ -147,7 +147,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -212,7 +212,7 @@ class TestSuiteAssertionSamplerTest {
             assertThat(message.categoryName()).isEqualTo("suite_assertion");
             assertThat(message.trace().id()).isEqualTo(trace.id());
             assertThat(message.ruleName()).isEqualTo("item-evaluator");
-            assertThat(message.llmAsJudgeCode().model().name()).isEqualTo("gpt-5-nano");
+            assertThat(message.llmAsJudgeCode().model().name()).isEqualTo("gpt-4o-mini");
             assertThat(message.llmAsJudgeCode().schema()).hasSize(1);
             // Schema names are renamed to stable assertion_N keys
             assertThat(message.llmAsJudgeCode().schema().getFirst().name()).isEqualTo("assertion_1");
@@ -241,7 +241,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -352,7 +352,7 @@ class TestSuiteAssertionSamplerTest {
             // Version has evaluators — if the skip check is removed, messages would be
             // enqueued and the never() assertion below would catch the regression.
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -413,7 +413,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Item 1 evaluator: 2 assertions (grammar, spelling)
             var item1EvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -433,7 +433,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Item 2 evaluator: 3 different assertions (tone, length, clarity)
             var item2EvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -562,7 +562,7 @@ class TestSuiteAssertionSamplerTest {
 
             // Dataset-level evaluator with 2 assertions
             var datasetEvalConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate: {assertions}")
@@ -644,7 +644,7 @@ class TestSuiteAssertionSamplerTest {
             String v2VersionHash = "version2hash";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -746,7 +746,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -837,7 +837,7 @@ class TestSuiteAssertionSamplerTest {
             String versionHash = "abc123";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")
@@ -918,7 +918,7 @@ class TestSuiteAssertionSamplerTest {
             String userName = "test-user";
 
             var evaluatorConfig = new LlmAsJudgeCode(
-                    LlmAsJudgeModelParameters.builder().name("gpt-5-nano").build(),
+                    LlmAsJudgeModelParameters.builder().name("gpt-4o-mini").build(),
                     List.of(LlmAsJudgeMessage.builder()
                             .role(ChatMessageType.USER)
                             .content("Evaluate {input}")

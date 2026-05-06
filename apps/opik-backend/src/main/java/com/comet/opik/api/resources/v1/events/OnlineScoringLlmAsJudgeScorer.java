@@ -114,7 +114,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             return workspaceNameService.getWorkspaceName(workspaceId,
                     opikConfiguration.getAuthentication().getReactService().url());
         } catch (Exception e) {
-            log.warn("Failed to resolve workspaceName for '{}', falling back to id: {}",
+            log.warn("Failed to resolve workspaceName for '{}', falling back to using workspace id. Error: {}",
                     workspaceId, e.getMessage());
             return workspaceId;
         }
@@ -219,12 +219,13 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
             }
 
-            userFacingLogger.info("Sending traceId '{}' to LLM using the following input:\n\n{}",
-                    trace.id(), scoreRequest);
+            userFacingLogger.info("Sending traceId '{}' to LLM: {}",
+                    trace.id(), summarizeRequest(scoreRequest, message));
 
             var chatResponse = aiProxyService.scoreTrace(
                     scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
-            userFacingLogger.info("Received response for traceId '{}':\n\n{}", trace.id(), chatResponse);
+            userFacingLogger.info("Received response for traceId '{}': {}",
+                    trace.id(), summarizeResponse(chatResponse));
 
             if (shouldUseTools(message)) {
                 chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
@@ -344,6 +345,37 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
         return aiProxyService.scoreTrace(
                 finalRequest, message.llmAsJudgeCode().model(), message.workspaceId());
+    }
+
+    /**
+     * Build a sanitized one-line description of the outgoing request for the user-facing
+     * log. The full {@code ChatRequest} contains the rendered system prompt, the user
+     * message with the trace's input/output, and request parameters — surfacing all of it
+     * in a stored log lands trace content (and any tokens or PII it carries) in clear
+     * text downstream of whatever sinks the user-facing log feeds. We log shape only.
+     */
+    private static String summarizeRequest(ChatRequest request, TraceToScoreLlmAsJudge message) {
+        int messageCount = request.messages() == null ? 0 : request.messages().size();
+        int totalChars = request.messages() == null ? 0
+                : request.messages().stream().mapToInt(m -> m.toString().length()).sum();
+        int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
+        return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
+                message.llmAsJudgeCode().model().name(),
+                messageCount, totalChars, toolSpecCount, shouldUseTools(message));
+    }
+
+    /**
+     * Build a sanitized one-line description of the LLM response. As with the request,
+     * the full {@code ChatResponse} contains the assistant text and any tool-call
+     * arguments, both of which can echo trace content the model is reasoning about.
+     */
+    private static String summarizeResponse(ChatResponse response) {
+        var ai = response.aiMessage();
+        int textLength = ai.text() == null ? 0 : ai.text().length();
+        int toolCallCount = ai.toolExecutionRequests() == null ? 0 : ai.toolExecutionRequests().size();
+        var finishReason = response.metadata() == null ? null : response.metadata().finishReason();
+        return String.format("textChars=%d, toolCalls=%d, finishReason=%s",
+                textLength, toolCallCount, finishReason);
     }
 
     private List<Span> fetchSpans(UUID traceId, String workspaceId, String userName) {
