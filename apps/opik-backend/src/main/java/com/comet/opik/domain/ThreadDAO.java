@@ -107,7 +107,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     last_updated_by,
                     created_by,
-                    created_at
+                    created_at,
+                    environment
                 FROM (
                     SELECT
                         *,
