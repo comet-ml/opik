@@ -124,7 +124,9 @@ class AgentConfigsResourceTest {
                         .usageReportEnabled(true)
                         .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
                         .customConfigs(List.of(
-                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true")))
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.environment",
+                                        "test")))
                         .build());
     }
 
@@ -220,10 +222,10 @@ class AgentConfigsResourceTest {
                                         equalTo(WORKSPACE_ID)))
                                 .and(matchingJsonPath("$.event_properties.config_environment",
                                         equalTo("prod")))
-                                .and(matchingJsonPath("$.event_properties.environment",
-                                        equalTo("prod")))
                                 .and(matchingJsonPath("$.event_properties.deployed_to_prod",
-                                        equalTo("true")))));
+                                        equalTo("true")))
+                                .and(matchingJsonPath("$.event_properties.environment",
+                                        equalTo("test")))));
             });
         }
 
