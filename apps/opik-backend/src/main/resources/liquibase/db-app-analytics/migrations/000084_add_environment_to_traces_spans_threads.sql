@@ -15,12 +15,14 @@ ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.traces ON CLUSTER '{cluster}'
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS environment String DEFAULT '';
 
+-- set(0) for the same low-cardinality rationale as idx_traces_environment above.
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.spans ON CLUSTER '{cluster}'
     ADD INDEX IF NOT EXISTS idx_spans_environment environment TYPE set(0) GRANULARITY 1;
 
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.trace_threads ON CLUSTER '{cluster}'
     ADD COLUMN IF NOT EXISTS environment String DEFAULT '';
 
+-- set(0) for the same low-cardinality rationale as idx_traces_environment above.
 ALTER TABLE ${ANALYTICS_DB_DATABASE_NAME}.trace_threads ON CLUSTER '{cluster}'
     ADD INDEX IF NOT EXISTS idx_trace_threads_environment environment TYPE set(0) GRANULARITY 1;
 

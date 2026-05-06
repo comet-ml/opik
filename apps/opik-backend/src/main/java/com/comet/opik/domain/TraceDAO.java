@@ -3046,8 +3046,6 @@ class TraceDAOImpl implements TraceDAO {
                 statement.bindNull("source", String.class);
             }
 
-            statement.bind("environment", StringUtils.defaultString(traceUpdate.environment()));
-
             Segment segment = startSegment("traces", "Clickhouse", "insert_partial");
 
             return Mono.from(statement.execute())

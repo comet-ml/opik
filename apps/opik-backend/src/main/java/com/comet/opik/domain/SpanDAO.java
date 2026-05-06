@@ -1743,8 +1743,6 @@ public class SpanDAO {
                         statement.bindNull("source", String.class);
                     }
 
-                    statement.bind("environment", StringUtils.defaultString(spanUpdate.environment()));
-
                     bindUserNameAndWorkspace(statement, userName, workspaceId);
 
                     Segment segment = startSegment("spans", "Clickhouse", "partial_insert");
