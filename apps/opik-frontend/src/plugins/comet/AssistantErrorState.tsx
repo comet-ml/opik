@@ -1,6 +1,7 @@
 import React from "react";
 import { AlertCircle, X } from "lucide-react";
 import { SLACK_LINK } from "@/shared/SupportHub/SupportHubSubMenu";
+import { cn } from "@/lib/utils";
 import { AssistantSurfaceVariant } from "@/types/assistant-sidebar";
 
 interface AssistantErrorStateProps {
@@ -43,11 +44,24 @@ const CloseButton: React.FC<{ onClick?: () => void }> = ({ onClick }) => (
   </button>
 );
 
-const EscalatedError: React.FC<
-  Pick<AssistantErrorStateProps, "onRetry" | "onToggle">
-> = ({ onRetry, onToggle }) => (
-  <div className="relative flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
-    <CloseButton onClick={onToggle} />
+type ExpandedErrorProps = Pick<
+  AssistantErrorStateProps,
+  "variant" | "onRetry" | "onToggle"
+>;
+
+const expandedCardClass = (variant: AssistantSurfaceVariant) =>
+  cn(
+    "relative flex size-full flex-col items-center justify-center gap-3 bg-primary-foreground px-6 text-center",
+    variant === "sidebar" && "border-l",
+  );
+
+const EscalatedError: React.FC<ExpandedErrorProps> = ({
+  variant,
+  onRetry,
+  onToggle,
+}) => (
+  <div className={expandedCardClass(variant)}>
+    {variant === "sidebar" && <CloseButton onClick={onToggle} />}
     <AlertCircle className="size-5 text-destructive" />
     <div className="text-sm font-medium text-foreground">
       Assistant is currently unavailable
@@ -73,11 +87,13 @@ const EscalatedError: React.FC<
   </div>
 );
 
-const FirstRetryError: React.FC<
-  Pick<AssistantErrorStateProps, "onRetry" | "onToggle">
-> = ({ onRetry, onToggle }) => (
-  <div className="relative flex size-full flex-col items-center justify-center gap-3 border-l bg-primary-foreground px-6 text-center">
-    <CloseButton onClick={onToggle} />
+const FirstRetryError: React.FC<ExpandedErrorProps> = ({
+  variant,
+  onRetry,
+  onToggle,
+}) => (
+  <div className={expandedCardClass(variant)}>
+    {variant === "sidebar" && <CloseButton onClick={onToggle} />}
     <AlertCircle className="size-5 text-destructive" />
     <div className="text-sm font-medium text-foreground">
       Unable to load assistant
@@ -104,8 +120,12 @@ const AssistantErrorState: React.FC<AssistantErrorStateProps> = ({
   if (variant === "collapsed")
     return <CollapsedError onToggle={onToggle} retryCount={retryCount} />;
   if (retryCount > 0)
-    return <EscalatedError onRetry={onRetry} onToggle={onToggle} />;
-  return <FirstRetryError onRetry={onRetry} onToggle={onToggle} />;
+    return (
+      <EscalatedError variant={variant} onRetry={onRetry} onToggle={onToggle} />
+    );
+  return (
+    <FirstRetryError variant={variant} onRetry={onRetry} onToggle={onToggle} />
+  );
 };
 
 export default AssistantErrorState;
