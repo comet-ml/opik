@@ -75,6 +75,8 @@ def _patch_adk_opentelemetry_tracers(
     # ProxyTracer object we already patched above). On older versions
     # the attribute is still present and points to the same object.
     if hasattr(base_agent, "tracer"):
-        base_agent.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
+        base_agent.tracer.start_as_current_span = (
+            no_op_opik_tracer.start_as_current_span
+        )
         base_agent.tracer.start_span = no_op_opik_tracer.start_span
     LOGGER.debug("Patched ADK tracers")
