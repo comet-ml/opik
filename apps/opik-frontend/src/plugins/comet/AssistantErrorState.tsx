@@ -1,9 +1,10 @@
 import React from "react";
 import { AlertCircle, X } from "lucide-react";
 import { SLACK_LINK } from "@/shared/SupportHub/SupportHubSubMenu";
+import { AssistantSurfaceVariant } from "@/types/assistant-sidebar";
 
 interface AssistantErrorStateProps {
-  collapsed: boolean;
+  variant: AssistantSurfaceVariant;
   onRetry?: () => void;
   onToggle?: () => void;
   retryCount: number;
@@ -95,12 +96,12 @@ const FirstRetryError: React.FC<
 );
 
 const AssistantErrorState: React.FC<AssistantErrorStateProps> = ({
-  collapsed,
+  variant,
   onRetry,
   onToggle,
   retryCount,
 }) => {
-  if (collapsed)
+  if (variant === "collapsed")
     return <CollapsedError onToggle={onToggle} retryCount={retryCount} />;
   if (retryCount > 0)
     return <EscalatedError onRetry={onRetry} onToggle={onToggle} />;
