@@ -81,7 +81,7 @@ const ExperimentsPage: React.FC = () => {
             docsUrl={buildDocsUrl("/evaluation/overview")}
           />
         ) : (
-          <GeneralDatasetsTab onNewExperimentClick={handleNewExperimentClick} />
+          <GeneralDatasetsTab isExistencePending={isExistencePending} />
         )}
         <AddExperimentDialog
           key={resetDialogKeyRef.current}

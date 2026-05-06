@@ -209,6 +209,7 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
   - Apply code changes according to the plan
   - Run quality checks and tests
   - Commit changes with proper ticket number prefix
+- **Post-push PR description sync**: Whenever this skill (or any follow-up step the user runs from this conversation) invokes `git push` or `git push --force-with-lease` to a branch with an open PR in `comet-ml/opik`, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) immediately after the push completes. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo. This keeps the PR description aligned with what was actually shipped instead of what was claimed when the PR was opened.
 - **If user declined**: Provide manual implementation guidance and stop
 
 ---

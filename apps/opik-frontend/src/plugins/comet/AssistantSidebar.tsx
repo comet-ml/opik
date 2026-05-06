@@ -8,6 +8,7 @@ import React, {
 import { useParams, useRouter } from "@tanstack/react-router";
 import {
   AssistantSidebarBridge,
+  AssistantSurfaceVariant,
   BridgeContext,
   BridgeSurface,
   HostEventMap,
@@ -24,7 +25,7 @@ import useProjectOnboardingStats from "@/hooks/useProjectOnboardingStats";
 import useRunnerBridgeSync from "@/hooks/useRunnerBridgeSync";
 import { BASE_API_URL } from "@/api/api";
 import AssistantErrorState from "@/plugins/comet/AssistantErrorState";
-import OllieLoader, { OllieLoaderVariant } from "@/plugins/comet/OllieLoader";
+import OllieLoader from "@/plugins/comet/OllieLoader";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
 import useAssistantManifest from "@/plugins/comet/useAssistantManifest";
 import {
@@ -75,12 +76,19 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
     });
   }, [onWidthChange]);
 
-  const collapsed = !isOpen;
+  let variant: AssistantSurfaceVariant;
+  if (surface === "page") {
+    variant = "page";
+  } else if (!isOpen) {
+    variant = "collapsed";
+  } else {
+    variant = "sidebar";
+  }
 
   if (error) {
     return (
       <AssistantErrorState
-        collapsed={collapsed}
+        variant={variant}
         onRetry={onRetry}
         onToggle={handleToggle}
         retryCount={retryCount}
@@ -88,12 +96,6 @@ const AssistantSidebarLoader: React.FC<AssistantSidebarLoaderProps> = ({
     );
   }
 
-  let variant: OllieLoaderVariant = "sidebar";
-  if (collapsed) {
-    variant = "collapsed";
-  } else if (surface === "page") {
-    variant = "page";
-  }
   return <OllieLoader variant={variant} />;
 };
 

@@ -224,7 +224,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             var chatResponse = aiProxyService.scoreTrace(scoreRequest, message.code().model(), message.workspaceId());
             userFacingLogger.info("Received response for threadId '{}':\n\n{}", threadId, chatResponse);
 
-            return OnlineScoringEngine.toFeedbackScores(chatResponse).stream()
+            var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+            OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
+            return parsed.scores().stream()
                     .map(item -> FeedbackScoresMapper.INSTANCE.map(
                             item.toBuilder()
                                     .id(threadModelId)

@@ -3,6 +3,7 @@ import { Pause, Play, RotateCcw, Unplug } from "lucide-react";
 
 import { Button } from "@/ui/button";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
+import { Skeleton } from "@/ui/skeleton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import {
   ResizableHandle,
@@ -26,6 +27,39 @@ import AgentRunnerConnectedState from "./AgentRunnerConnectedState";
 import AgentRunnerResult from "./AgentRunnerResult";
 
 const TRACE_POLL_INTERVAL = 1000;
+
+const renderAgentRunnerLoadingSkeleton = () => (
+  <ResizablePanelGroup
+    direction="vertical"
+    autoSaveId="agent-sandbox-layout"
+    className="min-h-0 flex-1"
+  >
+    <ResizablePanel id="agent-input" defaultSize={50} minSize={20}>
+      <div className="flex h-full flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-soft-background px-4">
+          <Skeleton className="h-4 w-[40px]" />
+          <Skeleton className="h-4 w-[80px]" />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col gap-2 bg-soft-background p-4">
+          <Skeleton className="h-[116px] w-full" />
+          <Skeleton className="h-[62px] w-full" />
+        </div>
+      </div>
+    </ResizablePanel>
+    <ResizableHandle />
+    <ResizablePanel id="agent-result" defaultSize={50} minSize={15}>
+      <div className="flex h-full flex-col">
+        <div className="flex h-10 shrink-0 items-center gap-2 border-b bg-soft-background px-4">
+          <Skeleton className="size-3 rounded-sm" />
+          <Skeleton className="h-4 w-[40px]" />
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col bg-background p-4">
+          <Skeleton className="h-[213px] w-full" />
+        </div>
+      </div>
+    </ResizablePanel>
+  </ResizablePanelGroup>
+);
 
 type AgentRunnerContentProps = {
   projectId: string;
@@ -158,7 +192,7 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
       <div className="flex items-center gap-3 border-b bg-gray-100 px-4 py-3">
         <h1 className="comet-title-xs">Agent playground</h1>
 
-        {isConnected ? (
+        {pairing.isInitialLoading ? null : isConnected ? (
           <TooltipWrapper content="Your agent is connected to Opik">
             <span className="comet-body-xs flex items-center gap-1.5 text-emerald-600">
               <span className="size-1.5 rounded-full bg-emerald-500" />
@@ -232,7 +266,9 @@ const AgentRunnerContent: React.FC<AgentRunnerContentProps> = ({
         </div>
       </div>
 
-      {isConnected && pairing.runner ? (
+      {pairing.isInitialLoading ? (
+        renderAgentRunnerLoadingSkeleton()
+      ) : isConnected && pairing.runner ? (
         <ResizablePanelGroup
           direction="vertical"
           autoSaveId="agent-sandbox-layout"
