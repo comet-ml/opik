@@ -104,7 +104,7 @@ const PlaygroundHeader = ({
   );
 
   const {
-    permissions: { canViewExperiments, canViewDatasets },
+    permissions: { canViewExperiments, canCreateExperiments, canViewDatasets },
   } = usePermissions();
 
   const [lastPickedModel] = useLastPickedModel({
@@ -257,7 +257,8 @@ const PlaygroundHeader = ({
   );
 
   const renderExperimentChipOrButton = () => {
-    if (!canViewDatasets) return null;
+    if (!(canViewDatasets && canCreateExperiments && canViewExperiments))
+      return null;
 
     if (isExperimentMode) {
       const chipLabel = datasetName
