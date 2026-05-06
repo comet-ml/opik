@@ -149,12 +149,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                         return Mono.empty();
                     })
                     .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
-                            .doOnNext(response -> persistAndEmit(workspaceId, response))
                             .flatMap(response -> cacheResult(workspaceId, response))
                             .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
         }
         return computeVersion(workspaceId, authSuggestedVersion)
-                .doOnNext(response -> persistAndEmit(workspaceId, response))
                 .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
     }
 
@@ -211,7 +209,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion) {
         if (authSuggestedVersion == OpikVersion.VERSION_2) {
             log.info("Locked via auth one-way gate, workspaceId '{}', version '{}'", workspaceId, authSuggestedVersion);
-            return Mono.just(buildResponse(OpikVersion.VERSION_2));
+            return Mono.just(buildResponse(OpikVersion.VERSION_2))
+                    .doOnNext(response -> persistAndEmit(workspaceId, response));
         }
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
@@ -224,7 +223,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                     log.info("Workspace version determined as '{}' for workspace '{}' (hasVersion1Entities={})",
                             version.getValue(), workspaceId, found);
                     return buildResponse(version);
-                });
+                })
+                .doOnNext(response -> persistAndEmit(workspaceId, response));
     }
 
     private Optional<OpikVersion> getForcedVersion() {
