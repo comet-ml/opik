@@ -2839,6 +2839,69 @@ class ExperimentAggregatesIntegrationTest {
         assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
     }
 
+    @Test
+    @DisplayName("OPIK-6177: EIA-side filter consistent across two experiments at distinct dataset versions, exercising push_top_limit")
+    void multiVersionExperimentsEiaFilterConsistentBeforeAndAfterAggregates() {
+        var workspaceName = UUID.randomUUID().toString();
+        var apiKey = UUID.randomUUID().toString();
+        var workspaceId = UUID.randomUUID().toString();
+
+        mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+        var project = createProject(apiKey, workspaceName);
+        var dataset = createDataset(apiKey, workspaceName);
+        List<String> feedbackScoreNames = PodamFactoryUtils.manufacturePojoList(factory, String.class);
+
+        // Two experiments at distinct resolved_dataset_version_id values. Mirrors the
+        // setup of multiVersionExperimentsFilterConsistentBeforeAndAfterAggregates above
+        // but exercises an EIA-side (experiment_item_aggregates) filter rather than a
+        // DI-side filter on `dataset_items_filtered_ids`. Catches regressions in the
+        // path OPIK-6311 optimised: experiment_item_filters clause + push_top_limit's
+        // top_dataset_items CTE rendering EIA filters with skip-index pushdown.
+        var experiment1 = createExperimentPinnedToFreshDatasetVersion(dataset, project, feedbackScoreNames, apiKey,
+                workspaceName);
+        var experiment2 = createExperimentPinnedToFreshDatasetVersion(dataset, project, feedbackScoreNames, apiKey,
+                workspaceName);
+
+        var experimentIds = List.of(experiment1.id(), experiment2.id());
+        // EIA-side filter: duration > 0 matches every experiment_item (createExperimentItemWithData
+        // populates traces with positive durations via Podam). Forces the
+        // <if(experiment_item_filters)> clause to render in both top_dataset_items and the
+        // outer SELECT, exercising eia.duration > 0 directly against the column (skip-index
+        // friendly post-OPIK-6177 stable-id migration).
+        var filters = List.<ExperimentsComparisonFilter>of(ExperimentsComparisonFilter.builder()
+                .field(ExperimentsComparisonValidKnownField.DURATION.getQueryParamField())
+                .operator(Operator.GREATER_THAN)
+                .value("0")
+                .type(FieldType.NUMBER)
+                .build());
+        int pageSize = 25;
+
+        var beforeAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, null, 1, pageSize, apiKey, workspaceName);
+
+        assertPageNotEmpty(beforeAggregation);
+
+        experimentAggregatesService.populateAggregations(experiment1.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+        experimentAggregatesService.populateAggregations(experiment2.id())
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        var afterAggregation = datasetResourceClient.getDatasetItemsWithExperimentItems(
+                dataset.id(), experimentIds, null, filters, null, 1, pageSize, apiKey, workspaceName);
+
+        assertThat(afterAggregation.total())
+                .as("EIA-filtered total should match before/after aggregation across multiple dataset versions")
+                .isEqualTo(beforeAggregation.total());
+        assertDatasetItemsWithExperimentItems(beforeAggregation.content(), afterAggregation.content());
+    }
+
     private Experiment createExperimentPinnedToFreshDatasetVersion(Dataset dataset, Project project,
             List<String> feedbackScoreNames, String apiKey, String workspaceName) {
         var datasetItemIndex = new java.util.concurrent.atomic.AtomicInteger(0);
