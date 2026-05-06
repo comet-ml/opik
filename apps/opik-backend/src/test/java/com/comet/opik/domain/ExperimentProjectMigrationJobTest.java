@@ -316,7 +316,7 @@ class ExperimentProjectMigrationJobTest {
         var experimentId = seeded.getLeft();
         var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
 
-        workspacesService.markMigrationSkipped(workspaceId, Instant.now(), "test-pre-marked-trap");
+        workspacesService.markMigrationSkipped(workspaceId, "test-pre-marked-trap");
 
         assertWorkspaceVersion1(apiKey, workspaceName);
 
