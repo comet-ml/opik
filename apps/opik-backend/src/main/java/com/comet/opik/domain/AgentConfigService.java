@@ -795,7 +795,7 @@ class AgentConfigServiceImpl implements AgentConfigService {
                 "project_id", projectId.toString(),
                 "blueprint_id", blueprintId.toString(),
                 "blueprint_name", blueprintName,
-                "environment", envName,
+                "config_environment", envName,
                 "deployed_to_prod", String.valueOf("prod".equalsIgnoreCase(envName))), userName);
     }
 }

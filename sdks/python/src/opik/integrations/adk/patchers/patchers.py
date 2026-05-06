@@ -68,6 +68,15 @@ def _patch_adk_opentelemetry_tracers(
     adk_telemetry.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
     adk_telemetry.tracer.start_span = no_op_opik_tracer.start_span
 
-    base_agent.tracer.start_as_current_span = no_op_opik_tracer.start_as_current_span
-    base_agent.tracer.start_span = no_op_opik_tracer.start_span
+    # google-adk >= 1.32 dropped the module-level `tracer` symbol from
+    # `google.adk.agents.base_agent` (agent invocation now goes through
+    # `google.adk.telemetry._instrumentation.record_agent_invocation`,
+    # which calls `telemetry.tracing.tracer` — the same singleton
+    # ProxyTracer object we already patched above). On older versions
+    # the attribute is still present and points to the same object.
+    if hasattr(base_agent, "tracer"):
+        base_agent.tracer.start_as_current_span = (
+            no_op_opik_tracer.start_as_current_span
+        )
+        base_agent.tracer.start_span = no_op_opik_tracer.start_span
     LOGGER.debug("Patched ADK tracers")
