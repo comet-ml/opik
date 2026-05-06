@@ -62,7 +62,7 @@ const renderPlaygroundLoadingSkeleton = () => (
         <Skeleton className="h-[62px] w-full" />
         <Skeleton className="h-4 w-[84px]" />
       </div>
-      <div className="flex flex-1 flex-col border-r bg-white p-4">
+      <div className="flex flex-1 flex-col border-r bg-background p-4">
         <Skeleton className="h-[213px] w-full" />
       </div>
     </div>
