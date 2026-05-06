@@ -682,7 +682,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                 ei.last_updated_by AS last_updated_by,
                 ei.execution_policy AS execution_policy
             FROM experiment_items AS ei
-            LEFT JOIN dataset_item_versions AS lookup_div
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
                 ON lookup_div.workspace_id = ei.workspace_id
                 AND lookup_div.id = ei.dataset_item_id
             WHERE ei.workspace_id = :workspace_id
@@ -1148,7 +1148,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             )
             SELECT COUNT(DISTINCT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)) as count
             FROM experiment_item_aggregates eia FINAL
-            LEFT JOIN dataset_item_versions AS lookup_div
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
                 ON lookup_div.workspace_id = eia.workspace_id
                 AND lookup_div.id = eia.dataset_item_id
             LEFT JOIN dataset_item_versions_resolved AS di
@@ -1259,7 +1259,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            eia.execution_policy
                 )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
-            LEFT JOIN dataset_item_versions AS lookup_div
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
                 ON lookup_div.workspace_id = eia.workspace_id
                 AND lookup_div.id = eia.dataset_item_id
             LEFT JOIN dataset_item_versions_resolved AS di
@@ -1293,7 +1293,7 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
     private static final String SELECT_EXPERIMENT_ITEMS_STATS_FROM_AGGREGATES = """
             WITH valid_dataset_items AS (
                 SELECT id, dataset_item_id
-                FROM dataset_item_versions
+                FROM dataset_item_versions FINAL
                 WHERE workspace_id = :workspace_id
                 AND dataset_id = :dataset_id
                 AND dataset_version_id = :version_id

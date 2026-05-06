@@ -442,7 +442,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-            	LEFT JOIN dataset_item_versions AS lookup_div
+            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
@@ -641,7 +641,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM (
                     SELECT id FROM dataset_items_agg_resolved WHERE <dataset_item_filters>
                 ) AS latest_passing
-                INNER JOIN dataset_item_versions AS div
+                INNER JOIN dataset_item_versions AS div FINAL
                     ON div.workspace_id = :workspace_id
                     AND div.dataset_id = :datasetId
                     AND div.dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
@@ -657,7 +657,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     eia.input AS input,
                     eia.output AS output
                 FROM experiment_item_aggregates AS eia FINAL
-                LEFT JOIN dataset_item_versions AS lookup_div
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = eia.workspace_id
                     AND lookup_div.id = eia.dataset_item_id
                 WHERE eia.workspace_id = :workspace_id
@@ -786,7 +786,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * <p><b>{@code lookup_for_count} CTE.</b> Used by the aggregated branch (count +
      * row {@code !push_top_limit}) to build a skip-index-friendly IN list when DI filters are
      * active: it narrows by {@code <dataset_item_filters>} first, then INNER JOINs
-     * {@code dataset_item_versions} on {@code div.dataset_item_id = latest_passing.id}
+     * {@code dataset_item_versions FINAL} on {@code div.dataset_item_id = latest_passing.id}
      * and emits {@code arrayJoin([div.id, latest_passing.id])} so the IN list covers every
      * version's {@code row_id} (legacy EIA referencing an older version's {@code row_id})
      * plus the stable id. The {@code dataset_item_id}-narrowed inner-join lets the
@@ -795,18 +795,18 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * {@code push_top_limit} branch doesn't use this CTE — it filters via
      * {@code top_dataset_items} (already stable-id-resolved through {@code lookup_div}).
      *
-     * <p><b>No {@code FINAL} on {@code dataset_item_versions} reads.</b> The table is a
-     * {@code ReplicatedReplacingMergeTree} ordered by
-     * {@code (workspace_id, dataset_id, dataset_version_id, id)}. Every writer
-     * ({@code BATCH_INSERT_ITEMS}, {@code EDIT_ITEM_VIA_SELECT_INSERT},
-     * {@code COPY_VERSION_ITEMS}) generates a fresh {@code id} per row, and the legacy
-     * one-shot {@code COPY_ITEMS_FROM_LEGACY} runs at most once per dataset (double-guarded
-     * by {@code DatasetVersioningMigrationService.ensureDatasetMigrated}). No path re-INSERTs
-     * the same {@code (workspace_id, dataset_id, dataset_version_id, id)} tuple, so
-     * {@code dataset_item_id} (the only retrieved non-key column relevant here) is immutable
-     * per row PK and pre-merge duplicates can't arise. If a future writer ever introduces an
-     * idempotent re-INSERT that updates non-key columns on this table, restore {@code FINAL}
-     * on the affected reads.
+     * <p><b>{@code FINAL} on {@code dataset_item_versions} reads is load-bearing.</b> The
+     * table is a {@code ReplicatedReplacingMergeTree} ordered by
+     * {@code (workspace_id, dataset_id, dataset_version_id, id)} with {@code last_updated_at}
+     * as the version column. The upsert flow (PUT {@code /datasets/items} →
+     * {@code BATCH_INSERT_ITEMS}) re-INSERTs the same {@code (ws, ds, dvid, id)} tuple when a
+     * client PUTs the same item ids twice with changed {@code data} / {@code description} /
+     * {@code tags} / {@code evaluators} / {@code execution_policy} (the endpoint contract
+     * says: "Each item's id is the stable identifier and upsert key"). Pre-merge duplicates
+     * are routine; {@code FINAL} is required so reads see only the latest row per PK.
+     * Subqueries that already do {@code LIMIT 1 BY dataset_item_id ORDER BY dvid DESC,
+     * last_updated_at DESC} dedupe at read time and don't need {@code FINAL} on the inner
+     * scan.
      *
      * <p>The outer SELECT over the aggregated/raw UNION dedupes across branches so a stable
      * id that appears in both branches yields one row with a flattened
@@ -851,7 +851,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             	    if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
             	FROM experiment_items ei
             	INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-            	LEFT JOIN dataset_item_versions AS lookup_div
+            	LEFT JOIN dataset_item_versions AS lookup_div FINAL
             	    ON lookup_div.workspace_id = ei.workspace_id
             	    AND lookup_div.id = ei.dataset_item_id
             	WHERE ei.workspace_id = :workspace_id
@@ -1124,7 +1124,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         last_updated_at,
                         created_by,
                         last_updated_by
-                    FROM dataset_item_versions
+                    FROM dataset_item_versions FINAL
                     WHERE workspace_id = :workspace_id
                     AND dataset_id  = :datasetId
                     AND dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
@@ -1186,7 +1186,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 FROM (
                     SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>
                 ) AS latest_passing
-                INNER JOIN dataset_item_versions AS div
+                INNER JOIN dataset_item_versions AS div FINAL
                     ON div.workspace_id = :workspace_id
                     AND div.dataset_id = :datasetId
                     AND div.dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
@@ -1308,7 +1308,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                         eia.execution_policy AS execution_policy,
                         eia.assertions_array AS assertions_array
                     FROM experiment_item_aggregates AS eia FINAL
-                    LEFT JOIN dataset_item_versions AS lookup_div
+                    LEFT JOIN dataset_item_versions AS lookup_div FINAL
                         ON lookup_div.workspace_id = eia.workspace_id
                         AND lookup_div.id = eia.dataset_item_id
                     WHERE eia.workspace_id = :workspace_id
@@ -1874,7 +1874,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     SELECT
                         id,
                         column_types
-                    FROM dataset_item_versions
+                    FROM dataset_item_versions FINAL
                     WHERE dataset_id = :datasetId
                     AND dataset_version_id = :versionId
                     AND workspace_id = :workspace_id
@@ -1986,7 +1986,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS stable_dataset_item_id
                 FROM experiment_items ei
                 INNER JOIN experiments_resolved e ON e.id = ei.experiment_id
-                LEFT JOIN dataset_item_versions AS lookup_div
+                LEFT JOIN dataset_item_versions AS lookup_div FINAL
                     ON lookup_div.workspace_id = ei.workspace_id
                     AND lookup_div.id = ei.dataset_item_id
                 WHERE ei.workspace_id = :workspace_id
