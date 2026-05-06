@@ -24,7 +24,6 @@ import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -201,7 +200,7 @@ public class ExperimentProjectMigrationService {
                                 workspaceId);
                         return Mono
                                 .fromRunnable(() -> workspacesService.markMigrationSkipped(
-                                        workspaceId, Instant.now(), TRAPPED_REASON_DELETED_PROJECT))
+                                        workspaceId, TRAPPED_REASON_DELETED_PROJECT))
                                 .subscribeOn(Schedulers.boundedElastic())
                                 .doFinally(signalType -> recordWorkspaceDuration(
                                         RESULT_ALL_SKIPPED, workspaceStartMillis))

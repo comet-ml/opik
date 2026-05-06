@@ -1,6 +1,7 @@
 package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
+import com.comet.opik.api.Workspace;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
 import com.comet.opik.domain.DashboardDAO;
@@ -183,16 +184,17 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response) {
         var newVersion = response.opikVersion();
-        var now = Instant.now();
-        var previousVersion = workspacesService.findLastKnownVersion(workspaceId);
-        workspacesService.upsertVersion(workspaceId, newVersion, now);
+        var previousVersion = workspacesService.findById(workspaceId)
+                .map(Workspace::lastKnownVersion)
+                .flatMap(OpikVersion::findByValue);
+        workspacesService.upsertVersion(workspaceId, newVersion);
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
-                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("none"),
+                "previous_version", previousVersion.map(OpikVersion::getValue).orElse("unknown"),
                 "new_version", newVersion.getValue(),
                 "version_changed", String.valueOf(versionChanged),
-                "date", now.toString()));
+                "date", Instant.now().toString()));
     }
 
     private Mono<WorkspaceVersion> cacheResult(String workspaceId, WorkspaceVersion response) {
