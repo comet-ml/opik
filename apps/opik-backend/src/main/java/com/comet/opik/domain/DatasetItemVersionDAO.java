@@ -635,6 +635,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             ),
+            <if(dataset_item_filters)>
+            lookup_for_count AS (
+                SELECT
+                    arrayJoin([div.id, latest_passing.id]) AS lookup_id
+                FROM (
+                    SELECT id FROM dataset_items_agg_resolved WHERE <dataset_item_filters>
+                ) AS latest_passing
+                INNER JOIN dataset_item_versions AS div FINAL
+                    ON div.workspace_id = :workspace_id
+                    AND div.dataset_id = :datasetId
+                    AND div.dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
+                    AND div.dataset_item_id = latest_passing.id
+            ),
+            <endif>
             item_agg_count AS (
                 SELECT
                     eia.id AS id,
@@ -653,7 +667,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <if(feedback_scores_filters_agg)> AND <feedback_scores_filters_agg> <endif>
                 <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                 <if(dataset_item_filters)>
-                AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_agg_resolved WHERE <dataset_item_filters>)
+                AND eia.dataset_item_id IN (SELECT lookup_id FROM lookup_for_count)
                 <endif>
             )
             SELECT COUNT(DISTINCT di_id) AS count
@@ -1142,6 +1156,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     LIMIT 1 BY dataset_item_id
                 ) AS div_dedup
             )
+            <if(!push_top_limit && dataset_item_filters)>
+            , lookup_for_count AS (
+                SELECT
+                    arrayJoin([div.id, latest_passing.id]) AS lookup_id
+                FROM (
+                    SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>
+                ) AS latest_passing
+                INNER JOIN dataset_item_versions AS div FINAL
+                    ON div.workspace_id = :workspace_id
+                    AND div.dataset_id = :datasetId
+                    AND div.dataset_version_id IN (SELECT resolved_dataset_version_id FROM experiment_aggregated_scope_ids)
+                    AND div.dataset_item_id = latest_passing.id
+            )
+            <endif>
             <if(push_top_limit && push_top_needs_div)>
             , top_dataset_items AS (
                 SELECT eia_t.dataset_item_id
@@ -1268,7 +1296,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     <if(feedback_scores_empty_filters_agg)> AND <feedback_scores_empty_filters_agg> <endif>
                     <if(dataset_item_filters)>
                     <if(!push_top_limit)>
-                    AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
+                    AND eia.dataset_item_id IN (SELECT lookup_id FROM lookup_for_count)
                     <else>
                     AND if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
                         IN (SELECT id FROM dataset_items_aggr_resolved WHERE <dataset_item_filters>)
