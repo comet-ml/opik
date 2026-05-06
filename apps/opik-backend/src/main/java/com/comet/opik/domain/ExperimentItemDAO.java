@@ -487,28 +487,60 @@ class ExperimentItemDAO {
             ;
             """;
 
+    // ReplacingMergeTree dedup is reproduced explicitly via `LIMIT 1 BY <full sort key> ORDER BY last_updated_at DESC`,
+    // matching the version column declared on each table. This avoids `FINAL`, which forces materializing all columns
+    // for the merge before WHERE filters apply; on `experiment_items`/`experiments` for a busy workspace, that drives
+    // ~10x latency, ~7x bytes read, and ~40x peak memory vs. the rewrite. Same pattern is used in TraceDAO.find.
     private static final String GET_EXPERIMENT_REFS_BY_TRACE_IDS = """
+            WITH
+                ei_dedup AS (
+                    SELECT experiment_id, trace_id, workspace_id, dataset_item_id, id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN :trace_ids
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, experiment_id, dataset_item_id, trace_id, id
+                ),
+                ea_dedup AS (
+                    SELECT id, status, workspace_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
             SELECT ei.experiment_id, ei.trace_id
-            FROM experiment_items AS ei FINAL
-            INNER JOIN experiments AS ea FINAL
+            FROM ei_dedup AS ei
+            INNER JOIN ea_dedup AS ea
                 ON ea.id = ei.experiment_id
                 AND ea.workspace_id = ei.workspace_id
-            WHERE ei.workspace_id = :workspace_id
-            AND ei.trace_id IN :trace_ids
-            AND ea.status IN :statuses
+            WHERE ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
 
     private static final String GET_EXPERIMENT_REFS_BY_ITEM_IDS = """
+            WITH
+                ei_dedup AS (
+                    SELECT experiment_id, trace_id, workspace_id, dataset_item_id, id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND id IN :item_ids
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, experiment_id, dataset_item_id, trace_id, id
+                ),
+                ea_dedup AS (
+                    SELECT id, status, workspace_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
             SELECT ei.experiment_id, ei.trace_id
-            FROM experiment_items AS ei FINAL
-            INNER JOIN experiments AS ea FINAL
+            FROM ei_dedup AS ei
+            INNER JOIN ea_dedup AS ea
                 ON ea.id = ei.experiment_id
                 AND ea.workspace_id = ei.workspace_id
-            WHERE ei.workspace_id = :workspace_id
-            AND ei.id IN :item_ids
-            AND ea.status IN :statuses
+            WHERE ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
@@ -523,17 +555,39 @@ class ExperimentItemDAO {
             """;
 
     private static final String GET_EXPERIMENT_REFS_BY_SPAN_IDS = """
+            WITH
+                spans_dedup AS (
+                    SELECT DISTINCT trace_id
+                    FROM (
+                        SELECT trace_id, id, workspace_id, project_id, parent_span_id
+                        FROM spans
+                        WHERE workspace_id = :workspace_id
+                        AND id IN :span_ids
+                        ORDER BY last_updated_at DESC
+                        LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                    )
+                ),
+                ei_dedup AS (
+                    SELECT experiment_id, trace_id, workspace_id, dataset_item_id, id
+                    FROM experiment_items
+                    WHERE workspace_id = :workspace_id
+                    AND trace_id IN (SELECT trace_id FROM spans_dedup)
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, experiment_id, dataset_item_id, trace_id, id
+                ),
+                ea_dedup AS (
+                    SELECT id, status, workspace_id
+                    FROM experiments
+                    WHERE workspace_id = :workspace_id
+                    ORDER BY last_updated_at DESC
+                    LIMIT 1 BY workspace_id, dataset_id, id
+                )
             SELECT ei.experiment_id, ei.trace_id
-            FROM experiment_items AS ei FINAL
-            INNER JOIN experiments AS ea FINAL
+            FROM ei_dedup AS ei
+            INNER JOIN ea_dedup AS ea
                 ON ea.id = ei.experiment_id
                 AND ea.workspace_id = ei.workspace_id
-            WHERE ei.workspace_id = :workspace_id
-            AND ei.trace_id IN (
-                SELECT DISTINCT trace_id FROM spans FINAL
-                WHERE id IN :span_ids AND workspace_id = :workspace_id
-            )
-            AND ea.status IN :statuses
+            WHERE ea.status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
