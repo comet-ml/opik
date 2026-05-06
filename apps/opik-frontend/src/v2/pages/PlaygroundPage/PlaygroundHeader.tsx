@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  ChevronDown,
   Database,
+  FlaskConical,
   ListChecks,
   Pause,
   Pencil,
@@ -12,15 +12,10 @@ import {
 
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
-import RunOnDatasetDialog from "@/v2/pages/PlaygroundPage/RunOnDatasetDialog";
+import FiltersButton from "@/shared/FiltersButton/FiltersButton";
+import RunExperimentDialog from "@/v2/pages/PlaygroundPage/RunExperimentDialog";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Link } from "@tanstack/react-router";
 import { generateDefaultPrompt } from "@/lib/playground";
@@ -28,9 +23,18 @@ import { LOGS_SOURCE } from "@/types/traces";
 import { useActiveProjectId } from "@/store/AppStore";
 import TraceLogsSidebarButton from "@/v2/pages-shared/traces/TraceLogsSidebar/TraceLogsSidebarButton";
 import { COMPOSED_PROVIDER_TYPE } from "@/types/providers";
-import { Filters } from "@/types/filters";
 import { DATASET_TYPE } from "@/types/datasets";
 import { PLAYGROUND_LAST_PICKED_MODEL } from "@/constants/llm";
+import useDatasetItemsList from "@/api/datasets/useDatasetItemsList";
+import useDatasetVersionsList from "@/api/datasets/useDatasetVersionsList";
+import {
+  buildDatasetFilterColumns,
+  transformDataColumnFilters,
+} from "@/lib/filters";
+import {
+  parseDatasetVersionKey,
+  toPlainDatasetId,
+} from "@/utils/datasetVersionStorage";
 import {
   usePromptMap,
   useSetPromptMap,
@@ -45,6 +49,8 @@ import {
   useDatasetFilters,
   useSetDatasetType,
   useDatasetType,
+  useSetRecentDatasetForType,
+  useSetScoresForDataset,
 } from "@/store/PlaygroundStore";
 import useLastPickedModel from "@/hooks/useLastPickedModel";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
@@ -93,15 +99,15 @@ const PlaygroundHeader = ({
   const isRunning = useIsRunning();
   const filters = useDatasetFilters();
   const setDatasetType = useSetDatasetType();
+  const setRecentDatasetForType = useSetRecentDatasetForType();
+  const setScoresForDataset = useSetScoresForDataset();
 
   const currentDatasetType = useDatasetType();
   const resetKeyRef = useRef(0);
   const leaveKeyRef = useRef(0);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
-  const [runOnDatasetType, setRunOnDatasetType] = useState<DATASET_TYPE | null>(
-    null,
-  );
+  const [isRunModalOpen, setIsRunModalOpen] = useState(false);
 
   const {
     permissions: { canViewExperiments, canCreateExperiments, canViewDatasets },
@@ -115,6 +121,46 @@ const PlaygroundHeader = ({
 
   const isExperimentMode = !!datasetId;
   const activeProjectId = useActiveProjectId();
+
+  const parsedDatasetKey = useMemo(
+    () => parseDatasetVersionKey(datasetId),
+    [datasetId],
+  );
+  const plainDatasetId = parsedDatasetKey?.datasetId ?? datasetId;
+
+  const { data: filterVersionsData } = useDatasetVersionsList(
+    { datasetId: plainDatasetId!, page: 1, size: 1000 },
+    { enabled: !!plainDatasetId && isExperimentMode },
+  );
+  const filterVersionHash = useMemo(
+    () =>
+      filterVersionsData?.content?.find(
+        (v) => v.id === parsedDatasetKey?.versionId,
+      )?.version_hash,
+    [filterVersionsData?.content, parsedDatasetKey?.versionId],
+  );
+
+  const transformedFiltersForColumnsFetch = useMemo(
+    () => (filters.length ? transformDataColumnFilters(filters) : undefined),
+    [filters],
+  );
+
+  const { data: datasetItemsForColumns } = useDatasetItemsList(
+    {
+      datasetId: plainDatasetId!,
+      page: 1,
+      size: 1,
+      truncate: true,
+      filters: transformedFiltersForColumnsFetch,
+      versionId: filterVersionHash,
+    },
+    { enabled: !!plainDatasetId && isExperimentMode },
+  );
+
+  const filterColumns = useMemo(
+    () => buildDatasetFilterColumns(datasetItemsForColumns?.columns ?? []),
+    [datasetItemsForColumns?.columns],
+  );
 
   const hasMediaCompatibilityIssues = useMemo(() => {
     return Object.values(promptMap).some((prompt) => {
@@ -233,26 +279,39 @@ const PlaygroundHeader = ({
       datasetType: DATASET_TYPE;
       selectedRuleIds: string[] | null;
       experimentNamePrefix: string;
-      filters: Filters;
     }) => {
       resetOutputMap();
       const datasetValue = params.versionId
         ? `${params.datasetId}::${params.versionId}`
         : params.datasetId;
+
+      const previousPlainId = toPlainDatasetId(datasetId);
+      const newPlainId = toPlainDatasetId(params.datasetId);
+      const isDifferentDataset = previousPlainId !== newPlainId;
       onChangeDatasetId(datasetValue);
 
       setSelectedRuleIds(params.selectedRuleIds);
-      setDatasetFilters(params.filters);
+      if (isDifferentDataset) {
+        resetDatasetFilters();
+      }
       setExperimentNamePrefix(params.experimentNamePrefix);
       setDatasetType(params.datasetType);
+
+      setRecentDatasetForType(params.datasetType, datasetValue);
+      if (params.datasetType === DATASET_TYPE.DATASET) {
+        setScoresForDataset(newPlainId, params.selectedRuleIds);
+      }
     },
     [
+      datasetId,
       resetOutputMap,
       onChangeDatasetId,
       setSelectedRuleIds,
-      setDatasetFilters,
+      resetDatasetFilters,
       setExperimentNamePrefix,
       setDatasetType,
+      setRecentDatasetForType,
+      setScoresForDataset,
     ],
   );
 
@@ -271,57 +330,51 @@ const PlaygroundHeader = ({
         currentDatasetType === DATASET_TYPE.TEST_SUITE ? ListChecks : Database;
 
       return (
-        <div className="flex h-6 items-center rounded-md border bg-background">
-          <button
-            className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
-            onClick={() =>
-              setRunOnDatasetType(currentDatasetType ?? DATASET_TYPE.DATASET)
-            }
-          >
-            <TypeIcon className="size-3.5 shrink-0 text-library-loaded" />
-            <span className="comet-body-xs max-w-[200px] truncate">
-              {chipLabel}
-            </span>
-            <Pencil className="size-3 shrink-0" />
-          </button>
-          <Separator orientation="vertical" className="h-full" />
-          <button
-            className="flex items-center p-1 text-muted-slate hover:text-primary-hover"
-            onClick={() => {
-              leaveKeyRef.current += 1;
-              setLeaveDialogOpen(true);
-            }}
-          >
-            <X className="size-3.5" />
-          </button>
-        </div>
+        <>
+          <div className="flex h-6 items-center rounded-md border bg-background">
+            <button
+              className="flex items-center gap-1.5 px-2 text-muted-slate hover:text-primary-hover"
+              onClick={() => setIsRunModalOpen(true)}
+            >
+              <TypeIcon className="size-3.5 shrink-0 text-library-loaded" />
+              <span className="comet-body-xs max-w-[200px] truncate">
+                {chipLabel}
+              </span>
+              <Pencil className="size-3 shrink-0" />
+            </button>
+            <Separator orientation="vertical" className="h-full" />
+            <button
+              className="flex items-center p-1 text-muted-slate hover:text-primary-hover"
+              onClick={() => {
+                leaveKeyRef.current += 1;
+                setLeaveDialogOpen(true);
+              }}
+            >
+              <X className="size-3.5" />
+            </button>
+          </div>
+          {currentDatasetType === DATASET_TYPE.DATASET && (
+            <FiltersButton
+              columns={filterColumns}
+              filters={filters}
+              onChange={setDatasetFilters}
+              layout="icon"
+              deferOnChange
+            />
+          )}
+        </>
       );
     }
 
     return (
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="2xs">
-            <Database className="mr-1 size-3.5" />
-            Test on
-            <ChevronDown className="ml-1 size-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem
-            onClick={() => setRunOnDatasetType(DATASET_TYPE.DATASET)}
-          >
-            <Database className="mr-2 size-4" />
-            Dataset
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => setRunOnDatasetType(DATASET_TYPE.TEST_SUITE)}
-          >
-            <ListChecks className="mr-2 size-4" />
-            Test suite
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <Button
+        variant="outline"
+        size="2xs"
+        onClick={() => setIsRunModalOpen(true)}
+      >
+        <FlaskConical className="mr-1 size-3.5" />
+        Run experiment
+      </Button>
     );
   };
 
@@ -337,10 +390,10 @@ const PlaygroundHeader = ({
       );
     }
 
-    const label = isExperimentMode ? "Run experiment" : "Run all";
+    const label = isExperimentMode ? "Re-run" : "Run";
     const tooltip =
       runDisabledReason ??
-      (isExperimentMode ? "Run experiment on dataset" : "Run your prompts");
+      (isExperimentMode ? "Re-run experiment on dataset" : "Run your prompts");
 
     return (
       <TooltipWrapper content={tooltip}>
@@ -434,15 +487,14 @@ const PlaygroundHeader = ({
         confirmText="Leave"
       />
 
-      <RunOnDatasetDialog
-        open={runOnDatasetType !== null}
-        onClose={() => setRunOnDatasetType(null)}
+      <RunExperimentDialog
+        open={isRunModalOpen}
+        onClose={() => setIsRunModalOpen(false)}
         onRun={handleRunOnDataset}
         workspaceName={workspaceName}
-        initialDatasetId={datasetId}
-        initialSelectedRuleIds={selectedRuleIds}
-        initialFilters={filters}
-        datasetType={runOnDatasetType ?? undefined}
+        initialDatasetId={isExperimentMode ? datasetId : null}
+        initialDatasetType={isExperimentMode ? currentDatasetType : null}
+        initialSelectedRuleIds={isExperimentMode ? selectedRuleIds : null}
       />
     </>
   );
