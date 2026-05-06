@@ -437,10 +437,17 @@ class ExperimentItemDAO {
                               trace_id,
                               sum(total_estimated_cost) AS total_estimated_cost,
                               sumMap(usage) AS usage
-                          FROM spans final
-                          WHERE workspace_id = :workspace_id
-                          <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
-                          AND trace_id IN (SELECT trace_id FROM experiment_items_ids)
+                          FROM (
+                              SELECT
+                                  workspace_id, project_id, trace_id, parent_span_id, id,
+                                  total_estimated_cost, usage
+                              FROM spans
+                              WHERE workspace_id = :workspace_id
+                              <if(has_target_projects)>AND project_id IN :target_project_ids<endif>
+                              AND trace_id IN (SELECT trace_id FROM experiment_items_ids)
+                              ORDER BY last_updated_at DESC
+                              LIMIT 1 BY workspace_id, project_id, trace_id, parent_span_id, id
+                          )
                           GROUP BY workspace_id, project_id, trace_id
                       ) s ON s.trace_id = t.id
                   ) AS tfs ON ei.trace_id = tfs.id
