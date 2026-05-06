@@ -2257,6 +2257,7 @@ class TracesResourceTest {
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
                     .visibilityMode(VisibilityMode.DEFAULT)
+                    .environment("")
                     .build();
             var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
@@ -2597,6 +2598,7 @@ class TracesResourceTest {
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
                             .visibilityMode(VisibilityMode.DEFAULT)
+                            .environment("")
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
@@ -3438,6 +3440,7 @@ class TracesResourceTest {
                     .startTime(Instant.now().minusSeconds(10))
                     .createdAt(Instant.now())
                     .visibilityMode(VisibilityMode.DEFAULT)
+                    .environment("")
                     .build();
             id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }

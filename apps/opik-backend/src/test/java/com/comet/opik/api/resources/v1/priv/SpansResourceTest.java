@@ -1487,6 +1487,7 @@ class SpansResourceTest {
                     .traceId(generator.generate())
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
+                    .environment("")
                     .build();
             var expectedSpanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
@@ -1977,6 +1978,7 @@ class SpansResourceTest {
                             .traceId(generator.generate())
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
+                            .environment("")
                             .build())
                     .toList();
             spanResourceClient.batchCreateSpans(expectedSpans0, API_KEY, TEST_WORKSPACE);
