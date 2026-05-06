@@ -593,11 +593,15 @@ class ExperimentItemDAO {
             """;
 
     private static final String FILTER_EXPERIMENT_IDS_BY_STATUS = """
-            SELECT id
-            FROM experiments FINAL
-            WHERE workspace_id = :workspace_id
-            AND id IN :experiment_ids
-            AND status IN :statuses
+            WITH ea_dedup AS (
+                SELECT id, status
+                FROM experiments
+                WHERE workspace_id = :workspace_id
+                AND id IN :experiment_ids
+                ORDER BY last_updated_at DESC
+                LIMIT 1 BY workspace_id, dataset_id, id
+            )
+            SELECT id FROM ea_dedup WHERE status IN :statuses
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
