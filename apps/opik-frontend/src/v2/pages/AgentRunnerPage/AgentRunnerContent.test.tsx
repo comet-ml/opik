@@ -107,6 +107,7 @@ describe("AgentRunnerContent", () => {
       status: RunnerConnectionStatus.IDLE,
       runnerId: null,
       runner: null,
+      isInitialLoading: false,
     };
     mockUseNavigationBlocker.mockReturnValue({
       DialogComponent: <div data-testid="navigation-blocker-dialog" />,
