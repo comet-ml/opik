@@ -859,6 +859,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "microsoft/phi-4",
     },
     {
+      value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_MINI_INSTRUCT,
+      label: "microsoft/phi-4-mini-instruct",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.MICROSOFT_PHI_4_MULTIMODAL_INSTRUCT,
       label: "microsoft/phi-4-multimodal-instruct",
     },
@@ -1422,6 +1426,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_AUDIO_MINI,
       label: "openai/gpt-audio-mini",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.OPENAI_GPT_CHAT_LATEST,
+      label: "openai/gpt-chat-latest",
     },
     {
       value: PROVIDER_MODEL_TYPE.OPENAI_GPT_OSS_120B,
