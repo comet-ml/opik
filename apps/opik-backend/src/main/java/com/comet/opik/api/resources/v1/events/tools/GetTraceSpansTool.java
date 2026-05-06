@@ -35,7 +35,7 @@ public class GetTraceSpansTool implements ToolExecutor {
         log.debug("get_trace_spans tool call with arguments: '{}' for trace={}", arguments, ctx.getTrace().id());
         String result = SpanTreeSerializer.serializeOverview(ctx.getSpans());
         if (log.isDebugEnabled()) {
-            log.debug("get_trace_spans summary: traceId={}, spanCount={}, outputBytes={}",
+            log.debug("get_trace_spans summary: traceId='{}', spanCount='{}', outputBytes='{}'",
                     ctx.getTrace().id(), ctx.getSpans().size(), result.length());
         }
         return result;

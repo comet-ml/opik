@@ -367,7 +367,8 @@ public class ReadTool implements ToolExecutor {
         if (size <= CACHE_CAP_CHARS) {
             return CacheOutcome.builder().cachedNode(fullJson).build();
         }
-        log.debug("Entity {} exceeds {} chars; capping to maximum of {} chars before caching", ref, size, CACHE_CAP_CHARS);
+        log.debug("Entity {} exceeds {} chars; capping to maximum of {} chars before caching", ref, size,
+                CACHE_CAP_CHARS);
         ctx.markTruncated(ref);
         return CacheOutcome.builder()
                 .cachedNode(fitWithinCap(fullJson))
@@ -394,7 +395,8 @@ public class ReadTool implements ToolExecutor {
             }
             last = candidate;
         }
-        log.debug("Entity exceeds {} chars with ceiling at {} limit; returning tightest limit", CACHE_CAP_CHARS, CAP_FALLBACK_LIMITS[0]);
+        log.debug("Entity exceeds {} chars with ceiling at {} limit; returning tightest limit", CACHE_CAP_CHARS,
+                CAP_FALLBACK_LIMITS[0]);
         return last;
     }
 
@@ -420,7 +422,8 @@ public class ReadTool implements ToolExecutor {
             envelope.put("cache_warning", cacheWarning);
         }
         if (log.isDebugEnabled()) {
-            log.debug("read summary: type={}, id={}, requestedTier={}, chosenTier={}, renderedBytes={}, cacheWarning={}",
+            log.debug(
+                    "read summary: type={}, id={}, requestedTier={}, chosenTier={}, renderedBytes={}, cacheWarning={}",
                     args.type.name().toLowerCase(), args.id, args.tier,
                     envelope.get("tier").asText(), envelope.toString().length(), cacheWarning != null);
         }

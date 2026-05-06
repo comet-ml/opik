@@ -219,13 +219,20 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
             }
 
-            userFacingLogger.info("Sending traceId '{}' to LLM: {}",
-                    trace.id(), summarizeRequest(scoreRequest, message));
+            // Guarded behind isInfoEnabled() because summarizeRequest streams over the message
+            // list to total up character counts; SLF4J's parameter substitution defers the
+            // {} placeholder, but the helper invocation itself is still evaluated eagerly.
+            if (userFacingLogger.isInfoEnabled()) {
+                userFacingLogger.info("Sending traceId '{}' to LLM: {}",
+                        trace.id(), summarizeRequest(scoreRequest, message));
+            }
 
             var chatResponse = aiProxyService.scoreTrace(
                     scoreRequest, message.llmAsJudgeCode().model(), message.workspaceId());
-            userFacingLogger.info("Received response for traceId '{}': {}",
-                    trace.id(), summarizeResponse(chatResponse));
+            if (userFacingLogger.isInfoEnabled()) {
+                userFacingLogger.info("Received response for traceId '{}': {}",
+                        trace.id(), summarizeResponse(chatResponse));
+            }
 
             if (shouldUseTools(message)) {
                 chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
@@ -358,7 +365,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      */
     private static String summarizeRequest(ChatRequest request, TraceToScoreLlmAsJudge message) {
         int messageCount = request.messages() == null ? 0 : request.messages().size();
-        int totalChars = request.messages() == null ? 0
+        int totalChars = request.messages() == null
+                ? 0
                 : request.messages().stream().mapToInt(m -> m.toString().length()).sum();
         int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
         return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
