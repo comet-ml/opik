@@ -401,8 +401,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      *
      * <p>OPIK-6177: same stable-id resolution shape as
      * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
-     * for the rationale on the eligible_dataset_item_lookup CTE and the direct-table
-     * lookup_div LEFT JOIN.
+     * for the rationale on the lookup_for_count CTE and the direct-table lookup_div LEFT JOIN.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             WITH experiment_aggregated_scope_ids AS (
@@ -782,10 +781,15 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     // CTE-based LEFT JOIN drops rows in deletion-cascade scenarios in ClickHouse (known
     // analyzer behavior; direct table reference works correctly).
     //
-    // The eligible_dataset_item_lookup CTE used by the aggregated branch is for
-    // skip-index-friendly IN list pushdown when DI filters are active (preserves the
-    // idx_experiment_item_aggregates_dataset_item_id minmax skip index pushdown that
-    // drove the 5.86× speedup measured in #6567).
+    // The lookup_for_count CTE used by the aggregated branch (count + row !push_top_limit)
+    // builds a skip-index-friendly IN list when DI filters are active: it narrows by
+    // <dataset_item_filters> first, then INNER JOINs dataset_item_versions FINAL on
+    // div.dataset_item_id = latest_passing.id and emits arrayJoin([div.id, latest_passing.id])
+    // so the IN list covers every version's row_id (legacy EIA referencing an older version's
+    // row_id) plus the stable id. The dataset_item_id-narrowed inner-join lets the bloom_filter
+    // skip index on idx_experiment_item_aggregates_dataset_item_id prune as in #6567.
+    // The push_top_limit branch doesn't use this CTE — it filters via top_dataset_items
+    // (already stable-id-resolved through lookup_div).
     //
     // The outer SELECT over the aggregated/raw UNION dedupes across branches so a stable
     // id that appears in both branches yields one row with a flattened experiment_items_array.
