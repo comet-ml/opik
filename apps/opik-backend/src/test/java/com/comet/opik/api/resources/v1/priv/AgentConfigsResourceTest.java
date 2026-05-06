@@ -218,6 +218,8 @@ class AgentConfigsResourceTest {
                         .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))
                                 .and(matchingJsonPath("$.event_properties.workspace_id",
                                         equalTo(WORKSPACE_ID)))
+                                .and(matchingJsonPath("$.event_properties.config_environment",
+                                        equalTo("prod")))
                                 .and(matchingJsonPath("$.event_properties.environment",
                                         equalTo("prod")))
                                 .and(matchingJsonPath("$.event_properties.deployed_to_prod",
