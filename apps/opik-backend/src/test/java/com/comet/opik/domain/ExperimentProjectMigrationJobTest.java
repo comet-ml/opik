@@ -302,6 +302,28 @@ class ExperimentProjectMigrationJobTest {
     }
 
     @Test
+    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
+        // Pre-mark a workspace as skipped via the workspaces table BEFORE seeding any experiments.
+        // The cycle's exclusion set is the union of migration.excludedWorkspaceIds config and
+        // findMigrationSkippedWorkspaceIds(), so this workspace must be omitted — proven by the
+        // eligible experiment never getting migrated.
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var seeded = seedCertainExperiment(apiKey, workspaceName, randomName("project"));
+        var experimentId = seeded.getLeft();
+        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+
+        workspacesService.markMigrationSkipped(workspaceId, Instant.now(), "test-pre-marked-trap");
+
+        assertWorkspaceVersion1(apiKey, workspaceName);
+
+        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
+    }
+
+    @Test
     void skipExcludedWorkspaces() {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
