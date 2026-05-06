@@ -1065,8 +1065,13 @@ public class FilterQueryBuilder {
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
                     if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
                         // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
-                        // ENUM names are constrained to [A-Za-z0-9_-]+ so a plain split is safe.
-                        statement.bind("filter%d".formatted(i), filter.value().split(","));
+                        // Trim and drop empty tokens defensively against stray whitespace
+                        // or trailing commas in client input.
+                        statement.bind("filter%d".formatted(i),
+                                Arrays.stream(filter.value().split(","))
+                                        .map(String::trim)
+                                        .filter(StringUtils::isNotEmpty)
+                                        .toArray(String[]::new));
                     } else {
                         statement.bind("filter%d".formatted(i), filter.value());
                     }
