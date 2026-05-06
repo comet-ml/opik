@@ -1,9 +1,9 @@
 import React, { useRef, useState } from "react";
-import { ArrowRight, GitCompare, Pencil, Undo2, X } from "lucide-react";
+import { ArrowRight, GitCompare, Pencil, Undo2 } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { Button } from "@/ui/button";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import { Tag } from "@/ui/tag";
 import { Textarea } from "@/ui/textarea";
 import AgentConfigurationEditView, {
@@ -62,29 +62,14 @@ const AgentConfigurationEditPanel: React.FC<
       <SheetContent
         side="right"
         className="flex w-full max-w-none flex-col p-0 sm:max-w-[872px]"
+        blockOverlayClose={state.isDirty}
         header={
-          <div className="flex h-12 items-center justify-between border-b px-6">
-            <div className="flex items-center gap-2">
-              <SheetTitle className="comet-body-accented text-left">
-                {title}
-              </SheetTitle>
-              <Tag
-                variant="gray"
-                className="flex items-center gap-1 px-1.5 py-1"
-              >
-                <Pencil className="size-3" />
-                From {item.name}
-              </Tag>
-            </div>
-            <Button
-              variant="outline"
-              size="icon-sm"
-              onClick={handleClose}
-              aria-label="Close"
-            >
-              <X className="size-3.5" />
-            </Button>
-          </div>
+          <SheetTopBar variant="form" title={title}>
+            <Tag variant="gray" className="flex items-center gap-1 px-1.5 py-1">
+              <Pencil className="size-3" />
+              From {item.name}
+            </Tag>
+          </SheetTopBar>
         }
       >
         <div className="min-h-0 flex-1 overflow-y-auto px-6">

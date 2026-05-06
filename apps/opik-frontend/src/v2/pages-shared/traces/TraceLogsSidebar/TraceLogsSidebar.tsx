@@ -11,7 +11,7 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { Undo2, X } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -54,7 +54,7 @@ import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
 import { Button } from "@/ui/button";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
@@ -921,18 +921,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   ]);
 
   const sheetHeader = (
-    <>
-      <SheetTitle className="sr-only">{title}</SheetTitle>
-      <div className="flex items-center justify-between border-b px-5 py-3">
-        <Button variant="outline" size="2xs" onClick={onClose}>
-          <Undo2 className="mr-1 size-3" />
-          {backLabel}
-        </Button>
-        <Button variant="ghost" size="icon-sm" onClick={onClose}>
-          <X />
-        </Button>
-      </div>
-    </>
+    <SheetTopBar variant="info" title={title}>
+      <Button variant="outline" size="2xs" onClick={onClose}>
+        <Undo2 className="mr-1 size-3" />
+        {backLabel}
+      </Button>
+    </SheetTopBar>
   );
 
   return (
@@ -948,10 +942,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="px-6 pb-1 pt-4">
-            <h2 className="comet-title-xxs">{title}</h2>
-          </div>
-
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
             <div className="flex items-center gap-2">
               <SearchInput
