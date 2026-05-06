@@ -46,6 +46,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @ExtendWith(DropwizardAppExtensionProvider.class)
@@ -121,15 +122,19 @@ class WorkspaceVersionAnalyticsEmissionTest {
     }
 
     @Test
-    void cacheHit__doesNotEmitAdditionalEvent() {
+    void cacheHit__doesNotWriteOrEmit(WorkspacesService workspacesService) {
+        // persistAndEmitBlocking upserts the row and emits the analytics event as a single
+        // unit (no early return between them), so an unchanged event count after a cache hit
+        // is sufficient to prove the upsert also did not run.
         var workspaceId = UUID.randomUUID().toString();
         var workspaceName = mockWorkspace(workspaceId);
 
         workspaceClient.getWorkspaceVersion(API_KEY, workspaceName);
-        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(
-                () -> verifyEventCount(workspaceId, 1, "true", "none", "version_2"));
+        Awaitility.await().atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+            verifyEventCount(workspaceId, 1, "true", "none", "version_2");
+            assertThat(workspacesService.findLastKnownVersion(workspaceId)).contains(OpikVersion.VERSION_2);
+        });
 
-        // Cache hit — must not emit a second event for this workspace.
         workspaceClient.getWorkspaceVersion(API_KEY, workspaceName);
         Awaitility.await()
                 .during(500, TimeUnit.MILLISECONDS)
