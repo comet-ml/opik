@@ -257,8 +257,8 @@ const PlaygroundHeader = ({
   );
 
   const renderExperimentChipOrButton = () => {
-    if (!canViewDatasets) return null;
-    if (!canCreateExperiments || !canViewExperiments) return null;
+    if (!canViewDatasets || !canCreateExperiments || !canViewExperiments)
+      return null;
 
     if (isExperimentMode) {
       const chipLabel = datasetName
