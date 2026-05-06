@@ -1,9 +1,10 @@
 import abc
 import collections
+import dataclasses
 import datetime
 import logging
 import threading
-from typing import List, Dict, Union, Optional, Any, Type, Callable
+from typing import List, Dict, Tuple, TypeVar, Union, Optional, Any, Type, Callable
 
 from opik import dict_utils
 from opik.rest_api.types import span_write, trace_write
@@ -11,6 +12,13 @@ from opik.types import ErrorInfoDict, SpanType, TraceSource
 from . import models
 from .. import messages
 from ..processors import message_processors
+
+ModelT = TypeVar("ModelT", models.TraceModel, models.SpanModel)
+
+# Fields are populated incrementally from outside the create-message path
+# (tree building, feedback batches, attachment messages). They must not be
+# overwritten when a duplicate Create message merges into an existing model.
+_MERGE_PRESERVED_FIELDS = frozenset({"spans", "feedback_scores", "attachments"})
 
 
 LOGGER = logging.getLogger(__name__)
@@ -86,6 +94,19 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 collections.defaultdict(list)
             )
             self._experiment_items: List[models.ExperimentItemModel] = []
+            # Updates that arrived before the matching CreateSpanMessage /
+            # CreateTraceMessage. Applied as soon as the create lands so we
+            # don't drop fields when the queue/batcher delivers messages out
+            # of order (common with batching enabled).
+            self._pending_span_updates: Dict[str, List[Dict[str, Any]]] = (
+                collections.defaultdict(list)
+            )
+            self._pending_trace_updates: Dict[str, List[Dict[str, Any]]] = (
+                collections.defaultdict(list)
+            )
+            # Track parent/span pairs we've already warned about so multiple
+            # `trace_trees` / `span_trees` reads don't spam the log.
+            self._warned_orphan_parents: set = set()
 
     def is_active(self) -> bool:
         with self._rlock:
@@ -105,6 +126,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             # call to connect all spans
             self._build_spans_tree()
             missing_trace_ids: set[str] = set()
+            traces_with_new_children: set = set()
 
             for span_id, trace_id in self._span_to_trace.items():
                 if trace_id is None:
@@ -119,7 +141,12 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 ] is None and not _observation_already_stored(span_id, trace.spans):
                     span = self._span_observations[span_id]
                     trace.spans.append(span)
-                    trace.spans.sort(key=lambda x: x.start_time)
+                    traces_with_new_children.add(trace_id)
+
+            for trace_id in traces_with_new_children:
+                self._trace_observations[trace_id].spans.sort(
+                    key=lambda x: x.start_time
+                )
 
             if missing_trace_ids:
                 LOGGER.warning(
@@ -136,42 +163,74 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             return self._trace_trees
 
     def _save_trace(self, trace: models.TraceModel) -> None:
-        if self.merge_duplicates:
-            # merge traces with the same id to keep only the latest one
-            if trace.id in self._trace_observations:
-                existing_trace: models.TraceModel = self._trace_observations[trace.id]
-                if trace.end_time is not None:
-                    if (
-                        existing_trace.end_time is None
-                        or trace.end_time > existing_trace.end_time
-                    ):
-                        # remove the current trace from the list
-                        self._trace_trees.remove(existing_trace)
+        existing_trace = self._trace_observations.get(trace.id)
 
-        self._trace_trees.append(trace)
-        self._trace_observations[trace.id] = trace
+        if existing_trace is None or not self.merge_duplicates:
+            self._trace_trees.append(trace)
+            self._trace_observations[trace.id] = trace
+            self._apply_pending_trace_updates(trace)
+            return
+
+        merged = _merge_models(existing_trace, trace)
+        if existing_trace in self._trace_trees:
+            index = self._trace_trees.index(existing_trace)
+            self._trace_trees[index] = merged
+        else:
+            self._trace_trees.append(merged)
+        self._trace_observations[trace.id] = merged
+        self._apply_pending_trace_updates(merged)
+
+    def _apply_pending_trace_updates(self, trace: models.TraceModel) -> None:
+        pending = self._pending_trace_updates.pop(trace.id, None)
+        if not pending:
+            return
+        for payload in pending:
+            trace.__dict__.update(payload)
 
     def _save_span(
         self, span: models.SpanModel, trace_id: str, parent_span_id: Optional[str]
     ) -> None:
-        if self.merge_duplicates:
-            # merge spans with the same id to keep only the latest one
-            if span.id in self._span_observations:
-                existing_span = self._span_observations[span.id]
-                if span.end_time is not None:
-                    if (
-                        existing_span.end_time is None
-                        or span.end_time > existing_span.end_time
-                    ):
-                        if existing_span in self._span_trees:
-                            self._span_trees.remove(existing_span)
+        existing_span = self._span_observations.get(span.id)
 
-        self._span_to_parent_span[span.id] = parent_span_id
-        if parent_span_id is None:
-            self._span_trees.append(span)
+        if existing_span is None or not self.merge_duplicates:
+            if parent_span_id is None:
+                self._span_trees.append(span)
+            self._span_to_parent_span[span.id] = parent_span_id
+            self._span_to_trace[span.id] = trace_id
+            self._span_observations[span.id] = span
+            self._apply_pending_span_updates(span)
+            return
 
-        self._span_to_trace[span.id] = trace_id
-        self._span_observations[span.id] = span
+        merged = _merge_models(existing_span, span)
+
+        # Late start messages can arrive with a stale (None) parent_span_id /
+        # trace_id even when the entity already had real values. Prefer the
+        # non-None observation we already had.
+        merged_parent_span_id = parent_span_id
+        if merged_parent_span_id is None:
+            merged_parent_span_id = self._span_to_parent_span.get(span.id)
+        merged_trace_id = trace_id
+        existing_trace_id = self._span_to_trace.get(span.id)
+        if existing_trace_id is not None:
+            merged_trace_id = existing_trace_id
+
+        if existing_span in self._span_trees:
+            index = self._span_trees.index(existing_span)
+            self._span_trees[index] = merged
+        elif merged_parent_span_id is None:
+            self._span_trees.append(merged)
+
+        self._span_to_parent_span[span.id] = merged_parent_span_id
+        self._span_to_trace[span.id] = merged_trace_id
+        self._span_observations[span.id] = merged
+        self._apply_pending_span_updates(merged)
+
+    def _apply_pending_span_updates(self, span: models.SpanModel) -> None:
+        pending = self._pending_span_updates.pop(span.id, None)
+        if not pending:
+            return
+        for payload in pending:
+            span.__dict__.update(payload)
 
     @property
     def span_trees(self) -> List[models.SpanModel]:
@@ -204,13 +263,16 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 # warning is the only signal.
                 parent_span = self._span_observations.get(parent_span_id)
                 if parent_span is None:
-                    LOGGER.warning(
-                        "Skipping span %s: parent span %s is not yet observed. "
-                        "Child will remain orphaned until the parent's "
-                        "CreateSpanMessage is processed.",
-                        span_id,
-                        parent_span_id,
-                    )
+                    warning_key = (span_id, parent_span_id)
+                    if warning_key not in self._warned_orphan_parents:
+                        self._warned_orphan_parents.add(warning_key)
+                        LOGGER.warning(
+                            "Skipping span %s: parent span %s is not yet observed. "
+                            "Child will remain orphaned until the parent's "
+                            "CreateSpanMessage is processed.",
+                            span_id,
+                            parent_span_id,
+                        )
                     continue
 
                 # First time we see this parent on this rebuild — drop stale
@@ -222,7 +284,11 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
 
                 if not _observation_already_stored(span_id, parent_span.spans):
                     parent_span.spans.append(self._span_observations[span_id])
-                    parent_span.spans.sort(key=lambda x: x.start_time)
+
+            for parent_id in visited_parents:
+                self._span_observations[parent_id].spans.sort(
+                    key=lambda x: x.start_time
+                )
 
             all_span_ids = self._span_to_trace
             for span_id in all_span_ids:
@@ -464,37 +530,47 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         )
 
     def _handle_update_span_message(self, message: messages.UpdateSpanMessage) -> None:
-        span = self._span_observations[message.span_id]
-        update_payload = {
-            "output": message.output,
-            "usage": message.usage,
-            "provider": message.provider,
-            "model": message.model,
-            "end_time": message.end_time,
-            "metadata": message.metadata,
-            "error_info": message.error_info,
-            "tags": message.tags,
-            "input": message.input,
-            "total_cost": message.total_cost,
-        }
-        cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-        span.__dict__.update(cleaned_update_payload)
+        update_payload = dict_utils.remove_none_from_dict(
+            {
+                "output": message.output,
+                "usage": message.usage,
+                "provider": message.provider,
+                "model": message.model,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+                "total_cost": message.total_cost,
+            }
+        )
+        span = self._span_observations.get(message.span_id)
+        if span is None:
+            # Queue the payload until the matching create arrives — batching
+            # can deliver Update before Create.
+            self._pending_span_updates[message.span_id].append(update_payload)
+            return
+        span.__dict__.update(update_payload)
 
     def _handle_update_trace_message(
         self, message: messages.UpdateTraceMessage
     ) -> None:
-        current_trace = self._trace_observations[message.trace_id]
-        update_payload = {
-            "output": message.output,
-            "end_time": message.end_time,
-            "metadata": message.metadata,
-            "error_info": message.error_info,
-            "tags": message.tags,
-            "input": message.input,
-            "thread_id": message.thread_id,
-        }
-        cleaned_update_payload = dict_utils.remove_none_from_dict(update_payload)
-        current_trace.__dict__.update(cleaned_update_payload)
+        update_payload = dict_utils.remove_none_from_dict(
+            {
+                "output": message.output,
+                "end_time": message.end_time,
+                "metadata": message.metadata,
+                "error_info": message.error_info,
+                "tags": message.tags,
+                "input": message.input,
+                "thread_id": message.thread_id,
+            }
+        )
+        current_trace = self._trace_observations.get(message.trace_id)
+        if current_trace is None:
+            self._pending_trace_updates[message.trace_id].append(update_payload)
+            return
+        current_trace.__dict__.update(update_payload)
 
     def _handle_add_span_feedback_scores_batch_message(
         self, message: messages.AddSpanFeedbackScoresBatchMessage
@@ -643,6 +719,76 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         """Returns the list of experiment items collected."""
         with self._rlock:
             return self._experiment_items
+
+
+def _merge_models(existing: ModelT, new: ModelT) -> ModelT:
+    """Merge two trace/span models that share the same id.
+
+    Duplicate Create messages reach the emulator out of order: a START message
+    (no end_time, defaulted type, no output) can arrive after the matching
+    FULL message (end_time set, output filled). The previous "newer end_time
+    wins" check silently let the late START overwrite the FULL entry. This
+    helper picks the more complete entry as primary and fills any None gaps
+    from the other so neither order produces data loss.
+    """
+    primary, secondary = _pick_primary(existing, new)
+
+    merged_kwargs: Dict[str, Any] = {}
+    for field in dataclasses.fields(type(primary)):
+        if field.name in _MERGE_PRESERVED_FIELDS:
+            # Children/feedback/attachments are accumulated externally; the
+            # in-memory `existing` model already holds whatever was attached.
+            merged_kwargs[field.name] = getattr(existing, field.name)
+            continue
+
+        primary_value = getattr(primary, field.name)
+        secondary_value = getattr(secondary, field.name)
+
+        if _is_missing(primary_value) and not _is_missing(secondary_value):
+            merged_kwargs[field.name] = secondary_value
+        else:
+            merged_kwargs[field.name] = primary_value
+
+    return type(primary)(**merged_kwargs)
+
+
+def _pick_primary(existing: ModelT, new: ModelT) -> Tuple[ModelT, ModelT]:
+    """Return ``(primary, secondary)`` where primary is the more complete entry.
+
+    Completeness order:
+    1. Whichever entry has a non-None ``end_time`` wins (FULL > START).
+    2. If both have end_time, the later one wins.
+    3. If neither has end_time, fall back to ``last_updated_at``; ties go to
+       ``new`` (last write wins).
+    """
+    if existing.end_time is not None and new.end_time is None:
+        return existing, new
+    if existing.end_time is None and new.end_time is not None:
+        return new, existing
+    if existing.end_time is not None and new.end_time is not None:
+        if new.end_time >= existing.end_time:
+            return new, existing
+        return existing, new
+
+    existing_updated = existing.last_updated_at
+    new_updated = new.last_updated_at
+    if existing_updated is not None and new_updated is None:
+        return existing, new
+    if existing_updated is None and new_updated is not None:
+        return new, existing
+    if existing_updated is not None and new_updated is not None:
+        if new_updated >= existing_updated:
+            return new, existing
+        return existing, new
+    return new, existing
+
+
+def _is_missing(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, list) and len(value) == 0:
+        return True
+    return False
 
 
 def _observation_already_stored(
