@@ -11,7 +11,6 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { Undo2, X } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -53,13 +52,15 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
-import { Button } from "@/ui/button";
-import { Sheet, SheetContent, SheetTitle } from "@/ui/sheet";
+import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
@@ -388,7 +389,6 @@ type TraceLogsSidebarProps = {
   projectName?: string;
   logsSource?: LOGS_SOURCE;
   title?: string;
-  backLabel?: string;
 };
 
 const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
@@ -398,7 +398,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   projectName = "",
   logsSource,
   title = "Logs",
-  backLabel = "Back",
 }) => {
   const type = TRACE_DATA_TYPE.traces;
   const truncationEnabled = useTruncationEnabled();
@@ -637,7 +636,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const isTableLoading = isPending || isFeedbackScoresPending;
 
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no traces yet" : "No search results";
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setFilters([]);
+  }, [setSearch, setFilters]);
 
   const rows: Array<Trace> = useMemo(
     () => (data?.content as Trace[]) ?? [],
@@ -920,27 +923,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  const sheetHeader = (
-    <>
-      <SheetTitle className="sr-only">{title}</SheetTitle>
-      <div className="flex items-center justify-between border-b px-5 py-3">
-        <Button variant="outline" size="2xs" onClick={onClose}>
-          <Undo2 className="mr-1 size-3" />
-          {backLabel}
-        </Button>
-        <Button variant="ghost" size="icon-sm" onClick={onClose}>
-          <X />
-        </Button>
-      </div>
-    </>
-  );
-
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={setSheetContentRef}
         className="flex w-screen flex-col shadow-none sm:max-w-full"
-        header={sheetHeader}
+        header={<SheetTopBar variant="info" title={title} />}
         onEscapeKeyDown={(e) => {
           if (traceId) {
             e.preventDefault();
@@ -948,10 +936,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
         }}
       >
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="px-6 pb-1 pt-4">
-            <h2 className="comet-title-xxs">{title}</h2>
-          </div>
-
           <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-2 px-6 py-4">
             <div className="flex items-center gap-2">
               <SearchInput
@@ -1018,7 +1002,14 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             <DataTableStateHandler
               isLoading={isTableLoading}
               isEmpty={showEmptyState}
-              emptyState={<DataTableNoData title="There are no traces yet" />}
+              emptyState={
+                <DataTableEmptyContent
+                  title="There are no traces yet"
+                  description="Traces will appear here once your agent starts receiving requests."
+                  lightImageUrl={emptyLogsLightUrl}
+                  darkImageUrl={emptyLogsDarkUrl}
+                />
+              }
             >
               <DataTable
                 columns={columns}
@@ -1035,7 +1026,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 getRowId={getRowId}
                 rowHeight={height as ROW_HEIGHT}
                 columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-                noData={<DataTableNoData title={noDataText} />}
+                noData={
+                  <DataTableNoMatchingData
+                    onClearFilters={
+                      search || filters.length > 0
+                        ? handleClearFilters
+                        : undefined
+                    }
+                  />
+                }
                 showLoadingOverlay={isPlaceholderData && isFetching}
               />
             </DataTableStateHandler>
