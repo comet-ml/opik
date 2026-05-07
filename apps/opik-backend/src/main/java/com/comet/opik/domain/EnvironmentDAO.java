@@ -7,6 +7,7 @@ import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.customizer.BindList;
 import org.jdbi.v3.sqlobject.customizer.BindMethods;
+import org.jdbi.v3.sqlobject.statement.SqlBatch;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;
 import org.jdbi.v3.sqlobject.statement.SqlUpdate;
 
@@ -23,6 +24,12 @@ interface EnvironmentDAO {
             +
             "VALUES (:bean.id, :workspaceId, :bean.name, :bean.description, COALESCE(:bean.color, 'default'), COALESCE(:bean.position, 0), :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Environment environment);
+
+    @SqlBatch("INSERT INTO environments (id, workspace_id, name, color, position, created_by, last_updated_by) "
+            +
+            "VALUES (:bean.id, :workspaceId, :bean.name, 'default', 0, :userName, :userName)")
+    void saveBatch(@Bind("workspaceId") String workspaceId, @Bind("userName") String userName,
+            @BindMethods("bean") List<Environment> environments);
 
     @SqlUpdate("UPDATE environments SET " +
             "name = COALESCE(:name, name), " +

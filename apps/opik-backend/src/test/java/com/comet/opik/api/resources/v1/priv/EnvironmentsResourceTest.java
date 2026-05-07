@@ -256,8 +256,8 @@ class EnvironmentsResourceTest {
             String capWorkspaceId = UUID.randomUUID().toString();
             mockIsolatedWorkspace(capApiKey, capWorkspaceName, capWorkspaceId);
 
-            // default max is 20 — fill the workspace then attempt one more
-            IntStream.range(0, 20).forEach(i -> environmentsClient.createEnvironment(
+            // default max is 100 — fill the workspace then attempt one more
+            IntStream.range(0, 100).forEach(i -> environmentsClient.createEnvironment(
                     buildEnvironment(), capApiKey, capWorkspaceName));
 
             try (var response = environmentsClient.callCreate(buildEnvironment(), capApiKey, capWorkspaceName)) {

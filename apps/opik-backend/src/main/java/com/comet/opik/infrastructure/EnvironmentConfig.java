@@ -9,5 +9,5 @@ import lombok.Data;
 public class EnvironmentConfig {
 
     @JsonProperty
-    @Min(1) @Max(1000) private int maxPerWorkspace = 20;
+    @Min(1) @Max(1000) private int maxPerWorkspace = 100;
 }

@@ -19,6 +19,7 @@ import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
@@ -32,6 +33,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
@@ -40,6 +42,8 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 public interface EnvironmentService {
 
     Environment create(Environment environment);
+
+    void bulkCreate(Set<String> names, String workspaceId, String userName);
 
     Environment update(UUID id, EnvironmentUpdate environmentUpdate);
 
@@ -58,6 +62,9 @@ class EnvironmentServiceImpl implements EnvironmentService {
     private static final String ENVIRONMENT_NAME_CONFLICT_TEMPLATE = "Environment with name '%s' already exists in the workspace";
     private static final String ENVIRONMENT_LIMIT_REACHED_TEMPLATE = "Workspace already has the maximum of %d environments";
     private static final String ENVIRONMENT_CREATE_LOCK = "environment_create";
+    private static final String ENVIRONMENT_CREATED_EVENT = "environment_created";
+    private static final String SOURCE_MANUAL = "manual";
+    private static final String SOURCE_INGESTION = "ingestion";
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -104,14 +111,77 @@ class EnvironmentServiceImpl implements EnvironmentService {
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .block();
 
-        analyticsService.trackEvent("environment_created", Map.of(
+        analyticsService.trackEvent(ENVIRONMENT_CREATED_EVENT, Map.of(
                 "environment_id", saved.id().toString(),
                 "environment_name", saved.name(),
                 "workspace_id", workspaceId,
                 "user_name", userName,
+                "source", SOURCE_MANUAL,
                 "date", Instant.now().toString()));
 
         return get(saved.id(), workspaceId);
+    }
+
+    @Override
+    public void bulkCreate(@NonNull Set<String> names, @NonNull String workspaceId, @NonNull String userName) {
+        Set<String> validNames = names.stream()
+                .filter(StringUtils::isNotBlank)
+                .filter(name -> name.length() <= 150)
+                .filter(name -> name.matches(Environment.NAME_PATTERN))
+                .collect(Collectors.toSet());
+
+        if (validNames.isEmpty()) {
+            return;
+        }
+
+        List<Environment> created = lockService.executeWithLock(
+                new LockService.Lock(workspaceId, ENVIRONMENT_CREATE_LOCK),
+                Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
+                    var repository = handle.attach(EnvironmentDAO.class);
+
+                    Set<String> existingNames = repository.findAll(workspaceId).stream()
+                            .map(Environment::name)
+                            .collect(Collectors.toSet());
+
+                    long availableSlots = (long) environmentConfig.getMaxPerWorkspace() - existingNames.size();
+                    if (availableSlots <= 0) {
+                        log.info("Skipping environment auto-create for workspace_id '{}': cap '{}' reached",
+                                workspaceId, environmentConfig.getMaxPerWorkspace());
+                        return List.<Environment>of();
+                    }
+
+                    List<Environment> environments = validNames.stream()
+                            .filter(name -> !existingNames.contains(name))
+                            .limit(availableSlots)
+                            .map(name -> Environment.builder()
+                                    .id(idGenerator.generateId())
+                                    .name(name)
+                                    .build())
+                            .toList();
+
+                    if (environments.isEmpty()) {
+                        return List.<Environment>of();
+                    }
+
+                    repository.saveBatch(workspaceId, userName, environments);
+                    return environments;
+                })).subscribeOn(Schedulers.boundedElastic()))
+                .block();
+
+        if (created == null || created.isEmpty()) {
+            return;
+        }
+
+        log.info("Auto-created '{}' environments for workspace_id '{}'", created.size(), workspaceId);
+
+        Instant now = Instant.now();
+        created.forEach(env -> analyticsService.trackEvent(ENVIRONMENT_CREATED_EVENT, Map.of(
+                "environment_id", env.id().toString(),
+                "environment_name", env.name(),
+                "workspace_id", workspaceId,
+                "user_name", userName,
+                "source", SOURCE_INGESTION,
+                "date", now.toString())));
     }
 
     @Override
