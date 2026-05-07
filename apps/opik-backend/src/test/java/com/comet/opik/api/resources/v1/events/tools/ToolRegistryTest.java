@@ -78,6 +78,62 @@ class ToolRegistryTest {
     }
 
     @Test
+    void executeReturnsErrorJsonWhenToolThrowsRuntimeException() {
+        var tool = new ToolExecutor() {
+            @Override
+            public String name() {
+                return "boom";
+            }
+
+            @Override
+            public ToolSpecification spec() {
+                return ToolSpecification.builder()
+                        .name("boom")
+                        .parameters(JsonObjectSchema.builder().build())
+                        .build();
+            }
+
+            @Override
+            public String execute(String arguments, TraceToolContext ctx) {
+                throw new IllegalStateException("kaboom");
+            }
+        };
+        var registry = new ToolRegistry(Set.of(tool));
+
+        var result = registry.execute("boom", "{}", newContext());
+
+        assertThat(result).contains("\"error\"").contains("boom").contains("kaboom");
+    }
+
+    @Test
+    void executeLetsErrorsPropagate() {
+        var tool = new ToolExecutor() {
+            @Override
+            public String name() {
+                return "fatal";
+            }
+
+            @Override
+            public ToolSpecification spec() {
+                return ToolSpecification.builder()
+                        .name("fatal")
+                        .parameters(JsonObjectSchema.builder().build())
+                        .build();
+            }
+
+            @Override
+            public String execute(String arguments, TraceToolContext ctx) {
+                throw new StackOverflowError("recursive tool");
+            }
+        };
+        var registry = new ToolRegistry(Set.of(tool));
+
+        org.assertj.core.api.Assertions
+                .assertThatThrownBy(() -> registry.execute("fatal", "{}", newContext()))
+                .isInstanceOf(StackOverflowError.class);
+    }
+
+    @Test
     void emptyRegistryReturnsEmptySpecsAndUnknownErrors() {
         var registry = new ToolRegistry(Set.of());
 

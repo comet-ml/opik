@@ -15,8 +15,10 @@ import java.util.stream.Collectors;
 /**
  * Central dispatcher for {@link ToolExecutor}s. Tools are bound through
  * {@code ToolsModule}'s multibinder, so adding a new tool is a single binding
- * line. Unknown tool names produce a non-fatal {@code {"error": ...}} string
- * rather than an exception so the judge's tool-call loop can continue.
+ * line. Unknown tool names — and any {@link Exception} thrown by an executor —
+ * produce a non-fatal {@code {"error": ...}} string rather than an exception
+ * so the judge's tool-call loop can continue. {@link Error}s (OOM,
+ * StackOverflowError) propagate.
  */
 @Singleton
 @Slf4j
@@ -45,6 +47,14 @@ public class ToolRegistry {
             log.warn("Unknown tool requested by judge: '{}'", name);
             return "{\"error\": \"Unknown tool: %s\"}".formatted(name);
         }
-        return executor.execute(arguments, ctx);
+        try {
+            return executor.execute(arguments, ctx);
+        } catch (Exception e) {
+            // Keep the judge loop alive when a tool throws unexpectedly. Errors (OOM,
+            // StackOverflowError) intentionally propagate — the JVM is in no shape to
+            // continue scoring after one of those.
+            log.warn("Tool '{}' threw; returning error JSON to keep judge loop alive", name, e);
+            return "{\"error\": \"Tool '%s' failed: %s\"}".formatted(name, e.getMessage());
+        }
     }
 }
