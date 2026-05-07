@@ -46,13 +46,17 @@ class ResolvedDataset:
     tags: Optional[List[str]]
 
 
-def _iter_dataset_pages(
+def iter_dataset_pages(
     rest_client: OpikApi,
     *,
-    name: str,
-    project_id: Optional[str],
+    name: Optional[str] = None,
+    project_id: Optional[str] = None,
 ) -> Iterable[Any]:
-    """Yield every dataset row matching ``name``, paginating to exhaustion.
+    """Yield every dataset row matching the filters, paginating to exhaustion.
+
+    Single source of truth for ``find_datasets`` pagination across
+    ``opik migrate`` — used both for name-resolution (with ``name`` set) and
+    for the workspace survey in ``migrate plan`` (``name=None``).
 
     Avoids the silent truncation bug where a single ``find_datasets(page=1)``
     call would miss rows on later pages. Yields the underlying Fern row
@@ -75,12 +79,23 @@ def _iter_dataset_pages(
         page_idx += 1
 
 
+# Backwards-compatible alias for the previous private name.
+_iter_dataset_pages = iter_dataset_pages
+
+
 def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
     """Resolve a dataset row's ``project_id`` to a human-readable name.
 
     Returns None when the dataset has no project (workspace-scoped) or when
-    the name lookup fails. Used both for ``ResolvedDataset.project_name`` so
-    downstream calls scope correctly, and for collision error messages.
+    the project lookup raises a recoverable ``ApiError`` (typically 404 — the
+    project was deleted out from under us between listing and lookup). The
+    fallback is intentional: a missing project label is fine to omit from a
+    collision message, and downstream code accepts ``None`` as
+    "workspace-scoped".
+
+    Unexpected exceptions (auth, transport, config) are logged at WARNING and
+    we still return ``None`` so the surrounding check doesn't fail mid-flight,
+    but the cause is surfaced rather than silently swallowed.
     """
     project_id = getattr(row, "project_id", None)
     if not project_id:
@@ -88,9 +103,15 @@ def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
     try:
         proj = rest_client.projects.get_project_by_id(id=project_id)
         return getattr(proj, "name", None)
-    except Exception:
-        # Best effort — a missing/inaccessible project name shouldn't break
-        # the surrounding migration check; the row's id is still usable.
+    except ApiError:
+        # Recoverable: 404 (project gone) or similar; row.id is still usable.
+        return None
+    except Exception as exc:
+        LOGGER.warning(
+            "Unexpected error resolving project id %s to a name: %s",
+            project_id,
+            exc.__class__.__name__,
+        )
         return None
 
 

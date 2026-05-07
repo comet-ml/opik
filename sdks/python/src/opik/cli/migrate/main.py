@@ -22,6 +22,7 @@ from opik.api_objects import rest_helpers
 from .audit import AuditLog, default_audit_path
 from .errors import MigrationError, safe_error_string
 from .executor import execute_plan, record_planned
+from .resolver import iter_dataset_pages
 from .planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
@@ -293,18 +294,10 @@ def migrate_plan_command(
             rest_client, project_name=from_project
         )
 
-        datasets = []
-        page = 1
-        while True:
-            response = rest_client.datasets.find_datasets(
-                page=page, size=100, project_id=project_id
-            )
-            if not response.content:
-                break
-            datasets.extend(response.content)
-            if len(response.content) < 100:
-                break
-            page += 1
+        # Reuse the shared pagination iterator from `resolver` so the plan
+        # command and name-resolution stay in lockstep. Materializing because
+        # we need both the count check below and a second pass over rows.
+        datasets = list(iter_dataset_pages(rest_client, project_id=project_id))
 
         scope_label = (
             f"project '{from_project}'"
