@@ -91,10 +91,32 @@ class WorkspacesServiceImpl implements WorkspacesService {
         });
     }
 
+    /**
+     * Same UPDATE-then-INSERT pattern as {@link #markFirstTraceReported}: the UPDATE only matches
+     * rows whose {@code migration_skipped_at} is currently NULL, and a duplicate-key on the INSERT
+     * means another writer already trapped the workspace. Returns 1 when this call set the flag,
+     * 0 otherwise (already trapped — idempotent no-op).
+     */
     @Override
     public int markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> handle.attach(WorkspacesDAO.class)
-                .upsertMigrationSkipped(workspaceId, Instant.now(), reason, SYSTEM_USER));
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            int updated = dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER);
+            if (updated > 0) {
+                return updated;
+            }
+            try {
+                dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return 1;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return 0;
+                }
+                throw exception;
+            }
+        });
     }
 
     @Override

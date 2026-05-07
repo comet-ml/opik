@@ -56,15 +56,33 @@ public interface WorkspacesDAO {
             @Bind("reportedAt") Instant reportedAt,
             @Bind("userName") String userName);
 
+    /**
+     * Atomic NULL → timestamp transition for the migration-skipped flag. Returns 1 only when
+     * this caller flipped {@code migration_skipped_at} from NULL to {@code :skippedAt}; returns
+     * 0 if no row exists or the column was already non-null. Pair with {@link #insertMigrationSkipped}
+     * for the missing-row case.
+     */
+    @SqlUpdate("""
+            UPDATE workspaces
+            SET migration_skipped_at = :skippedAt,
+                migration_skipped_reason = :reason,
+                last_updated_by = :userName
+            WHERE id = :id AND migration_skipped_at IS NULL
+            """)
+    int updateMigrationSkippedIfNull(@Bind("id") String id,
+            @Bind("skippedAt") Instant skippedAt,
+            @Bind("reason") String reason,
+            @Bind("userName") String userName);
+
+    /**
+     * Plain INSERT (no upsert). Throws on duplicate-key — caller handles the "row already exists"
+     * branch via the {@link #updateMigrationSkippedIfNull} attempt that precedes it.
+     */
     @SqlUpdate("""
             INSERT INTO workspaces (id, migration_skipped_at, migration_skipped_reason, created_by, last_updated_by)
             VALUES (:id, :skippedAt, :reason, :userName, :userName)
-            ON DUPLICATE KEY UPDATE
-                last_updated_by = IF(migration_skipped_at IS NULL, :userName, last_updated_by),
-                migration_skipped_at = COALESCE(migration_skipped_at, :skippedAt),
-                migration_skipped_reason = COALESCE(migration_skipped_reason, :reason)
             """)
-    int upsertMigrationSkipped(@Bind("id") String id,
+    void insertMigrationSkipped(@Bind("id") String id,
             @Bind("skippedAt") Instant skippedAt,
             @Bind("reason") String reason,
             @Bind("userName") String userName);
