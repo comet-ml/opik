@@ -263,6 +263,116 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .contains("Now respond with ONLY the JSON object");
     }
 
+    @Test
+    void handleToolCallsPropagatesScoreTraceFailureMidLoop() {
+        UUID traceId = UUID.randomUUID();
+        TraceToScoreLlmAsJudge message = newMessage(traceId);
+
+        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
+
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("call-1")
+                .name(GetTraceSpansTool.NAME)
+                .arguments("{}")
+                .build();
+        ChatResponse initialResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq)))
+                .build();
+
+        // Round-1 a follow-up call fails (transient blip after the per-LLM RetryUtils policy
+        // exhausted its budget). The contract: failure escapes handleToolCalls so the message
+        // returns un-ACKed and Redis Streams can redeliver. Crucially, we must NOT swallow the
+        // error and emit empty/partial scores — score writes are upsert-via-ReplacingMergeTree,
+        // so silent failure here would mask a problem instead of triggering the retry path.
+        RuntimeException providerFailure = new RuntimeException("provider 503");
+        when(aiProxyService.scoreTrace(any(ChatRequest.class), any(), any()))
+                .thenThrow(providerFailure);
+
+        ChatRequest toolRequest = ChatRequest.builder()
+                .messages(UserMessage.from("score"))
+                .toolSpecifications(stubSpec(GetTraceSpansTool.NAME))
+                .build();
+        ChatRequest structuredRequest = ChatRequest.builder()
+                .messages(UserMessage.from("score"))
+                .build();
+
+        org.assertj.core.api.Assertions
+                .assertThatThrownBy(() -> scorer.handleToolCalls(
+                        initialResponse, toolRequest, structuredRequest, message))
+                .isSameAs(providerFailure);
+
+        // Exactly one provider call attempted; the loop did not swallow + continue.
+        verify(aiProxyService, times(1)).scoreTrace(any(ChatRequest.class), any(), any());
+    }
+
+    @Test
+    void handleToolCallsCapsAtMaxRoundsAndStillFiresWrapUpStructuredCall() {
+        UUID traceId = UUID.randomUUID();
+        TraceToScoreLlmAsJudge message = newMessage(traceId);
+
+        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
+
+        // Initial response (passed in by the caller) carries a tool call — round 0's tools.
+        ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
+                .id("call")
+                .name(GetTraceSpansTool.NAME)
+                .arguments("{}")
+                .build();
+        ChatResponse toolCallingResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.from(List.of(toolReq)))
+                .build();
+        ChatResponse finalResponse = ChatResponse.builder()
+                .aiMessage(AiMessage.from("{\"score\": true}"))
+                .build();
+
+        // MAX_TOOL_CALL_ROUNDS = 10 (private in the scorer; inlined here intentionally —
+        // if the constant changes, this test should fail loudly to force a deliberate update).
+        // Loop trace: for (round = 0; round < 10; round++) { execute tools; chatResponse =
+        // scoreTrace(...) }. Since every chatResponse keeps emitting tool calls, all 10
+        // iterations run, producing 10 in-loop scoreTrace calls. Then the wrap-up appends
+        // the forcing UserMessage and issues 1 final structured call → 11 total invocations.
+        when(aiProxyService.scoreTrace(any(ChatRequest.class), any(), any()))
+                .thenReturn(toolCallingResponse, // round 1 → still tools
+                        toolCallingResponse, // round 2
+                        toolCallingResponse, // round 3
+                        toolCallingResponse, // round 4
+                        toolCallingResponse, // round 5
+                        toolCallingResponse, // round 6
+                        toolCallingResponse, // round 7
+                        toolCallingResponse, // round 8
+                        toolCallingResponse, // round 9
+                        toolCallingResponse, // round 10 (still tools — cap reached)
+                        finalResponse); // wrap-up structured call
+
+        ChatRequest toolRequest = ChatRequest.builder()
+                .messages(UserMessage.from("score"))
+                .toolSpecifications(stubSpec(GetTraceSpansTool.NAME))
+                .build();
+        ChatRequest structuredRequest = ChatRequest.builder()
+                .messages(UserMessage.from("score"))
+                .build();
+
+        ChatResponse result = scorer.handleToolCalls(
+                toolCallingResponse, toolRequest, structuredRequest, message);
+
+        // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
+        assertThat(result).isSameAs(finalResponse);
+
+        // 10 in-loop calls + 1 wrap-up structured call = 11 total provider invocations.
+        ArgumentCaptor<ChatRequest> requests = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(aiProxyService, times(11)).scoreTrace(requests.capture(), any(), any());
+
+        // The final (11th) call uses structuredRequest's shape — no tool specs — and the
+        // forcing UserMessage is its last message. This is the contract that prevents the
+        // model from continuing prose ("Now let me check...") after the cap.
+        ChatRequest finalSent = requests.getAllValues().get(10);
+        assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
+        var lastMessage = finalSent.messages().getLast();
+        assertThat(lastMessage).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) lastMessage).singleText())
+                .contains("Now respond with ONLY the JSON object");
+    }
+
     private static ToolSpecification stubSpec(String name) {
         return ToolSpecification.builder()
                 .name(name)
