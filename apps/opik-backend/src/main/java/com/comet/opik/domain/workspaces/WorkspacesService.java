@@ -1,7 +1,6 @@
 package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
-import com.comet.opik.api.Workspace;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;

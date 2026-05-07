@@ -1,6 +1,5 @@
 package com.comet.opik.domain.workspaces;
 
-import com.comet.opik.api.Workspace;
 import org.jdbi.v3.sqlobject.config.RegisterConstructorMapper;
 import org.jdbi.v3.sqlobject.customizer.Bind;
 import org.jdbi.v3.sqlobject.statement.SqlQuery;

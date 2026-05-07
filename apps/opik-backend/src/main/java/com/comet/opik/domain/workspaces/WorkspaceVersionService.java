@@ -1,7 +1,6 @@
 package com.comet.opik.domain.workspaces;
 
 import com.comet.opik.api.OpikVersion;
-import com.comet.opik.api.Workspace;
 import com.comet.opik.api.WorkspaceVersion;
 import com.comet.opik.domain.AlertDAO;
 import com.comet.opik.domain.DashboardDAO;
