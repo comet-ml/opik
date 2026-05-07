@@ -67,6 +67,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     ARCEE_AI_VIRTUOSO_LARGE("arcee-ai/virtuoso-large"),
     ARLIAI_QWQ_32B_ARLIAI_RPR_V1("arliai/qwq-32b-arliai-rpr-v1"),
     ARLIAI_QWQ_32B_ARLIAI_RPR_V1_FREE("arliai/qwq-32b-arliai-rpr-v1:free"),
+    BAIDU_COBUDDY_FREE("baidu/cobuddy:free"),
     BAIDU_ERNIE_4_5_21B_A3B("baidu/ernie-4.5-21b-a3b"),
     BAIDU_ERNIE_4_5_21B_A3B_THINKING("baidu/ernie-4.5-21b-a3b-thinking"),
     BAIDU_ERNIE_4_5_300B_A47B("baidu/ernie-4.5-300b-a47b"),

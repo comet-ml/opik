@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
@@ -82,6 +83,9 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
+
+    @Valid @NotNull @JsonProperty
+    private JerseyClientConfiguration jerseyClient = new JerseyClientConfiguration();
 
     @Valid @NotNull @JsonProperty
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();

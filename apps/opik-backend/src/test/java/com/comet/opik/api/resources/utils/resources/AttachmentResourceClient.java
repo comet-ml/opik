@@ -7,9 +7,9 @@ import com.comet.opik.api.attachment.DeleteAttachmentsRequest;
 import com.comet.opik.api.attachment.EntityType;
 import com.comet.opik.api.attachment.StartMultipartUploadRequest;
 import com.comet.opik.api.attachment.StartMultipartUploadResponse;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.utils.TestUtils;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
@@ -32,12 +32,8 @@ public class AttachmentResourceClient {
 
     public AttachmentResourceClient(ClientSupport client) {
         this.client = client;
-        this.externatClient = ClientBuilder.newClient();
+        this.externatClient = TestHttpClientUtils.client();
         this.baseURI = TestUtils.getBaseUrl(client);
-    }
-
-    public void close() {
-        externatClient.close();
     }
 
     public StartMultipartUploadResponse startMultiPartUpload(
