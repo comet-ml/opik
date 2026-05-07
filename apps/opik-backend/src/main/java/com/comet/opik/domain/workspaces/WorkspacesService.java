@@ -29,6 +29,16 @@ public interface WorkspacesService {
      */
     int upsertVersion(String workspaceId, OpikVersion version, String userName);
 
+    /**
+     * Atomically capture the prior {@code last_known_version} (with a row-level lock) and upsert
+     * the new value in a single transaction. Concurrent callers serialize per workspace, so each
+     * one observes the previous writer's commit — preventing duplicate {@code version_changed=true}
+     * emissions when two determinations race for the same workspace.
+     *
+     * @return the prior {@link OpikVersion} (empty when no row existed or the column was null)
+     */
+    Optional<OpikVersion> upsertVersionAndReturnPrevious(String workspaceId, OpikVersion version, String userName);
+
     /** Returns the row, or empty if not found / blank id. */
     Optional<Workspace> findById(String workspaceId);
 
@@ -63,6 +73,18 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public int upsertVersion(@NonNull String workspaceId, @NonNull OpikVersion version, @NonNull String userName) {
         return transactionTemplate.inTransaction(WRITE, handle -> handle.attach(WorkspacesDAO.class)
                 .upsertVersion(workspaceId, version.getValue(), Instant.now(), userName));
+    }
+
+    @Override
+    public Optional<OpikVersion> upsertVersionAndReturnPrevious(@NonNull String workspaceId,
+            @NonNull OpikVersion version, @NonNull String userName) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var previous = dao.findVersionForUpdate(workspaceId)
+                    .flatMap(OpikVersion::findByValue);
+            dao.upsertVersion(workspaceId, version.getValue(), Instant.now(), userName);
+            return previous;
+        });
     }
 
     @Override
