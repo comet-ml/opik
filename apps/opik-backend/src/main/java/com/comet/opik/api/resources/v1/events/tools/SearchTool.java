@@ -245,12 +245,7 @@ public class SearchTool implements ToolExecutor {
     }
 
     private static String successHeader(ParsedArgs args, int total, int shown) {
-        StringBuilder header = new StringBuilder("[search: ");
-        header.append(args.type.name().toLowerCase()).append(':').append(args.id);
-        header.append(" | pattern='").append(args.pattern).append('\'');
-        if (args.path != null && !args.path.isBlank()) {
-            header.append(" | path='").append(args.path).append('\'');
-        }
+        StringBuilder header = headerPrefix(args);
         if (total > shown) {
             header.append(" | ").append(total).append(" matches (showing ").append(shown).append(')');
         } else {
@@ -265,14 +260,17 @@ public class SearchTool implements ToolExecutor {
     }
 
     private static String errorHeader(ParsedArgs args) {
+        return headerPrefix(args).append(" | ERROR]").toString();
+    }
+
+    private static StringBuilder headerPrefix(ParsedArgs args) {
         StringBuilder header = new StringBuilder("[search: ");
         header.append(args.type.name().toLowerCase()).append(':').append(args.id);
         header.append(" | pattern='").append(args.pattern).append('\'');
         if (args.path != null && !args.path.isBlank()) {
             header.append(" | path='").append(args.path).append('\'');
         }
-        header.append(" | ERROR]");
-        return header.toString();
+        return header;
     }
 
     // ---------------- Argument parsing ----------------
