@@ -121,10 +121,15 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
      * ({@code CLIENT_FOUND_ROWS=on}), which makes a matched-but-unchanged upsert return
      * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives keeps
-     * the detection unambiguous: the UPDATE's row count is exact, and a duplicate-key exception
-     * on the INSERT means another writer beat us to it.
+     * the detection unambiguous: the UPDATE's row count is exact.
      *
-     * @return {@code true} when this caller flipped the flag; {@code false} when another writer
+     * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped <i>this</i>
+     * flag — it just means the row exists. It might have been inserted by an unrelated writer
+     * (version determination, migration job) that didn't touch the target column. We retry the
+     * UPDATE-if-null to disambiguate: if the column is still NULL we flip it (and return true),
+     * otherwise some prior caller already set it (return false).</p>
+     *
+     * @return {@code true} when this caller flipped the flag; {@code false} when another caller
      *         already set it
      */
     private boolean transitionFlagAtomically(ToIntFunction<WorkspacesDAO> updateIfNull,
@@ -139,7 +144,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 return true;
             } catch (UnableToExecuteStatementException exception) {
                 if (isDuplicateKeyViolation(exception)) {
-                    return false;
+                    return updateIfNull.applyAsInt(dao) > 0;
                 }
                 throw exception;
             }
