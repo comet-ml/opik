@@ -36,6 +36,7 @@ public enum TraceField implements Field {
     ANNOTATION_QUEUE_IDS(ANNOTATION_QUEUE_IDS_QUERY_PARAM, FieldType.LIST),
     EXPERIMENT_ID(EXPERIMENT_ID_QUERY_PARAM, FieldType.STRING_EXACT),
     SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY),
+    ENVIRONMENT(ENVIRONMENT_QUERY_PARAM, FieldType.ENUM),
     ;
 
     private final String queryParamField;

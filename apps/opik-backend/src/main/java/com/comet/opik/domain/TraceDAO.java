@@ -209,7 +209,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -235,7 +236,8 @@ class TraceDAOImpl implements TraceDAO {
                         :input_slim<item.index>,
                         :output_slim<item.index>,
                         :ttft<item.index>,
-                        :source<item.index>
+                        :source<item.index>,
+                        :environment<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -270,7 +272,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 new_trace.id as id,
@@ -345,7 +348,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.source, 'unknown'), old_trace.source,
                     new_trace.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(old_trace.environment), old_trace.environment,
+                    new_trace.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -368,7 +375,8 @@ class TraceDAOImpl implements TraceDAO {
                     :input_slim as input_slim,
                     :output_slim as output_slim,
                     :ttft as ttft,
-                    :source as source
+                    :source as source,
+                    :environment as environment
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -389,7 +397,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
             	id,
@@ -412,7 +420,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source
+                <if(source)> :source <else> source <endif> as source,
+                <if(environment)> :environment <else> environment <endif> as environment
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1758,7 +1767,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
                 new_trace.id as id,
@@ -1843,7 +1852,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.source, 'unknown'), old_trace.source,
                     new_trace.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(new_trace.environment), new_trace.environment,
+                    old_trace.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -1866,7 +1879,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
                     <if(ttft)> :ttft <else> null <endif> as ttft,
-                    :source as source
+                    :source as source,
+                    <if(environment)> :environment <else> '' <endif> as environment
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2431,7 +2445,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 t.id,
@@ -2455,7 +2470,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
-                t.source
+                t.source,
+                <if(environment)> :environment <else> t.environment <endif> as environment
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
@@ -2525,6 +2541,8 @@ class TraceDAOImpl implements TraceDAO {
         } else {
             statement.bindNull("source", String.class);
         }
+
+        statement.bind("environment", StringUtils.defaultString(trace.environment()));
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
@@ -2643,6 +2661,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.source())
                 .ifPresent(source -> statement.bind("source", source.getValue()));
 
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
@@ -2681,6 +2702,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.source())
                 .ifPresent(source -> template.add("source", source.getValue()));
+
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
 
         return template;
     }
@@ -2926,6 +2950,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
                         .orElse(null))
+                .environment(getValue(exclude, Trace.TraceField.ENVIRONMENT, row, "environment", String.class))
                 .experiment(mapExperiment(exclude, row))
                 .build();
     }
@@ -3307,6 +3332,8 @@ class TraceDAOImpl implements TraceDAO {
                 } else {
                     statement.bindNull("source" + i, String.class);
                 }
+
+                statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
 
                 i++;
             }
@@ -3767,6 +3794,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
 
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
+
         return template;
     }
 
@@ -3800,6 +3830,9 @@ class TraceDAOImpl implements TraceDAO {
         }
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
+
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

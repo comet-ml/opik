@@ -1383,6 +1383,8 @@ class TracesResourceTest {
                         .lastUpdatedAt(
                                 expectedTraces.stream().max(Comparator.comparing(Trace::lastUpdatedAt)).orElseThrow()
                                         .lastUpdatedAt())
+                        .environment(expectedTraces.stream().min(Comparator.comparing(Trace::id)).orElseThrow()
+                                .environment())
                         .build());
     }
 
@@ -2255,6 +2257,7 @@ class TracesResourceTest {
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
                     .visibilityMode(VisibilityMode.DEFAULT)
+                    .environment("")
                     .build();
             var id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
 
@@ -2595,6 +2598,7 @@ class TracesResourceTest {
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
                             .visibilityMode(VisibilityMode.DEFAULT)
+                            .environment("")
                             .build())
                     .toList();
             traceResourceClient.batchCreateTraces(expectedTraces0, API_KEY, TEST_WORKSPACE);
@@ -3460,6 +3464,7 @@ class TracesResourceTest {
                     .startTime(Instant.now().minusSeconds(10))
                     .createdAt(Instant.now())
                     .visibilityMode(VisibilityMode.DEFAULT)
+                    .environment("")
                     .build();
             id = traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
         }
@@ -3500,6 +3505,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             traceResourceClient.updateTrace(id, traceUpdate, API_KEY, TEST_WORKSPACE);
 
@@ -3526,9 +3532,12 @@ class TracesResourceTest {
                     .build();
             traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
 
-            // The update arrives first and sets source; when the create arrives, the existing non-unknown
-            // source is preserved (INSERT SQL: if old.source != 'unknown', keep old.source)
+            // The update arrives first and sets source/environment; when the create arrives, the existing
+            // non-default values are preserved (INSERT SQL: keep old values when present)
             var effectiveSource = traceUpdate.source() != null ? traceUpdate.source() : newTrace.source();
+            var effectiveEnvironment = traceUpdate.environment() != null
+                    ? traceUpdate.environment()
+                    : newTrace.environment();
             var expectedTrace = newTrace.toBuilder()
                     .name(traceUpdate.name())
                     .endTime(traceUpdate.endTime())
@@ -3542,6 +3551,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(effectiveSource)
+                    .environment(effectiveEnvironment)
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3615,6 +3625,7 @@ class TracesResourceTest {
                     .threadId(traceUpdate.threadId())
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             getAndAssert(expectedTrace, null, API_KEY, TEST_WORKSPACE);
         }
@@ -3819,6 +3830,7 @@ class TracesResourceTest {
                             traceUpdate.endTime()))
                     .ttft(traceUpdate.ttft())
                     .source(traceUpdate.source())
+                    .environment(traceUpdate.environment())
                     .build();
             getAndAssert(updatedTrace, projectId, API_KEY, TEST_WORKSPACE);
         }
@@ -3958,6 +3970,30 @@ class TracesResourceTest {
             Trace finalTrace = traceResourceClient.getById(traceId, TEST_WORKSPACE, API_KEY);
             assertThat(finalTrace).isNotNull();
             assertThat(finalTrace.id()).isEqualTo(traceId);
+        }
+
+        @Test
+        @DisplayName("when patch omits environment, then existing environment is preserved")
+        void update__whenPatchOmitsEnvironment__thenExistingEnvironmentPreserved() {
+            var projectName = "project-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var newTrace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .environment("production")
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+            traceResourceClient.createTrace(newTrace, API_KEY, TEST_WORKSPACE);
+
+            // Patch with name only — no environment — should preserve "production"
+            var traceUpdate = TraceUpdate.builder()
+                    .projectName(projectName)
+                    .name("updated-name")
+                    .build();
+            traceResourceClient.updateTrace(newTrace.id(), traceUpdate, API_KEY, TEST_WORKSPACE);
+
+            var actual = traceResourceClient.getById(newTrace.id(), TEST_WORKSPACE, API_KEY);
+            assertThat(actual.environment()).isEqualTo("production");
+            assertThat(actual.name()).isEqualTo("updated-name");
         }
     }
 
@@ -5653,7 +5689,16 @@ class TracesResourceTest {
                             SortingField.builder().field(SortableFields.TAGS).direction(Direction.ASC).build()),
                     Arguments.of(
                             tagsComparator.reversed(),
-                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.TAGS).direction(Direction.DESC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::environment)
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(
+                            Comparator.comparing(TraceThread::environment).reversed()
+                                    .thenComparing(Comparator.comparing(TraceThread::lastUpdatedAt).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @ParameterizedTest
@@ -5787,7 +5832,8 @@ class TracesResourceTest {
                     SortableFields.CREATED_BY,
                     SortableFields.CREATED_AT,
                     SortableFields.TOTAL_ESTIMATED_COST,
-                    SortableFields.USAGE);
+                    SortableFields.USAGE,
+                    SortableFields.ENVIRONMENT);
         }
 
         @Test
@@ -5878,15 +5924,23 @@ class TracesResourceTest {
             String threadId2 = randomUUID().toString();
 
             // Create multiple trace within same thread
+            // Use a fixed environment per thread so concurrent batch merges remain deterministic
+            // (real usage: all traces in a thread share the same environment).
             List<List<Trace>> traces = IntStream.range(0, 5)
                     .mapToObj(i -> PodamFactoryUtils.manufacturePojoList(factory, Trace.class)
                             .stream()
-                            .map(trace -> fromBuilder(trace.toBuilder()).toBuilder()
-                                    .projectId(projectId)
-                                    .projectName(projectName)
-                                    .threadId(PodamUtils.getIntegerInRange(0, 1) % 2 == 0 ? threadId1 : threadId2)
-                                    .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
-                                    .build())
+                            .map(trace -> {
+                                String threadId = PodamUtils.getIntegerInRange(0, 1) % 2 == 0
+                                        ? threadId1
+                                        : threadId2;
+                                return fromBuilder(trace.toBuilder()).toBuilder()
+                                        .projectId(projectId)
+                                        .projectName(projectName)
+                                        .threadId(threadId)
+                                        .environment(threadId.equals(threadId1) ? "production" : "staging")
+                                        .lastUpdatedAt(Instant.now().truncatedTo(ChronoUnit.MICROS))
+                                        .build();
+                            })
                             .toList())
                     .toList();
 
@@ -7288,6 +7342,158 @@ class TracesResourceTest {
             TraceAssertions.assertTraces(page.content(),
                     List.of(unknownSourceTrace, sdkTrace),
                     List.of(experimentTrace), USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Filter traces by environment")
+    class FilterTracesByEnvironment {
+
+        private Trace buildTrace(String projectName, String environment) {
+            return factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .environment(environment)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+        }
+
+        @Test
+        @DisplayName("EQUAL returns only matching environment")
+        void filterByEnvironmentEqual() {
+            var projectName = "env-filter-equal-" + UUID.randomUUID();
+            var matching = buildTrace(projectName, "production");
+            var other = buildTrace(projectName, "staging");
+
+            traceResourceClient.createTrace(matching, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(other, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.EQUAL)
+                    .value("production")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(matching), List.of(other), USER);
+        }
+
+        @Test
+        @DisplayName("IS_EMPTY returns Untagged traces")
+        void filterByEnvironmentIsEmpty() {
+            var projectName = "env-filter-untagged-" + UUID.randomUUID();
+            var untagged = buildTrace(projectName, "");
+            var tagged = buildTrace(projectName, "production");
+
+            traceResourceClient.createTrace(untagged, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(tagged, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(untagged), List.of(tagged), USER);
+        }
+
+        @Test
+        @DisplayName("NOT_EQUAL excludes matching environment")
+        void filterByEnvironmentNotEqual() {
+            var projectName = "env-filter-not-equal-" + UUID.randomUUID();
+            var excluded = buildTrace(projectName, "production");
+            var kept = buildTrace(projectName, "staging");
+
+            traceResourceClient.createTrace(excluded, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(kept, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.NOT_EQUAL)
+                    .value("production")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(kept), List.of(excluded), USER);
+        }
+
+        @Test
+        @DisplayName("IS_NOT_EMPTY excludes Untagged traces")
+        void filterByEnvironmentIsNotEmpty() {
+            var projectName = "env-filter-not-untagged-" + UUID.randomUUID();
+            var untagged = buildTrace(projectName, "");
+            var tagged = buildTrace(projectName, "production");
+
+            traceResourceClient.createTrace(untagged, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(tagged, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(tagged), List.of(untagged), USER);
+        }
+
+        @Test
+        @DisplayName("IN returns traces matching any of the values")
+        void filterByEnvironmentIn() {
+            var projectName = "env-filter-in-" + UUID.randomUUID();
+            var dev = buildTrace(projectName, "development");
+            var staging = buildTrace(projectName, "staging");
+            var prod = buildTrace(projectName, "production");
+
+            traceResourceClient.createTrace(dev, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(staging, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(prod, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.IN)
+                    .value("development,staging")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(staging, dev), List.of(prod), USER);
+        }
+
+        @Test
+        @DisplayName("NOT_IN returns traces with environments outside the predefined set (Unknown)")
+        void filterByEnvironmentNotIn() {
+            var projectName = "env-filter-not-in-" + UUID.randomUUID();
+            var dev = buildTrace(projectName, "development");
+            var staging = buildTrace(projectName, "staging");
+            var prod = buildTrace(projectName, "production");
+            var custom = buildTrace(projectName, "qa");
+
+            traceResourceClient.createTrace(dev, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(staging, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(prod, API_KEY, TEST_WORKSPACE);
+            traceResourceClient.createTrace(custom, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(TraceFilter.builder()
+                    .field(TraceField.ENVIRONMENT)
+                    .operator(Operator.NOT_IN)
+                    .value("development,staging,production")
+                    .build());
+
+            var page = traceResourceClient.getTraces(projectName, null, API_KEY, TEST_WORKSPACE,
+                    filters, List.of(), 10, Map.of());
+
+            TraceAssertions.assertTraces(page.content(), List.of(custom), List.of(dev, staging, prod), USER);
         }
     }
 
