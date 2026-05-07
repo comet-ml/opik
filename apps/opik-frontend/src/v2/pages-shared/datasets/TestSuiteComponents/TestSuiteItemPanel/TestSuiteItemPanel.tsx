@@ -14,6 +14,8 @@ import {
 } from "@/v2/pages-shared/datasets/DatasetItemEditor/DatasetItemEditorAutosaveContext";
 import { prepareFormDataForSave } from "@/v2/pages-shared/datasets/DatasetItemEditor/hooks/useDatasetItemFormHelpers";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -146,54 +148,62 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
     [datasetItemId, columns, editItem, updateItemAssertions, serverEvaluators],
   );
 
-  const headerContent = isNewItem ? null : (
-    <div className="flex flex-auto items-center justify-end pl-6">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              toast({ description: "URL successfully copied to clipboard" });
-              copy(window.location.href);
-            }}
-          >
-            <Share className="mr-2 size-4" />
-            Share item
-          </DropdownMenuItem>
-          <TooltipWrapper content={datasetItemId} side="left">
-            <DropdownMenuItem
-              onClick={() => {
-                toast({
-                  description: "Item ID successfully copied to clipboard",
-                });
-                copy(datasetItemId);
-              }}
-            >
-              <Copy className="mr-2 size-4" />
-              Copy item ID
-            </DropdownMenuItem>
-          </TooltipWrapper>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => handleDelete(onClose)}>
-            <Trash className="mr-2 size-4" />
-            Delete item
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
-
   return (
     <ResizableSidePanel
       panelId="test-suite-item-panel"
-      entity="item"
       open={isOpen}
-      headerContent={headerContent}
+      header={
+        <ResizableSidePanelTopBar
+          variant="info"
+          title={isNewItem ? "Add item" : "Edit item"}
+          onClose={onClose}
+        >
+          {!isNewItem && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon-2xs">
+                  <span className="sr-only">Actions menu</span>
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                  onClick={() => {
+                    toast({
+                      description: "URL successfully copied to clipboard",
+                    });
+                    copy(window.location.href);
+                  }}
+                >
+                  <Share className="mr-2 size-4" />
+                  Share item
+                </DropdownMenuItem>
+                <TooltipWrapper content={datasetItemId} side="left">
+                  <DropdownMenuItem
+                    onClick={() => {
+                      toast({
+                        description: "Item ID successfully copied to clipboard",
+                      });
+                      copy(datasetItemId);
+                    }}
+                  >
+                    <Copy className="mr-2 size-4" />
+                    Copy item ID
+                  </DropdownMenuItem>
+                </TooltipWrapper>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => handleDelete(onClose)}>
+                  <Trash className="mr-2 size-4" />
+                  Delete item
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+          <ResizableSidePanelArrowNavigation
+            horizontalNavigation={horizontalNavigation}
+          />
+        </ResizableSidePanelTopBar>
+      }
       onClose={onClose}
       horizontalNavigation={horizontalNavigation}
     >
@@ -203,10 +213,7 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
         </div>
       ) : (
         <div className="relative size-full overflow-y-auto">
-          <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
-            <div className="comet-body-accented">
-              {isNewItem ? "Add item" : "Edit item"}
-            </div>
+          <div className="sticky top-0 z-10 border-b bg-background px-6 py-4">
             <TagListRenderer
               tags={tags}
               onAddTag={handleAddTag}

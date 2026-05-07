@@ -2,7 +2,6 @@ import React, { useCallback, useMemo, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
   Calendar,
-  ChevronsRight,
   Clock,
   Coins,
   Copy,
@@ -44,8 +43,9 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import Loader from "@/shared/Loader/Loader";
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { Button } from "@/ui/button";
-import { HotkeyDisplay } from "@/ui/hotkey-display";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import useThreadById from "@/api/traces/useThreadById";
 import useTracesList from "@/api/traces/useTracesList";
@@ -77,7 +77,6 @@ import { JsonParam, StringParam, useQueryParam } from "use-query-params";
 import ThreadAnnotatePanel from "./ThreadAnnotatePanel";
 import useThreadFeedbackScoreDeleteMutation from "@/api/traces/useThreadFeedbackScoreDeleteMutation";
 import ThreadFeedbackScoresInfo from "./ThreadFeedbackScoresInfo";
-import { Separator } from "@/ui/separator";
 import ThreadDetailsTags from "./ThreadDetailsTags";
 import AddToDropdown from "@/v2/pages-shared/traces/AddToDropdown/AddToDropdown";
 import ConfigurableFeedbackScoreTable from "../TraceDetailsPanel/TraceDataViewer/FeedbackScoreTable/ConfigurableFeedbackScoreTable";
@@ -358,19 +357,6 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
     { enableOnFormTags: false, enabled: canAnnotateTraceSpanThread },
     [setActiveSection, canAnnotateTraceSpanThread],
   );
-  useHotkeys(
-    "j",
-    () =>
-      horizontalNavigation?.hasPrevious && horizontalNavigation.onChange(-1),
-    { enabled: Boolean(horizontalNavigation) },
-    [horizontalNavigation],
-  );
-  useHotkeys(
-    "k",
-    () => horizontalNavigation?.hasNext && horizontalNavigation.onChange(1),
-    { enabled: Boolean(horizontalNavigation) },
-    [horizontalNavigation],
-  );
 
   const bodyStyle = {
     ...(height && { height: `${height}px` }),
@@ -579,157 +565,130 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
 
   const renderHeaderContent = () => {
     return (
-      <div className="flex flex-auto items-center justify-between">
-        <div className="flex items-center gap-1 overflow-hidden">
-          <TooltipWrapper content="Close panel">
-            <Button variant="ghost" size="icon-2xs" onClick={onClose}>
-              <ChevronsRight />
-            </Button>
-          </TooltipWrapper>
+      <ResizableSidePanelTopBar
+        variant="info"
+        title="Thread"
+        leftIcon={
           <div className="relative flex size-4 shrink-0 items-center justify-center rounded bg-[var(--thread-icon-background)] text-[var(--thread-icon-text)]">
             <MessagesSquare className="size-2" />
           </div>
-          <span className="comet-body-s-accented truncate">Thread</span>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-2 pl-4">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-2xs">
-                <span className="sr-only">Actions menu</span>
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
+        }
+        onClose={onClose}
+      >
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="icon-2xs">
+              <span className="sr-only">Actions menu</span>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              onClick={() => {
+                toast({
+                  description: "URL successfully copied to clipboard",
+                });
+                copy(window.location.href);
+              }}
+            >
+              <Share className="mr-2 size-4" />
+              Share
+            </DropdownMenuItem>
+            <TooltipWrapper content={threadId} side="left">
               <DropdownMenuItem
                 onClick={() => {
                   toast({
-                    description: "URL successfully copied to clipboard",
+                    description: `Thread ID successfully copied to clipboard`,
                   });
-                  copy(window.location.href);
+                  copy(threadId);
                 }}
               >
-                <Share className="mr-2 size-4" />
-                Share
+                <Copy className="mr-2 size-4" />
+                Copy thread ID
               </DropdownMenuItem>
-              <TooltipWrapper content={threadId} side="left">
+            </TooltipWrapper>
+            <DropdownMenuSeparator />
+            {(["csv", "json"] as const).map((format) => {
+              const handler =
+                format === "csv" ? handleExportCSV : handleExportJSON;
+              const item = (
                 <DropdownMenuItem
-                  onClick={() => {
-                    toast({
-                      description: `Thread ID successfully copied to clipboard`,
-                    });
-                    copy(threadId);
-                  }}
+                  key={format}
+                  onClick={handler}
+                  disabled={!isExportEnabled}
                 >
-                  <Copy className="mr-2 size-4" />
-                  Copy thread ID
+                  <Download className="mr-2 size-4" />
+                  Export as {format.toUpperCase()}
                 </DropdownMenuItem>
-              </TooltipWrapper>
-              <DropdownMenuSeparator />
-              {(["csv", "json"] as const).map((format) => {
-                const handler =
-                  format === "csv" ? handleExportCSV : handleExportJSON;
-                const item = (
-                  <DropdownMenuItem
-                    key={format}
-                    onClick={handler}
-                    disabled={!isExportEnabled}
-                  >
-                    <Download className="mr-2 size-4" />
-                    Export as {format.toUpperCase()}
-                  </DropdownMenuItem>
-                );
+              );
 
-                return isExportEnabled ? (
-                  item
-                ) : (
-                  <TooltipWrapper
-                    key={format}
-                    content="Export functionality is disabled for this installation"
-                    side="left"
-                  >
-                    <div>{item}</div>
-                  </TooltipWrapper>
-                );
-              })}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setPopupOpen(true)}
-                variant="destructive"
-              >
-                <Trash className="mr-2 size-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <ConfirmDialog
-            open={popupOpen}
-            setOpen={setPopupOpen}
-            onConfirm={handleThreadDelete}
-            title="Delete thread"
-            description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
-            confirmText="Delete thread"
-            confirmButtonVariant="destructive"
-          />
-
-          {horizontalNavigation && (
-            <>
-              <Separator orientation="vertical" className="mx-1 h-4" />
-              <Button
-                variant="outline"
-                size="2xs"
-                disabled={!horizontalNavigation.hasPrevious}
-                onClick={() => horizontalNavigation.onChange(-1)}
-                className="gap-1"
-              >
-                Previous
-                <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
-              </Button>
-              <Button
-                variant="outline"
-                size="2xs"
-                disabled={!horizontalNavigation.hasNext}
-                onClick={() => horizontalNavigation.onChange(1)}
-                className="gap-1"
-              >
-                Next
-                <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
-              </Button>
-            </>
-          )}
-
-          <TooltipWrapper content="View all traces for this thread">
-            <Button
-              variant="outline"
-              size="2xs"
-              onClick={() => {
-                navigate({
-                  to: "/$workspaceName/projects/$projectId/logs",
-                  params: {
-                    projectId,
-                    workspaceName,
-                  },
-                  search: {
-                    logsType: LOGS_TYPE.traces,
-                    traces_filters: [
-                      {
-                        id: "thread_id_filter",
-                        field: "thread_id",
-                        type: COLUMN_TYPE.string,
-                        operator: "=",
-                        value: threadId,
-                      },
-                    ],
-                  },
-                });
-              }}
+              return isExportEnabled ? (
+                item
+              ) : (
+                <TooltipWrapper
+                  key={format}
+                  content="Export functionality is disabled for this installation"
+                  side="left"
+                >
+                  <div>{item}</div>
+                </TooltipWrapper>
+              );
+            })}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => setPopupOpen(true)}
+              variant="destructive"
             >
-              Traces
-              <ArrowUpRight className="ml-1 size-3.5" />
-            </Button>
-          </TooltipWrapper>
-        </div>
-      </div>
+              <Trash className="mr-2 size-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <ConfirmDialog
+          open={popupOpen}
+          setOpen={setPopupOpen}
+          onConfirm={handleThreadDelete}
+          title="Delete thread"
+          description="Deleting a thread will also remove all traces linked to it and their data. This action can’t be undone. Are you sure you want to continue?"
+          confirmText="Delete thread"
+          confirmButtonVariant="destructive"
+        />
+
+        <ResizableSidePanelArrowNavigation
+          horizontalNavigation={horizontalNavigation}
+        />
+
+        <TooltipWrapper content="View all traces for this thread">
+          <Button
+            variant="outline"
+            size="2xs"
+            onClick={() => {
+              navigate({
+                to: "/$workspaceName/projects/$projectId/logs",
+                params: {
+                  projectId,
+                  workspaceName,
+                },
+                search: {
+                  logsType: LOGS_TYPE.traces,
+                  traces_filters: [
+                    {
+                      id: "thread_id_filter",
+                      field: "thread_id",
+                      type: COLUMN_TYPE.string,
+                      operator: "=",
+                      value: threadId,
+                    },
+                  ],
+                },
+              });
+            }}
+          >
+            Traces
+            <ArrowUpRight className="ml-1 size-3.5" />
+          </Button>
+        </TooltipWrapper>
+      </ResizableSidePanelTopBar>
     );
   };
 
@@ -738,9 +697,8 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
       panelId="thread"
       entity="thread"
       open={open}
-      headerContent={renderHeaderContent()}
+      header={renderHeaderContent()}
       onClose={onClose}
-      hideDefaultControls
       initialWidth={0.5}
       minWidth={700}
       horizontalNavigation={horizontalNavigation}

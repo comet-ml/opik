@@ -2,6 +2,8 @@ import React, { useCallback, useMemo } from "react";
 import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { Button } from "@/ui/button";
 import {
   DropdownMenu,
@@ -28,47 +30,6 @@ interface DatasetItemEditorAutosaveLayoutProps {
 const truncateId = (id: string): string => {
   if (id.length <= 12) return id;
   return `${id.slice(0, 4)}...${id.slice(-4)}`;
-};
-
-interface DatasetItemEditorActionsPanelProps {
-  datasetItemId: string;
-  onShare: () => void;
-  onCopyId: () => void;
-  onDelete: () => void;
-}
-
-const DatasetItemEditorActionsPanel: React.FC<
-  DatasetItemEditorActionsPanelProps
-> = ({ datasetItemId, onShare, onCopyId, onDelete }) => {
-  return (
-    <div className="flex flex-auto items-center justify-end pl-6">
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon-sm">
-            <span className="sr-only">Actions menu</span>
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem onClick={onShare}>
-            <Share className="mr-2 size-4" />
-            Share item
-          </DropdownMenuItem>
-          <TooltipWrapper content={datasetItemId} side="left">
-            <DropdownMenuItem onClick={onCopyId}>
-              <Copy className="mr-2 size-4" />
-              Copy item ID
-            </DropdownMenuItem>
-          </TooltipWrapper>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={onDelete}>
-            <Trash className="mr-2 size-4" />
-            Delete item
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
 };
 
 const DatasetItemEditorAutosaveLayout: React.FC<
@@ -121,15 +82,51 @@ const DatasetItemEditorAutosaveLayout: React.FC<
   return (
     <ResizableSidePanel
       panelId="dataset-item-editor"
-      entity="item"
       open={isOpen}
-      headerContent={
-        <DatasetItemEditorActionsPanel
-          datasetItemId={datasetItemId}
-          onShare={handleShare}
-          onCopyId={handleCopyId}
-          onDelete={handleDeleteItemConfirm}
-        />
+      header={
+        <ResizableSidePanelTopBar
+          variant="info"
+          title={
+            <TooltipWrapper content={datasetItemId}>
+              <span>
+                Dataset item{" "}
+                <span className="comet-body-s text-muted-slate">
+                  {truncateId(datasetItemId)}
+                </span>
+              </span>
+            </TooltipWrapper>
+          }
+          onClose={handleClose}
+        >
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon-2xs">
+                <span className="sr-only">Actions menu</span>
+                <MoreHorizontal />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={handleShare}>
+                <Share className="mr-2 size-4" />
+                Share item
+              </DropdownMenuItem>
+              <TooltipWrapper content={datasetItemId} side="left">
+                <DropdownMenuItem onClick={handleCopyId}>
+                  <Copy className="mr-2 size-4" />
+                  Copy item ID
+                </DropdownMenuItem>
+              </TooltipWrapper>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleDeleteItemConfirm}>
+                <Trash className="mr-2 size-4" />
+                Delete item
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <ResizableSidePanelArrowNavigation
+            horizontalNavigation={horizontalNavigation}
+          />
+        </ResizableSidePanelTopBar>
       }
       onClose={handleClose}
       horizontalNavigation={horizontalNavigation}
@@ -140,15 +137,7 @@ const DatasetItemEditorAutosaveLayout: React.FC<
         </div>
       ) : (
         <div className="relative size-full overflow-y-auto">
-          <div className="sticky top-0 z-10 border-b bg-background p-6 pb-4">
-            <TooltipWrapper content={datasetItemId}>
-              <div className="comet-body-accented">
-                Dataset item{" "}
-                <span className="comet-body-s text-muted-slate">
-                  {truncateId(datasetItemId)}
-                </span>
-              </div>
-            </TooltipWrapper>
+          <div className="sticky top-0 z-10 border-b bg-background px-6 py-4">
             <TagListRenderer
               tags={tags}
               onAddTag={handleAddTag}
