@@ -1049,11 +1049,19 @@ serviceToggles:
   # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V1 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Second — overridden by v2WorkspaceAllowlist; overrides forceWorkspaceVersion and all subsequent determination logic.
+  # Use case: customer-driven V1 stickiness — pin specific workspaces to legacy navigation without affecting the rest of the deployment.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v1WorkspaceAllowlist: ${TOGGLE_V1_WORKSPACE_ALLOWLIST:-""}
   # Default: disabled
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
