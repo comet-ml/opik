@@ -346,6 +346,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arliai/qwq-32b-arliai-rpr-v1:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BAIDU_COBUDDY_FREE,
+      label: "baidu/cobuddy:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BAIDU_ERNIE_4_5_21B_A3B,
       label: "baidu/ernie-4.5-21b-a3b",
     },
