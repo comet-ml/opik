@@ -516,8 +516,8 @@ eval_results = evaluate(
       setOpen={openChangeHandler}
       header={<SheetTopBar variant="info" title="Create new experiment" />}
     >
-      <div className="max-h-full overflow-y-auto p-6 pb-20 pt-4">
-        <div className="mx-auto flex w-full flex-col gap-6 md:max-w-[1250px] md:flex-row md:items-start">
+      <div className="max-h-full overflow-y-auto px-5 pb-20 pt-4">
+        <div className="mx-auto flex w-full flex-col gap-6 md:flex-row md:items-start">
           {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>

@@ -11,7 +11,6 @@ import {
   ColumnSort,
   RowSelectionState,
 } from "@tanstack/react-table";
-import { Undo2 } from "lucide-react";
 import findIndex from "lodash/findIndex";
 import isObject from "lodash/isObject";
 import isNumber from "lodash/isNumber";
@@ -53,7 +52,6 @@ import SearchInput from "@/shared/SearchInput/SearchInput";
 import FiltersButton from "@/shared/FiltersButton/FiltersButton";
 import TracesActionsPanel from "@/v2/pages-shared/traces/TracesActionsPanel/TracesActionsPanel";
 import { Separator } from "@/ui/separator";
-import { Button } from "@/ui/button";
 import { Sheet, SheetContent, SheetTopBar } from "@/ui/sheet";
 import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/DataTableRowHeightSelector";
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
@@ -391,7 +389,6 @@ type TraceLogsSidebarProps = {
   projectName?: string;
   logsSource?: LOGS_SOURCE;
   title?: string;
-  backLabel?: string;
 };
 
 const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
@@ -401,7 +398,6 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   projectName = "",
   logsSource,
   title = "Logs",
-  backLabel = "Back",
 }) => {
   const type = TRACE_DATA_TYPE.traces;
   const truncationEnabled = useTruncationEnabled();
@@ -927,21 +923,12 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
     setMetadataColumnsOrder,
   ]);
 
-  const sheetHeader = (
-    <SheetTopBar variant="info" title={title}>
-      <Button variant="outline" size="2xs" onClick={onClose}>
-        <Undo2 className="mr-1 size-3" />
-        {backLabel}
-      </Button>
-    </SheetTopBar>
-  );
-
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
         ref={setSheetContentRef}
         className="flex w-screen flex-col shadow-none sm:max-w-full"
-        header={sheetHeader}
+        header={<SheetTopBar variant="info" title={title} />}
         onEscapeKeyDown={(e) => {
           if (traceId) {
             e.preventDefault();

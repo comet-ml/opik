@@ -360,8 +360,8 @@ const AddOptimizationDialog: React.FunctionComponent<
       setOpen={openChangeHandler}
       header={<SheetTopBar variant="info" title="Start optimization run" />}
     >
-      <div className="max-h-full overflow-y-auto p-6 pb-20 pt-4">
-        <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
+      <div className="max-h-full overflow-y-auto px-5 pb-20 pt-4">
+        <div className="m-auto flex w-full items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col gap-2">
             <div className="comet-title-s">Optimization algorithms</div>
             {generateList(OPTIMIZATION_ALGORITHMS_OPTIONS)}
