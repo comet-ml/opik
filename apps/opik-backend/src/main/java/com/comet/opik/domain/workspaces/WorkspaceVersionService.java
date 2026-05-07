@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
+import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 
 /**
@@ -147,7 +148,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         return Mono.deferContextual(ctx -> {
             var userName = ctx.<String>getOrEmpty(RequestContext.USER_NAME)
                     .filter(StringUtils::isNotBlank)
-                    .orElse(RequestContext.SYSTEM_USER);
+                    .orElse(SYSTEM_USER);
             if (cacheConfiguration.isEnabled()) {
                 return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
                         .onErrorResume(throwable -> {
