@@ -46,7 +46,7 @@ class ResolvedDataset:
     tags: Optional[List[str]]
 
 
-def iter_dataset_pages(
+def _iter_dataset_pages(
     rest_client: OpikApi,
     *,
     name: Optional[str] = None,
@@ -54,13 +54,9 @@ def iter_dataset_pages(
 ) -> Iterable[Any]:
     """Yield every dataset row matching the filters, paginating to exhaustion.
 
-    Single source of truth for ``find_datasets`` pagination across
-    ``opik migrate`` — used both for name-resolution (with ``name`` set) and
-    for the workspace survey in ``migrate plan`` (``name=None``).
-
-    Avoids the silent truncation bug where a single ``find_datasets(page=1)``
-    call would miss rows on later pages. Yields the underlying Fern row
-    objects so callers can read all available fields.
+    Single source of truth for ``find_datasets`` pagination inside this
+    module. Avoids the silent truncation bug where a single
+    ``find_datasets(page=1)`` call would miss rows on later pages.
     """
     page_idx = 1
     while True:
@@ -77,10 +73,6 @@ def iter_dataset_pages(
         if len(page.content) < _FIND_DATASETS_PAGE_SIZE:
             return
         page_idx += 1
-
-
-# Backwards-compatible alias for the previous private name.
-_iter_dataset_pages = iter_dataset_pages
 
 
 def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:

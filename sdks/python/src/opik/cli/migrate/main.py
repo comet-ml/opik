@@ -1,9 +1,9 @@
-"""``opik migrate`` Click group and subcommands.
+"""``opik migrate`` Click group and the ``dataset`` subcommand.
 
-Slice 1: ``opik migrate dataset NAME --to-project=B`` migrates a dataset
-entity and its current items into the destination project. ``opik migrate
-plan`` is the workspace-wide survey surface — slice 1 lists candidate
-datasets and what the per-dataset migration would do by default.
+Slice 1 surface: ``opik migrate dataset NAME --to-project=B`` migrates a
+dataset entity (and its current items) into the destination project, in a
+single workspace. The follow-up slices extend this surface; this slice
+deliberately keeps it minimal.
 """
 
 from __future__ import annotations
@@ -17,17 +17,14 @@ from rich.console import Console
 from rich.table import Table
 
 import opik
-from opik.api_objects import rest_helpers
 
 from .audit import AuditLog, default_audit_path
 from .errors import MigrationError, safe_error_string
 from .executor import execute_plan, record_planned
-from .resolver import iter_dataset_pages
 from .planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
     CreateDestination,
-    DeleteSource,
     MigrationPlan,
     RenameSource,
     build_dataset_plan,
@@ -36,8 +33,6 @@ from .planner import (
 console = Console()
 
 MIGRATE_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
-
-DEFAULT_SOURCE_SUFFIX = "_v1"
 
 
 @click.group(name="migrate", context_settings=MIGRATE_CONTEXT_SETTINGS)
@@ -64,18 +59,14 @@ def migrate_group(
     \b
     Commands:
         dataset    Migrate a dataset (and its current items) into a destination project
-        plan       Workspace-wide survey of what would be migrated (no side effects)
 
     \b
     Examples:
         # Migrate a dataset into project B (renames source to "<name>_v1")
         opik migrate dataset "MyDataset" --to-project=B
 
-        # Preview a single migration without touching the backend
+        # Preview the migration without touching the backend
         opik migrate dataset "MyDataset" --to-project=B --dry-run
-
-        # Survey the workspace
-        opik migrate plan
 
         # Override the configured workspace per-invocation
         opik migrate --workspace=production dataset "MyDataset" --to-project=B
@@ -120,7 +111,6 @@ def _finalize_and_fail(
     exc: BaseException,
     *,
     user_facing: bool,
-    prefix: str,
 ) -> None:
     """Shared exception path: write audit log + print sanitized error + exit.
 
@@ -135,7 +125,7 @@ def _finalize_and_fail(
     if user_facing:
         console.print(f"[red]{exc}[/red]")
     else:
-        console.print(f"[red]{prefix}: {safe_error_string(exc)}[/red]")
+        console.print(f"[red]Migration failed: {safe_error_string(exc)}[/red]")
     sys.exit(1)
 
 
@@ -154,24 +144,6 @@ def _finalize_and_fail(
     help="Source project name. Omit to look up workspace-scoped datasets.",
 )
 @click.option(
-    "--target-name",
-    type=str,
-    default=None,
-    help="Override the destination dataset name. When set, the source is NOT renamed.",
-)
-@click.option(
-    "--source-suffix",
-    type=str,
-    default=DEFAULT_SOURCE_SUFFIX,
-    show_default=True,
-    help="Suffix appended to the source name during the rename step.",
-)
-@click.option(
-    "--delete-source",
-    is_flag=True,
-    help="Delete the renamed source dataset after a successful copy.",
-)
-@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -188,9 +160,6 @@ def migrate_dataset_command(
     name: str,
     to_project: str,
     from_project: Optional[str],
-    target_name: Optional[str],
-    source_suffix: str,
-    delete_source: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -198,18 +167,15 @@ def migrate_dataset_command(
 
     \b
     Steps performed (in order):
-        1. Rename source to "<name>{--source-suffix}" (skipped when --target-name is set)
+        1. Rename source to "<name>_v1"
         2. Create the destination dataset under --to-project
-        3. Copy the source's current items into the destination
-        4. Optionally delete the renamed source (--delete-source)
+        3. (Test suites only) Apply suite-level evaluators + execution_policy
+        4. Copy the source's current items into the destination
     """
     args = {
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
-        "target_name": target_name,
-        "source_suffix": source_suffix,
-        "delete_source": delete_source,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -223,9 +189,6 @@ def migrate_dataset_command(
             name=name,
             to_project=to_project,
             from_project=from_project,
-            target_name=target_name,
-            source_suffix=source_suffix,
-            delete_source=delete_source,
         )
 
         _print_plan(plan)
@@ -241,13 +204,9 @@ def migrate_dataset_command(
 
         execute_plan(client, plan, audit)
     except MigrationError as exc:
-        _finalize_and_fail(
-            audit, audit_path, exc, user_facing=True, prefix="Migration failed"
-        )
+        _finalize_and_fail(audit, audit_path, exc, user_facing=True)
     except Exception as exc:
-        _finalize_and_fail(
-            audit, audit_path, exc, user_facing=False, prefix="Migration failed"
-        )
+        _finalize_and_fail(audit, audit_path, exc, user_facing=False)
 
     audit.finalize("ok")
     audit.write(audit_path)
@@ -255,95 +214,6 @@ def migrate_dataset_command(
         f"[green]Migrated '{name}' into project '{to_project}' as '{plan.target_name}'.[/green] "
         f"Audit log: {audit_path}"
     )
-
-
-@migrate_group.command(name="plan")
-@click.option(
-    "--from-project",
-    type=str,
-    default=None,
-    help="Restrict the survey to a single source project. Omit for workspace-scoped datasets.",
-)
-@click.option(
-    "--audit-log",
-    type=click.Path(dir_okay=False, writable=True, path_type=Path),
-    default=None,
-    help="Path to write the audit-log JSON file (default: ./opik-migrate-<timestamp>.json).",
-)
-@click.pass_context
-def migrate_plan_command(
-    ctx: click.Context,
-    from_project: Optional[str],
-    audit_log: Optional[Path],
-) -> None:
-    """Survey the workspace for datasets eligible for migration (no side effects).
-
-    Slice 1 lists every dataset in scope and shows what ``opik migrate dataset
-    <name> --to-project=<...>`` would do by default. Slices 2-4 will extend the
-    output with version, experiment, and optimization counts.
-    """
-    args = {"from_project": from_project}
-    audit = AuditLog(command="opik migrate plan", args=args)
-    audit_path = audit_log or default_audit_path()
-
-    try:
-        client = _build_client(ctx)
-        _print_workspace_banner(client)
-        rest_client = client.rest_client
-        project_id = rest_helpers.resolve_project_id_by_name_optional(
-            rest_client, project_name=from_project
-        )
-
-        # Reuse the shared pagination iterator from `resolver` so the plan
-        # command and name-resolution stay in lockstep. Materializing because
-        # we need both the count check below and a second pass over rows.
-        datasets = list(iter_dataset_pages(rest_client, project_id=project_id))
-
-        scope_label = (
-            f"project '{from_project}'"
-            if from_project
-            else "the workspace (no project)"
-        )
-        if not datasets:
-            console.print(f"[yellow]No datasets found in {scope_label}.[/yellow]")
-            audit.finalize("planned")
-            audit.write(audit_path)
-            return
-
-        table = Table(title=f"Datasets in {scope_label}")
-        table.add_column("Name")
-        table.add_column("Items", justify="right")
-        table.add_column("Default migration")
-        for d in datasets:
-            table.add_row(
-                d.name,
-                str(d.dataset_items_count or 0),
-                f"rename to '{d.name}{DEFAULT_SOURCE_SUFFIX}', copy current items",
-            )
-            audit.record(
-                type="plan_candidate",
-                status="planned",
-                details={
-                    "dataset": d.name,
-                    "items": d.dataset_items_count or 0,
-                    "from_project": from_project,
-                },
-            )
-        console.print(table)
-        console.print(
-            "[blue]Run `opik migrate <workspace> dataset <name> --to-project=<dest>` to migrate one.[/blue]"
-        )
-
-        audit.finalize("planned")
-        audit.write(audit_path)
-    except MigrationError as exc:
-        _finalize_and_fail(
-            audit, audit_path, exc, user_facing=True, prefix="Plan failed"
-        )
-    except Exception as exc:
-        _finalize_and_fail(
-            audit, audit_path, exc, user_facing=False, prefix="Plan failed"
-        )
 
 
 def _print_plan(plan: MigrationPlan) -> None:
@@ -373,11 +243,5 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "copy suite config",
                 f"latest evaluators + execution_policy → {action.dest_name}",
-            )
-        elif isinstance(action, DeleteSource):
-            table.add_row(
-                str(idx),
-                "delete source",
-                action.name_after_rename,
             )
     console.print(table)

@@ -1,8 +1,8 @@
 """Action planning for ``opik migrate dataset``.
 
 The planner builds a ``MigrationPlan`` of typed action records. The executor
-applies them in list order; this separation is what lets ``--dry-run`` and
-``opik migrate plan`` reuse the same logic with no side effects.
+applies them in list order; this separation is what lets ``--dry-run``
+reuse the same logic with no side effects.
 """
 
 from __future__ import annotations
@@ -25,6 +25,11 @@ from .resolver import (
 # versioned config; we copy the LATEST version's config onto the target.
 SUPPORTED_DATASET_TYPES = {None, "dataset", "evaluation_suite"}
 TEST_SUITE_TYPE = "evaluation_suite"
+
+# Hardcoded suffix appended to the source dataset's name during the rename
+# step. Slice 1 doesn't expose this as a flag; if a future slice needs it
+# configurable the planner is the right place to add it.
+SOURCE_SUFFIX = "_v1"
 
 
 @dataclass(frozen=True)
@@ -77,13 +82,6 @@ class CopyTestSuiteConfig:
     dest_project_name: str
 
 
-@dataclass(frozen=True)
-class DeleteSource:
-    source_id: str
-    name_after_rename: str
-    project_name: Optional[str]
-
-
 @dataclass
 class MigrationPlan:
     source: ResolvedDataset
@@ -97,16 +95,12 @@ def build_dataset_plan(
     name: str,
     to_project: str,
     from_project: Optional[str],
-    target_name: Optional[str],
-    source_suffix: str,
-    delete_source: bool,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
-    Ordering invariant: the source rename (when applied) always precedes the
-    destination create, so the workspace-unique-name constraint never trips.
-    ``DeleteSource`` is always last; if any earlier action fails, the executor
-    short-circuits before reaching it.
+    Ordering invariant: the source rename always precedes the destination
+    create, so the workspace-unique-name constraint never trips. The target
+    keeps the source's original name.
     """
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
@@ -121,60 +115,41 @@ def build_dataset_plan(
         )
 
     is_test_suite = source.type == TEST_SUITE_TYPE
+    name_after_rename = f"{source.name}{SOURCE_SUFFIX}"
 
-    rename_applied = target_name is None
-    final_target_name = target_name if target_name is not None else source.name
-    name_after_rename = (
-        f"{source.name}{source_suffix}" if rename_applied else source.name
+    # Dataset names are workspace-unique, so the rename target must be free
+    # workspace-wide (excluding the source dataset itself, which is about
+    # to be renamed). Without this check the rename PUT would 409 mid-flight.
+    collision = name_taken_in_workspace(
+        rest_client, name_after_rename, ignore_dataset_id=source.id
     )
-
-    # Dataset names are workspace-unique, so the pre-flight has to look
-    # workspace-wide:
-    #   - rename step: <source><suffix> must be free (excluding the source itself)
-    #   - create step: target name must be free (when --target-name overrides
-    #     the default; otherwise the rename above frees the source's old name)
-    if rename_applied:
-        collision = name_taken_in_workspace(
-            rest_client, name_after_rename, ignore_dataset_id=source.id
+    if collision:
+        raise ConflictError(
+            f"Cannot rename source to '{name_after_rename}' — that name is "
+            f"already used by a dataset in {collision}. "
+            "Rename or delete the conflicting dataset and re-run."
         )
-        if collision:
-            raise ConflictError(
-                f"Cannot rename source to '{name_after_rename}' — that name is "
-                f"already used by a dataset in {collision}. "
-                "Try a different --source-suffix."
-            )
-
-    if target_name is not None:
-        collision = name_taken_in_workspace(
-            rest_client, target_name, ignore_dataset_id=source.id
-        )
-        if collision:
-            raise ConflictError(
-                f"Target name '{target_name}' is already used by a dataset in "
-                f"{collision}."
-            )
 
     plan = MigrationPlan(
         source=source,
-        target_name=final_target_name,
+        target_name=source.name,
         to_project=to_project,
     )
 
-    if rename_applied:
-        plan.actions.append(
-            RenameSource(
-                source_id=source.id,
-                from_name=source.name,
-                to_name=name_after_rename,
-                description=source.description,
-                visibility=source.visibility,
-                tags=source.tags,
-            )
+    plan.actions.append(
+        RenameSource(
+            source_id=source.id,
+            from_name=source.name,
+            to_name=name_after_rename,
+            description=source.description,
+            visibility=source.visibility,
+            tags=source.tags,
         )
+    )
 
     plan.actions.append(
         CreateDestination(
-            name=final_target_name,
+            name=source.name,
             project_name=to_project,
             description=source.description,
             visibility=source.visibility,
@@ -197,7 +172,7 @@ def build_dataset_plan(
         plan.actions.append(
             CopyTestSuiteConfig(
                 source_dataset_id=source.id,
-                dest_name=final_target_name,
+                dest_name=source.name,
                 dest_project_name=to_project,
             )
         )
@@ -207,18 +182,9 @@ def build_dataset_plan(
             source_dataset_id=source.id,
             source_name_after_rename=name_after_rename,
             source_project_name=source.project_name,
-            dest_name=final_target_name,
+            dest_name=source.name,
             dest_project_name=to_project,
         )
     )
-
-    if delete_source:
-        plan.actions.append(
-            DeleteSource(
-                source_id=source.id,
-                name_after_rename=name_after_rename,
-                project_name=source.project_name,
-            )
-        )
 
     return plan

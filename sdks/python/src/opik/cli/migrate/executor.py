@@ -22,7 +22,6 @@ from .planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
     CreateDestination,
-    DeleteSource,
     MigrationPlan,
     RenameSource,
 )
@@ -100,12 +99,6 @@ def _apply(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
         _copy_items(client, action)
     elif isinstance(action, CopyTestSuiteConfig):
         _copy_test_suite_config(rest_client, action)
-    elif isinstance(action, DeleteSource):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: client.delete_dataset(
-                name=action.name_after_rename, project_name=action.project_name
-            )
-        )
     else:
         raise TypeError(f"Unknown migration action: {type(action).__name__}")
 
@@ -241,12 +234,5 @@ def _action_details(action: object) -> Dict[str, Any]:
             "source_dataset_id": action.source_dataset_id,
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
-        }
-    if isinstance(action, DeleteSource):
-        return {
-            "type": "delete_source",
-            "entity": "dataset",
-            "name": action.name_after_rename,
-            "project": action.project_name,
         }
     raise TypeError(f"Unknown migration action: {type(action).__name__}")
