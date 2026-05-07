@@ -1,6 +1,6 @@
 import React from "react";
 import SideDialog from "@/shared/SideDialog/SideDialog";
-import { SheetTitle } from "@/ui/sheet";
+import { SheetTopBar } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GuardrailConfig from "./GuardrailConfig";
 import { Separator } from "@/ui/separator";
@@ -52,16 +52,16 @@ const SetGuardrailDialog: React.FC<SetGuardrailDialogProps> = ({
   const PII_GUARDRAIL_STATE = guardrailsState[GuardrailTypes.PII];
 
   return (
-    <SideDialog open={open} setOpen={setOpen}>
-      <div className="pb-20">
-        <div className="pb-8">
-          <SheetTitle>Set a guardrail</SheetTitle>
-          <div className="comet-body-s m-auto mt-4 w-[700px] self-center text-center text-muted-slate">
-            Guardrails help you protect your application from risks inherent in
-            LLMs. Use them to check the inputs and outputs of your LLM calls,
-            and detect issues like off-topic answers or leaking sensitive
-            information.
-          </div>
+    <SideDialog
+      open={open}
+      setOpen={setOpen}
+      header={<SheetTopBar variant="form" title="Set a guardrail" />}
+    >
+      <div className="max-h-full overflow-y-auto p-6 pb-20 pt-4">
+        <div className="comet-body-s m-auto mb-8 w-[700px] self-center text-center text-muted-slate">
+          Guardrails help you protect your application from risks inherent in
+          LLMs. Use them to check the inputs and outputs of your LLM calls, and
+          detect issues like off-topic answers or leaking sensitive information.
         </div>
         <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col">
