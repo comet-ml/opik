@@ -12,7 +12,13 @@ const FeedbackScoreNameCell = (context: CellContext<unknown, string>) => {
       tableMetadata={context.table.options.meta}
       className="gap-1.5"
     >
-      <ColoredTagNew label={value} colorKey={row.colorKey} className="px-0" />
+      <ColoredTagNew
+        label={value}
+        colorKey={row.colorKey}
+        size="sm"
+        labelClassName="comet-body-xs-accented"
+        className="px-0"
+      />
     </CellWrapper>
   );
 };

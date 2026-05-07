@@ -23,6 +23,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -75,6 +76,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
+import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -212,6 +214,12 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: ListCell as never,
   },
   {
+    id: "environment",
+    label: "Environment",
+    type: COLUMN_TYPE.string,
+    cell: EnvironmentCell as never,
+  },
+  {
     id: "usage.total_tokens",
     label: "Total tokens",
     type: COLUMN_TYPE.number,
@@ -278,6 +286,7 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   "usage.total_tokens",
   "total_estimated_cost",
   "tags",
+  "environment",
   COLUMN_COMMENTS_ID,
 ];
 
@@ -291,6 +300,7 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
   "duration",
   "total_estimated_cost",
   "tags",
+  "environment",
   COLUMN_COMMENTS_ID,
 ];
 
@@ -307,6 +317,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
+  "environment",
   COLUMN_COMMENTS_ID,
   "name",
   "span_count",
@@ -333,6 +344,7 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
+  "environment",
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
@@ -398,6 +410,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const [threadId = "", setThreadId] = useQueryParam("thread", StringParam, {
     updateType: "replaceIn",
   });
+
+  const [environment = "", setEnvironment] = useQueryParam(
+    "environment",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
 
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
@@ -1262,6 +1282,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
         </div>
         <div className="flex items-center gap-2">
+          <EnvironmentFilterSelect
+            value={environment ?? ""}
+            onChange={(next) => setEnvironment(next || undefined)}
+          />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
