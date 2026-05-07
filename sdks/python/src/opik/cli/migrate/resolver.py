@@ -30,6 +30,13 @@ class ResolvedDataset:
     name: str
     project_name: Optional[str]
     description: Optional[str]
+    # Type ('dataset' or 'evaluation_suite' for test suites). Slice 1 only
+    # supports plain datasets; the planner refuses 'evaluation_suite' since
+    # suite-level evaluators/execution_policy live as a versioned config that
+    # this slice does not replicate.
+    type: Optional[str]
+    visibility: Optional[str]
+    tags: Optional[List[str]]
 
 
 def resolve_source(
@@ -58,6 +65,9 @@ def resolve_source(
             name=d.name,
             project_name=from_project,
             description=d.description,
+            type=getattr(d, "type", None),
+            visibility=getattr(d, "visibility", None),
+            tags=getattr(d, "tags", None),
         )
         for d in page.content
         if d.name == name

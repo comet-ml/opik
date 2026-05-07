@@ -24,3 +24,13 @@ class ProjectNotFoundError(MigrationError):
     in --to-project would otherwise silently strand a migration under a brand-
     new project the user did not mean to create.
     """
+
+
+class UnsupportedDatasetTypeError(MigrationError):
+    """Raised when the source dataset has an unrecognised ``type``.
+
+    Slice 1 supports plain datasets and test suites (``evaluation_suite``).
+    Any other type is rejected so the user can decide whether the new type
+    needs explicit handling rather than being silently shoehorned into the
+    plain-dataset code path.
+    """

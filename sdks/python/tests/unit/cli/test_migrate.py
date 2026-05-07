@@ -58,11 +58,17 @@ class _DatasetRow:
         name: str,
         description: Optional[str] = None,
         items: int = 0,
+        type: Optional[str] = "dataset",
+        visibility: Optional[str] = "private",
+        tags: Optional[List[str]] = None,
     ) -> None:
         self.id = id
         self.name = name
         self.description = description
         self.dataset_items_count = items
+        self.type = type
+        self.visibility = visibility
+        self.tags = tags
 
 
 class _Page:
@@ -83,7 +89,14 @@ def _build_fake_client(
     (source resolution) and ``destination_rows`` for the second (preflight
     conflict check). The planner places those calls in a fixed order, so a
     side-effect list is the simplest way to drive both branches deterministically.
+
+    ``items`` is a list of dicts; we materialize them as DatasetItem
+    dataclasses for the streaming mock (matches the real `__internal_api__
+    stream_items_as_dataclasses__` shape) so per-item fidelity assertions
+    have somewhere to land.
     """
+    from opik.api_objects.dataset import dataset_item
+
     rest_client = MagicMock()
     if target_project_exists:
         target_project = MagicMock()
@@ -100,20 +113,50 @@ def _build_fake_client(
         _Page(destination_rows),
     ]
     rest_client.datasets.update_dataset = MagicMock()
+    rest_client.datasets.create_dataset = MagicMock()
 
     client = MagicMock()
     client.rest_client = rest_client
+    client._workspace = "default"
 
+    # Build DatasetItem dataclasses from the provided dicts so the executor's
+    # dataclass-form stream returns a realistic shape. Top-level fields like
+    # `description` / `source` / `trace_id` / `span_id` can be passed via the
+    # dict (other keys get stuffed into `data`/extra).
+    top_level = {
+        "id",
+        "trace_id",
+        "span_id",
+        "source",
+        "description",
+        "evaluators",
+        "execution_policy",
+    }
+    source_items: List[dataset_item.DatasetItem] = []
+    for raw in items:
+        kwargs = {k: v for k, v in raw.items() if k in top_level and k != "id"}
+        data = {k: v for k, v in raw.items() if k not in top_level}
+        ds_item = dataset_item.DatasetItem(**kwargs, **data)
+        if "id" in raw:
+            ds_item.id = raw["id"]  # type: ignore[assignment]
+        source_items.append(ds_item)
+
+    # MagicMock treats dunder-prefixed names as magic and blocks them by
+    # default; pre-attach plain MagicMocks so attribute access works.
     source_dataset = MagicMock()
-    source_dataset.get_items.return_value = items
+    stream_mock = MagicMock(return_value=iter(source_items))
+    source_dataset.__internal_api__stream_items_as_dataclasses__ = stream_mock
+
     dest_dataset = MagicMock()
+    insert_mock = MagicMock()
+    dest_dataset.__internal_api__insert_items_as_dataclasses__ = insert_mock
 
     def _get_dataset(name: str, project_name: Optional[str] = None) -> MagicMock:
         # The executor first reads from the (renamed) source, then the dest.
-        if dest_dataset.insert.call_count == 0 and not getattr(
+        if insert_mock.call_count == 0 and not getattr(
             _get_dataset, "_dest_handed_out", False
         ):
-            if source_dataset.get_items.call_count == 0:
+            if stream_mock.call_count == 0:
                 return source_dataset
             _get_dataset._dest_handed_out = True  # type: ignore[attr-defined]
             return dest_dataset
@@ -418,16 +461,24 @@ class TestMigrateDatasetCommand:
         )
 
         assert result.exit_code == 0, result.output
-        # Rename via REST update
+        # Rename via REST update — re-passes description/visibility/tags so
+        # the BE doesn't wipe them.
         client.rest_client.datasets.update_dataset.assert_called_once_with(
-            id="src-1", name="MyDataset_v1"
+            id="src-1",
+            name="MyDataset_v1",
+            description="d",
+            visibility="private",
+            tags=None,
         )
-        # Destination created
-        client.create_dataset.assert_called_once()
-        # Items copied (id stripped) in one insert() call → one target version.
-        dest_dataset.insert.assert_called_once()
-        inserted = dest_dataset.insert.call_args.args[0]
-        assert all("id" not in item for item in inserted)
+        # Destination created at REST layer with full metadata forwarded.
+        client.rest_client.datasets.create_dataset.assert_called_once()
+        # Items copied in one dataclass-form call → one target version.
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted = (
+            dest_dataset.__internal_api__insert_items_as_dataclasses__.call_args.args[0]
+        )
+        # Each rebuilt item is a fresh DatasetItem with a new server-fresh id.
+        assert all(item.id != raw_id for item, raw_id in zip(inserted, ("i2", "i1")))
         assert len(inserted) == 2
         # No delete
         client.delete_dataset.assert_not_called()
@@ -460,8 +511,8 @@ class TestMigrateDatasetCommand:
 
         assert result.exit_code == 1
         client.rest_client.datasets.update_dataset.assert_not_called()
-        client.create_dataset.assert_not_called()
-        dest_dataset.insert.assert_not_called()
+        client.rest_client.datasets.create_dataset.assert_not_called()
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_not_called()
         client.delete_dataset.assert_not_called()
 
         audit = json.loads((tmp_path / "audit.json").read_text())
@@ -484,8 +535,8 @@ class TestMigrateDatasetCommand:
 
         assert result.exit_code == 0, result.output
         client.rest_client.datasets.update_dataset.assert_not_called()
-        client.create_dataset.assert_not_called()
-        dest_dataset.insert.assert_not_called()
+        client.rest_client.datasets.create_dataset.assert_not_called()
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_not_called()
         client.delete_dataset.assert_not_called()
 
         audit = json.loads((tmp_path / "audit.json").read_text())
@@ -510,7 +561,7 @@ class TestMigrateDatasetCommand:
         assert result.exit_code == 0, result.output
         client.rest_client.datasets.update_dataset.assert_not_called()
         # Destination created with the override name
-        kwargs = client.create_dataset.call_args.kwargs
+        kwargs = client.rest_client.datasets.create_dataset.call_args.kwargs
         assert kwargs["name"] == "Renamed"
 
     def test_delete_source_runs_only_after_success(self, tmp_path: Path) -> None:
@@ -542,7 +593,9 @@ class TestMigrateDatasetCommand:
             destination_rows=[],
             items=[{"id": "i1", "x": 1}],
         )
-        dest_dataset.insert.side_effect = RuntimeError("boom")
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.side_effect = (
+            RuntimeError("boom")
+        )
 
         result = self._invoke(
             runner,
@@ -576,9 +629,11 @@ class TestMigrateDatasetCommand:
         )
 
         assert result.exit_code == 0, result.output
-        inserted = dest_dataset.insert.call_args.args[0]
+        inserted = (
+            dest_dataset.__internal_api__insert_items_as_dataclasses__.call_args.args[0]
+        )
         # Source returned [5,4,3,2,1]; insert receives [1,2,3,4,5].
-        assert [item["idx"] for item in inserted] == [1, 2, 3, 4, 5]
+        assert [item.get_content()["idx"] for item in inserted] == [1, 2, 3, 4, 5]
 
     def test_copy_calls_insert_exactly_once_for_one_target_version(
         self, tmp_path: Path
@@ -607,13 +662,257 @@ class TestMigrateDatasetCommand:
         )
 
         assert result.exit_code == 0, result.output
-        dest_dataset.insert.assert_called_once()
-        inserted = dest_dataset.insert.call_args.args[0]
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+        inserted = (
+            dest_dataset.__internal_api__insert_items_as_dataclasses__.call_args.args[0]
+        )
         # All n items handed to insert() in one call — internal SDK batching
         # then groups them under one batch_group_id => one target version.
         assert len(inserted) == n
         # And the order is reversed (oldest-first) to match UI display order.
-        assert [item["idx"] for item in inserted] == list(range(n))
+        assert [item.get_content()["idx"] for item in inserted] == list(range(n))
+
+    def test_per_item_top_level_fields_are_preserved(self, tmp_path: Path) -> None:
+        # Per-item description / source must round-trip through the copy.
+        # (trace_id/span_id/evaluators/execution_policy follow the same code
+        # path; description + source are sufficient to pin the contract.)
+        runner = CliRunner()
+        client, _, dest_dataset = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
+            destination_rows=[],
+            items=[
+                {
+                    "input": "hello",
+                    "description": "per-item description",
+                    "source": "manual",
+                },
+                {
+                    "input": "world",
+                    "description": "another description",
+                    "source": "sdk",
+                },
+            ],
+        )
+
+        result = self._invoke(
+            runner,
+            ["MyDataset", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 0, result.output
+        inserted = (
+            dest_dataset.__internal_api__insert_items_as_dataclasses__.call_args.args[0]
+        )
+        # Reversed: source returned [hello, world]; written [world, hello].
+        assert [it.description for it in inserted] == [
+            "another description",
+            "per-item description",
+        ]
+        assert [it.source for it in inserted] == ["sdk", "manual"]
+
+    def test_dataset_level_metadata_is_forwarded_to_target(
+        self, tmp_path: Path
+    ) -> None:
+        runner = CliRunner()
+        client, _, _ = _build_fake_client(
+            source_rows=[
+                _DatasetRow(
+                    id="src-1",
+                    name="MyDataset",
+                    description="dataset-level description",
+                    visibility="private",
+                    tags=["a", "b"],
+                )
+            ],
+            destination_rows=[],
+            items=[],
+        )
+
+        result = self._invoke(
+            runner,
+            ["MyDataset", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 0, result.output
+        # Both rename PUT and create POST carry full metadata.
+        rename_kwargs = client.rest_client.datasets.update_dataset.call_args.kwargs
+        assert rename_kwargs["description"] == "dataset-level description"
+        assert rename_kwargs["visibility"] == "private"
+        assert rename_kwargs["tags"] == ["a", "b"]
+
+        create_kwargs = client.rest_client.datasets.create_dataset.call_args.kwargs
+        assert create_kwargs["description"] == "dataset-level description"
+        assert create_kwargs["visibility"] == "private"
+        assert create_kwargs["tags"] == ["a", "b"]
+
+    def test_test_suite_source_is_migrated_with_type_and_suite_config(
+        self, tmp_path: Path
+    ) -> None:
+        # Test suites: target is created with type='evaluation_suite' and the
+        # latest version's suite-level evaluators+execution_policy are copied.
+        runner = CliRunner()
+        client, _, _ = _build_fake_client(
+            source_rows=[
+                _DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")
+            ],
+            destination_rows=[],
+            items=[],
+        )
+
+        # Stub list_dataset_versions: latest version carries one evaluator
+        # and an execution_policy. The executor should map both into an
+        # apply_dataset_item_changes payload against the target id.
+        evaluator = MagicMock()
+        evaluator.name = "judge-1"
+        evaluator.type = "llm_judge"
+        evaluator.config = {"model": "gpt-4"}
+        exec_policy = MagicMock()
+        exec_policy.runs_per_item = 3
+        exec_policy.pass_threshold = 2
+        latest_version = MagicMock()
+        latest_version.evaluators = [evaluator]
+        latest_version.execution_policy = exec_policy
+        client.rest_client.datasets.list_dataset_versions.return_value = _Page(
+            [latest_version]
+        )
+        target_after_create = MagicMock()
+        target_after_create.id = "target-dataset-id"
+        client.rest_client.datasets.get_dataset_by_identifier.return_value = (
+            target_after_create
+        )
+
+        result = self._invoke(
+            runner,
+            ["MySuite", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 0, result.output
+
+        # Target was created with type forwarded.
+        create_kwargs = client.rest_client.datasets.create_dataset.call_args.kwargs
+        assert create_kwargs["type"] == "evaluation_suite"
+
+        # Suite config was applied with evaluators + execution_policy.
+        apply_kwargs = (
+            client.rest_client.datasets.apply_dataset_item_changes.call_args.kwargs
+        )
+        assert apply_kwargs["id"] == "target-dataset-id"
+        assert apply_kwargs["override"] is True
+        request = apply_kwargs["request"]
+        assert request["execution_policy"] == {
+            "runs_per_item": 3,
+            "pass_threshold": 2,
+        }
+        assert request["evaluators"] == [
+            {"name": "judge-1", "type": "llm_judge", "config": {"model": "gpt-4"}}
+        ]
+
+    def test_per_item_evaluator_and_policy_overrides_round_trip(
+        self, tmp_path: Path
+    ) -> None:
+        # An item can override the suite-level evaluators / execution_policy.
+        # Those per-item overrides MUST survive the dataclass-form copy.
+        from opik.api_objects.dataset.dataset_item import (
+            DatasetItem,
+            EvaluatorItem,
+            ExecutionPolicyItem,
+        )
+
+        runner = CliRunner()
+        # We need a custom item: build it explicitly and inject through the
+        # mock's stream side-effect.
+        custom_item = DatasetItem(
+            input="custom-q",
+            expected="custom-a",
+            source="manual",
+            evaluators=[
+                EvaluatorItem(
+                    name="item-specific-judge",
+                    type="llm_judge",
+                    config={"model": "haiku"},
+                ),
+            ],
+            execution_policy=ExecutionPolicyItem(runs_per_item=10, pass_threshold=7),
+        )
+
+        client, source_dataset, dest_dataset = _build_fake_client(
+            source_rows=[
+                _DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")
+            ],
+            destination_rows=[],
+            items=[],  # we override the stream below
+        )
+        # Replace the stream with our custom-overridden item.
+        source_dataset.__internal_api__stream_items_as_dataclasses__.return_value = (
+            iter([custom_item])
+        )
+        # Stub list_dataset_versions for the suite-config copy step (no
+        # config here, so it's effectively a no-op for the CopyTestSuiteConfig
+        # action).
+        empty_version = MagicMock()
+        empty_version.evaluators = None
+        empty_version.execution_policy = None
+        client.rest_client.datasets.list_dataset_versions.return_value = _Page(
+            [empty_version]
+        )
+        target_after_create = MagicMock()
+        target_after_create.id = "target-dataset-id"
+        client.rest_client.datasets.get_dataset_by_identifier.return_value = (
+            target_after_create
+        )
+
+        result = self._invoke(
+            runner,
+            ["MySuite", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 0, result.output
+        inserted = (
+            dest_dataset.__internal_api__insert_items_as_dataclasses__.call_args.args[0]
+        )
+        assert len(inserted) == 1
+        rebuilt = inserted[0]
+        # Per-item evaluator override survived.
+        assert rebuilt.evaluators is not None
+        assert len(rebuilt.evaluators) == 1
+        assert rebuilt.evaluators[0].name == "item-specific-judge"
+        assert rebuilt.evaluators[0].config == {"model": "haiku"}
+        # Per-item execution policy override survived.
+        assert rebuilt.execution_policy is not None
+        assert rebuilt.execution_policy.runs_per_item == 10
+        assert rebuilt.execution_policy.pass_threshold == 7
+
+    def test_unknown_dataset_type_is_refused(self, tmp_path: Path) -> None:
+        runner = CliRunner()
+        client, _, dest_dataset = _build_fake_client(
+            source_rows=[
+                _DatasetRow(id="src-1", name="WeirdDS", type="some_future_type")
+            ],
+            destination_rows=[],
+            items=[],
+        )
+
+        result = self._invoke(
+            runner,
+            ["WeirdDS", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 1
+        assert "unsupported type" in result.output.lower()
+        # No side effects.
+        client.rest_client.datasets.update_dataset.assert_not_called()
+        client.rest_client.datasets.create_dataset.assert_not_called()
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_not_called()
 
     def test_unknown_name_actionable_error(self, tmp_path: Path) -> None:
         runner = CliRunner()

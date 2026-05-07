@@ -24,6 +24,7 @@ from .errors import MigrationError
 from .executor import execute_plan, record_planned
 from .planner import (
     CopyCurrentItems,
+    CopyTestSuiteConfig,
     CreateDestination,
     DeleteSource,
     MigrationPlan,
@@ -347,6 +348,12 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "copy items",
                 f"{action.source_name_after_rename} → {action.dest_name}",
+            )
+        elif isinstance(action, CopyTestSuiteConfig):
+            table.add_row(
+                str(idx),
+                "copy suite config",
+                f"latest evaluators + execution_policy → {action.dest_name}",
             )
         elif isinstance(action, DeleteSource):
             table.add_row(
