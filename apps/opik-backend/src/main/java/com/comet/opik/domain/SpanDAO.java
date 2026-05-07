@@ -306,7 +306,7 @@ public class SpanDAO {
                     :metadata as metadata,
                     :model as model,
                     :provider as provider,
-                    toDecimal128(:total_estimated_cost, 12) as total_estimated_cost,
+                    :total_estimated_cost as total_estimated_cost,
                     :total_estimated_cost_version as total_estimated_cost_version,
                     :tags as tags,
                     mapFromArrays(:usage_keys, :usage_values) as usage,
@@ -383,7 +383,7 @@ public class SpanDAO {
             	<if(metadata)> :metadata <else> metadata <endif> as metadata,
             	<if(model)> :model <else> model <endif> as model,
             	<if(provider)> :provider <else> provider <endif> as provider,
-            	<if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> total_estimated_cost <endif> as total_estimated_cost,
+            	<if(total_estimated_cost)> :total_estimated_cost <else> total_estimated_cost <endif> as total_estimated_cost,
             	<if(total_estimated_cost_version)> :total_estimated_cost_version <else> total_estimated_cost_version <endif> as total_estimated_cost_version,
             	<if(tags)> :tags <else> tags <endif> as tags,
             	<if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else> usage <endif> as usage,
@@ -553,7 +553,7 @@ public class SpanDAO {
                     <if(metadata)> :metadata <else> '' <endif> as metadata,
                     <if(model)> :model <else> '' <endif> as model,
                     <if(provider)> :provider <else> '' <endif> as provider,
-                    <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> toDecimal128(0, 12) <endif> as total_estimated_cost,
+                    <if(total_estimated_cost)> :total_estimated_cost <else> 0 <endif> as total_estimated_cost,
                     <if(total_estimated_cost_version)> :total_estimated_cost_version <else> '' <endif> as total_estimated_cost_version,
                     <if(tags)> :tags <else> [] <endif> as tags,
                     <if(usage)> CAST((:usageKeys, :usageValues), 'Map(String, Int64)') <else>  mapFromArrays([], []) <endif> as usage,
@@ -1449,7 +1449,7 @@ public class SpanDAO {
                 <if(metadata)> :metadata <else> s.metadata <endif> as metadata,
                 <if(model)> :model <else> s.model <endif> as model,
                 <if(provider)> :provider <else> s.provider <endif> as provider,
-                <if(total_estimated_cost)> toDecimal128(:total_estimated_cost, 12) <else> s.total_estimated_cost <endif> as total_estimated_cost,
+                <if(total_estimated_cost)> :total_estimated_cost <else> s.total_estimated_cost <endif> as total_estimated_cost,
                 <if(total_estimated_cost_version)> :total_estimated_cost_version <else> s.total_estimated_cost_version <endif> as total_estimated_cost_version,
                 """
             + TagOperations.tagUpdateFragment("s.tags")
@@ -1562,15 +1562,7 @@ public class SpanDAO {
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
-                // BULK_INSERT writes the cost cell directly into Decimal128(12) (no toDecimal128
-                // wrap), so the driver must emit an unquoted numeric literal — bind the
-                // BigDecimal itself rather than its String form. See OPIK-5694.
-                BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
-                statement.bind("total_estimated_cost" + i, cost);
-                statement.bind("total_estimated_cost_version" + i,
-                        span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
-                                ? ESTIMATED_COST_VERSION
-                                : "");
+                bindCost(span, statement, String.valueOf(i));
 
                 if (span.ttft() != null) {
                     statement.bind("ttft" + i, span.ttft());
@@ -2581,16 +2573,17 @@ public class SpanDAO {
     }
 
     private void bindCost(Span span, Statement statement, String index) {
-        if (span.totalEstimatedCost() != null) {
-            // Cost is set manually by the user
-            statement.bind("total_estimated_cost" + index, span.totalEstimatedCost().toString());
-            statement.bind("total_estimated_cost_version" + index, "");
-        } else {
-            BigDecimal estimatedCost = calculateCost(span);
-            statement.bind("total_estimated_cost" + index, estimatedCost.toString());
-            statement.bind("total_estimated_cost_version" + index,
-                    estimatedCost.compareTo(BigDecimal.ZERO) > 0 ? ESTIMATED_COST_VERSION : "");
-        }
+        // Bind BigDecimal directly so the driver emits an unquoted numeric literal. Every
+        // SQL site for this column writes straight into a Decimal128(12) cell without a
+        // toDecimal128(...) wrap, so CH parses the literal directly into the column type
+        // (no Float64 detour, no precision drift) and FORMAT Values stays on the streaming
+        // parser fast path. See OPIK-5694.
+        BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
+        statement.bind("total_estimated_cost" + index, cost);
+        statement.bind("total_estimated_cost_version" + index,
+                span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
+                        ? ESTIMATED_COST_VERSION
+                        : "");
     }
 
     @WithSpan

@@ -1,5 +1,6 @@
 package com.comet.opik.utils;
 
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 
 import java.time.Instant;
@@ -31,11 +32,11 @@ public class ClickHouseDateTimeFormat {
             .ofPattern("yyyy-MM-dd HH:mm:ss.SSSSSS")
             .withZone(ZoneOffset.UTC);
 
-    public static String formatNanos(Instant instant) {
+    public static String formatNanos(@NonNull Instant instant) {
         return NANOS.format(instant);
     }
 
-    public static String formatMicros(Instant instant) {
+    public static String formatMicros(@NonNull Instant instant) {
         return MICROS.format(instant);
     }
 }
