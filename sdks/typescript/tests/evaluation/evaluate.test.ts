@@ -214,7 +214,7 @@ describe("evaluate function", () => {
         testCase: expect.objectContaining({
           datasetItemId: "item-1",
           traceId: expect.any(String),
-          taskOutput: {},
+          taskOutput: expect.objectContaining({ input: expect.any(Object) }),
           scoringInputs: expect.objectContaining({
             input: "test input 1",
             expected: "test output 1",
@@ -232,6 +232,9 @@ describe("evaluate function", () => {
     );
 
     const createTracesCall = createTracesSpy.mock.calls[0][0];
+    const capturedTraceId = createTracesCall.traces[0].id;
+    expect(capturedTraceId).toBeDefined();
+    expect(result.testResults[0].testCase.traceId).toBe(capturedTraceId);
     expect(createTracesCall).toEqual(
       expect.objectContaining({
         traces: expect.arrayContaining([

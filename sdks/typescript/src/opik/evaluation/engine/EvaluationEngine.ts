@@ -185,16 +185,15 @@ export class EvaluationEngine<T = Record<string, unknown>> {
                 if (error instanceof EvaluationItemRunError) {
                   testResults.push(error.testResult);
                 }
+                const originalError =
+                  error instanceof EvaluationItemRunError
+                    ? error.originalError
+                    : error;
                 errors.push({
                   datasetItemId: item.id,
                   runIndex,
                   message: errorMessage,
-                  ...(error instanceof EvaluationItemRunError &&
-                    error.originalError instanceof Error && {
-                      error: error.originalError,
-                    }),
-                  ...(!(error instanceof EvaluationItemRunError) &&
-                    error instanceof Error && { error }),
+                  ...(originalError instanceof Error && { error: originalError }),
                 });
                 progress.recordFailure();
               })
@@ -364,16 +363,24 @@ export class EvaluationEngine<T = Record<string, unknown>> {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      if (error instanceof Error) {
-        trace.update({
+      trace.update({
+        ...(error instanceof Error && {
           errorInfo: {
             message: error.message,
             exceptionType: error.name,
             traceback: error.stack ?? "",
           },
-          endTime: new Date(),
-        });
-      }
+        }),
+        endTime: new Date(),
+      });
+
+      await this.experiment.insert([
+        new ExperimentItemReferences({
+          datasetItemId: datasetItem.id,
+          traceId: trace.data.id,
+          projectName: trace.data.projectName,
+        }),
+      ]);
 
       throw new EvaluationItemRunError(
         errorMessage,
@@ -394,7 +401,7 @@ export class EvaluationEngine<T = Record<string, unknown>> {
         traceId: trace.data.id,
         datasetItemId: datasetItem.id,
         scoringInputs: { ...datasetItem },
-        taskOutput: {},
+        taskOutput: { input: datasetItem },
       },
       scoreResults: [
         {
