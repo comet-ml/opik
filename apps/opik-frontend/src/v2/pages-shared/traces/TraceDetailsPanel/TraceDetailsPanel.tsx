@@ -434,7 +434,7 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
       panelId="traces"
       entity="trace"
       open={open}
-      headerContent={
+      header={
         <TraceDetailsActionsPanel
           traceId={traceId}
           spanId={spanId}
@@ -451,7 +451,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
         />
       }
       onClose={onClose}
-      hideDefaultControls
       ignoreHotkeys={isGraphFullscreen}
       horizontalNavigation={horizontalNavigation}
       verticalNavigation={verticalNavigation}
