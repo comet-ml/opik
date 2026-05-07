@@ -663,25 +663,33 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             """;
 
     /**
-     * Get experiment items with cursor pagination
+     * Get experiment items with cursor pagination.
+     *
+     * <p>OPIK-6177: resolves {@code ei.dataset_item_id} (legacy per-version DIV row id or modern
+     * stable id) to the stable {@code dataset_item_id} at aggregation time. Compare reads still
+     * resolve at read time too (see {@code DatasetItemVersionDAO}), so this is best-effort
+     * hygiene — over time it phases out legacy values from EIA without a backfill migration.
      */
     private static final String GET_EXPERIMENT_ITEMS = """
             SELECT
-                id,
-                experiment_id,
-                trace_id,
-                dataset_item_id,
-                created_at,
-                last_updated_at,
-                created_by,
-                last_updated_by,
-                execution_policy
-            FROM experiment_items
-            WHERE workspace_id = :workspace_id
-            AND experiment_id = :experiment_id
-            <if(cursor)>AND id > :cursor<endif>
-            ORDER BY (workspace_id, experiment_id, id) ASC, last_updated_at DESC
-            LIMIT 1 BY id
+                ei.id AS id,
+                ei.experiment_id AS experiment_id,
+                ei.trace_id AS trace_id,
+                if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, ei.dataset_item_id) AS dataset_item_id,
+                ei.created_at AS created_at,
+                ei.last_updated_at AS last_updated_at,
+                ei.created_by AS created_by,
+                ei.last_updated_by AS last_updated_by,
+                ei.execution_policy AS execution_policy
+            FROM experiment_items AS ei
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = ei.workspace_id
+                AND lookup_div.id = ei.dataset_item_id
+            WHERE ei.workspace_id = :workspace_id
+            AND ei.experiment_id = :experiment_id
+            <if(cursor)>AND ei.id > :cursor<endif>
+            ORDER BY (ei.workspace_id, ei.experiment_id, ei.id) ASC, ei.last_updated_at DESC
+            LIMIT 1 BY ei.id
             LIMIT :limit
             SETTINGS log_comment = '<log_comment>'
             ;
@@ -1081,6 +1089,15 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    /**
+     * Count query for the dev/test parity harness ({@link #countDatasetItemsWithExperimentItemsFromAggregates}).
+     * Resolves the legacy-or-stable {@code eia.dataset_item_id} to the canonical stable id at read time
+     * via the {@code lookup_div FINAL} LEFT JOIN, then de-duplicates with {@code COUNT(DISTINCT
+     * if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id))}.
+     * The production count uses a different stable-id pre-narrowing CTE ({@code lookup_for_count})
+     * for skip-index pushdown — see {@code DatasetItemVersionDAO}; this harness path doesn't need
+     * it because callers exercise it only against test fixtures.
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             WITH dataset_item_versions_resolved AS (
                 SELECT
@@ -1129,11 +1146,13 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                     LIMIT 1 BY div.id
                 ) AS div_dedup
             )
-            SELECT COUNT(DISTINCT eia.dataset_item_id) as count
+            SELECT COUNT(DISTINCT if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)) as count
             FROM experiment_item_aggregates eia FINAL
-            INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
-            LEFT JOIN dataset_item_versions_resolved AS di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                AND di.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
+            LEFT JOIN dataset_item_versions_resolved AS di
+                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
@@ -1154,6 +1173,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
             ;
             """;
 
+    /**
+     * Row query for the dev/test parity harness ({@link #getDatasetItemsWithExperimentItemsFromAggregates}).
+     * Same stable-id resolution shape as {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT}
+     * — see that constant's Javadoc for the rationale.
+     */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS = """
             WITH dataset_item_versions_resolved AS (
                 SELECT
@@ -1235,9 +1259,11 @@ class ExperimentAggregatesDAOImpl implements ExperimentAggregatesDAO {
                            eia.execution_policy
                 )) AS experiment_items_array
             FROM experiment_item_aggregates eia FINAL
-            INNER JOIN experiment_aggregates ea FINAL ON ea.id = eia.experiment_id
-            LEFT JOIN dataset_item_versions_resolved AS di ON (di.id = eia.dataset_item_id OR di.row_id = eia.dataset_item_id)
-                AND di.dataset_version_id = COALESCE(nullIf(ea.dataset_version_id, ''), :version_id)
+            LEFT JOIN dataset_item_versions AS lookup_div FINAL
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
+            LEFT JOIN dataset_item_versions_resolved AS di
+                ON di.id = if(notEmpty(lookup_div.dataset_item_id), lookup_div.dataset_item_id, eia.dataset_item_id)
             WHERE eia.workspace_id = :workspace_id
             <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
             <if(has_target_projects)>AND eia.project_id IN :target_project_ids<endif>
