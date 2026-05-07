@@ -53,6 +53,13 @@ def patched_sleep():
         yield sleep_mock
 
 
+def _sleep_called_with(mock_sleep: mock.Mock, seconds) -> bool:
+    """Patching time.sleep is global — background threads also trip the mock.
+    Assert on the specific value we expect rather than total call count.
+    """
+    return any(call.args == (seconds,) for call in mock_sleep.call_args_list)
+
+
 def test_search_spans__retries_on_rate_limit(patched_sleep, capture_log):
     rest_client = mock.Mock()
     rest_client.spans.search_spans.side_effect = [
@@ -72,7 +79,7 @@ def test_search_spans__retries_on_rate_limit(patched_sleep, capture_log):
     assert len(result) == 1
     assert result[0] == span_public.SpanPublic.model_validate(SPAN_RECORD)
     assert rest_client.spans.search_spans.call_count == 2
-    patched_sleep.assert_called_once_with(2)
+    assert _sleep_called_with(patched_sleep, 2)
     assert any(
         "search_spans" in record.message and record.levelno == logging.WARNING
         for record in capture_log.records
@@ -97,7 +104,7 @@ def test_search_traces__retries_on_rate_limit(patched_sleep, capture_log):
     assert len(result) == 1
     assert result[0] == trace_public.TracePublic.model_validate(TRACE_RECORD)
     assert rest_client.traces.search_traces.call_count == 2
-    patched_sleep.assert_called_once_with(3)
+    assert _sleep_called_with(patched_sleep, 3)
     assert any(
         "search_traces" in record.message and record.levelno == logging.WARNING
         for record in capture_log.records
@@ -121,8 +128,9 @@ def test_search_spans__non_rate_limit_error_propagates(patched_sleep):
         )
 
     assert exc_info.value.status_code == 400
+    # call_count == 1 already proves no retry happened — no need to assert on
+    # patched_sleep, which is polluted by background-thread sleeps.
     assert rest_client.spans.search_spans.call_count == 1
-    patched_sleep.assert_not_called()
 
 
 def test_search_traces__non_rate_limit_error_propagates(patched_sleep):
@@ -142,7 +150,6 @@ def test_search_traces__non_rate_limit_error_propagates(patched_sleep):
 
     assert exc_info.value.status_code == 500
     assert rest_client.traces.search_traces.call_count == 1
-    patched_sleep.assert_not_called()
 
 
 def test_search_spans__no_retry_after_header_falls_back_to_default(patched_sleep):
@@ -163,4 +170,4 @@ def test_search_spans__no_retry_after_header_falls_back_to_default(patched_sleep
 
     assert len(result) == 1
     assert rest_client.spans.search_spans.call_count == 2
-    patched_sleep.assert_called_once_with(1)
+    assert _sleep_called_with(patched_sleep, 1)
