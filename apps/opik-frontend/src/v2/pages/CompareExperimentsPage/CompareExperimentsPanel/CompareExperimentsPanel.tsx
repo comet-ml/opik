@@ -162,6 +162,7 @@ const CompareExperimentsPanel: React.FunctionComponent<
           </Button>
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}
+            ignoreHotkeys={isTraceDetailsOpened}
           />
         </ResizableSidePanelTopBar>
       }

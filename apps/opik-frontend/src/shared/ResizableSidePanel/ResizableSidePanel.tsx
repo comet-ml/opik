@@ -33,7 +33,6 @@ type ResizableSidePanelProps = {
   initialWidth?: number;
   minWidth?: number;
   ignoreHotkeys?: boolean;
-  closeOnClickOutside?: boolean;
   blockOverlayClose?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
@@ -72,7 +71,6 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   initialWidth = INITIAL_WIDTH,
   minWidth,
   ignoreHotkeys = false,
-  closeOnClickOutside = true,
   blockOverlayClose = false,
   horizontalNavigation,
   verticalNavigation,
@@ -293,7 +291,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         !open && "pointer-events-none overflow-hidden",
       )}
     >
-      {open && (closeOnClickOutside || blockOverlayClose) && (
+      {open && (
         <div
           className="absolute inset-0 bg-black/10"
           onClick={blockOverlayClose ? undefined : onClose}
@@ -341,7 +339,7 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
                       </TooltipWrapper>
                       {renderNavigation()}
                     </div>
-                    {headerContent && headerContent}
+                    {headerContent}
                   </>
                 )}
               </div>

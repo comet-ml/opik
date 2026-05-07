@@ -1,5 +1,4 @@
 import React, { useCallback } from "react";
-import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
 import {
   DatasetItemColumn,
@@ -16,17 +15,9 @@ import { prepareFormDataForSave } from "@/v2/pages-shared/datasets/DatasetItemEd
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
+import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
 import { useToast } from "@/ui/use-toast";
 import Loader from "@/shared/Loader/Loader";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import TagListRenderer from "@/shared/TagListRenderer/TagListRenderer";
 import TestSuiteItemFormContainer from "./TestSuiteItemFormContainer";
 import {
@@ -148,6 +139,21 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
     [datasetItemId, columns, editItem, updateItemAssertions, serverEvaluators],
   );
 
+  const handleShare = useCallback(() => {
+    toast({ description: "URL successfully copied to clipboard" });
+    copy(window.location.href);
+  }, [toast]);
+
+  const handleCopyId = useCallback(() => {
+    toast({ description: "Item ID successfully copied to clipboard" });
+    copy(datasetItemId);
+  }, [datasetItemId, toast]);
+
+  const handleDeleteItemConfirm = useCallback(
+    () => handleDelete(onClose),
+    [handleDelete, onClose],
+  );
+
   return (
     <ResizableSidePanel
       panelId="test-suite-item-panel"
@@ -159,45 +165,12 @@ const TestSuiteItemPanelLayout: React.FC<TestSuiteItemPanelLayoutProps> = ({
           onClose={onClose}
         >
           {!isNewItem && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon-2xs">
-                  <span className="sr-only">Actions menu</span>
-                  <MoreHorizontal />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem
-                  onClick={() => {
-                    toast({
-                      description: "URL successfully copied to clipboard",
-                    });
-                    copy(window.location.href);
-                  }}
-                >
-                  <Share className="mr-2 size-4" />
-                  Share item
-                </DropdownMenuItem>
-                <TooltipWrapper content={datasetItemId} side="left">
-                  <DropdownMenuItem
-                    onClick={() => {
-                      toast({
-                        description: "Item ID successfully copied to clipboard",
-                      });
-                      copy(datasetItemId);
-                    }}
-                  >
-                    <Copy className="mr-2 size-4" />
-                    Copy item ID
-                  </DropdownMenuItem>
-                </TooltipWrapper>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => handleDelete(onClose)}>
-                  <Trash className="mr-2 size-4" />
-                  Delete item
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <DatasetItemActionsDropdown
+              datasetItemId={datasetItemId}
+              onShare={handleShare}
+              onCopyId={handleCopyId}
+              onDelete={handleDeleteItemConfirm}
+            />
           )}
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}

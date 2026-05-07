@@ -1,17 +1,8 @@
 import React, { useCallback, useMemo } from "react";
-import { Copy, MoreHorizontal, Share, Trash } from "lucide-react";
 import copy from "clipboard-copy";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
 import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
-import { Button } from "@/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/ui/dropdown-menu";
 import { useToast } from "@/ui/use-toast";
 import Loader from "@/shared/Loader/Loader";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
@@ -20,6 +11,7 @@ import { processInputData } from "@/lib/images";
 import ImagesListWrapper from "@/shared/attachments/ImagesListWrapper/ImagesListWrapper";
 import { useDatasetItemEditorAutosaveContext } from "./DatasetItemEditorAutosaveContext";
 import DatasetItemEditorForm from "./DatasetItemEditorForm";
+import DatasetItemActionsDropdown from "@/v2/pages-shared/datasets/DatasetItemActionsDropdown/DatasetItemActionsDropdown";
 
 interface DatasetItemEditorAutosaveLayoutProps {
   datasetItemId: string;
@@ -98,31 +90,12 @@ const DatasetItemEditorAutosaveLayout: React.FC<
           }
           onClose={handleClose}
         >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon-2xs">
-                <span className="sr-only">Actions menu</span>
-                <MoreHorizontal />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onClick={handleShare}>
-                <Share className="mr-2 size-4" />
-                Share item
-              </DropdownMenuItem>
-              <TooltipWrapper content={datasetItemId} side="left">
-                <DropdownMenuItem onClick={handleCopyId}>
-                  <Copy className="mr-2 size-4" />
-                  Copy item ID
-                </DropdownMenuItem>
-              </TooltipWrapper>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleDeleteItemConfirm}>
-                <Trash className="mr-2 size-4" />
-                Delete item
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <DatasetItemActionsDropdown
+            datasetItemId={datasetItemId}
+            onShare={handleShare}
+            onCopyId={handleCopyId}
+            onDelete={handleDeleteItemConfirm}
+          />
           <ResizableSidePanelArrowNavigation
             horizontalNavigation={horizontalNavigation}
           />
