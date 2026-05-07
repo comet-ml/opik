@@ -50,9 +50,14 @@ const PageLayout = () => {
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
 
   const matchRoute = useMatchRoute();
-  const isOlliePage = !!matchRoute({
-    to: "/$workspaceName/projects/$projectId/ollie",
-  });
+  // TODO: OPIK-6260 - Remove /home match once home page redesign is restored
+  const isOlliePage =
+    !!matchRoute({
+      to: "/$workspaceName/projects/$projectId/ollie",
+    }) ||
+    !!matchRoute({
+      to: "/$workspaceName/projects/$projectId/home",
+    });
 
   const showAssistantSidebar = !!AssistantSidebar && !isOlliePage;
 
