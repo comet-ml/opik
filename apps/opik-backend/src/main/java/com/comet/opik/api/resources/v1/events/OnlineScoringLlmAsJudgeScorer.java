@@ -261,22 +261,19 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     // Package-private for unit tests.
     ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice) {
-        // Preserve all the original request's tunables (response format, temperature, etc.) and
-        // only layer the tool specifications on top. ChatRequest rejects setting both
-        // `parameters` and `toolSpecifications` directly because tool specs live inside
-        // ChatRequestParameters — so we copy the existing parameters via overrideWith and
-        // override toolSpecifications, then attach the rebuilt parameters to a fresh request.
-        // The naive ChatRequest.builder().messages(...).toolSpecifications(...) version that
-        // used to live here silently dropped every other field, leaving the initial scoring
-        // call with a different shape from the final structured re-issue at the end of
-        // handleToolCalls.
+        // Tool specs live inside ChatRequestParameters, so we copy the existing parameters via
+        // overrideWith and layer tool specs on top — setting toolSpecifications directly on
+        // ChatRequest's builder would conflict with parameters. Using toBuilder() (rather than
+        // a fresh builder + .messages()) preserves any other top-level fields on ChatRequest,
+        // present or future, guarding against the same "silently dropped fields" regression
+        // that previously gave the initial scoring call a different shape from the final
+        // structured re-issue in handleToolCalls.
         var parameters = ChatRequestParameters.builder()
                 .overrideWith(request.parameters())
                 .toolSpecifications(toolRegistry.specs())
                 .toolChoice(toolChoice)
                 .build();
-        return ChatRequest.builder()
-                .messages(request.messages())
+        return request.toBuilder()
                 .parameters(parameters)
                 .build();
     }
