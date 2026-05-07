@@ -111,8 +111,8 @@ def create_feedback_scores_definition(base_url, workspace_name, comet_api_key):
 
 def create_default_environments(base_url, workspace_name, comet_api_key):
     defaults = [
-        {"name": "development", "position": 0, "color": "#EF6868"},
-        {"name": "staging", "position": 1, "color": "#F4B400"},
+        {"name": "development", "position": 0, "color": "#945FCF"},
+        {"name": "staging", "position": 1, "color": "#12A4B4"},
         {"name": "production", "position": 2, "color": "#19A979"},
     ]
     for payload in defaults:
