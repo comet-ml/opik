@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events;
 import com.comet.opik.api.AlertEventType;
 import com.comet.opik.api.AlertType;
 import com.comet.opik.api.events.webhooks.WebhookEvent;
+import com.comet.opik.api.resources.utils.TestHttpClientUtils;
 import com.comet.opik.api.resources.v1.events.webhooks.WebhookHttpClient;
 import com.comet.opik.infrastructure.WebhookConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
@@ -43,7 +44,6 @@ class WebhookSubscriberTest {
 
     private WireMockServer wireMockServer;
     private WebhookConfig webhookConfig;
-    private WebhookHttpClient webhookHttpClient;
     private WebhookSubscriber webhookSubscriber;
 
     @BeforeEach
@@ -53,6 +53,8 @@ class WebhookSubscriberTest {
 
         webhookConfig = createWebhookConfig();
 
+        WebhookHttpClient webhookHttpClient;
+
         // Mock the static UserFacingLoggingFactory.getLogger method
         try (MockedStatic<UserFacingLoggingFactory> mockedFactory = mockStatic(UserFacingLoggingFactory.class)) {
             mockedFactory.when(() -> UserFacingLoggingFactory.getLogger(any(Class.class)))
@@ -60,9 +62,7 @@ class WebhookSubscriberTest {
 
             // Create WebhookHttpClient with a real JAX-RS client and a mock UserFacingLoggingFactory
             // Note: The factory parameter is not actually used in the constructor, but is required
-            webhookHttpClient = new WebhookHttpClient(
-                    jakarta.ws.rs.client.ClientBuilder.newClient(),
-                    webhookConfig);
+            webhookHttpClient = new WebhookHttpClient(TestHttpClientUtils.client(), webhookConfig);
         }
 
         webhookSubscriber = new WebhookSubscriber(webhookConfig, redisson, webhookHttpClient);

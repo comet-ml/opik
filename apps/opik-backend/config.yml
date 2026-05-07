@@ -938,6 +938,45 @@ pythonEvaluator:
   # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
   connectTimeout: ${PYTHON_EVALUATOR_CONNECT_TIMEOUT:-5s}
 
+# JAX-RS Jersey client configuration. This is the singleton HTTP client shared in the service.
+jerseyClient:
+  # Default: 30s
+  # Description: Overall response read timeout. Per-call timeouts can override via Jersey ClientProperties.READ_TIMEOUT.
+  timeout: ${JERSEY_CLIENT_TIMEOUT:-30s}
+  # Default: 2s
+  # Description: The maximum time to wait for a connection to open.
+  connectionTimeout: ${JERSEY_CLIENT_CONNECTION_TIMEOUT:-2s}
+  # Default: 1s
+  # Description: The maximum time to wait for a connection to be returned from the connection pool.
+  connectionRequestTimeout: ${JERSEY_CLIENT_CONNECTION_REQUEST_TIMEOUT:-1s}
+  # Default: 5m
+  # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
+  timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 256
+  # Description: The maximum number of concurrent open connections.
+  maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
+  # Default: 64
+  # Description: The maximum number of concurrent open connections per route.
+  maxConnectionsPerRoute: ${JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE:-64}
+  # Default: 5s
+  # Description: The maximum time before a persistent connection is checked to remain active. If set to 0, no inactivity check will be performed.
+  validateAfterInactivityPeriod: ${JERSEY_CLIENT_VALIDATE_AFTER_INACTIVITY:-5s}
+  # Default: 16
+  # Description: Minimum idle Jersey async worker threads.
+  minThreads: ${JERSEY_CLIENT_MIN_THREADS:-16}
+  # Default: 128
+  # Description: Maximum Jersey async worker threads.
+  maxThreads: ${JERSEY_CLIENT_MAX_THREADS:-128}
+  # Default: 64
+  # Description: The size of the work queue of the pool used for asynchronous requests. Additional threads will be spawn only if the queue is reached its maximum size.
+  workQueueSize: ${JERSEY_CLIENT_WORK_QUEUE_SIZE:-64}
+  # Default: false
+  # Description: Whether to send gzipped request bodies. Off because not all upstreams handle Content-Encoding: gzip on requests.
+  gzipEnabledForRequests: ${JERSEY_CLIENT_GZIP_ENABLED_FOR_REQUESTS:-false}
+  # Default: false
+  # Description: Whether to enable Transfer-Encoding: chunked on outbound request bodies. Off because sending Content-Length is universally accepted.
+  chunkedEncodingEnabled: ${JERSEY_CLIENT_CHUNKED_ENCODING_ENABLED:-false}
+
 serviceToggles:
   # Default: true
   # Description: Whether or not Python evaluator is enabled
