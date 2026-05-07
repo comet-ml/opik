@@ -6318,6 +6318,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage_Detail"
+  /v1/private/projects/{projectId}/activities:
+    get:
+      tags:
+      - Projects
+      summary: Get recent activity for a project
+      description: "Returns the most recent activity items across all entity types\
+        \ for a project, sorted by date descending."
+      operationId: getRecentActivity
+      parameters:
+      - name: projectId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        schema:
+          minimum: 1
+          type: integer
+          format: int32
+          default: 1
+      - name: size
+        in: query
+        schema:
+          maximum: 100
+          minimum: 1
+          type: integer
+          format: int32
+          default: 10
+      responses:
+        "200":
+          description: Recent activity page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecentActivityPage_Public"
+        "400":
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
+        "500":
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage_Public"
   /v1/private/retention/rules:
     get:
       tags:
@@ -18452,6 +18501,47 @@ components:
         Note: Prompt versions are immutable by design.
         Only organizational properties (such as tags etc.) can be updated.
         Core properties like template, metadata etc. cannot be modified after creation.
+    RecentActivityItem_Public:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+          - experiment
+          - dataset_version
+          - test_suite_version
+          - alert_event
+          - optimization
+          - agent_config_version
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        resource_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    RecentActivityPage_Public:
+      type: object
+      properties:
+        page:
+          type: integer
+          format: int32
+        size:
+          type: integer
+          format: int32
+        total:
+          type: integer
+          format: int64
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/RecentActivityItem_Public"
     RetentionRule_Public:
       required:
       - retention
