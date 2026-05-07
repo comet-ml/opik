@@ -83,10 +83,10 @@ jobs:
               }
             }
             
-            // 3. Find existing linter comment (if any)
+            // 3. Find all existing linter comments across all pages
             const COMMENT_MARKER = "<!-- pr-linter-comment -->";
-            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: pr.number });
-            const existingComment = comments.find(c => c.body && c.body.includes(COMMENT_MARKER));
+            const allComments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number: pr.number });
+            const markerComments = allComments.filter(c => c.body && c.body.includes(COMMENT_MARKER));
 
             // 4. Final step: upsert/delete comment and/or fail the job
             if (errors.length > 0) {
@@ -99,16 +99,17 @@ jobs:
                   .replace(/###\s/g, '')
                   .replace(/---\n\n/g, '');
 
-              if (existingComment) {
-                await github.rest.issues.updateComment({ owner, repo, comment_id: existingComment.id, body: commentBody });
+              if (markerComments.length > 0) {
+                // Keep the newest, delete any duplicates
+                const [keep, ...duplicates] = [...markerComments].sort((a, b) => b.id - a.id);
+                await github.rest.issues.updateComment({ owner, repo, comment_id: keep.id, body: commentBody });
+                await Promise.all(duplicates.map(c => github.rest.issues.deleteComment({ owner, repo, comment_id: c.id })));
               } else {
                 await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: commentBody });
               }
 
               core.setFailed(logMessage);
             } else {
-              if (existingComment) {
-                await github.rest.issues.deleteComment({ owner, repo, comment_id: existingComment.id });
-              }
+              await Promise.all(markerComments.map(c => github.rest.issues.deleteComment({ owner, repo, comment_id: c.id })));
               console.log("✅ PR linting passed!");
             }
