@@ -25,6 +25,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -218,18 +219,18 @@ class TraceDAOImpl implements TraceDAO {
                         :project_id<item.index>,
                         :workspace_id,
                         :name<item.index>,
-                        parseDateTime64BestEffort(:start_time<item.index>, 9),
-                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :start_time<item.index>,
+                        :end_time<item.index>,
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
-                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        :last_updated_at<item.index>,
                         :error_info<item.index>,
                         :user_name,
                         :user_name,
                         :thread_id<item.index>,
-                        if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>),
+                        :visibility_mode<item.index>,
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
                         :output_slim<item.index>,
@@ -3257,12 +3258,18 @@ class TraceDAOImpl implements TraceDAO {
 
             Statement statement = connection.createStatement(template.render());
 
+            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
+            // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
+            // it once per query) and avoids timing-sensitive ordering in downstream MAX(...)
+            // aggregations.
+            Instant nowForBatch = Instant.now();
+
             int i = 0;
             for (Trace trace : traces) {
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
                         .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
-                        .bind("start_time" + i, trace.startTime().toString())
+                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.startTime()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
@@ -3271,22 +3278,21 @@ class TraceDAOImpl implements TraceDAO {
                 bindInputOutputMetadataAndSlim(statement, trace, i);
 
                 if (trace.endTime() != null) {
-                    statement.bind("end_time" + i, trace.endTime().toString());
+                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.endTime()));
                 } else {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                if (trace.lastUpdatedAt() != null) {
-                    statement.bind("last_updated_at" + i, trace.lastUpdatedAt().toString());
-                } else {
-                    statement.bindNull("last_updated_at" + i, String.class);
-                }
+                // Format the timestamp client-side so the SQL contains a plain string literal in the
+                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
+                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
+                // that would trip the FORMAT Values fast-path. See OPIK-5694.
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
+                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
 
-                if (trace.visibilityMode() != null) {
-                    statement.bind("visibility_mode" + i, trace.visibilityMode().getValue());
-                } else {
-                    statement.bindNull("visibility_mode" + i, String.class);
-                }
+                statement.bind("visibility_mode" + i, trace.visibilityMode() != null
+                        ? trace.visibilityMode().getValue()
+                        : VisibilityMode.DEFAULT.getValue());
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
