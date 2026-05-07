@@ -358,14 +358,17 @@ public class ReadTool implements ToolExecutor {
      * back into the same truncated value.
      */
     private static CacheOutcome applyCacheCap(JsonNode fullJson, EntityRef ref, TraceToolContext ctx) {
-        if (ctx.isTruncated(ref)) {
-            // Cache already holds a capped form (set on a prior call). Don't re-cap;
-            // just keep the warning visible.
-            return CacheOutcome.builder().cachedNode(fullJson).warning(CACHE_WARNING_MESSAGE).build();
-        }
+        // Input size drives the cap decision purely; the truncation flag drives the warning surfacing
+        // purely. Keeping these independent prevents a future caller
+        // from silently bypassing the cap by passing an uncapped node for a ref whose flag
+        // was set elsewhere (or vice versa).
+        boolean alreadyTruncated = ctx.isTruncated(ref);
         int size = fullJson.toString().length();
         if (size <= CACHE_CAP_CHARS) {
-            return CacheOutcome.builder().cachedNode(fullJson).build();
+            return CacheOutcome.builder()
+                    .cachedNode(fullJson)
+                    .warning(alreadyTruncated ? CACHE_WARNING_MESSAGE : null)
+                    .build();
         }
         log.debug("Entity {} exceeds {} chars; capping to maximum of {} chars before caching", ref, size,
                 CACHE_CAP_CHARS);
