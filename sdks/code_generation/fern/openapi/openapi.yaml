@@ -10020,6 +10020,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10079,6 +10081,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10103,6 +10107,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10434,6 +10440,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10493,6 +10501,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10517,6 +10527,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10903,6 +10915,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10962,6 +10976,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -10986,6 +11002,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -11875,6 +11893,8 @@ components:
           - <=
           - is_empty
           - is_not_empty
+          - in
+          - not_in
         key:
           type: string
         value:
@@ -14646,6 +14666,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace:
       required:
       - start_time
@@ -14776,6 +14800,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_ExperimentItemBulkWriteView:
       required:
       - exception_type
@@ -14961,6 +14989,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     Trace_ExperimentItemBulkWriteView:
       required:
       - start_time
@@ -15010,6 +15042,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
       description: "Please provide either none, only one of evaluate_task_result or\
         \ trace, but never both"
     ValueEntry_ExperimentItemBulkWriteView:
@@ -18845,6 +18881,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ErrorInfo_Write:
       required:
       - exception_type
@@ -18934,6 +18974,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     SpanBatch:
       required:
       - spans
@@ -19133,6 +19177,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     ValueEntry_Public:
       type: object
       properties:
@@ -19292,6 +19340,7 @@ components:
             - duration
             - ttft
             - source
+            - environment
         from_time:
           type: string
           description: Filter spans created from this time (ISO-8601 format).
@@ -19394,6 +19443,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThreadBatchUpdate:
       required:
       - ids
@@ -19514,6 +19567,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceBatch:
       required:
       - traces
@@ -19771,6 +19828,10 @@ components:
           - experiment
           - playground
           - optimization
+        environment:
+          maxLength: 150
+          minLength: 0
+          type: string
     TraceThread:
       type: object
       properties:
@@ -19833,6 +19894,8 @@ components:
         created_at:
           type: string
           format: date-time
+        environment:
+          type: string
     TraceThreadIdentifier:
       required:
       - thread_id
@@ -20044,6 +20107,7 @@ components:
             - providers
             - experiment
             - source
+            - environment
         from_time:
           type: string
           description: Filter traces created from this time (ISO-8601 format).
