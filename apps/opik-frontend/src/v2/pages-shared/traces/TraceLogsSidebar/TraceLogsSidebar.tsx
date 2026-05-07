@@ -59,7 +59,10 @@ import DataTableRowHeightSelector from "@/shared/DataTableRowHeightSelector/Data
 import ColumnsButton from "@/shared/ColumnsButton/ColumnsButton";
 import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import DataTable from "@/shared/DataTable/DataTable";
-import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
+import DataTableEmptyContent from "@/shared/DataTableNoData/DataTableEmptyContent";
+import DataTableNoMatchingData from "@/shared/DataTableNoData/DataTableNoMatchingData";
+import emptyLogsLightUrl from "/images/empty-logs-light.svg";
+import emptyLogsDarkUrl from "/images/empty-logs-dark.svg";
 import DataTablePagination from "@/shared/DataTablePagination/DataTablePagination";
 import LinkCell from "@/shared/DataTableCells/LinkCell";
 import ResourceCell from "@/shared/DataTableCells/ResourceCell";
@@ -637,7 +640,11 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
   const isTableLoading = isPending || isFeedbackScoresPending;
 
   const noData = !search && filters.length === 0;
-  const noDataText = noData ? "There are no traces yet" : "No search results";
+
+  const handleClearFilters = useCallback(() => {
+    setSearch("");
+    setFilters([]);
+  }, [setSearch, setFilters]);
 
   const rows: Array<Trace> = useMemo(
     () => (data?.content as Trace[]) ?? [],
@@ -1008,7 +1015,14 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
             <DataTableStateHandler
               isLoading={isTableLoading}
               isEmpty={showEmptyState}
-              emptyState={<DataTableNoData title="There are no traces yet" />}
+              emptyState={
+                <DataTableEmptyContent
+                  title="There are no traces yet"
+                  description="Traces will appear here once your agent starts receiving requests."
+                  lightImageUrl={emptyLogsLightUrl}
+                  darkImageUrl={emptyLogsDarkUrl}
+                />
+              }
             >
               <DataTable
                 columns={columns}
@@ -1025,7 +1039,15 @@ const TraceLogsSidebar: React.FunctionComponent<TraceLogsSidebarProps> = ({
                 getRowId={getRowId}
                 rowHeight={height as ROW_HEIGHT}
                 columnPinning={DEFAULT_TRACES_COLUMN_PINNING}
-                noData={<DataTableNoData title={noDataText} />}
+                noData={
+                  <DataTableNoMatchingData
+                    onClearFilters={
+                      search || filters.length > 0
+                        ? handleClearFilters
+                        : undefined
+                    }
+                  />
+                }
                 showLoadingOverlay={isPlaceholderData && isFetching}
               />
             </DataTableStateHandler>
