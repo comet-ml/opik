@@ -26,15 +26,14 @@ type ResizableSidePanelProps = {
   panelId: string;
   children: React.ReactNode;
   entity?: string;
+  header?: React.ReactNode;
   headerContent?: React.ReactNode;
   open?: boolean;
   onClose: () => void;
   initialWidth?: number;
   minWidth?: number;
   ignoreHotkeys?: boolean;
-  closeOnClickOutside?: boolean;
-  closeButtonPosition?: "left" | "right";
-  hideDefaultControls?: boolean;
+  blockOverlayClose?: boolean;
   horizontalNavigation?: ArrowNavigationConfig;
   verticalNavigation?: ArrowNavigationConfig;
   container?: HTMLElement | null;
@@ -65,15 +64,14 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
   panelId,
   children,
   entity = "",
+  header,
   headerContent,
   open = false,
   onClose,
   initialWidth = INITIAL_WIDTH,
   minWidth,
   ignoreHotkeys = false,
-  closeOnClickOutside = true,
-  closeButtonPosition = "left",
-  hideDefaultControls = false,
+  blockOverlayClose = false,
   horizontalNavigation,
   verticalNavigation,
   container,
@@ -293,8 +291,11 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
         !open && "pointer-events-none overflow-hidden",
       )}
     >
-      {open && closeOnClickOutside && (
-        <div className="absolute inset-0 bg-black/10" onClick={onClose} />
+      {open && (
+        <div
+          className="absolute inset-0 bg-black/10"
+          onClick={blockOverlayClose ? undefined : onClose}
+        />
       )}
       <div
         ref={panelRef}
@@ -315,36 +316,32 @@ const ResizableSidePanel: React.FunctionComponent<ResizableSidePanelProps> = ({
               <div
                 className={cn(
                   "absolute inset-x-0 top-0 flex h-[47px] items-center overflow-hidden pr-4",
-                  hideDefaultControls ? "pl-2" : "pl-6",
+                  header !== undefined ? "pl-2" : "pl-6",
                 )}
               >
-                {!hideDefaultControls && (
-                  <div
-                    className={cn(
-                      "flex items-center gap-2",
-                      closeButtonPosition === "right" && "ml-auto",
-                    )}
-                    style={{
-                      order: closeButtonPosition === "right" ? 2 : 0,
-                    }}
-                  >
-                    <TooltipWrapper
-                      content={`Close ${entity}`}
-                      hotkeys={ESC_HOTKEYS}
-                    >
-                      <Button
-                        data-testid="side-panel-close"
-                        variant="outline"
-                        size="icon-sm"
-                        onClick={onClose}
+                {header !== undefined ? (
+                  header
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2">
+                      <TooltipWrapper
+                        content={`Close ${entity}`}
+                        hotkeys={ESC_HOTKEYS}
                       >
-                        <X />
-                      </Button>
-                    </TooltipWrapper>
-                    {renderNavigation()}
-                  </div>
+                        <Button
+                          data-testid="side-panel-close"
+                          variant="outline"
+                          size="icon-sm"
+                          onClick={onClose}
+                        >
+                          <X />
+                        </Button>
+                      </TooltipWrapper>
+                      {renderNavigation()}
+                    </div>
+                    {headerContent}
+                  </>
                 )}
-                {headerContent && headerContent}
               </div>
               <div className="absolute inset-x-0 bottom-0 top-[47px] border-t">
                 {children}

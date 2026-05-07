@@ -355,6 +355,8 @@ openrouter:
   - id: "arliai/qwq-32b-arliai-rpr-v1:free"
     label: "arliai/qwq-32b-arliai-rpr-v1:free"
     reasoning: true
+  - id: "baidu/cobuddy:free"
+    label: "baidu/cobuddy:free"
   - id: "baidu/ernie-4.5-21b-a3b"
     label: "baidu/ernie-4.5-21b-a3b"
   - id: "baidu/ernie-4.5-21b-a3b-thinking"

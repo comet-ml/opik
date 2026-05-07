@@ -499,6 +499,58 @@ pythonEvaluator:
   # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
   connectTimeout: 5s
 
+# JAX-RS Jersey client configuration. This is the singleton HTTP client shared in the service.
+jerseyClient:
+  # Default: 30s
+  # Description: Overall response read timeout. Per-call timeouts can override via Jersey ClientProperties.READ_TIMEOUT.
+  timeout: 30s
+  # Default: 2s
+  # Description: The maximum time to wait for a connection to open.
+  connectionTimeout: 2s
+  # Default: 1s
+  # Description: The maximum time to wait for a connection to be returned from the connection pool.
+  connectionRequestTimeout: 1s
+  # Default: 5m
+  # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
+  timeToLive: 5m
+  # Default: 256
+  # Description: The maximum number of concurrent open connections.
+  maxConnections: 256
+  # Default: 64
+  # Description: The maximum number of concurrent open connections per route.
+  maxConnectionsPerRoute: 64
+  # Default: 5s
+  # Description: The maximum time before a persistent connection is checked to remain active. If set to 0, no inactivity check will be performed.
+  validateAfterInactivityPeriod: 5s
+  # Default: 16
+  # Description: Minimum idle Jersey async worker threads.
+  minThreads: 16
+  # Default: 128
+  # Description: Maximum Jersey async worker threads.
+  maxThreads: 128
+  # Default: 64
+  # Description: The size of the work queue of the pool used for asynchronous requests. Additional threads will be spawn only if the queue is reached its maximum size.
+  workQueueSize: 64
+  # Default: false
+  # Description: Whether to send gzipped request bodies. Off because not all upstreams handle Content-Encoding: gzip on requests.
+  gzipEnabledForRequests: false
+  # Default: false
+  # Description: Whether to enable Transfer-Encoding: chunked on outbound request bodies. Off because sending Content-Length is universally accepted.
+  chunkedEncodingEnabled: false
+  # Default: false (tests only — production keeps default of true).
+  # Description: Adds an Accept-Encoding: gzip header to all requests, and enables automatic gzip decoding of responses.
+  # WireMock returns plain (non-gzipped) bodies and some response paths surface ZipException.
+  # Off in tests; production upstreams follow the HTTP contract correctly (Content-Encoding only when actually gzipped)
+  gzipEnabled: false
+  # TLS relaxation for tests only. WireMock with uses self-signed certs, miss-matching the hostname.
+  tls:
+    # Default: true
+    # Description: Whether to trust self-signed certificates regardless of trustStore settings.
+    trustSelfSignedCertificates: true
+    # Default: false
+    # Description: Whether to verify the hostname of the server against the hostname presented in the server certificate.
+    verifyHostname: false
+
 serviceToggles:
   # Default: false for testing. It should be enabled for test scenarios when it's relevant.
   # Description: Whether or not Python evaluator is enabled

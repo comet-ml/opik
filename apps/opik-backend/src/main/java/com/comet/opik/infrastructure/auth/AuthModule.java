@@ -18,7 +18,6 @@ import com.google.inject.Provides;
 import jakarta.inject.Provider;
 import jakarta.inject.Singleton;
 import jakarta.ws.rs.client.Client;
-import jakarta.ws.rs.client.ClientBuilder;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -37,7 +36,8 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
     public AuthService authService(
             @Config("authentication") AuthenticationConfig config,
             @NonNull Provider<RequestContext> requestContext,
-            @NonNull RedissonReactiveClient redissonClient) {
+            @NonNull RedissonReactiveClient redissonClient,
+            @NonNull Client client) {
 
         if (!config.isEnabled()) {
             return new AuthServiceImpl(requestContext);
@@ -53,17 +53,14 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
                 ? new AuthCredentialsCacheService(redissonClient, config.getApiKeyResolutionCacheTTLInSec())
                 : new NoopCacheService();
 
-        return new RemoteAuthService(client(), config.getReactService(), requestContext, cacheService);
-    }
-
-    public Client client() {
-        return ClientBuilder.newClient();
+        return new RemoteAuthService(client, config.getReactService(), requestContext, cacheService);
     }
 
     @Provides
     @Singleton
     public WorkspacePermissionsService workspacePermissionsService(
-            @Config("authentication") AuthenticationConfig config) {
+            @Config("authentication") AuthenticationConfig config,
+            @NonNull Client client) {
 
         if (!config.isEnabled()) {
             return new LocalWorkspacePermissionsService();
@@ -75,7 +72,7 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
         Preconditions.checkArgument(StringUtils.isNotBlank(config.getReactService().url()),
                 "The property authentication.reactService.url must not be blank when authentication is enabled");
 
-        return new RemoteWorkspacePermissionsService(client(), config.getReactService());
+        return new RemoteWorkspacePermissionsService(client, config.getReactService());
     }
 
     @Provides

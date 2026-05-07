@@ -1,7 +1,7 @@
 import * as React from "react";
 import * as SheetPrimitive from "@radix-ui/react-dialog";
 import { cva, type VariantProps } from "class-variance-authority";
-import { X } from "lucide-react";
+import { ChevronsRight, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "./button";
@@ -49,46 +49,97 @@ const sheetVariants = cva(
   },
 );
 
+type SheetTopBarVariant = "form" | "info";
+
+type SheetTopBarProps = {
+  title?: React.ReactNode;
+  leftIcon?: React.ReactNode;
+  children?: React.ReactNode;
+  variant?: SheetTopBarVariant;
+};
+
+const SheetTopBar = React.forwardRef<HTMLDivElement, SheetTopBarProps>(
+  ({ title, leftIcon, children, variant = "form" }, ref) => {
+    const CloseIcon = variant === "info" ? ChevronsRight : X;
+    return (
+      <div
+        ref={ref}
+        className="flex h-[var(--header-height)] shrink-0 items-center justify-between gap-2 border-b border-b-border px-4"
+      >
+        <div className="flex items-center gap-1 overflow-hidden">
+          <SheetPrimitive.Close asChild>
+            <Button variant="ghost" size="icon-2xs">
+              <CloseIcon />
+              <span className="sr-only">Close</span>
+            </Button>
+          </SheetPrimitive.Close>
+          {leftIcon}
+          {title !== undefined && (
+            <SheetTitle className="comet-body-s-accented truncate">
+              {title}
+            </SheetTitle>
+          )}
+        </div>
+        {children !== undefined && (
+          <div className="flex shrink-0 items-center gap-2 pl-4">
+            {children}
+          </div>
+        )}
+      </div>
+    );
+  },
+);
+SheetTopBar.displayName = "SheetTopBar";
+
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {
   header?: React.ReactNode;
+  blockOverlayClose?: boolean;
 }
-
-const DefaultSheetHeader = () => (
-  <div className="flex h-[var(--header-height)] items-center border-b border-b-border px-6">
-    <Button asChild size="icon-sm" variant="outline">
-      <SheetPrimitive.Close className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
-        <X />
-        <span className="sr-only">Close</span>
-      </SheetPrimitive.Close>
-    </Button>
-  </div>
-);
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, header, ...props }, ref) => {
-  const container = usePortalContainer();
-  return (
-    <SheetPortal container={container}>
-      <SheetOverlay />
-      <SheetPrimitive.Content
-        ref={ref}
-        className={cn(sheetVariants({ side }), className)}
-        {...props}
-      >
-        {header !== undefined ? header : <DefaultSheetHeader />}
-        {header !== undefined ? (
-          children
-        ) : (
-          <div className="max-h-full overflow-y-auto p-6">{children}</div>
-        )}
-      </SheetPrimitive.Content>
-    </SheetPortal>
-  );
-});
+>(
+  (
+    {
+      side = "right",
+      className,
+      children,
+      header,
+      blockOverlayClose,
+      onPointerDownOutside,
+      ...props
+    },
+    ref,
+  ) => {
+    const container = usePortalContainer();
+    return (
+      <SheetPortal container={container}>
+        <SheetOverlay />
+        <SheetPrimitive.Content
+          ref={ref}
+          className={cn(sheetVariants({ side }), className)}
+          onPointerDownOutside={(event) => {
+            if (blockOverlayClose) {
+              event.preventDefault();
+            }
+            onPointerDownOutside?.(event);
+          }}
+          {...props}
+        >
+          {header !== undefined ? header : <SheetTopBar />}
+          {header !== undefined ? (
+            children
+          ) : (
+            <div className="max-h-full overflow-y-auto p-6">{children}</div>
+          )}
+        </SheetPrimitive.Content>
+      </SheetPortal>
+    );
+  },
+);
 SheetContent.displayName = SheetPrimitive.Content.displayName;
 
 const SheetHeader = ({
@@ -154,4 +205,5 @@ export {
   SheetFooter,
   SheetTitle,
   SheetDescription,
+  SheetTopBar,
 };

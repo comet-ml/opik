@@ -36,6 +36,8 @@ public class WebhookEvent<T> {
 
     @NotNull private UUID alertId;
 
+    private UUID projectId;
+
     @NotNull private String alertName;
 
     @NotNull Map<String, String> alertMetadata;

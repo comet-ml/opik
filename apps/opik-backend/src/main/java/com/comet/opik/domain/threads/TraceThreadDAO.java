@@ -7,6 +7,7 @@ import com.comet.opik.api.events.ProjectWithPendingClosureTraceThreads;
 import com.comet.opik.domain.TagOperations;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.instrumentation.InstrumentAsyncUtils;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.template.TemplateUtils;
 import com.google.common.base.Preconditions;
 import com.google.inject.ImplementedBy;
@@ -29,6 +30,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -90,10 +92,10 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                          :status<item.index>,
                          :created_by<item.index>,
                          :last_updated_by<item.index>,
-                         parseDateTime64BestEffort(:created_at<item.index> , 9),
-                         parseDateTime64BestEffort(:last_updated_at<item.index> , 6),
+                         :created_at<item.index>,
+                         :last_updated_at<item.index>,
                          :tags<item.index>,
-                         mapFromArrays(:rule_ids<item.index>, :sampling<item.index>),
+                         :sampling_per_rule<item.index>,
                          :scored_at<item.index>,
                          :source<item.index>
                      )
@@ -317,8 +319,8 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                 statement.bind("status" + i, item.status().getValue());
                 statement.bind("created_by" + i, item.createdBy());
                 statement.bind("last_updated_by" + i, userName);
-                statement.bind("created_at" + i, item.createdAt().toString());
-                statement.bind("last_updated_at" + i, item.lastUpdatedAt().toString());
+                statement.bind("created_at" + i, ClickHouseDateTimeFormat.formatNanos(item.createdAt()));
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(item.lastUpdatedAt()));
 
                 if (item.tags() != null) {
                     statement.bind("tags" + i, item.tags().toArray(String[]::new));
@@ -326,20 +328,13 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                     statement.bind("tags" + i, new String[]{});
                 }
 
-                if (item.sampling() != null) {
-                    UUID[] ruleIds = item.sampling().keySet().toArray(UUID[]::new);
-                    statement.bind("rule_ids" + i, ruleIds);
-                    statement.bind("sampling" + i,
-                            Arrays.stream(ruleIds).map(ruleId -> item.sampling().get(ruleId)).toArray(Boolean[]::new));
-                } else {
-                    statement.bind("rule_ids" + i, new UUID[]{});
-                    statement.bind("sampling" + i, new Boolean[]{});
-                }
+                statement.bind("sampling_per_rule" + i,
+                        item.sampling() != null ? item.sampling() : Map.of());
 
                 if (item.scoredAt() != null) {
-                    statement.bind("scored_at" + i, item.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(item.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (item.source() != null) {
@@ -518,9 +513,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
                         : new String[]{});
 
                 if (traceThreadModel.scoredAt() != null) {
-                    statement.bind("scored_at" + i, traceThreadModel.scoredAt().toString());
+                    statement.bind("scored_at" + i, ClickHouseDateTimeFormat.formatNanos(traceThreadModel.scoredAt()));
                 } else {
-                    statement.bindNull("scored_at" + i, Instant.class);
+                    statement.bindNull("scored_at" + i, String.class);
                 }
 
                 if (traceThreadModel.source() != null) {
@@ -568,7 +563,7 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             var statement = connection.createStatement(UPDATE_THREAD_SCORED_AT)
                     .bind("project_id", projectId)
                     .bind("thread_ids", threadIds)
-                    .bind("scored_at", scoredAt.toString());
+                    .bind("scored_at", ClickHouseDateTimeFormat.formatNanos(scoredAt));
 
             return makeMonoContextAware(bindUserNameAndWorkspaceContext(statement))
                     .flatMap(result -> Mono.from(result.getRowsUpdated()));

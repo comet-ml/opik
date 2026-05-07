@@ -120,7 +120,6 @@ class AttachmentResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-        attachmentResourceClient.close();
     }
 
     @Test

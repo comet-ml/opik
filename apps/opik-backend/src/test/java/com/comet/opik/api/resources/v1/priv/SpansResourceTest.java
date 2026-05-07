@@ -2094,35 +2094,52 @@ class SpansResourceTest {
         }
 
         @Test
-        @DisplayName("when batch contains a span with null lastUpdatedAt, then no CANNOT_CONVERT_TYPE errors are emitted (OPIK-5694)")
-        void batch__whenSpanHasNullLastUpdatedAt__thenNoCannotConvertTypeErrors(
+        @DisplayName("when batch spans are inserted, no FORMAT Values fast-path errors are emitted (OPIK-5694)")
+        void batch__whenSpansAreInserted__thenNoFastPathErrorsEmitted(
                 TransactionTemplateAsync templateAsync) {
             var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
             var workspaceId = UUID.randomUUID().toString();
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER);
 
-            long cannotConvertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long parseInputBefore = readClickHouseErrorCount(templateAsync, 27);
+            long convertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
+            long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
 
-            var spanWithNullLastUpdatedAt = podamFactory.manufacturePojo(Span.class).toBuilder()
+            // Cover every null/non-null branch of the fields this PR touches in BULK_INSERT:
+            // - endTime: null (row A) + non-null (row B)
+            // - lastUpdatedAt: null (row A) + non-null (row B)
+            // - usage: null (row A) + non-empty Map (row B)
+            // - totalEstimatedCost: null (row A, calculated path) + explicit BigDecimal (row B)
+            var rowA = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .endTime(null)
                     .duration(null)
                     .lastUpdatedAt(null)
-                    .feedbackScores(null)
+                    .usage(null)
                     .totalEstimatedCost(null)
-                    .build();
-            var spanWithEndTime = podamFactory.manufacturePojo(Span.class).toBuilder()
                     .feedbackScores(null)
-                    .totalEstimatedCost(null)
+                    .build();
+            var rowB = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .usage(Map.of("prompt_tokens", 12, "completion_tokens", 7))
+                    .totalEstimatedCost(new java.math.BigDecimal("0.000123456789"))
+                    .feedbackScores(null)
                     .build();
 
-            spanResourceClient.batchCreateSpans(List.of(spanWithNullLastUpdatedAt, spanWithEndTime),
-                    API_KEY, workspaceName);
+            spanResourceClient.batchCreateSpans(List.of(rowA, rowB), API_KEY, workspaceName);
 
-            long cannotConvertTypeAfter = readClickHouseErrorCount(templateAsync, 70);
-
-            assertThat(cannotConvertTypeAfter - cannotConvertTypeBefore)
-                    .as("batch insert must not emit CANNOT_CONVERT_TYPE errors (code 70) "
-                            + "into system.errors when spans have null lastUpdatedAt")
+            // After the fix, the spans BULK_INSERT must not increment any of the FORMAT Values
+            // fast-path counters. See OPIK-5694.
+            assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
+                    .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 27) - parseInputBefore)
+                    .as("CANNOT_PARSE_INPUT_ASSERTION_FAILED (27): function expressions in Values cells")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 43) - illegalArgBefore)
+                    .as("ILLEGAL_TYPE_OF_ARGUMENT (43): same fast-path fallback path")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 26) - parseQuotedBefore)
+                    .as("CANNOT_PARSE_QUOTED_STRING (26): same fast-path fallback path")
                     .isZero();
         }
 
