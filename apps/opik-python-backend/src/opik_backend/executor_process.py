@@ -14,7 +14,11 @@ from typing import Optional
 
 from opentelemetry import metrics
 
-from opik_backend.executor import CodeExecutorBase
+from opik_backend.executor import (
+    CodeExecutorBase,
+    SATURATED_ERROR,
+    SHUTDOWN_ERROR,
+)
 from opik_backend import process_worker
 
 logger = logging.getLogger(__name__)
@@ -228,6 +232,7 @@ class ProcessExecutor(CodeExecutorBase):
 
             worker = {'id': worker_id, 'process': process, 'connection': parent_conn}
             self.process_pool.put(worker)
+            self._update_pool_size_metric()
             latency = _calculate_latency_ms(start_time)
             process_creation_histogram.record(latency)
             logger.info(f"Created worker {worker_id} (PID: {process.pid}) in {latency:.3f}ms.")
@@ -242,26 +247,49 @@ class ProcessExecutor(CodeExecutorBase):
             if child_conn:
                 child_conn.close()
 
+    def _update_pool_size_metric(self):
+        process_pool_size_gauge.set(self.process_pool.qsize())
+
     def get_worker(self):
+        """Acquire a worker from the pool.
+
+        Blocks up to ``pool_acquire_timeout`` seconds and raises
+        :class:`TimeoutError` if no worker becomes available, or if the
+        executor is shutting down. ``run_scoring`` translates this into HTTP
+        503 so callers can retry with backoff.
+        """
         if self.stop_event.is_set():
-            raise RuntimeError("Executor is shutting down")
+            raise TimeoutError("Executor is shutting down, no workers available")
+        self._update_pool_size_metric()
         try:
-            worker = self.process_pool.get(timeout=self.exec_timeout)
-            if not worker['process'].is_alive():
-                logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
-                terminate_worker(worker)
-                return self.get_worker()  # Retry
-            return worker
-        except Empty:
-            logger.error("Timeout getting a worker from the pool.")
-            raise RuntimeError("No available workers in the pool.")
+            worker = self.process_pool.get(timeout=self.pool_acquire_timeout)
+        except Empty as e:
+            message = (
+                f"Process pool exhausted: no worker available within "
+                f"{self.pool_acquire_timeout:.3f}s (max_parallel={self.max_parallel})"
+            )
+            logger.warning(message)
+            # Refresh the gauge so the saturation event reports the
+            # zero-available state, not the pre-call value.
+            self._update_pool_size_metric()
+            raise TimeoutError(message) from e
+        self._update_pool_size_metric()
+        if not worker['process'].is_alive():
+            logger.warning(f"Got a dead worker {worker['id']} from pool. Terminating and retrying.")
+            terminate_worker(worker)
+            # Bounded recursion: each retry drops one dead worker from the pool.
+            # A non-zero pool_acquire_timeout will compound across retries.
+            return self.get_worker()
+        return worker
 
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
-            return {"code": 503, "error": "Service is shutting down"}
-        worker = None
+            return {"code": 503, "error": SHUTDOWN_ERROR}
         try:
             worker = self.get_worker()
+        except TimeoutError:
+            return {"code": 503, "error": SATURATED_ERROR}
+        try:
             worker_id = worker.get('id', 'unknown')
             connection = worker.get('connection')
             if not connection:
@@ -283,9 +311,9 @@ class ProcessExecutor(CodeExecutorBase):
             process_execution_histogram.record(latency)
 
             self.process_pool.put(worker)  # Return worker to pool
+            self._update_pool_size_metric()
             return result
         except Exception as e:
-            logger.error(f"Error in run_scoring with worker {worker.get('id') if worker else 'N/A'}: {e}")
-            if worker:
-                terminate_worker(worker)  # Terminate failed worker
+            logger.error(f"Error in run_scoring with worker {worker.get('id', 'unknown')}: {e}")
+            terminate_worker(worker)
             return {"code": 500, "error": f"Failed to execute code: {e}"}

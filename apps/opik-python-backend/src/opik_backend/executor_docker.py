@@ -4,7 +4,7 @@ import json
 import logging
 import os
 import time
-from queue import Queue
+from queue import Queue, Empty
 from threading import Lock, Event
 from typing import Optional
 from uuid6 import uuid7
@@ -15,7 +15,15 @@ from opentelemetry import metrics
 from opentelemetry import trace
 from opentelemetry.trace import Status, StatusCode
 
-from opik_backend.executor import CodeExecutorBase, ExecutionResult, DEFAULT_CPU_SHARES, DEFAULT_MEM_LIMIT, DEFAULT_CPU_LIMIT
+from opik_backend.executor import (
+    CodeExecutorBase,
+    ExecutionResult,
+    DEFAULT_CPU_SHARES,
+    DEFAULT_MEM_LIMIT,
+    DEFAULT_CPU_LIMIT,
+    SATURATED_ERROR,
+    SHUTDOWN_ERROR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +301,7 @@ class DockerExecutor(CodeExecutorBase):
         # Record the start time for detailed container creation metrics
         start_time = time.time()
         with self.tracer.start_as_current_span("docker.create_container"):
-            
+
             run_kwargs = dict(
                 image=f"{self.docker_registry}/{self.docker_image}:{self.docker_tag}",
                 command=["tail", "-f", "/dev/null"], # a never ending process so Docker won't kill the container
@@ -311,6 +319,7 @@ class DockerExecutor(CodeExecutorBase):
 
             # Add the container to the pool
             self.container_pool.put(new_container)
+            self._update_container_pool_size_metric()
 
             # Calculate and record the latency for the direct container creation
             latency = self._calculate_latency_ms(start_time)
@@ -365,18 +374,29 @@ class DockerExecutor(CodeExecutorBase):
                 logger.error(f"Failed to stop container {container.id}: {e}")
 
     def get_container(self):
+        """Acquire a container from the pool.
+
+        Blocks up to ``pool_acquire_timeout`` seconds and raises
+        :class:`TimeoutError` if no container becomes available, or if the
+        executor is shutting down. ``run_scoring`` translates this into HTTP
+        503 so callers can retry with backoff.
+        """
         with self.tracer.start_as_current_span("get_container"):
             if self.stop_event.is_set():
-                raise RuntimeError("Executor is shutting down, no containers available")
+                raise TimeoutError("Executor is shutting down, no containers available")
 
-            while not self.stop_event.is_set():
-                try:
-                    return self.container_pool.get(timeout=self.exec_timeout)
-                except Exception as e:
-                    if self.stop_event.is_set():
-                        raise RuntimeError("Executor is shutting down, no containers available")
-
-                    logger.warning(f"Couldn't get a container to execute after waiting for {self.exec_timeout}s. Will retry: {e}")
+            self._update_container_pool_size_metric()
+            try:
+                container = self.container_pool.get(timeout=self.pool_acquire_timeout)
+            except Empty as e:
+                message = f"Container pool exhausted: no container available within {self.pool_acquire_timeout:.3f}s"
+                logger.warning(message)
+                # Refresh the gauge so the saturation event reports the
+                # zero-available state, not the pre-call value.
+                self._update_container_pool_size_metric()
+                raise TimeoutError(message) from e
+            self._update_container_pool_size_metric()
+            return container
 
     def _record_execution_outcome(self, status: str, payload_type: Optional[str] = None):
         """Record execution outcome for monitoring failure rates."""
@@ -387,12 +407,12 @@ class DockerExecutor(CodeExecutorBase):
 
     def run_scoring(self, code: str, data: dict, payload_type: Optional[str] = None) -> dict:
         if self.stop_event.is_set():
-            return {"code": 503, "error": "Service is shutting down"}
-        
+            return {"code": 503, "error": SHUTDOWN_ERROR}
+
         # Record code payload size early (string encoding is safe)
         code_size = len(code.encode('utf-8')) if code else 0
         payload_code_size_histogram.record(code_size, attributes={"payload_type": payload_type or "unknown"})
-        
+
         # Serialize data payload - can fail if data contains non-serializable objects
         try:
             data_json = json.dumps(data)
@@ -402,9 +422,13 @@ class DockerExecutor(CodeExecutorBase):
             self._record_execution_outcome("serialization_error", payload_type)
             logger.error(f"Failed to serialize data payload: {e}")
             return {"code": 400, "error": f"Data serialization failed: {e}"}
-        
+
         start_time = time.time()
-        container = self.get_container()
+        try:
+            container = self.get_container()
+        except TimeoutError:
+            self._record_execution_outcome("saturated", payload_type)
+            return {"code": 503, "error": SATURATED_ERROR}
         get_container_latency = self._calculate_latency_ms(start_time)
         logger.debug(f"Get container latency: {get_container_latency:.3f} milliseconds")
         get_container_histogram.record(get_container_latency, attributes={"method": "get_container"})
@@ -412,7 +436,7 @@ class DockerExecutor(CodeExecutorBase):
         with self.tracer.start_as_current_span("docker.run_scoring") as span:
             try:
                 cmd = ["python", "/opt/opik-sandbox-executor-python/scoring_runner.pyc", code, data_json, payload_type or ""]
-                
+
                 future = self.scoring_executor.submit(
                     container.exec_run,
                     cmd=cmd,
@@ -422,19 +446,19 @@ class DockerExecutor(CodeExecutorBase):
                 )
 
                 result = future.result(timeout=self.exec_timeout)
-                
+
                 exec_result = ExecutionResult(
                     exit_code=result.exit_code,
                     output=result.output
                 )
-                
+
                 # Access ThreadPoolExecutor's internal work queue (private attribute)
                 queue_size = self.scoring_executor._work_queue.qsize()
                 scoring_executor_queue_size_gauge.set(queue_size)
-                
+
                 # Parse result and track outcome
                 parsed_result = self.parse_execution_result(exec_result)
-                
+
                 # Determine outcome status based on result
                 if exec_result.exit_code == 0:
                     outcome_status = "success"
@@ -443,7 +467,7 @@ class DockerExecutor(CodeExecutorBase):
                     span.set_status(Status(StatusCode.ERROR, f"Execution failed with exit_code={exec_result.exit_code}"))
                     span.set_attribute("error.type", "invalid_code")
                     span.set_attribute("error.exit_code", exec_result.exit_code)
-                
+
                 self._record_execution_outcome(outcome_status, payload_type)
                 return parsed_result
             except concurrent.futures.TimeoutError as e:
@@ -468,10 +492,10 @@ class DockerExecutor(CodeExecutorBase):
                 span.set_attribute("code_size_bytes", code_size)
                 span.set_attribute("data_size_bytes", data_size)
                 logger.debug(f"Scoring executor latency: {total_latency:.3f} ms (code_size: {code_size} bytes, data_size: {data_size} bytes)")
-                
+
                 # Stop and remove the container, then create a new one asynchronously
                 self.release_container(container)
-            
+
     def cleanup(self):
         """Clean up all containers managed by this executor."""
         logger.debug("Shutting down Docker executor")
