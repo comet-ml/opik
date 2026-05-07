@@ -1,0 +1,238 @@
+"""Executor for ``MigrationPlan`` actions.
+
+Each action is wrapped in audit-log entries (``in_progress`` -> ``ok`` /
+``failed``). ``DeleteSource`` only fires after every preceding action
+succeeds; the planner already places it last, and any exception aborts the
+loop before reaching it.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any, Dict, List
+
+import opik
+from opik.api_objects import rest_helpers
+from opik.rest_api import OpikApi
+from rich.console import Console
+
+from .audit import AuditLog
+from .errors import safe_error_envelope
+from .planner import (
+    CopyCurrentItems,
+    CopyTestSuiteConfig,
+    CreateDestination,
+    MigrationPlan,
+    RenameSource,
+)
+
+LOGGER = logging.getLogger(__name__)
+_console = Console()
+
+
+def execute_plan(
+    client: opik.Opik,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
+    """Apply ``plan`` against ``client``, recording each action in ``audit``."""
+    rest_client = client.rest_client
+    for action in plan.actions:
+        details = _action_details(action)
+        audit.record(type=details["type"], status="in_progress", details=details)
+        try:
+            _apply(client, rest_client, action)
+        except Exception as exc:
+            audit.record(
+                type=details["type"],
+                status="failed",
+                details=details,
+                error=safe_error_envelope(exc),
+            )
+            raise
+        audit.record(type=details["type"], status="ok", details=details)
+
+
+def record_planned(plan: MigrationPlan, audit: AuditLog) -> None:
+    """Record every planned action with status=planned (used for dry-run)."""
+    for action in plan.actions:
+        details = _action_details(action)
+        audit.record(type=details["type"], status="planned", details=details)
+
+
+def _apply(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
+    # Workspace-mutating REST writes are wrapped with the SDK's 429-aware
+    # retry helper so a transient rate limit doesn't abort a half-finished
+    # migration. Reads (find_datasets, find_projects, retrieve_project,
+    # list_dataset_versions) stay unwrapped — failing fast on 429 there is a
+    # better signal than silent retry.
+    if isinstance(action, RenameSource):
+        # Re-pass description/visibility/tags so the BE doesn't wipe them on
+        # the rename PUT (description is silently nulled when omitted).
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.datasets.update_dataset(
+                id=action.source_id,
+                name=action.to_name,
+                description=action.description,
+                visibility=action.visibility,
+                tags=action.tags,
+            )
+        )
+    elif isinstance(action, CreateDestination):
+        # Forward all dataset-level metadata so the target inherits the
+        # source's description, visibility, tags, and (for test suites) type.
+        kwargs: Dict[str, Any] = dict(
+            name=action.name,
+            description=action.description,
+            project_name=action.project_name,
+            visibility=action.visibility,
+            tags=action.tags,
+        )
+        if action.type is not None:
+            kwargs["type"] = action.type
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.datasets.create_dataset(**kwargs)
+        )
+    elif isinstance(action, CopyCurrentItems):
+        # __internal_api__insert_items_as_dataclasses__ already wraps every
+        # internal batch with the rate-limit helper, so no extra wrapping here.
+        _copy_items(client, action)
+    elif isinstance(action, CopyTestSuiteConfig):
+        _copy_test_suite_config(rest_client, action)
+    else:
+        raise TypeError(f"Unknown migration action: {type(action).__name__}")
+
+
+def _copy_items(client: opik.Opik, action: CopyCurrentItems) -> None:
+    from opik.api_objects.dataset import dataset_item
+
+    source = client.get_dataset(
+        action.source_name_after_rename, project_name=action.source_project_name
+    )
+    # Stream as dataclasses (DatasetItem) so per-item description, source,
+    # trace_id, span_id, evaluators, and execution_policy round-trip. The
+    # public `get_items()` returns dicts that strip those top-level fields.
+    items = list(source.__internal_api__stream_items_as_dataclasses__())
+    if not items:
+        return
+
+    # Stream is newest-first; insert preserves call order; UI displays
+    # newest-first. Reversing once makes target display order match source
+    # display order at any scale.
+    items.reverse()
+
+    # Build fresh DatasetItem instances for the target so each gets a
+    # server-fresh id (the source ids belong to the source dataset). All
+    # other top-level fields and the user-defined `data` content are copied
+    # verbatim — that's what restores fidelity vs the prior dict round-trip.
+    rebuilt: List[dataset_item.DatasetItem] = [
+        dataset_item.DatasetItem(
+            trace_id=item.trace_id,
+            span_id=item.span_id,
+            source=item.source,
+            description=item.description,
+            evaluators=item.evaluators,
+            execution_policy=item.execution_policy,
+            **item.get_content(),
+        )
+        for item in items
+    ]
+
+    dest = client.get_dataset(action.dest_name, project_name=action.dest_project_name)
+
+    # Single dataclass-form insert call (not a chunked loop):
+    # __internal_api__insert_items_as_dataclasses__ coalesces all internal HTTP
+    # batches under one batch_group_id, producing exactly ONE dataset version on
+    # the target. A CLI-level chunked loop would generate one version per chunk
+    # — wrong for slice 1's "current items only" contract and would corrupt the
+    # starting state for slice 2's version-history replay.
+    with _console.status(
+        f"Copying {len(rebuilt):,} items → {action.dest_name}…",
+        spinner="dots",
+    ):
+        dest.__internal_api__insert_items_as_dataclasses__(rebuilt)
+
+
+def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -> None:
+    """Copy the source's latest suite-level evaluators + execution_policy.
+
+    Reads the most recent dataset version from the source (versions are
+    listed newest-first), then issues apply_dataset_item_changes with
+    override=True against the target dataset id. ``override=True`` skips the
+    base-version check, which is what we want for an initial config payload
+    on a freshly-created target.
+
+    No-op when the source has no version yet (suites without configured
+    evaluators/policy don't generate an initial version, by design — see
+    rest_operations.create_test_suite_dataset).
+    """
+    versions = rest_client.datasets.list_dataset_versions(
+        id=action.source_dataset_id, page=1, size=1
+    )
+    if not versions.content:
+        return
+    latest = versions.content[0]
+
+    request: Dict[str, Any] = {
+        "change_description": "Migrated suite config from source",
+    }
+    if latest.evaluators:
+        request["evaluators"] = [
+            {"name": e.name, "type": e.type, "config": e.config}
+            for e in latest.evaluators
+        ]
+    if latest.execution_policy is not None:
+        request["execution_policy"] = {
+            "runs_per_item": latest.execution_policy.runs_per_item,
+            "pass_threshold": latest.execution_policy.pass_threshold,
+        }
+    if "evaluators" not in request and "execution_policy" not in request:
+        # Latest version had no suite-level config beyond items — nothing
+        # to copy. The target was already created with type='evaluation_suite'
+        # which is sufficient.
+        return
+
+    # Target dataset id resolved by name within the destination project.
+    dest = rest_client.datasets.get_dataset_by_identifier(
+        dataset_name=action.dest_name, project_name=action.dest_project_name
+    )
+    rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.apply_dataset_item_changes(
+            id=dest.id, request=request, override=True
+        )
+    )
+
+
+def _action_details(action: object) -> Dict[str, Any]:
+    if isinstance(action, RenameSource):
+        return {
+            "type": "rename_source",
+            "entity": "dataset",
+            "id": action.source_id,
+            "from": action.from_name,
+            "to": action.to_name,
+        }
+    if isinstance(action, CreateDestination):
+        return {
+            "type": "create_destination",
+            "entity": "dataset",
+            "name": action.name,
+            "project": action.project_name,
+            "dataset_type": action.type,
+        }
+    if isinstance(action, CopyCurrentItems):
+        return {
+            "type": "copy_dataset_items",
+            "from_dataset": action.source_name_after_rename,
+            "from_project": action.source_project_name,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
+        }
+    if isinstance(action, CopyTestSuiteConfig):
+        return {
+            "type": "copy_test_suite_config",
+            "source_dataset_id": action.source_dataset_id,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
+        }
+    raise TypeError(f"Unknown migration action: {type(action).__name__}")
