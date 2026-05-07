@@ -15,6 +15,7 @@ import net.thisptr.jackson.jq.exception.JsonQueryException;
 
 import java.util.ArrayList;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Per-entity regex location within a cached entity. Pairs with {@link JqTool}:
@@ -108,6 +109,18 @@ public class SearchTool implements ToolExecutor {
                           else $v end)
               }))}
             """;
+
+    /**
+     * Restricts {@code path} to pure field/index access — no pipes, function
+     * calls, parens, slices, or string-quoted keys. Matches what the tool spec
+     * advertises ("jq scope expression to narrow the search, e.g. '.spans'")
+     * and prevents the LLM (steerable by malicious trace content) from
+     * smuggling a full jq program into a slot that's interpolated unescaped
+     * into {@link #SEARCH_TEMPLATE}. Allows: {@code .}, {@code .foo},
+     * {@code .foo.bar}, {@code .spans[2].input}.
+     */
+    private static final Pattern SAFE_PATH_PATTERN = Pattern.compile(
+            "^\\.$|^\\.(?:[A-Za-z_][A-Za-z_0-9]*|\\[\\d+])(?:\\.[A-Za-z_][A-Za-z_0-9]*|\\[\\d+])*$");
 
     private static final Scope ROOT_SCOPE = buildRootScope();
 
@@ -286,6 +299,11 @@ public class SearchTool implements ToolExecutor {
                 return ParsedArgs.error(patternRes.error());
             }
             String path = ToolArgs.textOrNull(node.get("path"));
+            if (path != null && !path.isBlank() && !SAFE_PATH_PATTERN.matcher(path).matches()) {
+                return ParsedArgs.error(ToolArgs.errorJson(
+                        "path must be a simple jq scope expression (e.g. '.', '.spans', '.spans[2].input') —"
+                                + " only dotted field names and bracketed integer indices are allowed."));
+            }
             return new ParsedArgs(typeRes.value(), idRes.value(), patternRes.value(), path, null);
         } catch (Exception e) {
             log.warn("Failed to parse search tool arguments: '{}'", arguments, e);

@@ -182,6 +182,39 @@ class SearchToolTest {
     }
 
     @Test
+    void unsafePathIsRejectedAtParseTime() {
+        var spanId = UUID.randomUUID();
+        var ctx = newCtxWithCachedSpan(spanId, "{\"err\":\"hi\"}");
+
+        // A pipe expression — a fully-formed jq program in the path slot. Must not reach jackson-jq.
+        var raw = tool.execute(
+                ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"hi\", \"path\": \". | error(\\\"leak\\\")\"}")
+                        .formatted(spanId),
+                ctx);
+        var result = JsonUtils.getJsonNodeFromString(raw);
+
+        assertThat(result.get("error").asText())
+                .contains("path must be a simple jq scope expression");
+    }
+
+    @Test
+    void simplePathShapesAreAccepted() {
+        var spanId = UUID.randomUUID();
+        var json = JsonUtils.getJsonNodeFromString(
+                "{\"spans\":[{\"input\":\"alpha\"},{\"input\":\"beta needle\"}]}");
+        var ctx = newEmptyCtx();
+        ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), json);
+
+        var output = tool.execute(
+                ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"needle\", \"path\": \".spans[1].input\"}")
+                        .formatted(spanId),
+                ctx);
+
+        assertThat(output).contains("1 matches");
+        assertThat(output).doesNotContain("ERROR");
+    }
+
+    @Test
     void malformedRegexReturnsErrorHeader() {
         var spanId = UUID.randomUUID();
         var ctx = newCtxWithCachedSpan(spanId, "{\"err\":\"hi\"}");
