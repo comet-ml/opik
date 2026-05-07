@@ -145,6 +145,7 @@ public class FiltersFactory {
     private Filter toValidAndDecoded(Filter filter) {
         if (filter.field().getType() != FieldType.STRING
                 && filter.field().getType() != FieldType.STRING_EXACT
+                && filter.field().getType() != FieldType.ENUM
                 && !Operator.NO_VALUE_OPERATORS.contains(filter.operator())) {
             // don't decode value for string fields or no-value operators (IS_EMPTY, IS_NOT_EMPTY)
             try {

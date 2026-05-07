@@ -548,8 +548,7 @@ public class SpanDAO {
                 ) as source,
                 multiIf(
                     notEmpty(new_span.environment), new_span.environment,
-                    notEmpty(old_span.environment), old_span.environment,
-                    new_span.environment
+                    old_span.environment
                 ) as environment
             FROM (
                 SELECT

@@ -1854,8 +1854,7 @@ class TraceDAOImpl implements TraceDAO {
                 ) as source,
                 multiIf(
                     notEmpty(new_trace.environment), new_trace.environment,
-                    notEmpty(old_trace.environment), old_trace.environment,
-                    new_trace.environment
+                    old_trace.environment
                 ) as environment
             FROM (
                 SELECT
