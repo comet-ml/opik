@@ -124,7 +124,7 @@ public class BiEventListener {
             return;
         }
 
-        if (!workspacesService.markFirstTraceReported(workspaceId)) {
+        if (!workspacesService.markFirstTraceReported(workspaceId, event.userName())) {
             return;
         }
 

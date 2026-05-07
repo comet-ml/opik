@@ -22,16 +22,28 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(WorkspacesServiceImpl.class)
 public interface WorkspacesService {
 
-    /** Must only be called after a real determination — not on allowlist / forced-version overrides. */
-    int upsertVersion(String workspaceId, OpikVersion version);
+    /**
+     * Must only be called after a real determination — not on allowlist / forced-version overrides.
+     * {@code userName} is recorded in the audit columns (caller passes the API user from the request
+     * context).
+     */
+    int upsertVersion(String workspaceId, OpikVersion version, String userName);
 
     /** Returns the row, or empty if not found / blank id. */
     Optional<Workspace> findById(String workspaceId);
 
-    /** Returns {@code true} only for the writer that transitioned {@code first_trace_reported_at} from NULL. */
-    boolean markFirstTraceReported(String workspaceId);
+    /**
+     * Returns {@code true} only for the writer that transitioned {@code first_trace_reported_at}
+     * from NULL. {@code userName} is recorded in the audit columns (caller passes the user that
+     * created the trace).
+     */
+    boolean markFirstTraceReported(String workspaceId, String userName);
 
-    /** Idempotent: subsequent calls do not overwrite the original timestamp/reason. */
+    /**
+     * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
+     * are stamped with the system user — this is the migration job's call site, never a direct
+     * user action.
+     */
     int markMigrationSkipped(String workspaceId, String reason);
 
     List<String> findMigrationSkippedWorkspaceIds();
@@ -48,9 +60,9 @@ class WorkspacesServiceImpl implements WorkspacesService {
     private final @NonNull TransactionTemplate transactionTemplate;
 
     @Override
-    public int upsertVersion(@NonNull String workspaceId, @NonNull OpikVersion version) {
+    public int upsertVersion(@NonNull String workspaceId, @NonNull OpikVersion version, @NonNull String userName) {
         return transactionTemplate.inTransaction(WRITE, handle -> handle.attach(WorkspacesDAO.class)
-                .upsertVersion(workspaceId, version.getValue(), Instant.now(), SYSTEM_USER));
+                .upsertVersion(workspaceId, version.getValue(), Instant.now(), userName));
     }
 
     @Override
@@ -71,15 +83,15 @@ class WorkspacesServiceImpl implements WorkspacesService {
      * exception on the INSERT means another writer beat us to it.
      */
     @Override
-    public boolean markFirstTraceReported(@NonNull String workspaceId) {
+    public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
             var now = Instant.now();
-            if (dao.updateFirstTraceIfNull(workspaceId, now, SYSTEM_USER) > 0) {
+            if (dao.updateFirstTraceIfNull(workspaceId, now, userName) > 0) {
                 return true;
             }
             try {
-                dao.insertFirstTrace(workspaceId, now, SYSTEM_USER);
+                dao.insertFirstTrace(workspaceId, now, userName);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
                 if (exception.getCause() instanceof SQLException sql

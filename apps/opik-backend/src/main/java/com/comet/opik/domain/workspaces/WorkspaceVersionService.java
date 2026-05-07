@@ -12,6 +12,7 @@ import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
@@ -101,6 +102,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
+    private static final String SYSTEM_USER = "system";
+
     protected final TransactionTemplate transactionTemplate;
     protected final ExperimentDAO experimentDAO;
     protected final OptimizationDAO optimizationDAO;
@@ -141,18 +144,27 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                     forcedVersion.get().getValue(), workspaceId);
             return Mono.just(buildResponse(forcedVersion.get()));
         }
-        if (cacheConfiguration.isEnabled()) {
-            return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
-                    .onErrorResume(throwable -> {
-                        log.warn("Cache read failed, computing version, workspaceId '{}'", workspaceId, throwable);
-                        return Mono.empty();
-                    })
-                    .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion)
-                            .flatMap(response -> cacheResult(workspaceId, response))
-                            .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
-        }
-        return computeVersion(workspaceId, authSuggestedVersion)
-                .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
+        // Pull the API user from the reactive context the resource set via .contextWrite(...).
+        // SYSTEM_USER is a defensive fallback for callers that don't propagate a request scope.
+        return Mono.deferContextual(ctx -> {
+            var userName = ctx.<String>getOrEmpty(RequestContext.USER_NAME)
+                    .filter(StringUtils::isNotBlank)
+                    .orElse(SYSTEM_USER);
+            if (cacheConfiguration.isEnabled()) {
+                return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
+                        .onErrorResume(throwable -> {
+                            log.warn("Cache read failed, computing version, workspaceId '{}'", workspaceId,
+                                    throwable);
+                            return Mono.empty();
+                        })
+                        .switchIfEmpty(Mono.defer(() -> computeVersion(workspaceId, authSuggestedVersion, userName)
+                                .flatMap(response -> cacheResult(workspaceId, response))
+                                .onErrorResume(
+                                        throwable -> fallback(workspaceId, authSuggestedVersion, throwable))));
+            }
+            return computeVersion(workspaceId, authSuggestedVersion, userName)
+                    .onErrorResume(throwable -> fallback(workspaceId, authSuggestedVersion, throwable));
+        });
     }
 
     protected abstract OpikVersion getFallbackVersion(String workspaceId, OpikVersion authSuggestedVersion);
@@ -168,10 +180,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      * one-way V2 gate too, so {@code last_known_version} for those workspaces reflects
      * the auth-state, not an entity-scan result.
      */
-    private void persistAndEmit(String workspaceId, WorkspaceVersion response) {
+    private void persistAndEmit(String workspaceId, WorkspaceVersion response, String userName) {
         Schedulers.boundedElastic().schedule(() -> {
             try {
-                persistAndEmitBlocking(workspaceId, response);
+                persistAndEmitBlocking(workspaceId, response, userName);
             } catch (RuntimeException exception) {
                 log.warn("Failed to persist workspace version determination, workspaceId '{}'",
                         workspaceId, exception);
@@ -179,12 +191,12 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         });
     }
 
-    private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response) {
+    private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
         var newVersion = response.opikVersion();
         var previousVersion = workspacesService.findById(workspaceId)
                 .map(Workspace::lastKnownVersion)
                 .flatMap(OpikVersion::findByValue);
-        workspacesService.upsertVersion(workspaceId, newVersion);
+        workspacesService.upsertVersion(workspaceId, newVersion, userName);
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
@@ -205,11 +217,12 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 });
     }
 
-    private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion) {
+    private Mono<WorkspaceVersion> computeVersion(String workspaceId, OpikVersion authSuggestedVersion,
+            String userName) {
         if (authSuggestedVersion == OpikVersion.VERSION_2) {
             log.info("Locked via auth one-way gate, workspaceId '{}', version '{}'", workspaceId, authSuggestedVersion);
             return Mono.just(buildResponse(OpikVersion.VERSION_2))
-                    .doOnNext(response -> persistAndEmit(workspaceId, response));
+                    .doOnNext(response -> persistAndEmit(workspaceId, response, userName));
         }
         return Flux.concat(
                 Mono.fromCallable(() -> hasStateDbVersion1Entities(workspaceId))
@@ -223,7 +236,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                             version.getValue(), workspaceId, found);
                     return buildResponse(version);
                 })
-                .doOnNext(response -> persistAndEmit(workspaceId, response));
+                .doOnNext(response -> persistAndEmit(workspaceId, response, userName));
     }
 
     private Optional<OpikVersion> getForcedVersion() {

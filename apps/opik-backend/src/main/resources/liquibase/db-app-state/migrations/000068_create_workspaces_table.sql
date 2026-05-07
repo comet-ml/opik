@@ -1,5 +1,5 @@
 --liquibase formatted sql
---changeset thiagohora:000067_create_workspaces_table
+--changeset thiagohora:000068_create_workspaces_table
 --comment: Generic per-workspace metadata table replacing in-memory/Redis-only state for version tracking, first-trace dedup, and migration skip flag. Designed to grow into the long-term workspace metadata table; feature columns are NULLable so rows are upserted on first relevant event.
 
 CREATE TABLE workspaces (
