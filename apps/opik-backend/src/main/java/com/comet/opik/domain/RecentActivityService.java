@@ -2,6 +2,7 @@ package com.comet.opik.domain;
 
 import com.comet.opik.api.ExperimentSearchCriteria;
 import com.comet.opik.api.ExperimentType;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.LogCriteria;
 import com.comet.opik.api.RecentActivity.ActivityType;
 import com.comet.opik.api.RecentActivity.RecentActivityItem;
@@ -37,6 +38,9 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONL
  * Each source is queried for its N most recent items (page 1 only, sorted by id DESC).
  * Results are merged, sorted by createdAt descending, and paginated in memory.
  * <p>
+ * <b>Graceful degradation:</b> individual source failures are caught and logged, returning
+ * partial results from the remaining sources rather than failing the entire request.
+ * <p>
  * <b>Limitation:</b> only page 1 is reliable. Cross-source pagination beyond page 1
  * would require fetching page*size per source to guarantee correct ordering across types.
  */
@@ -51,7 +55,7 @@ public class RecentActivityService {
     private final @NonNull OptimizationService optimizationService;
     private final @NonNull AlertEventLogsDAO alertEventLogsDAO;
     private final @NonNull TransactionTemplate transactionTemplate;
-    private final @NonNull IdGenerator idGenerator;
+    private final @NonNull InstantToUUIDMapper instantToUUIDMapper;
     private final @NonNull Provider<RequestContext> requestContext;
 
     public Mono<RecentActivityPage> getRecentActivity(@NonNull UUID projectId, int page, int size) {
@@ -81,7 +85,6 @@ public class RecentActivityService {
                             .page(page)
                             .size(size)
                             .total(all.size())
-                            .projectId(projectId)
                             .content(content)
                             .build();
                 });
@@ -148,7 +151,7 @@ public class RecentActivityService {
     }
 
     private Mono<List<RecentActivityItem>> fetchDatasetSources(String workspaceId, UUID projectId, int size) {
-        var minId = idGenerator.generateId(Instant.now().minus(LOOKBACK_DAYS, ChronoUnit.DAYS));
+        var minId = instantToUUIDMapper.toLowerBound(Instant.now().minus(LOOKBACK_DAYS, ChronoUnit.DAYS));
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(DatasetVersionDAO.class);
             return dao.findRecentActivityByProjectId(workspaceId, projectId, minId, size).stream()

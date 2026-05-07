@@ -20,6 +20,5 @@ export interface RecentActivityResponse {
   page: number;
   size: number;
   total: number;
-  project_id: string;
   content: RecentActivityItem[];
 }

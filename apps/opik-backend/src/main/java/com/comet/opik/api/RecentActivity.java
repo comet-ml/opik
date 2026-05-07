@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import lombok.Builder;
 import lombok.Getter;
+import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
 
 import java.time.Instant;
@@ -27,7 +28,6 @@ public class RecentActivity {
             @JsonView(View.Public.class) int page,
             @JsonView(View.Public.class) int size,
             @JsonView(View.Public.class) long total,
-            @JsonView(View.Public.class) UUID projectId,
             @JsonView(View.Public.class) List<RecentActivityItem> content) {
     }
 
@@ -38,14 +38,14 @@ public class RecentActivity {
             @JsonView(View.Public.class) ActivityType type,
             @JsonView(View.Public.class) UUID id,
             @JsonView(View.Public.class) String name,
-            @JsonView(View.Public.class) Instant createdAt,
             @JsonView(View.Public.class) UUID resourceId,
-            @JsonView(View.Public.class) String createdBy) {
+            @JsonView(View.Public.class) String createdBy,
+            @JsonView(View.Public.class) Instant createdAt) {
     }
 
     @Builder(toBuilder = true)
-    public record RecentDatasetVersion(UUID datasetId, String datasetName, String datasetType, Instant createdAt,
-            String createdBy) {
+    public record RecentDatasetVersion(@NonNull UUID datasetId, @NonNull String datasetName,
+            @NonNull String datasetType, @NonNull Instant createdAt, @NonNull String createdBy) {
     }
 
     @RequiredArgsConstructor

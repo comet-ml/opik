@@ -1,6 +1,7 @@
 package com.comet.opik.domain;
 
 import com.comet.opik.api.Experiment;
+import com.comet.opik.api.InstantToUUIDMapper;
 import com.comet.opik.api.LogItem;
 import com.comet.opik.api.Optimization;
 import com.comet.opik.api.RecentActivity.ActivityType;
@@ -41,7 +42,7 @@ class RecentActivityServiceTest {
 
     private static final String WORKSPACE_ID = UUID.randomUUID().toString();
     private static final UUID PROJECT_ID = UUID.randomUUID();
-    private static final PodamFactory PODAM = PodamFactoryUtils.newPodamFactory();
+    private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
     @Mock
     private ExperimentService experimentService;
@@ -52,7 +53,7 @@ class RecentActivityServiceTest {
     @Mock
     private TransactionTemplate transactionTemplate;
     @Mock
-    private IdGenerator idGenerator;
+    private InstantToUUIDMapper instantToUUIDMapper;
     @Mock
     private Provider<RequestContext> requestContextProvider;
     @Mock
@@ -65,7 +66,7 @@ class RecentActivityServiceTest {
     void setUp() {
         when(requestContextProvider.get()).thenReturn(requestContext);
         when(requestContext.getWorkspaceId()).thenReturn(WORKSPACE_ID);
-        when(idGenerator.generateId(any(Instant.class))).thenReturn(UUID.randomUUID());
+        when(instantToUUIDMapper.toLowerBound(any(Instant.class))).thenReturn(UUID.randomUUID());
     }
 
     private void mockEmptyJdbiSources() {
@@ -84,13 +85,13 @@ class RecentActivityServiceTest {
             var middle = now.minusSeconds(100);
             var newest = now;
 
-            var experiment = PODAM.manufacturePojo(Experiment.class).toBuilder()
+            var experiment = podamFactory.manufacturePojo(Experiment.class).toBuilder()
                     .createdAt(middle).build();
             when(experimentService.find(eq(1), eq(10),
                     argThat(c -> PROJECT_ID.equals(c.projectId()))))
                     .thenReturn(Mono.just(new Experiment.ExperimentPage(1, 1, 1, List.of(experiment), List.of())));
 
-            var optimization = PODAM.manufacturePojo(Optimization.class).toBuilder()
+            var optimization = podamFactory.manufacturePojo(Optimization.class).toBuilder()
                     .createdAt(newest).build();
             when(optimizationService.find(eq(1), eq(10),
                     argThat(c -> PROJECT_ID.equals(c.projectId()))))
@@ -113,7 +114,6 @@ class RecentActivityServiceTest {
                         assertThat(result.page()).isEqualTo(1);
                         assertThat(result.size()).isEqualTo(10);
                         assertThat(result.total()).isEqualTo(3);
-                        assertThat(result.projectId()).isEqualTo(PROJECT_ID);
 
                         assertThat(result.content()).containsExactly(
                                 RecentActivityItem.builder()
@@ -136,9 +136,9 @@ class RecentActivityServiceTest {
         void shouldLimitResultsToRequestedSize() {
             var now = Instant.now();
             var experiments = List.of(
-                    PODAM.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(1)).build(),
-                    PODAM.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(2)).build(),
-                    PODAM.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(3)).build());
+                    podamFactory.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(1)).build(),
+                    podamFactory.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(2)).build(),
+                    podamFactory.manufacturePojo(Experiment.class).toBuilder().createdAt(now.minusSeconds(3)).build());
             when(experimentService.find(eq(1), eq(2),
                     argThat(c -> PROJECT_ID.equals(c.projectId()))))
                     .thenReturn(Mono.just(new Experiment.ExperimentPage(1, 3, 3, experiments, List.of())));
@@ -164,7 +164,7 @@ class RecentActivityServiceTest {
 
         @Test
         void shouldReturnPartialResultsWhenOneSourceFails() {
-            var optimization = PODAM.manufacturePojo(Optimization.class).toBuilder()
+            var optimization = podamFactory.manufacturePojo(Optimization.class).toBuilder()
                     .createdAt(Instant.now()).build();
             when(optimizationService.find(eq(1), eq(10),
                     argThat(c -> PROJECT_ID.equals(c.projectId()))))

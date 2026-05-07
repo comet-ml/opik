@@ -66,7 +66,7 @@ const getMenuItems = ({
                 path: projectPath("/ollie"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
-                label: "Ollie",
+                label: "Opik Connect",
                 disabled: !projectPrefix,
               },
             ]

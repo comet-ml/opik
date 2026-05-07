@@ -19,18 +19,16 @@ import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.OptimizationResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
+import com.comet.opik.api.resources.utils.resources.RecentActivityResourceClient;
 import com.comet.opik.domain.AgentBlueprint;
 import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import com.comet.opik.domain.AgentConfigValue;
 import com.comet.opik.domain.AgentConfigValue.ValueType;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
-import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
-import jakarta.ws.rs.core.HttpHeaders;
-import jakarta.ws.rs.core.Response;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterAll;
@@ -108,18 +106,16 @@ class RecentActivityResourceTest {
 
     private final PodamFactory podamFactory = PodamFactoryUtils.newPodamFactory();
 
-    private String baseURI;
-    private ClientSupport client;
     private ProjectResourceClient projectResourceClient;
     private ExperimentResourceClient experimentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private AgentConfigsResourceClient agentConfigsResourceClient;
+    private RecentActivityResourceClient recentActivityResourceClient;
 
     @BeforeAll
     void beforeAll(ClientSupport client) {
-        this.client = client;
-        this.baseURI = TestUtils.getBaseUrl(client);
+        var baseURI = TestUtils.getBaseUrl(client);
         ClientSupportUtils.config(client);
 
         this.projectResourceClient = new ProjectResourceClient(client, baseURI, podamFactory);
@@ -127,6 +123,7 @@ class RecentActivityResourceTest {
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, podamFactory);
         this.agentConfigsResourceClient = new AgentConfigsResourceClient(client);
+        this.recentActivityResourceClient = new RecentActivityResourceClient(client, baseURI);
 
         AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, TEST_WORKSPACE_NAME, WORKSPACE_ID, USER);
     }
@@ -134,22 +131,6 @@ class RecentActivityResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
-    }
-
-    private RecentActivity.RecentActivityPage getActivities(UUID projectId, String apiKey, String workspaceName) {
-        return client.target("%s/v1/private/projects/%s/activities".formatted(baseURI, projectId))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get(RecentActivity.RecentActivityPage.class);
-    }
-
-    private Response callGetActivities(UUID projectId, String apiKey, String workspaceName) {
-        return client.target("%s/v1/private/projects/%s/activities".formatted(baseURI, projectId))
-                .request()
-                .header(HttpHeaders.AUTHORIZATION, apiKey)
-                .header(RequestContext.WORKSPACE_HEADER, workspaceName)
-                .get();
     }
 
     @Nested
@@ -162,11 +143,10 @@ class RecentActivityResourceTest {
             var projectId = projectResourceClient.createProject(
                     "project-" + UUID.randomUUID(), API_KEY, TEST_WORKSPACE_NAME);
 
-            var result = getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertThat(result.content()).isEmpty();
-            assertThat(result.total()).isZero();
-            assertThat(result.projectId()).isEqualTo(projectId);
+            assertThat(result).isEqualTo(RecentActivity.RecentActivityPage.builder()
+                    .page(1).size(10).total(0).content(List.of()).build());
         }
 
         @Test
@@ -204,22 +184,29 @@ class RecentActivityResourceTest {
                             .values(agentConfigValues).build())
                     .build(), API_KEY, TEST_WORKSPACE_NAME, HttpStatus.SC_CREATED);
 
-            var result = getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
 
-            assertThat(result.content()).isNotEmpty();
-            assertThat(result.projectId()).isEqualTo(projectId);
+            var content = result.content();
+            assertThat(content).isNotEmpty();
 
-            var types = result.content().stream()
-                    .map(RecentActivity.RecentActivityItem::type)
-                    .toList();
-            assertThat(types).contains(
-                    RecentActivity.ActivityType.EXPERIMENT,
-                    RecentActivity.ActivityType.OPTIMIZATION,
-                    RecentActivity.ActivityType.DATASET_VERSION,
-                    RecentActivity.ActivityType.TEST_SUITE_VERSION,
-                    RecentActivity.ActivityType.AGENT_CONFIG_VERSION);
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.EXPERIMENT
+                    && experiment.name().equals(item.name())
+                    && item.resourceId() != null);
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.OPTIMIZATION
+                    && optimization.datasetName().equals(item.name()));
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.DATASET_VERSION
+                    && datasetName.equals(item.name()));
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.TEST_SUITE_VERSION
+                    && suiteName.equals(item.name()));
+            assertThat(content).anyMatch(item -> item.type() == RecentActivity.ActivityType.AGENT_CONFIG_VERSION);
 
-            assertThat(result.content())
+            content.forEach(item -> {
+                assertThat(item.id()).isNotNull();
+                assertThat(item.createdAt()).isNotNull();
+                assertThat(item.createdBy()).isEqualTo(USER);
+            });
+
+            assertThat(content)
                     .extracting(RecentActivity.RecentActivityItem::createdAt)
                     .isSortedAccordingTo(Comparator.reverseOrder());
         }
@@ -239,7 +226,7 @@ class RecentActivityResourceTest {
                     .build();
             experimentResourceClient.create(experiment, API_KEY, TEST_WORKSPACE_NAME);
 
-            var result = getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
+            var result = recentActivityResourceClient.getActivities(projectId, API_KEY, TEST_WORKSPACE_NAME);
 
             assertThat(result.content()).noneMatch(
                     item -> experiment.name().equals(item.name()));
@@ -259,7 +246,7 @@ class RecentActivityResourceTest {
             AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER);
 
             wireMock.server().resetRequests();
-            callGetActivities(UUID.randomUUID(), apiKey, workspaceName).close();
+            recentActivityResourceClient.callGetActivities(UUID.randomUUID(), apiKey, workspaceName).close();
 
             wireMock.server().verify(
                     postRequestedFor(urlPathEqualTo("/opik/auth"))
@@ -276,7 +263,8 @@ class RecentActivityResourceTest {
             AuthTestUtils.mockTargetWorkspaceDenyPermission(wireMock.server(), apiKey, workspaceName,
                     WorkspaceUserPermission.PROJECT_DATA_VIEW.getValue());
 
-            try (var response = callGetActivities(UUID.randomUUID(), apiKey, workspaceName)) {
+            try (var response = recentActivityResourceClient.callGetActivities(UUID.randomUUID(), apiKey,
+                    workspaceName)) {
                 assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_FORBIDDEN);
             }
         }
