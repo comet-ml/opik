@@ -14,6 +14,8 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
+import java.util.function.ToIntFunction;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -53,8 +55,10 @@ public interface WorkspacesService {
      * Idempotent: subsequent calls do not overwrite the original timestamp/reason. Audit columns
      * are stamped with the system user — this is the migration job's call site, never a direct
      * user action.
+     *
+     * @return {@code true} when this caller flipped the flag; {@code false} when it was already set
      */
-    int markMigrationSkipped(String workspaceId, String reason);
+    boolean markMigrationSkipped(String workspaceId, String reason);
 
     List<String> findMigrationSkippedWorkspaceIds();
 
@@ -96,28 +100,45 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 handle -> handle.attach(WorkspacesDAO.class).findById(workspaceId));
     }
 
-    /**
-     * UPDATE-then-INSERT, single transaction. We can't use a single-statement upsert with
-     * a ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
-     * ({@code CLIENT_FOUND_ROWS=on}), which makes a matched-but-unchanged upsert return
-     * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives
-     * keeps the detection unambiguous: the UPDATE's row count is exact, and a duplicate-key
-     * exception on the INSERT means another writer beat us to it.
-     */
     @Override
     public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
+        var now = Instant.now();
+        return transitionFlagAtomically(
+                dao -> dao.updateFirstTraceIfNull(workspaceId, now, userName),
+                dao -> dao.insertFirstTrace(workspaceId, now, userName));
+    }
+
+    @Override
+    public boolean markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        var now = Instant.now();
+        return transitionFlagAtomically(
+                dao -> dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER),
+                dao -> dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER));
+    }
+
+    /**
+     * UPDATE-then-INSERT, single transaction. We can't use a single-statement upsert with a
+     * ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
+     * ({@code CLIENT_FOUND_ROWS=on}), which makes a matched-but-unchanged upsert return
+     * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives keeps
+     * the detection unambiguous: the UPDATE's row count is exact, and a duplicate-key exception
+     * on the INSERT means another writer beat us to it.
+     *
+     * @return {@code true} when this caller flipped the flag; {@code false} when another writer
+     *         already set it
+     */
+    private boolean transitionFlagAtomically(ToIntFunction<WorkspacesDAO> updateIfNull,
+            Consumer<WorkspacesDAO> insert) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            if (dao.updateFirstTraceIfNull(workspaceId, now, userName) > 0) {
+            if (updateIfNull.applyAsInt(dao) > 0) {
                 return true;
             }
             try {
-                dao.insertFirstTrace(workspaceId, now, userName);
+                insert.accept(dao);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                if (isDuplicateKeyViolation(exception)) {
                     return false;
                 }
                 throw exception;
@@ -125,32 +146,9 @@ class WorkspacesServiceImpl implements WorkspacesService {
         });
     }
 
-    /**
-     * Same UPDATE-then-INSERT pattern as {@link #markFirstTraceReported}: the UPDATE only matches
-     * rows whose {@code migration_skipped_at} is currently NULL, and a duplicate-key on the INSERT
-     * means another writer already trapped the workspace. Returns 1 when this call set the flag,
-     * 0 otherwise (already trapped — idempotent no-op).
-     */
-    @Override
-    public int markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var now = Instant.now();
-            int updated = dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER);
-            if (updated > 0) {
-                return updated;
-            }
-            try {
-                dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
-                return 1;
-            } catch (UnableToExecuteStatementException exception) {
-                if (exception.getCause() instanceof SQLException sql
-                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
-                    return 0;
-                }
-                throw exception;
-            }
-        });
+    private static boolean isDuplicateKeyViolation(UnableToExecuteStatementException exception) {
+        return exception.getCause() instanceof SQLException sql
+                && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState());
     }
 
     @Override

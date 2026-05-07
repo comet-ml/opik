@@ -1,6 +1,7 @@
 package com.comet.opik.domain.workspaces;
 
 import lombok.Builder;
+import lombok.NonNull;
 
 import java.time.Instant;
 
@@ -15,7 +16,7 @@ import java.time.Instant;
  */
 @Builder(toBuilder = true)
 public record Workspace(
-        String id,
+        @NonNull String id,
         String lastKnownVersion,
         Instant versionDeterminedAt,
         Instant firstTraceReportedAt,

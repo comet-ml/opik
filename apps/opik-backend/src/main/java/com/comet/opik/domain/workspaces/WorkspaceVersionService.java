@@ -102,8 +102,6 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
      */
     private final Logger log = LoggerFactory.getLogger(this.getClass());
 
-    private static final String SYSTEM_USER = "system";
-
     protected final TransactionTemplate transactionTemplate;
     protected final ExperimentDAO experimentDAO;
     protected final OptimizationDAO optimizationDAO;
@@ -149,7 +147,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         return Mono.deferContextual(ctx -> {
             var userName = ctx.<String>getOrEmpty(RequestContext.USER_NAME)
                     .filter(StringUtils::isNotBlank)
-                    .orElse(SYSTEM_USER);
+                    .orElse(RequestContext.SYSTEM_USER);
             if (cacheConfiguration.isEnabled()) {
                 return cacheManager.get(cacheKey(workspaceId), WorkspaceVersion.class)
                         .onErrorResume(throwable -> {

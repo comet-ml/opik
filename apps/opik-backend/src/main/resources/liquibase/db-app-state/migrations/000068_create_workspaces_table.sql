@@ -20,3 +20,4 @@ CREATE TABLE workspaces (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 --rollback DROP TABLE workspaces;
+
