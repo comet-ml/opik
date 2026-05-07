@@ -305,7 +305,9 @@ print_usage() {
 
 check_runtime_status() {
   if ! $CONTAINER_RUNTIME info >/dev/null 2>&1; then
-    echo "❌ ${CONTAINER_RUNTIME^} is not running or not accessible. Please start ${CONTAINER_RUNTIME^} first."
+    local _rt_cap
+    _rt_cap="$(tr '[:lower:]' '[:upper:]' <<< "${CONTAINER_RUNTIME:0:1}")${CONTAINER_RUNTIME:1}"
+    echo "❌ $_rt_cap is not running or not accessible. Please start $_rt_cap first."
     exit 1
   fi
 }
