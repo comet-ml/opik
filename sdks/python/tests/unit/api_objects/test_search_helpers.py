@@ -60,7 +60,9 @@ def _sleep_called_with(mock_sleep: mock.Mock, seconds) -> bool:
     return any(call.args == (seconds,) for call in mock_sleep.call_args_list)
 
 
-def test_search_spans__retries_on_rate_limit(patched_sleep, capture_log):
+def test_search_spans__429_response__retries_with_reset_header(
+    patched_sleep, capture_log
+):
     rest_client = mock.Mock()
     rest_client.spans.search_spans.side_effect = [
         ApiError(status_code=429, headers={"RateLimit-Reset": "2"}),
@@ -86,7 +88,9 @@ def test_search_spans__retries_on_rate_limit(patched_sleep, capture_log):
     )
 
 
-def test_search_traces__retries_on_rate_limit(patched_sleep, capture_log):
+def test_search_traces__429_response__retries_with_reset_header(
+    patched_sleep, capture_log
+):
     rest_client = mock.Mock()
     rest_client.traces.search_traces.side_effect = [
         ApiError(status_code=429, headers={"RateLimit-Reset": "3"}),
@@ -111,7 +115,7 @@ def test_search_traces__retries_on_rate_limit(patched_sleep, capture_log):
     )
 
 
-def test_search_spans__non_rate_limit_error_propagates(patched_sleep):
+def test_search_spans__non_429_error__propagates_without_retry():
     rest_client = mock.Mock()
     rest_client.spans.search_spans.side_effect = ApiError(
         status_code=400, body="bad request"
@@ -133,7 +137,7 @@ def test_search_spans__non_rate_limit_error_propagates(patched_sleep):
     assert rest_client.spans.search_spans.call_count == 1
 
 
-def test_search_traces__non_rate_limit_error_propagates(patched_sleep):
+def test_search_traces__non_429_error__propagates_without_retry():
     rest_client = mock.Mock()
     rest_client.traces.search_traces.side_effect = ApiError(
         status_code=500, body="boom"
@@ -152,7 +156,9 @@ def test_search_traces__non_rate_limit_error_propagates(patched_sleep):
     assert rest_client.traces.search_traces.call_count == 1
 
 
-def test_search_spans__no_retry_after_header_falls_back_to_default(patched_sleep):
+def test_search_spans__429_without_reset_header__falls_back_to_one_second_sleep(
+    patched_sleep,
+):
     rest_client = mock.Mock()
     rest_client.spans.search_spans.side_effect = [
         ApiError(status_code=429, headers={}),
