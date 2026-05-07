@@ -389,8 +389,9 @@ public class ReadTool implements ToolExecutor {
         for (int limit : CAP_FALLBACK_LIMITS) {
             JsonNode candidate = PathAwareTruncator.truncate(fullJson, limit,
                     PathAwareTruncator.SuffixStyle.BARE);
-            if (candidate.toString().length() <= CACHE_CAP_CHARS) {
-                log.debug("Entity capped to {} chars with ceiling at {} limit", candidate.toString().length(), limit);
+            int candidateSize = candidate.toString().length();
+            if (candidateSize <= CACHE_CAP_CHARS) {
+                log.debug("Entity capped to {} chars with ceiling at {} limit", candidateSize, limit);
                 return candidate;
             }
             last = candidate;
