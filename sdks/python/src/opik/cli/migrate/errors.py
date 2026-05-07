@@ -1,8 +1,20 @@
 """Errors raised by ``opik migrate`` planning and execution."""
 
+from __future__ import annotations
 
-class MigrationError(Exception):
-    """Base class for migration command failures surfaced to the CLI."""
+from typing import Any, Dict
+
+from opik import exceptions
+from opik.rest_api.core.api_error import ApiError
+
+
+class MigrationError(exceptions.OpikException):
+    """Base class for migration command failures surfaced to the CLI.
+
+    Inherits from ``OpikException`` so shared shutdown / error-tracking code
+    that does ``isinstance(exc, opik.exceptions.OpikException)`` classifies
+    migration failures correctly.
+    """
 
 
 class DatasetNotFoundError(MigrationError):
@@ -34,3 +46,52 @@ class UnsupportedDatasetTypeError(MigrationError):
     needs explicit handling rather than being silently shoehorned into the
     plain-dataset code path.
     """
+
+
+def safe_error_envelope(exc: BaseException) -> Dict[str, Any]:
+    """Build a sanitized error envelope for audit logs and console output.
+
+    ``ApiError.__str__`` includes the response ``headers``, ``body``, and
+    request URL, all of which can carry tokens, internal hostnames, or other
+    response data we don't want printed to the terminal or written into a
+    JSON artifact users may share. This helper returns only the fields that
+    are safe to surface:
+
+    * ``type`` — the exception class name (e.g. ``"ApiError"``)
+    * ``status_code`` — the HTTP status when available (``ApiError`` only)
+    * ``message`` — a short, sanitized message. For ``ApiError`` we deliberately
+      do **not** include ``str(exc)``; we either pull a ``message`` field out
+      of the response body when present, or fall back to the status code.
+      For other exceptions we use ``str(exc)`` since those are SDK-shaped and
+      don't carry remote response payloads.
+    """
+    envelope: Dict[str, Any] = {"type": exc.__class__.__name__}
+    if isinstance(exc, ApiError):
+        envelope["status_code"] = exc.status_code
+        message = None
+        body = getattr(exc, "body", None)
+        if isinstance(body, dict):
+            # ApiError bodies sometimes carry a high-level "message" or
+            # "errors" field that's safe to surface; everything else (raw
+            # response payloads, headers) is omitted.
+            raw = body.get("message")
+            if isinstance(raw, str) and raw:
+                message = raw
+            else:
+                errors = body.get("errors")
+                if isinstance(errors, list) and errors and isinstance(errors[0], str):
+                    message = errors[0]
+        envelope["message"] = message or f"HTTP {exc.status_code}"
+    else:
+        envelope["message"] = str(exc)
+    return envelope
+
+
+def safe_error_string(exc: BaseException) -> str:
+    """Format ``safe_error_envelope`` as a single line for console output."""
+    env = safe_error_envelope(exc)
+    parts = [env["type"]]
+    if "status_code" in env:
+        parts.append(f"({env['status_code']})")
+    parts.append(env["message"])
+    return " ".join(parts)

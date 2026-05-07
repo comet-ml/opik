@@ -180,7 +180,7 @@ def _no_project_resolution() -> None:
 
 
 class TestMigrateHelp:
-    def test_migrate_group_help(self) -> None:
+    def test_migrate_group__help_invoked__lists_subcommands(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["migrate", "--help"])
         assert result.exit_code == 0
@@ -188,7 +188,7 @@ class TestMigrateHelp:
         assert "dataset" in result.output
         assert "plan" in result.output
 
-    def test_dataset_help_lists_required_flags(self) -> None:
+    def test_migrate_dataset__help_invoked__lists_required_flags(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["migrate", "dataset", "--help"])
         assert result.exit_code == 0
@@ -199,7 +199,7 @@ class TestMigrateHelp:
         assert "--delete-source" in result.output
         assert "--dry-run" in result.output
 
-    def test_plan_help(self) -> None:
+    def test_migrate_plan__help_invoked__describes_survey(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["migrate", "plan", "--help"])
         assert result.exit_code == 0
@@ -212,7 +212,9 @@ class TestMigrateHelp:
 
 
 class TestPlanBuilding:
-    def test_plan_orders_rename_create_copy(self) -> None:
+    def test_build_dataset_plan__default_flow__orders_rename_then_create_then_copy(
+        self,
+    ) -> None:
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
@@ -237,7 +239,7 @@ class TestPlanBuilding:
         assert rename.to_name == "MyDataset_v1"
         assert plan.target_name == "MyDataset"
 
-    def test_target_name_skips_rename(self) -> None:
+    def test_build_dataset_plan__target_name_set__skips_rename(self) -> None:
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
@@ -259,7 +261,7 @@ class TestPlanBuilding:
         assert types == ["CreateDestination", "CopyCurrentItems"]
         assert plan.target_name == "RenamedInDest"
 
-    def test_delete_source_is_last_action(self) -> None:
+    def test_build_dataset_plan__delete_source_set__delete_is_last(self) -> None:
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
@@ -279,7 +281,9 @@ class TestPlanBuilding:
 
         assert type(plan.actions[-1]).__name__ == "DeleteSource"
 
-    def test_post_rename_name_collision_raises(self) -> None:
+    def test_build_dataset_plan__post_rename_name_collides_workspace_wide__raises_conflict(
+        self,
+    ) -> None:
         # Default flow: source rename frees the target name, but the
         # post-rename name "<source>_v1" itself collides with another dataset
         # in the workspace.
@@ -303,7 +307,9 @@ class TestPlanBuilding:
         assert "MyDataset_v1" in str(exc_info.value)
         assert "--source-suffix" in str(exc_info.value)
 
-    def test_target_name_workspace_collision_raises(self) -> None:
+    def test_build_dataset_plan__target_name_collides_workspace_wide__raises_conflict(
+        self,
+    ) -> None:
         # --target-name=Other, but Other already exists somewhere in the workspace.
         rest_client = _planner_rest_client(
             [
@@ -324,7 +330,9 @@ class TestPlanBuilding:
             )
         assert "Other" in str(exc_info.value)
 
-    def test_post_rename_collision_ignores_source_itself(self) -> None:
+    def test_build_dataset_plan__post_rename_match_is_source_itself__no_conflict(
+        self,
+    ) -> None:
         # When find_datasets returns the source itself, we must not treat that
         # as a collision — it's about to be renamed.
         rest_client = _planner_rest_client(
@@ -345,7 +353,9 @@ class TestPlanBuilding:
         )
         assert plan.target_name == "MyDataset"
 
-    def test_unknown_name_raises(self) -> None:
+    def test_build_dataset_plan__source_name_not_found__raises_dataset_not_found(
+        self,
+    ) -> None:
         rest_client = _planner_rest_client([_Page([])])
 
         with pytest.raises(DatasetNotFoundError) as exc_info:
@@ -360,7 +370,9 @@ class TestPlanBuilding:
             )
         assert "Missing" in str(exc_info.value)
 
-    def test_ambiguous_name_raises(self) -> None:
+    def test_build_dataset_plan__source_name_resolves_to_many__raises_ambiguity(
+        self,
+    ) -> None:
         rest_client = _planner_rest_client(
             [
                 _Page(
@@ -383,7 +395,9 @@ class TestPlanBuilding:
                 delete_source=False,
             )
 
-    def test_destination_project_missing_raises(self) -> None:
+    def test_build_dataset_plan__destination_project_missing__raises_project_not_found(
+        self,
+    ) -> None:
         rest_client = _planner_rest_client(
             find_side_effects=[],
             target_project_exists=False,
@@ -401,7 +415,9 @@ class TestPlanBuilding:
             )
         assert "DoesNotExist" in str(exc_info.value)
 
-    def test_destination_project_missing_suggests_similar(self) -> None:
+    def test_build_dataset_plan__destination_project_missing__suggests_similar_names(
+        self,
+    ) -> None:
         rest_client = _planner_rest_client(
             find_side_effects=[],
             target_project_exists=False,
@@ -445,7 +461,7 @@ class TestMigrateDatasetCommand:
                 ["migrate", "dataset", *args, "--audit-log", str(audit_path)],
             )
 
-    def test_success_path_in_order(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__happyflow(self, tmp_path: Path) -> None:
         runner = CliRunner()
         client, source_dataset, dest_dataset = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset", description="d")],
@@ -492,7 +508,9 @@ class TestMigrateDatasetCommand:
         assert "create_destination" in types
         assert "copy_dataset_items" in types
 
-    def test_destination_conflict_no_side_effects(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__post_rename_collision__exits_with_no_side_effects(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         # Workspace already has a dataset named "MyDataset_v1" (the post-rename
         # target name) — pre-flight should reject before any side effect.
@@ -518,7 +536,7 @@ class TestMigrateDatasetCommand:
         audit = json.loads((tmp_path / "audit.json").read_text())
         assert audit["status"] == "failed"
 
-    def test_dry_run_writes_no_data(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__dry_run__writes_no_data(self, tmp_path: Path) -> None:
         runner = CliRunner()
         client, _, dest_dataset = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
@@ -543,7 +561,9 @@ class TestMigrateDatasetCommand:
         assert audit["status"] == "planned"
         assert all(a["status"] == "planned" for a in audit["actions"])
 
-    def test_target_name_skips_rename(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__target_name_set__skips_rename_and_overrides_target_name(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         client, _, _ = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
@@ -564,7 +584,9 @@ class TestMigrateDatasetCommand:
         kwargs = client.rest_client.datasets.create_dataset.call_args.kwargs
         assert kwargs["name"] == "Renamed"
 
-    def test_delete_source_runs_only_after_success(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__delete_source__runs_only_after_copy_success(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         client, _, _ = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
@@ -586,7 +608,9 @@ class TestMigrateDatasetCommand:
         ok_types = [a["type"] for a in audit["actions"] if a["status"] == "ok"]
         assert ok_types.index("copy_dataset_items") < ok_types.index("delete_source")
 
-    def test_delete_source_skipped_on_copy_failure(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__copy_fails_with_delete_source__skips_delete(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         client, source_dataset, dest_dataset = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
@@ -610,7 +634,9 @@ class TestMigrateDatasetCommand:
         assert audit["status"] == "failed"
         assert not any(a["type"] == "delete_source" for a in audit["actions"])
 
-    def test_items_inserted_in_reverse_of_source_order(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__items_streamed_newest_first__inserted_oldest_first(
+        self, tmp_path: Path
+    ) -> None:
         # get_items() returns newest-first; the executor reverses before insert
         # so the target's display order matches the source's display order.
         runner = CliRunner()
@@ -635,7 +661,7 @@ class TestMigrateDatasetCommand:
         # Source returned [5,4,3,2,1]; insert receives [1,2,3,4,5].
         assert [item.get_content()["idx"] for item in inserted] == [1, 2, 3, 4, 5]
 
-    def test_copy_calls_insert_exactly_once_for_one_target_version(
+    def test_migrate_dataset__many_items__one_insert_call_so_one_target_version(
         self, tmp_path: Path
     ) -> None:
         # Critical contract: even with many items, the executor must call
@@ -672,7 +698,9 @@ class TestMigrateDatasetCommand:
         # And the order is reversed (oldest-first) to match UI display order.
         assert [item.get_content()["idx"] for item in inserted] == list(range(n))
 
-    def test_per_item_top_level_fields_are_preserved(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__per_item_description_and_source_set__preserved_in_target(
+        self, tmp_path: Path
+    ) -> None:
         # Per-item description / source must round-trip through the copy.
         # (trace_id/span_id/evaluators/execution_policy follow the same code
         # path; description + source are sufficient to pin the contract.)
@@ -712,7 +740,7 @@ class TestMigrateDatasetCommand:
         ]
         assert [it.source for it in inserted] == ["sdk", "manual"]
 
-    def test_dataset_level_metadata_is_forwarded_to_target(
+    def test_migrate_dataset__source_has_metadata__forwarded_to_target(
         self, tmp_path: Path
     ) -> None:
         runner = CliRunner()
@@ -749,7 +777,7 @@ class TestMigrateDatasetCommand:
         assert create_kwargs["visibility"] == "private"
         assert create_kwargs["tags"] == ["a", "b"]
 
-    def test_test_suite_source_is_migrated_with_type_and_suite_config(
+    def test_migrate_dataset__source_is_test_suite__type_forwarded_and_suite_config_copied(
         self, tmp_path: Path
     ) -> None:
         # Test suites: target is created with type='evaluation_suite' and the
@@ -813,7 +841,7 @@ class TestMigrateDatasetCommand:
             {"name": "judge-1", "type": "llm_judge", "config": {"model": "gpt-4"}}
         ]
 
-    def test_per_item_evaluator_and_policy_overrides_round_trip(
+    def test_migrate_dataset__per_item_evaluator_and_policy_overrides__round_trip(
         self, tmp_path: Path
     ) -> None:
         # An item can override the suite-level evaluators / execution_policy.
@@ -890,7 +918,9 @@ class TestMigrateDatasetCommand:
         assert rebuilt.execution_policy.runs_per_item == 10
         assert rebuilt.execution_policy.pass_threshold == 7
 
-    def test_unknown_dataset_type_is_refused(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__unknown_dataset_type__raises_unsupported(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         client, _, dest_dataset = _build_fake_client(
             source_rows=[
@@ -914,7 +944,9 @@ class TestMigrateDatasetCommand:
         client.rest_client.datasets.create_dataset.assert_not_called()
         dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_not_called()
 
-    def test_unknown_name_actionable_error(self, tmp_path: Path) -> None:
+    def test_migrate_dataset__source_name_not_found__exits_with_actionable_error(
+        self, tmp_path: Path
+    ) -> None:
         runner = CliRunner()
         client, _, _ = _build_fake_client(
             source_rows=[],

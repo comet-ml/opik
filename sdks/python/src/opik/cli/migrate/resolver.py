@@ -10,8 +10,9 @@ project paths so the user can disambiguate with ``--from-project``.
 from __future__ import annotations
 
 import difflib
+import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Any, Iterable, List, Optional
 
 from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
@@ -19,9 +20,15 @@ from opik.rest_api.core.api_error import ApiError
 
 from .errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
 
+LOGGER = logging.getLogger(__name__)
+
 # Cap the candidate list we feed to difflib. Workspaces with >100 projects
 # are uncommon, and the suggestion quality plateaus quickly past that.
 _PROJECT_SUGGESTION_PAGE_SIZE = 100
+
+# Page size used when paginating dataset lookups. Larger pages = fewer
+# round-trips on workspaces with many same-named datasets.
+_FIND_DATASETS_PAGE_SIZE = 100
 
 
 @dataclass(frozen=True)
@@ -30,13 +37,61 @@ class ResolvedDataset:
     name: str
     project_name: Optional[str]
     description: Optional[str]
-    # Type ('dataset' or 'evaluation_suite' for test suites). Slice 1 only
-    # supports plain datasets; the planner refuses 'evaluation_suite' since
-    # suite-level evaluators/execution_policy live as a versioned config that
-    # this slice does not replicate.
+    # Type ('dataset' or 'evaluation_suite' for test suites). The planner
+    # forwards this into the plan so the target inherits the same type;
+    # for suites the executor's CopyTestSuiteConfig action additionally
+    # copies the latest version's evaluators + execution_policy.
     type: Optional[str]
     visibility: Optional[str]
     tags: Optional[List[str]]
+
+
+def _iter_dataset_pages(
+    rest_client: OpikApi,
+    *,
+    name: str,
+    project_id: Optional[str],
+) -> Iterable[Any]:
+    """Yield every dataset row matching ``name``, paginating to exhaustion.
+
+    Avoids the silent truncation bug where a single ``find_datasets(page=1)``
+    call would miss rows on later pages. Yields the underlying Fern row
+    objects so callers can read all available fields.
+    """
+    page_idx = 1
+    while True:
+        page = rest_client.datasets.find_datasets(
+            page=page_idx,
+            size=_FIND_DATASETS_PAGE_SIZE,
+            project_id=project_id,
+            name=name,
+        )
+        if not page.content:
+            return
+        for row in page.content:
+            yield row
+        if len(page.content) < _FIND_DATASETS_PAGE_SIZE:
+            return
+        page_idx += 1
+
+
+def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
+    """Resolve a dataset row's ``project_id`` to a human-readable name.
+
+    Returns None when the dataset has no project (workspace-scoped) or when
+    the name lookup fails. Used both for ``ResolvedDataset.project_name`` so
+    downstream calls scope correctly, and for collision error messages.
+    """
+    project_id = getattr(row, "project_id", None)
+    if not project_id:
+        return None
+    try:
+        proj = rest_client.projects.get_project_by_id(id=project_id)
+        return getattr(proj, "name", None)
+    except Exception:
+        # Best effort — a missing/inaccessible project name shouldn't break
+        # the surrounding migration check; the row's id is still usable.
+        return None
 
 
 def resolve_source(
@@ -51,27 +106,35 @@ def resolve_source(
     same name shouldn't normally happen (the BE enforces uniqueness within a
     project), but workspace-scoped + project-scoped collisions are possible
     and we surface them as ``AmbiguityError``.
+
+    Pagination: walks every ``find_datasets`` page (not just the first) so
+    matches on later pages are not silently dropped.
+
+    ``project_name`` on the returned ``ResolvedDataset`` is derived from the
+    matched row's ``project_id`` (resolved to a name), not from the
+    ``--from-project`` flag — so workspace-scoped lookups still produce the
+    correct project context for downstream ``Opik.get_dataset`` /
+    ``delete_dataset`` calls.
     """
     project_id = rest_helpers.resolve_project_id_by_name_optional(
         rest_client, project_name=from_project
     )
 
-    page = rest_client.datasets.find_datasets(
-        page=1, size=100, project_id=project_id, name=name
-    )
-    matches: List[ResolvedDataset] = [
-        ResolvedDataset(
-            id=d.id,
-            name=d.name,
-            project_name=from_project,
-            description=d.description,
-            type=getattr(d, "type", None),
-            visibility=getattr(d, "visibility", None),
-            tags=getattr(d, "tags", None),
+    matches: List[ResolvedDataset] = []
+    for row in _iter_dataset_pages(rest_client, name=name, project_id=project_id):
+        if row.name != name:
+            continue
+        matches.append(
+            ResolvedDataset(
+                id=row.id,
+                name=row.name,
+                project_name=_project_name_for_row(rest_client, row),
+                description=row.description,
+                type=getattr(row, "type", None),
+                visibility=getattr(row, "visibility", None),
+                tags=getattr(row, "tags", None),
+            )
         )
-        for d in page.content
-        if d.name == name
-    ]
 
     if not matches:
         scope = f"project '{from_project}'" if from_project else "the workspace"
@@ -116,17 +179,26 @@ def ensure_destination_project_exists(
 def _suggest_project_names(rest_client: OpikApi, name: str) -> List[str]:
     """Return up to 3 closest project-name matches for ``name``.
 
-    Best-effort: any error during suggestion lookup degrades silently to no
-    suggestions — we'd rather raise the original 404 than a secondary error
-    that obscures the real issue.
+    Best-effort with narrow exception handling: an ``ApiError`` during the
+    lookup just degrades to no suggestions (we'd rather raise the original
+    404 from the caller than a secondary error that obscures the real issue),
+    but unexpected errors are logged so they're still visible to operators.
     """
     try:
         page = rest_client.projects.find_projects(
             page=1, size=_PROJECT_SUGGESTION_PAGE_SIZE
         )
-        candidates = [p.name for p in page.content if p.name]
-    except Exception:
+    except ApiError:
         return []
+    except Exception as exc:
+        LOGGER.warning(
+            "Project-suggestion lookup failed unexpectedly while resolving "
+            "missing project %r: %s",
+            name,
+            exc.__class__.__name__,
+        )
+        return []
+    candidates = [p.name for p in page.content if p.name]
     return difflib.get_close_matches(name, candidates, n=3, cutoff=0.6)
 
 
@@ -136,20 +208,28 @@ def name_taken_in_workspace(
     *,
     ignore_dataset_id: Optional[str] = None,
 ) -> Optional[str]:
-    """Return the project name of a workspace-wide collision, or ``None``.
+    """Return a description of the colliding project, or ``None``.
 
     Opik enforces dataset names workspace-wide (not per-project), so the
     pre-flight has to scan without a ``project_id`` filter. ``ignore_dataset_id``
     lets callers exclude the source dataset from the check (it'll get renamed
     before the destination is created, so its current name doesn't conflict).
+
+    Pagination: iterates every page until we either find a true collision
+    (early-exit) or exhaust the results — so collisions don't slip through
+    just because they live past the first page of name-matches.
+
+    The returned string is a human-readable label for the colliding project
+    (its name when resolvable, else ``"another project"``) suitable for
+    ``ConflictError`` messages.
     """
-    page = rest_client.datasets.find_datasets(page=1, size=10, name=name)
-    for d in page.content:
-        if d.name != name:
+    for row in _iter_dataset_pages(rest_client, name=name, project_id=None):
+        if row.name != name:
             continue
-        if ignore_dataset_id is not None and d.id == ignore_dataset_id:
+        if ignore_dataset_id is not None and row.id == ignore_dataset_id:
             continue
-        # The Fern model carries project_name on dataset rows; fall back to
-        # the id when the name is unavailable for older payloads.
-        return getattr(d, "project_name", None) or "another project"
+        project_name = _project_name_for_row(rest_client, row)
+        if project_name:
+            return f"project '{project_name}'"
+        return "another project"
     return None

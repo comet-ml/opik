@@ -17,6 +17,7 @@ from opik.rest_api import OpikApi
 from rich.console import Console
 
 from .audit import AuditLog
+from .errors import safe_error_envelope
 from .planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
@@ -47,7 +48,7 @@ def execute_plan(
                 type=details["type"],
                 status="failed",
                 details=details,
-                error=str(exc),
+                error=safe_error_envelope(exc),
             )
             raise
         audit.record(type=details["type"], status="ok", details=details)

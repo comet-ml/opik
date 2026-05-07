@@ -20,7 +20,7 @@ import opik
 from opik.api_objects import rest_helpers
 
 from .audit import AuditLog, default_audit_path
-from .errors import MigrationError
+from .errors import MigrationError, safe_error_string
 from .executor import execute_plan, record_planned
 from .planner import (
     CopyCurrentItems,
@@ -111,6 +111,31 @@ def _print_workspace_banner(client: opik.Opik) -> None:
     """
     resolved = getattr(client, "_workspace", None) or "default"
     console.print(f"[blue]Workspace:[/blue] {resolved}")
+
+
+def _finalize_and_fail(
+    audit: AuditLog,
+    audit_path: Path,
+    exc: BaseException,
+    *,
+    user_facing: bool,
+    prefix: str,
+) -> None:
+    """Shared exception path: write audit log + print sanitized error + exit.
+
+    ``user_facing`` distinguishes ``MigrationError`` (already user-friendly,
+    print verbatim) from generic exceptions (sanitize via
+    ``safe_error_string`` so ``ApiError`` response bodies/headers don't leak
+    to the terminal). Always finalises the audit log to ``failed`` first so
+    the on-disk record matches what the operator saw.
+    """
+    audit.finalize("failed")
+    audit.write(audit_path)
+    if user_facing:
+        console.print(f"[red]{exc}[/red]")
+    else:
+        console.print(f"[red]{prefix}: {safe_error_string(exc)}[/red]")
+    sys.exit(1)
 
 
 @migrate_group.command(name="dataset")
@@ -215,15 +240,13 @@ def migrate_dataset_command(
 
         execute_plan(client, plan, audit)
     except MigrationError as exc:
-        audit.finalize("failed")
-        audit.write(audit_path)
-        console.print(f"[red]{exc}[/red]")
-        sys.exit(1)
+        _finalize_and_fail(
+            audit, audit_path, exc, user_facing=True, prefix="Migration failed"
+        )
     except Exception as exc:
-        audit.finalize("failed")
-        audit.write(audit_path)
-        console.print(f"[red]Migration failed: {exc}[/red]")
-        sys.exit(1)
+        _finalize_and_fail(
+            audit, audit_path, exc, user_facing=False, prefix="Migration failed"
+        )
 
     audit.finalize("ok")
     audit.write(audit_path)
@@ -320,11 +343,14 @@ def migrate_plan_command(
 
         audit.finalize("planned")
         audit.write(audit_path)
+    except MigrationError as exc:
+        _finalize_and_fail(
+            audit, audit_path, exc, user_facing=True, prefix="Plan failed"
+        )
     except Exception as exc:
-        audit.finalize("failed")
-        audit.write(audit_path)
-        console.print(f"[red]Plan failed: {exc}[/red]")
-        sys.exit(1)
+        _finalize_and_fail(
+            audit, audit_path, exc, user_facing=False, prefix="Plan failed"
+        )
 
 
 def _print_plan(plan: MigrationPlan) -> None:

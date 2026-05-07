@@ -35,8 +35,14 @@ class AuditLog:
         type: str,
         status: str,
         details: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None,
+        error: Optional[Dict[str, Any]] = None,
     ) -> None:
+        """Append an audit-log entry.
+
+        ``error`` is a sanitized envelope (see ``errors.safe_error_envelope``);
+        passing the raw exception text would risk leaking ``ApiError`` response
+        bodies or headers into a JSON artifact users may share.
+        """
         entry: Dict[str, Any] = {
             "type": type,
             "status": status,
