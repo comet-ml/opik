@@ -11,6 +11,7 @@ LOGGER = logging.getLogger(__name__)
 
 def ensure_rest_api_call_respecting_rate_limit(
     rest_callable: Callable[[], Any],
+    operation_name: Optional[str] = None,
 ) -> Any:
     """
     Execute a REST API call with automatic retry on rate limit (429) errors.
@@ -21,6 +22,8 @@ def ensure_rest_api_call_respecting_rate_limit(
 
     Args:
         rest_callable: A callable that performs the REST API call.
+        operation_name: Optional label included in rate-limit log messages so users
+            can identify which SDK operation is being throttled.
 
     Returns:
         The result of the successful REST API call.
@@ -28,6 +31,7 @@ def ensure_rest_api_call_respecting_rate_limit(
     Raises:
         ApiError: If the error is not a 429 rate limit error.
     """
+    label = f" for '{operation_name}'" if operation_name else ""
     while True:
         try:
             result = rest_callable()
@@ -38,15 +42,17 @@ def ensure_rest_api_call_respecting_rate_limit(
                     rate_limiter = rate_limit.parse_rate_limit(exception.headers)
                     if rate_limiter is not None:
                         retry_after = rate_limiter.retry_after()
-                        LOGGER.info(
-                            "Rate limited (HTTP 429), retrying in %s seconds",
+                        LOGGER.warning(
+                            "Rate limited (HTTP 429)%s, continuing in %s seconds",
+                            label,
                             retry_after,
                         )
                         time.sleep(retry_after)
                         continue
 
-                LOGGER.info(
-                    "Rate limited (HTTP 429) with no retry-after header, retrying in 1 second"
+                LOGGER.warning(
+                    "Rate limited (HTTP 429)%s with no retry-after header, continuing in 1 second",
+                    label,
                 )
                 time.sleep(1)
                 continue

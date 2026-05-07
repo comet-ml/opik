@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Callable, Iterable, Type, List, Optional, TypeVar, Any
+from typing import Callable, Iterable, Type, List, Optional, TypeVar
 
 LOGGER = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ T = TypeVar("T")
 
 
 def read_and_parse_full_stream(
-    read_source: Callable[[int, Optional[int]], List[Any]],
+    read_source: Callable[[int, Optional[str]], Iterable[bytes]],
     parsed_item_class: Type[T],
     max_results: Optional[int],
     max_endpoint_batch_size: int = MAX_ENDPOINT_BATCH_SIZE,
