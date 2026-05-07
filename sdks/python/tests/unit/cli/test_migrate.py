@@ -61,6 +61,10 @@ class _DatasetRow:
         type: Optional[str] = "dataset",
         visibility: Optional[str] = "private",
         tags: Optional[List[str]] = None,
+        # ``project_id=None`` represents a workspace-scoped dataset (V1
+        # entity, or anything left at workspace scope after auto-migration).
+        # Tests that want a project-scoped source pass an explicit id.
+        project_id: Optional[str] = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -69,6 +73,7 @@ class _DatasetRow:
         self.type = type
         self.visibility = visibility
         self.tags = tags
+        self.project_id = project_id
 
 
 class _Page:
@@ -943,6 +948,51 @@ class TestMigrateDatasetCommand:
         client.rest_client.datasets.update_dataset.assert_not_called()
         client.rest_client.datasets.create_dataset.assert_not_called()
         dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_not_called()
+
+    def test_migrate_dataset__source_has_no_project__migrates_workspace_scoped_source(
+        self, tmp_path: Path
+    ) -> None:
+        # V1 datasets and anything left at workspace scope after auto-migration
+        # have project_id=None on the BE. The CLI must handle that source the
+        # same way as a project-scoped one — resolver returns project_name=None,
+        # rename / create / copy / delete all proceed without a from-project
+        # context.
+        runner = CliRunner()
+        client, _, dest_dataset = _build_fake_client(
+            source_rows=[_DatasetRow(id="src-1", name="LegacyDS", project_id=None)],
+            destination_rows=[],
+            items=[{"input": "q1"}, {"input": "q2"}],
+        )
+
+        result = self._invoke(
+            runner,
+            ["LegacyDS", "--to-project", "B"],
+            client,
+            tmp_path,
+        )
+
+        assert result.exit_code == 0, result.output
+        # Source rename happened against the row id; no project context needed.
+        client.rest_client.datasets.update_dataset.assert_called_once()
+        rename_kwargs = client.rest_client.datasets.update_dataset.call_args.kwargs
+        assert rename_kwargs["id"] == "src-1"
+        assert rename_kwargs["name"] == "LegacyDS_v1"
+        # Destination is created under the explicit --to-project=B regardless
+        # of the source's (missing) project.
+        create_kwargs = client.rest_client.datasets.create_dataset.call_args.kwargs
+        assert create_kwargs["name"] == "LegacyDS"
+        assert create_kwargs["project_name"] == "B"
+        # Items copied exactly once (one-target-version contract still holds).
+        dest_dataset.__internal_api__insert_items_as_dataclasses__.assert_called_once()
+
+        # Source-side reads went through `Opik.get_dataset` with project_name=None
+        # — the workspace-scoped lookup path. Pinning this so a refactor that
+        # silently routes the source read through a default-project fallback
+        # (or breaks against a project_id=None source) trips this test first.
+        get_calls = client.get_dataset.call_args_list
+        # First get_dataset call is for the (renamed) source.
+        first_call_kwargs = get_calls[0].kwargs
+        assert first_call_kwargs.get("project_name") is None
 
     def test_migrate_dataset__source_name_not_found__exits_with_actionable_error(
         self, tmp_path: Path
