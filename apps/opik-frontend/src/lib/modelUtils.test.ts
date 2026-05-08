@@ -393,4 +393,43 @@ describe("sanitizeConfigForRequest", () => {
     const configs = { temperature: 0.5 };
     expect(sanitizeConfigForRequest("", configs)).toBe(configs);
   });
+
+  it("strips reasoningEffort for OpenAI models that don't support it", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_4O, {
+      reasoningEffort: "high",
+      temperature: 0.5,
+    });
+    expect(result.reasoningEffort).toBeUndefined();
+  });
+
+  it("strips reasoningEffort for o1-mini (reasoning model that rejects the param)", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_O1_MINI, {
+      reasoningEffort: "high",
+    });
+    expect(result.reasoningEffort).toBeUndefined();
+  });
+
+  it("strips an unsupported reasoningEffort value (xhigh on gpt-5.1)", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_1, {
+      reasoningEffort: "xhigh",
+    });
+    expect(result.reasoningEffort).toBeUndefined();
+  });
+
+  it("keeps a valid reasoningEffort value for the model", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5, {
+      reasoningEffort: "minimal",
+    });
+    expect(result.reasoningEffort).toBe("minimal");
+  });
+
+  it("does not touch reasoningEffort for non-OpenAI providers", () => {
+    const result = sanitizeConfigForRequest(
+      PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,
+      {
+        reasoningEffort: "high",
+      },
+    );
+    expect(result.reasoningEffort).toBe("high");
+  });
 });
