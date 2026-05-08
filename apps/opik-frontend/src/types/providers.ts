@@ -220,6 +220,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
   GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW = "google/gemini-3.1-flash-image-preview",
+  GOOGLE_GEMINI_3_1_FLASH_LITE = "google/gemini-3.1-flash-lite",
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
@@ -246,6 +247,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
+  INCLUSIONAI_LING_2_6_1T = "inclusionai/ling-2.6-1t",
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
@@ -624,6 +626,7 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
