@@ -14,8 +14,6 @@ import java.sql.SQLException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
-import java.util.function.ToIntFunction;
 
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -30,16 +28,6 @@ public interface WorkspacesService {
      * context).
      */
     int upsertVersion(String workspaceId, OpikVersion version, String userName);
-
-    /**
-     * Atomically capture the prior {@code last_known_version} (with a row-level lock) and upsert
-     * the new value in a single transaction. Concurrent callers serialize per workspace, so each
-     * one observes the previous writer's commit — preventing duplicate {@code version_changed=true}
-     * emissions when two determinations race for the same workspace.
-     *
-     * @return the prior {@link OpikVersion} (empty when no row existed or the column was null)
-     */
-    Optional<OpikVersion> upsertVersionAndReturnPrevious(String workspaceId, OpikVersion version, String userName);
 
     /** Returns the row, or empty if not found / blank id. */
     Optional<Workspace> findById(@NonNull String workspaceId);
@@ -80,18 +68,6 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public Optional<OpikVersion> upsertVersionAndReturnPrevious(@NonNull String workspaceId,
-            @NonNull OpikVersion version, @NonNull String userName) {
-        return transactionTemplate.inTransaction(WRITE, handle -> {
-            var dao = handle.attach(WorkspacesDAO.class);
-            var previous = dao.findVersionForUpdate(workspaceId)
-                    .flatMap(OpikVersion::findByValue);
-            dao.upsertVersion(workspaceId, version.getValue(), Instant.now(), userName);
-            return previous;
-        });
-    }
-
-    @Override
     public Optional<Workspace> findById(@NonNull String workspaceId) {
         if (StringUtils.isBlank(workspaceId)) {
             return Optional.empty();
@@ -100,60 +76,63 @@ class WorkspacesServiceImpl implements WorkspacesService {
                 handle -> handle.attach(WorkspacesDAO.class).findById(workspaceId));
     }
 
-    @Override
-    public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
-        var now = Instant.now();
-        return transitionFlagAtomically(
-                dao -> dao.updateFirstTraceIfNull(workspaceId, now, userName),
-                dao -> dao.insertFirstTrace(workspaceId, now, userName));
-    }
-
-    @Override
-    public boolean markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
-        var now = Instant.now();
-        return transitionFlagAtomically(
-                dao -> dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER),
-                dao -> dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER));
-    }
-
     /**
      * UPDATE-then-INSERT, single transaction. We can't use a single-statement upsert with a
      * ROW_COUNT check here because Connector/J defaults to {@code useAffectedRows=false}
      * ({@code CLIENT_FOUND_ROWS=on}), which makes a matched-but-unchanged upsert return
-     * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives keeps
-     * the detection unambiguous: the UPDATE's row count is exact.
+     * {@code 1} — indistinguishable from a fresh insert. Splitting into two primitives keeps the
+     * detection unambiguous.
      *
-     * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped <i>this</i>
-     * flag — it just means the row exists. It might have been inserted by an unrelated writer
-     * (version determination, migration job) that didn't touch the target column. We retry the
-     * UPDATE-if-null to disambiguate: if the column is still NULL we flip it (and return true),
-     * otherwise some prior caller already set it (return false).</p>
-     *
-     * @return {@code true} when this caller flipped the flag; {@code false} when another caller
-     *         already set it
+     * <p>A duplicate-key on the INSERT does <b>not</b> mean another writer flipped
+     * {@code first_trace_reported_at} — it just means the row exists. It might have been inserted
+     * by an unrelated writer (version determination, migration job) that didn't touch the column.
+     * Retrying the UPDATE-if-null disambiguates: if the column is still NULL we flip it.</p>
      */
-    private boolean transitionFlagAtomically(ToIntFunction<WorkspacesDAO> updateIfNull,
-            Consumer<WorkspacesDAO> insert) {
+    @Override
+    public boolean markFirstTraceReported(@NonNull String workspaceId, @NonNull String userName) {
         return transactionTemplate.inTransaction(WRITE, handle -> {
             var dao = handle.attach(WorkspacesDAO.class);
-            if (updateIfNull.applyAsInt(dao) > 0) {
+            var now = Instant.now();
+            if (dao.updateFirstTraceIfNull(workspaceId, now, userName) > 0) {
                 return true;
             }
             try {
-                insert.accept(dao);
+                dao.insertFirstTrace(workspaceId, now, userName);
                 return true;
             } catch (UnableToExecuteStatementException exception) {
-                if (isDuplicateKeyViolation(exception)) {
-                    return updateIfNull.applyAsInt(dao) > 0;
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateFirstTraceIfNull(workspaceId, now, userName) > 0;
                 }
                 throw exception;
             }
         });
     }
 
-    private static boolean isDuplicateKeyViolation(UnableToExecuteStatementException exception) {
-        return exception.getCause() instanceof SQLException sql
-                && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState());
+    /**
+     * Same UPDATE-then-INSERT-then-retry-UPDATE flow as {@link #markFirstTraceReported}, applied
+     * to the {@code migration_skipped_at} flag. Idempotent: returns {@code false} when this caller
+     * loses the race or the workspace was already trapped.
+     */
+    @Override
+    public boolean markMigrationSkipped(@NonNull String workspaceId, @NonNull String reason) {
+        return transactionTemplate.inTransaction(WRITE, handle -> {
+            var dao = handle.attach(WorkspacesDAO.class);
+            var now = Instant.now();
+            if (dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0) {
+                return true;
+            }
+            try {
+                dao.insertMigrationSkipped(workspaceId, now, reason, SYSTEM_USER);
+                return true;
+            } catch (UnableToExecuteStatementException exception) {
+                if (exception.getCause() instanceof SQLException sql
+                        && SQL_STATE_INTEGRITY_CONSTRAINT_VIOLATION.equals(sql.getSQLState())) {
+                    return dao.updateMigrationSkippedIfNull(workspaceId, now, reason, SYSTEM_USER) > 0;
+                }
+                throw exception;
+            }
+        });
     }
 
     @Override

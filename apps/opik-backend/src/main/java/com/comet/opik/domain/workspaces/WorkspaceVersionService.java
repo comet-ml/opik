@@ -27,6 +27,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.ServiceTogglesConfig.FORCE_WORKSPACE_VERSION_DISABLED;
 import static com.comet.opik.infrastructure.auth.RequestContext.SYSTEM_USER;
@@ -128,6 +129,21 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         this.cacheConfiguration = cacheConfiguration;
         this.workspacesService = workspacesService;
         this.analyticsService = analyticsService;
+        warnIfWorkspaceAllowlistsOverlap();
+    }
+
+    private void warnIfWorkspaceAllowlistsOverlap() {
+        var v1 = serviceTogglesConfig.getV1WorkspaceAllowlistIds();
+        var v2 = serviceTogglesConfig.getV2WorkspaceAllowlistIds();
+        if (v1.isEmpty() || v2.isEmpty()) {
+            return;
+        }
+        var overlap = v1.stream().filter(v2::contains).collect(Collectors.toUnmodifiableSet());
+        if (!overlap.isEmpty()) {
+            log.warn(
+                    "Workspace IDs are configured in both V1 and V2 allowlists; V2 wins per priority order, ids '{}'",
+                    overlap);
+        }
     }
 
     @Override
@@ -136,6 +152,11 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         if (isWorkspaceInV2Allowlist) {
             log.info("Workspace included in version_2 allowlist, workspaceId '{}'", workspaceId);
             return Mono.just(buildResponse(OpikVersion.VERSION_2));
+        }
+        var isWorkspaceInV1Allowlist = serviceTogglesConfig.getV1WorkspaceAllowlistIds().contains(workspaceId);
+        if (isWorkspaceInV1Allowlist) {
+            log.info("Workspace included in version_1 allowlist, workspaceId '{}'", workspaceId);
+            return Mono.just(buildResponse(OpikVersion.VERSION_1));
         }
         var forcedVersion = getForcedVersion();
         if (forcedVersion.isPresent()) {
@@ -192,7 +213,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
         var newVersion = response.opikVersion();
-        var previousVersion = workspacesService.upsertVersionAndReturnPrevious(workspaceId, newVersion, userName);
+        var previousVersion = workspacesService.findById(workspaceId)
+                .map(Workspace::lastKnownVersion)
+                .flatMap(OpikVersion::findByValue);
+        workspacesService.upsertVersion(workspaceId, newVersion, userName);
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,

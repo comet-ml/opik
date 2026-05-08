@@ -177,6 +177,101 @@ class WorkspaceVersionResourceTest {
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     @ExtendWith(DropwizardAppExtensionProvider.class)
+    class V1WorkspaceAllowlistTest {
+
+        private static final String V1_ALLOWLISTED_ID_1 = UUID.randomUUID().toString();
+        private static final String V1_ALLOWLISTED_ID_2 = UUID.randomUUID().toString();
+        // Same ID is in both lists — V2 must win per priority order.
+        private static final String V2_AND_V1_ALLOWLISTED_ID = UUID.randomUUID().toString();
+        private static final String V1_WORKSPACE_ALLOWLIST = "%s, %s, %s".formatted(
+                V1_ALLOWLISTED_ID_1, V1_ALLOWLISTED_ID_2, V2_AND_V1_ALLOWLISTED_ID);
+        private static final String V2_WORKSPACE_ALLOWLIST = V2_AND_V1_ALLOWLISTED_ID;
+
+        private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
+        private final Network NETWORK = Network.newNetwork();
+        private final GenericContainer<?> ZOOKEEPER = ClickHouseContainerUtils.newZookeeperContainer(false, NETWORK);
+        private final ClickHouseContainer CLICKHOUSE = ClickHouseContainerUtils.newClickHouseContainer(
+                false, NETWORK, ZOOKEEPER);
+        private final MySQLContainer MYSQL = MySQLContainerUtils.newMySQLContainer(false);
+
+        @RegisterApp
+        private final TestDropwizardAppExtension app;
+
+        private final WireMockUtils.WireMockRuntime wireMock;
+
+        {
+            wireMock = WireMockUtils.startWireMock();
+
+            Startables.deepStart(REDIS, MYSQL, CLICKHOUSE).join();
+
+            MigrationUtils.runMysqlDbMigration(MYSQL);
+            MigrationUtils.runClickhouseDbMigration(CLICKHOUSE);
+
+            var databaseAnalyticsFactory = ClickHouseContainerUtils
+                    .newDatabaseAnalyticsFactory(CLICKHOUSE, DATABASE_NAME);
+
+            // forceWorkspaceVersion=version_2 lets the test prove V1-allowlist beats the global force.
+            app = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
+                    AppContextConfig.builder()
+                            .redisUrl(REDIS.getRedisURI())
+                            .jdbcUrl(MYSQL.getJdbcUrl())
+                            .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                            .runtimeInfo(wireMock.runtimeInfo())
+                            .customConfigs(List.of(
+                                    new CustomConfig("serviceToggles.v1WorkspaceAllowlist", V1_WORKSPACE_ALLOWLIST),
+                                    new CustomConfig("serviceToggles.v2WorkspaceAllowlist", V2_WORKSPACE_ALLOWLIST),
+                                    new CustomConfig("serviceToggles.forceWorkspaceVersion", "version_2")))
+                            .build());
+        }
+
+        private WorkspaceResourceClient workspaceClient;
+
+        @BeforeAll
+        void beforeAll(ClientSupport clientSupport) {
+            var baseUrl = TestUtils.getBaseUrl(clientSupport);
+            ClientSupportUtils.config(clientSupport);
+            workspaceClient = new WorkspaceResourceClient(clientSupport, baseUrl, podamFactory);
+        }
+
+        @AfterAll
+        void afterAll() {
+            wireMock.server().stop();
+        }
+
+        static Stream<Arguments> workspaceVersion__whenV1AllowlistAndOverrides__returnsExpectedVersion() {
+            return Stream.of(
+                    // V1 allowlist hit → V1, even though forceWorkspaceVersion=version_2.
+                    arguments(V1_ALLOWLISTED_ID_1, V1_WORKSPACE_VERSION),
+                    arguments(V1_ALLOWLISTED_ID_2, V1_WORKSPACE_VERSION),
+                    // Both V1 and V2 allowlists list this id → V2 wins.
+                    arguments(V2_AND_V1_ALLOWLISTED_ID, V2_WORKSPACE_VERSION),
+                    // Not in either allowlist → forceWorkspaceVersion=version_2 takes over.
+                    arguments(UUID.randomUUID().toString(), V2_WORKSPACE_VERSION));
+        }
+
+        @ParameterizedTest
+        @MethodSource
+        void workspaceVersion__whenV1AllowlistAndOverrides__returnsExpectedVersion(
+                String workspaceId, WorkspaceVersion expectedVersion) {
+            var workspaceName = mockWorkspace(wireMock, workspaceId, null);
+
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(expectedVersion);
+        }
+
+        @Test
+        void v1AllowlistHit__doesNotPersistRowToWorkspacesTable(WorkspacesService workspacesService) {
+            // V1 allowlist hits short-circuit before persistAndEmit — no workspaces row should ever appear.
+            var workspaceName = mockWorkspace(wireMock, V1_ALLOWLISTED_ID_1, null);
+
+            assertThat(workspaceClient.getWorkspaceVersion(API_KEY, workspaceName)).isEqualTo(V1_WORKSPACE_VERSION);
+
+            assertThat(workspacesService.findById(V1_ALLOWLISTED_ID_1)).isEmpty();
+        }
+    }
+
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    @ExtendWith(DropwizardAppExtensionProvider.class)
     class ForceWorkspaceVersion1Test {
 
         private final RedisContainer REDIS = RedisContainerUtils.newRedisContainer();
