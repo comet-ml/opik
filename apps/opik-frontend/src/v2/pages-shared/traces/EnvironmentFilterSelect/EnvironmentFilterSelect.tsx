@@ -14,6 +14,7 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useAppStore from "@/store/AppStore";
 import { Environment } from "@/types/environments";
 import { EnvironmentSquare } from "@/shared/EnvironmentLabel/EnvironmentLabel";
+import { CONFIGURATION_TABS } from "@/v2/pages/ConfigurationPage/ConfigurationPage";
 
 export const ALL_ENVIRONMENTS_VALUE = "";
 
@@ -82,7 +83,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
           <Link
             to="/$workspaceName/configuration"
             params={{ workspaceName }}
-            search={{ tab: "environments" }}
+            search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
           >
             <SlidersHorizontal className="mr-2 size-4 shrink-0 text-light-slate" />
             Manage environments

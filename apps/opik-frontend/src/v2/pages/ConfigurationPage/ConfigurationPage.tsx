@@ -9,7 +9,7 @@ import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
 
-enum CONFIGURATION_TABS {
+export enum CONFIGURATION_TABS {
   FEEDBACK_DEFINITIONS = "feedback-definitions",
   ENVIRONMENTS = "environments",
   AI_PROVIDER = "ai-provider",
