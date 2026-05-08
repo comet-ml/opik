@@ -17,7 +17,7 @@ import { Input } from "@/ui/input";
 import { Label } from "@/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/ui/popover";
 import { Textarea } from "@/ui/textarea";
-import { DEFAULT_HEX_COLOR } from "@/constants/colorVariants";
+import { DEFAULT_HEX_COLOR, HEX_COLOR_REGEX } from "@/constants/colorVariants";
 import {
   ENVIRONMENT_DESCRIPTION_MAX_LENGTH,
   ENVIRONMENT_NAME_MAX_LENGTH,
@@ -49,7 +49,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     environment?.description ?? "",
   );
   const [color, setColor] = useState<string>(
-    environment?.color && environment.color !== "default"
+    environment?.color && HEX_COLOR_REGEX.test(environment.color)
       ? environment.color
       : DEFAULT_HEX_COLOR,
   );
@@ -122,7 +122,8 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
                 <PopoverTrigger asChild>
                   <button
                     type="button"
-                    className="size-10 shrink-0 rounded-l-md focus-visible:outline-none"
+                    aria-label="Change color"
+                    className="size-10 shrink-0 rounded-l-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
                     style={{ backgroundColor: color }}
                   />
                 </PopoverTrigger>

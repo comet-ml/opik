@@ -36,7 +36,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
     [data?.content],
   );
 
-  const selectedEnvironment = environments.find((env) => env.id === value);
+  const selectedEnvironment = environments.find((env) => env.name === value);
 
   return (
     <DropdownMenu>
@@ -44,7 +44,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
         <Button
           variant="outline"
           size="sm"
-          className="min-w-40 justify-between gap-2 font-normal"
+          className="min-w-40 justify-between gap-2 font-normal focus-visible:border-primary focus-visible:ring-0"
         >
           <span className="flex min-w-0 items-center gap-1.5 truncate">
             {selectedEnvironment && (
@@ -68,8 +68,8 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
         {environments.map((env) => (
           <DropdownMenuItem
             key={env.id}
-            selected={value === env.id}
-            onSelect={() => onChange(env.id)}
+            selected={value === env.name}
+            onSelect={() => onChange(env.name)}
           >
             <div className="flex min-w-0 items-center gap-2">
               <EnvironmentSquare color={env.color} />

@@ -114,7 +114,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
   }, [allEnvironments, search]);
 
   const total = allEnvironments.length;
-  const noData = !search;
+  const showCreate = !search;
   const atLimit = total >= ENVIRONMENT_WORKSPACE_LIMIT;
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -203,7 +203,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
           placeholder="Search by name"
           className="w-[320px]"
           dimension="sm"
-        ></SearchInput>
+        />
 
         <div className="flex items-center gap-2">
           <EnvironmentsActionsPanel environments={selectedRows} />
@@ -214,7 +214,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
             onSelectionChange={setSelectedColumns}
             order={columnsOrder}
             onOrderChange={setColumnsOrder}
-          ></ColumnsButton>
+          />
         </div>
       </div>
       <DataTable
@@ -225,7 +225,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
         getRowId={getRowId}
         columnPinning={DEFAULT_COLUMN_PINNING}
         noData={
-          noData ? (
+          showCreate ? (
             <DataTableEmptyContent
               lightImageUrl={emptyEnvironmentsLightImage}
               darkImageUrl={emptyEnvironmentsDarkImage}

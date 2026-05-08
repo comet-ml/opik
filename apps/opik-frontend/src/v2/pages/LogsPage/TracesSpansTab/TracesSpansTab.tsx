@@ -47,6 +47,8 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { generateEnvironmentFilter } from "@/lib/filters";
+import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -459,6 +461,21 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     },
   );
 
+  const { data: environmentsData } = useEnvironmentsList();
+
+  const effectiveFilters = useMemo(() => {
+    const userFilters = filters ?? [];
+    if (!environment) return userFilters;
+
+    const envList = environmentsData?.content;
+    const envExists = envList
+      ? envList.some((e) => e.name === environment)
+      : true;
+    if (!envExists) return userFilters;
+
+    return [...userFilters, ...generateEnvironmentFilter(environment)];
+  }, [filters, environment, environmentsData?.content]);
+
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
   );
@@ -604,7 +621,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         projectId,
         type: type as TRACE_DATA_TYPE,
         sorting: sortedColumns,
-        filters,
+        filters: effectiveFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -626,7 +643,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters,
+      filters: effectiveFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -647,7 +664,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
-        filters,
+        filters: effectiveFilters,
         search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -703,8 +720,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const handleClearFilters = useCallback(() => {
     setSearch("");
     setFilters([]);
+    setEnvironment(undefined);
     setPage(1);
-  }, [setSearch, setFilters, setPage]);
+  }, [setSearch, setFilters, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
     () => data?.content ?? [],
@@ -1064,17 +1082,18 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "ID",
         type: COLUMN_TYPE.string,
       },
-      ...SHARED_COLUMNS.flatMap((col) =>
-        col.id === "error_info"
-          ? [
-              col,
-              {
-                id: "error_type",
-                label: "Error type",
-                type: COLUMN_TYPE.string,
-              },
-            ]
-          : [col],
+      ...SHARED_COLUMNS.filter((col) => col.id !== "environment").flatMap(
+        (col) =>
+          col.id === "error_info"
+            ? [
+                col,
+                {
+                  id: "error_type",
+                  label: "Error type",
+                  type: COLUMN_TYPE.string,
+                },
+              ]
+            : [col],
       ),
       ...(type === TRACE_DATA_TYPE.traces
         ? [
@@ -1284,7 +1303,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         <div className="flex items-center gap-2">
           <EnvironmentFilterSelect
             value={environment ?? ""}
-            onChange={(next) => setEnvironment(next || undefined)}
+            onChange={(next) => {
+              setEnvironment(next || undefined);
+              setPage(1);
+            }}
           />
           <MetricDateRangeSelect
             value={dateRange}
@@ -1304,7 +1326,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           projectId={projectId}
           entityType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
           countLabel={type === TRACE_DATA_TYPE.traces ? "Traces" : "Spans"}
-          filters={filters}
+          filters={effectiveFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
@@ -1439,7 +1461,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           noData={
             <DataTableNoMatchingData
               onClearFilters={
-                search || filters.length > 0 ? handleClearFilters : undefined
+                search || filters.length > 0 || environment
+                  ? handleClearFilters
+                  : undefined
               }
             />
           }
