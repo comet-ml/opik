@@ -848,3 +848,8 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: 5000ms
+
+# Environment CRUD configuration
+environment:
+  # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
+  maxPerWorkspace: 5

@@ -5,6 +5,7 @@ import com.comet.opik.api.BatchDeleteByProject;
 import com.comet.opik.api.Comment;
 import com.comet.opik.api.DeleteFeedbackScore;
 import com.comet.opik.api.DeleteTraceThreads;
+import com.comet.opik.api.Environment;
 import com.comet.opik.api.ErrorInfo;
 import com.comet.opik.api.ExperimentItem;
 import com.comet.opik.api.FeedbackScore;
@@ -49,6 +50,7 @@ import com.comet.opik.api.resources.utils.TestUtils;
 import com.comet.opik.api.resources.utils.WireMockUtils;
 import com.comet.opik.api.resources.utils.resources.AttachmentResourceClient;
 import com.comet.opik.api.resources.utils.resources.DatasetResourceClient;
+import com.comet.opik.api.resources.utils.resources.EnvironmentsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
@@ -234,6 +236,7 @@ class TracesResourceTest {
     private AttachmentResourceClient attachmentResourceClient;
     private DatasetResourceClient datasetResourceClient;
     private ExperimentResourceClient experimentResourceClient;
+    private EnvironmentsResourceClient environmentsResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client) {
@@ -252,6 +255,7 @@ class TracesResourceTest {
         this.attachmentResourceClient = new AttachmentResourceClient(client);
         this.datasetResourceClient = new DatasetResourceClient(this.client, baseURI);
         this.experimentResourceClient = new ExperimentResourceClient(this.client, baseURI, factory);
+        this.environmentsResourceClient = new EnvironmentsResourceClient(this.client, baseURI);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -2480,6 +2484,184 @@ class TracesResourceTest {
             assertThat(fullInputString).doesNotContainPattern("\\[input-attachment-\\d+-\\d+\\.gif\\]");
         }
 
+    }
+
+    @Nested
+    @DisplayName("Environment auto-create on trace ingestion:")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class EnvironmentAutoCreate {
+
+        private static final int ENVIRONMENT_CAP = 5;
+
+        @Test
+        @DisplayName("when trace is created with a new environment, then it is auto-created")
+        void create__whenTraceWithNewEnvironment__thenEnvironmentAutoCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String envName = "auto-env-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .environment(envName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name))
+                                    .contains(envName);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when batch traces with multiple new environments, then all are auto-created")
+        void batchCreate__whenMultipleEnvironments__thenAllAutoCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Set<String> envNames = Set.of(
+                    "env-a-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                    "env-b-" + RandomStringUtils.secure().nextAlphanumeric(8),
+                    "env-c-" + RandomStringUtils.secure().nextAlphanumeric(8));
+
+            List<Trace> traces = envNames.stream()
+                    .map(name -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .environment(name)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name).collect(Collectors.toSet()))
+                                    .containsAll(envNames);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when batch traces share the same new environment, then it is created only once")
+        void batchCreate__whenDuplicatedEnvironmentInBatch__thenCreatedOnce() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String envName = "dup-env-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            List<Trace> traces = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .environment(envName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name).filter(envName::equals))
+                                    .hasSize(1);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when batch traces include environment names with disallowed characters, then only valid ones are auto-created")
+        void batchCreate__whenEnvironmentNamesWithDisallowedChars__thenOnlyValidOnesAutoCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String validEnvName = "valid-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            String invalidCharsEnvName = "invalid env name!";
+
+            List<Trace> traces = Stream.of(validEnvName, invalidCharsEnvName)
+                    .map(name -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .environment(name)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name))
+                                    .contains(validEnvName)
+                                    .doesNotContain(invalidCharsEnvName);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when workspace at cap, then trace ingestion succeeds and no new env is created")
+        void create__whenWorkspaceAtCap__thenIngestionSucceedsAndNoEnvCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            IntStream.range(0, ENVIRONMENT_CAP).forEach(i -> environmentsResourceClient.createEnvironment(
+                    Environment.builder()
+                            .name("seed-" + RandomStringUtils.secure().nextAlphanumeric(12))
+                            .build(),
+                    apiKey, workspaceName));
+
+            String overflowEnvName = "overflow-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(DEFAULT_PROJECT)
+                    .environment(overflowEnvName)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+
+            traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollDelay(2, TimeUnit.SECONDS)
+                    .atMost(5, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content()).hasSize(ENVIRONMENT_CAP);
+                            assertThat(page.content().stream().map(Environment::name))
+                                    .doesNotContain(overflowEnvName);
+                        }
+                    });
+        }
     }
 
     @Nested
