@@ -70,6 +70,7 @@ const ConnectAgentStep: React.FC = () => {
       page: 1,
       size: 1,
       sorting: TRACES_OLDEST_FIRST_SORTING,
+      stripAttachments: true,
     },
     {
       enabled: !!projectId,
