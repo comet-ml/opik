@@ -170,12 +170,7 @@ describe("getOpenAIReasoningEffortOptions", () => {
 
   it("returns gpt-5.1 options with none replacing minimal", () => {
     const opts = getOpenAIReasoningEffortOptions(PROVIDER_MODEL_TYPE.GPT_5_1);
-    expect(opts.map((o) => o.value)).toEqual([
-      "none",
-      "low",
-      "medium",
-      "high",
-    ]);
+    expect(opts.map((o) => o.value)).toEqual(["none", "low", "medium", "high"]);
   });
 
   it("labels the default value as 'High (Default)'", () => {
