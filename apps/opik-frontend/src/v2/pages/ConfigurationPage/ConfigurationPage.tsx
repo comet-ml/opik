@@ -4,16 +4,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ui/tabs";
 import { StringParam, useQueryParam } from "use-query-params";
 import usePluginsStore from "@/store/PluginsStore";
 import FeedbackDefinitionsTab from "@/v2/pages/ConfigurationPage/FeedbackDefinitionsTab/FeedbackDefinitionsTab";
+import EnvironmentsTab from "@/v2/pages/ConfigurationPage/EnvironmentsTab/EnvironmentsTab";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
-
-enum CONFIGURATION_TABS {
-  FEEDBACK_DEFINITIONS = "feedback-definitions",
-  AI_PROVIDER = "ai-provider",
-  WORKSPACE_PREFERENCES = "workspace-preferences",
-  MEMBERS = "members",
-}
+import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
@@ -54,6 +49,12 @@ const ConfigurationPage = () => {
             </TabsTrigger>
             <TabsTrigger
               variant="underline"
+              value={CONFIGURATION_TABS.ENVIRONMENTS}
+            >
+              Environments
+            </TabsTrigger>
+            <TabsTrigger
+              variant="underline"
               value={CONFIGURATION_TABS.AI_PROVIDER}
             >
               AI Providers
@@ -71,6 +72,10 @@ const ConfigurationPage = () => {
 
           <TabsContent value={CONFIGURATION_TABS.FEEDBACK_DEFINITIONS}>
             <FeedbackDefinitionsTab />
+          </TabsContent>
+
+          <TabsContent value={CONFIGURATION_TABS.ENVIRONMENTS}>
+            <EnvironmentsTab />
           </TabsContent>
 
           <TabsContent value={CONFIGURATION_TABS.AI_PROVIDER}>

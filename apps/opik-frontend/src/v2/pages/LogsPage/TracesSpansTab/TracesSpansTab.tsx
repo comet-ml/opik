@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -23,6 +23,7 @@ import {
   DATE_RANGE_PRESET_ALLTIME,
 } from "@/v2/pages-shared/traces/MetricDateRangeSelect";
 import MetricDateRangeSelect from "@/v2/pages-shared/traces/MetricDateRangeSelect/MetricDateRangeSelect";
+import EnvironmentFilterSelect from "@/v2/pages-shared/traces/EnvironmentFilterSelect/EnvironmentFilterSelect";
 
 import useTracesOrSpansList, {
   TRACE_DATA_TYPE,
@@ -30,6 +31,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
@@ -46,6 +48,8 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
+import { generateEnvironmentFilter } from "@/lib/filters";
+import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import {
   normalizeMetadataPaths,
   buildDynamicMetadataColumns,
@@ -75,6 +79,7 @@ import IdCell from "@/shared/DataTableCells/IdCell";
 import CodeCell from "@/shared/DataTableCells/CodeCell";
 import AutodetectCell from "@/shared/DataTableCells/AutodetectCell";
 import ListCell from "@/shared/DataTableCells/ListCell";
+import EnvironmentCell from "@/shared/DataTableCells/EnvironmentCell";
 import CostCell from "@/shared/DataTableCells/CostCell";
 import ErrorCell from "@/shared/DataTableCells/ErrorCell";
 import DurationCell from "@/shared/DataTableCells/DurationCell";
@@ -212,6 +217,12 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: ListCell as never,
   },
   {
+    id: COLUMN_ENVIRONMENT_ID,
+    label: "Environment",
+    type: COLUMN_TYPE.string,
+    cell: EnvironmentCell as never,
+  },
+  {
     id: "usage.total_tokens",
     label: "Total tokens",
     type: COLUMN_TYPE.number,
@@ -278,6 +289,7 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   "usage.total_tokens",
   "total_estimated_cost",
   "tags",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -291,6 +303,7 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
   "duration",
   "total_estimated_cost",
   "tags",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -307,6 +320,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
   "name",
   "span_count",
@@ -333,6 +347,7 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
@@ -399,6 +414,14 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     updateType: "replaceIn",
   });
 
+  const [environment = "", setEnvironment] = useQueryParam(
+    "environment",
+    StringParam,
+    {
+      updateType: "replaceIn",
+    },
+  );
+
   const [page = 1, setPage] = useQueryParam("page", NumberParam, {
     updateType: "replaceIn",
   });
@@ -438,6 +461,25 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       updateType: "replaceIn",
     },
   );
+
+  const { data: environmentsData } = useEnvironmentsList();
+
+  const envList = environmentsData?.content;
+  const envInList =
+    environment && envList ? envList.some((e) => e.name === environment) : null;
+
+  useEffect(() => {
+    if (envInList === false) {
+      setEnvironment(undefined);
+      setPage(1);
+    }
+  }, [envInList, setEnvironment, setPage]);
+
+  const effectiveFilters = useMemo(() => {
+    const userFilters = filters ?? [];
+    if (!environment || envInList === false) return userFilters;
+    return [...userFilters, ...generateEnvironmentFilter(environment)];
+  }, [filters, environment, envInList]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
@@ -584,7 +626,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         projectId,
         type: type as TRACE_DATA_TYPE,
         sorting: sortedColumns,
-        filters,
+        filters: effectiveFilters,
         page: page as number,
         size: size as number,
         search: trimmedSearch,
@@ -606,7 +648,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       projectId,
       type: type as TRACE_DATA_TYPE,
       sorting: sortedColumns,
-      filters,
+      filters: effectiveFilters,
       page: page as number,
       size: size as number,
       search: search as string,
@@ -627,7 +669,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       {
         projectId,
         type: type as TRACE_DATA_TYPE,
-        filters,
+        filters: effectiveFilters,
         search: trimmedSearch,
         fromTime: intervalStart,
         toTime: intervalEnd,
@@ -683,8 +725,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const handleClearFilters = useCallback(() => {
     setSearch("");
     setFilters([]);
+    setEnvironment(undefined);
     setPage(1);
-  }, [setSearch, setFilters, setPage]);
+  }, [setSearch, setFilters, setEnvironment, setPage]);
 
   const rows: Array<Span | Trace> = useMemo(
     () => data?.content ?? [],
@@ -1044,7 +1087,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "ID",
         type: COLUMN_TYPE.string,
       },
-      ...SHARED_COLUMNS.flatMap((col) =>
+      ...SHARED_COLUMNS.filter(
+        (col) => col.id !== COLUMN_ENVIRONMENT_ID,
+      ).flatMap((col) =>
         col.id === "error_info"
           ? [
               col,
@@ -1262,6 +1307,13 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           <LogsTypeToggle value={logsType} onValueChange={onLogsTypeChange} />
         </div>
         <div className="flex items-center gap-2">
+          <EnvironmentFilterSelect
+            value={environment ?? ""}
+            onChange={(next) => {
+              setEnvironment(next || undefined);
+              setPage(1);
+            }}
+          />
           <MetricDateRangeSelect
             value={dateRange}
             onChangeValue={handleDateRangeChange}
@@ -1280,7 +1332,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           projectId={projectId}
           entityType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
           countLabel={type === TRACE_DATA_TYPE.traces ? "Traces" : "Spans"}
-          filters={filters}
+          filters={effectiveFilters}
           intervalStart={intervalStart}
           intervalEnd={intervalEnd}
           dateRange={dateRange}
@@ -1415,7 +1467,9 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
           noData={
             <DataTableNoMatchingData
               onClearFilters={
-                search || filters.length > 0 ? handleClearFilters : undefined
+                search || filters.length > 0 || environment
+                  ? handleClearFilters
+                  : undefined
               }
             />
           }
