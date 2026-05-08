@@ -161,6 +161,25 @@ def test_create_trace_message__environment_field_default_is_none_for_backwards_c
     assert msg.environment is None
 
 
+def test_create_environment__conflict_raises_environment_already_exists():
+    from unittest.mock import patch
+    from opik.exceptions import EnvironmentAlreadyExists
+    from opik.rest_api.errors import ConflictError
+
+    client = opik_client.Opik(project_name="test-project")
+
+    with patch.object(
+        client._rest_client.environments,
+        "create_environment",
+        side_effect=ConflictError(body={"message": "already exists"}),
+    ):
+        try:
+            client.create_environment("production")
+            assert False, "expected EnvironmentAlreadyExists"
+        except EnvironmentAlreadyExists as e:
+            assert "production" in str(e)
+
+
 def test_create_span_message__environment_field_default_is_none_for_backwards_compat():
     msg = messages.CreateSpanMessage(
         span_id="s",

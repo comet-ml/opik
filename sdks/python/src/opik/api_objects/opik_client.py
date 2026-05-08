@@ -72,6 +72,7 @@ from ..message_processing.batching import sequence_splitter
 from ..message_processing.processors import message_processors_chain
 from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
+from ..rest_api import errors as rest_api_errors
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
     environment_public,
@@ -1109,12 +1110,17 @@ class Opik:
             The created environment.
         """
         new_id = id_helpers.generate_id()
-        self._rest_client.environments.create_environment(
-            id=new_id,
-            name=name,
-            description=description,
-            color=color,
-        )
+        try:
+            self._rest_client.environments.create_environment(
+                id=new_id,
+                name=name,
+                description=description,
+                color=color,
+            )
+        except rest_api_errors.ConflictError:
+            raise exceptions.EnvironmentAlreadyExists(
+                f"Environment {name!r} already exists in this workspace."
+            )
         return self._rest_client.environments.get_environment_by_id(new_id)
 
     def get_environments(self) -> List[environment_public.EnvironmentPublic]:

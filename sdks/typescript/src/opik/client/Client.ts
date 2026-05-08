@@ -67,6 +67,7 @@ import {
 } from "@/agent-config/blueprintCache";
 import { trackStorage } from "@/decorators/track";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
+import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
 
 interface TraceData extends Omit<ITrace, "startTime"> {
@@ -1960,12 +1961,19 @@ export class OpikClient {
     options?: { description?: string; color?: string }
   ): Promise<OpikApi.EnvironmentPublic> => {
     const newId = generateId();
-    await this.api.environments.createEnvironment({
-      id: newId,
-      name,
-      description: options?.description,
-      color: options?.color,
-    });
+    try {
+      await this.api.environments.createEnvironment({
+        id: newId,
+        name,
+        description: options?.description,
+        color: options?.color,
+      });
+    } catch (error) {
+      if (error instanceof OpikApiError && error.statusCode === 409) {
+        throw new EnvironmentAlreadyExistsError(name);
+      }
+      throw error;
+    }
     return this.api.environments.getEnvironmentById(newId);
   };
 

@@ -10,6 +10,8 @@
  * - Back-compat: traces without `environment` still serialize fine.
  */
 import { Opik } from "opik";
+import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
+import { OpikApiError } from "@/rest_api";
 import {
   _resetTrackOpikClientCache,
   getTrackOpikClient,
@@ -94,6 +96,34 @@ describe("environment feature", () => {
       expect(spans[0].environment).toBe("production");
       expect(spans[1].environment).toBe("production");
       createSpansSpy.mockRestore();
+    });
+  });
+
+  describe("createEnvironment", () => {
+    it("throws EnvironmentAlreadyExistsError on 409", async () => {
+      const client = new Opik();
+      vi.spyOn(client.api.environments, "createEnvironment").mockRejectedValue(
+        new OpikApiError({ statusCode: 409, body: "conflict" })
+      );
+
+      await expect(client.createEnvironment("production")).rejects.toThrow(
+        EnvironmentAlreadyExistsError
+      );
+      await expect(client.createEnvironment("production")).rejects.toThrow(
+        "production"
+      );
+    });
+
+    it("re-throws non-409 errors unchanged", async () => {
+      const client = new Opik();
+      const serverError = new OpikApiError({ statusCode: 500, body: "oops" });
+      vi.spyOn(client.api.environments, "createEnvironment").mockRejectedValue(
+        serverError
+      );
+
+      await expect(client.createEnvironment("production")).rejects.toBe(
+        serverError
+      );
     });
   });
 
