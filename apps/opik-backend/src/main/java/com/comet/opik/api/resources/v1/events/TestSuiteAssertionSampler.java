@@ -162,6 +162,10 @@ public class TestSuiteAssertionSampler {
         var experimentId = getMetadataString(trace, TestSuiteMetadataKeys.EXPERIMENT_ID)
                 .flatMap(id -> parseUUID(id, trace.id()))
                 .orElse(null);
+        // Mirror the rule used by OnlineScoringLlmAsJudgeScorer: when tools won't be bound,
+        // we must also strip the tool-teaching addendum from the system prompt, otherwise
+        // the LLM tries to call tools the request doesn't declare.
+        boolean useTools = LlmAsJudgeToolsMode.shouldUseTools(experimentId);
 
         var testSuiteDatasetId = getMetadataString(trace, TestSuiteMetadataKeys.DATASET_ID);
         if (testSuiteDatasetId.isEmpty()) {
@@ -208,8 +212,9 @@ public class TestSuiteAssertionSampler {
 
         return datasetEvaluatorsMono
                 .flatMap(result -> {
-                    var datasetEvals = evaluatorMapper.prepareEvaluators(result.evaluators(), modelName);
-                    return fetchItemEvaluators(itemId, result.versionId(), modelName)
+                    var datasetEvals = evaluatorMapper.prepareEvaluators(result.evaluators(), modelName,
+                            useTools);
+                    return fetchItemEvaluators(itemId, result.versionId(), modelName, useTools)
                             .map(itemEvals -> {
                                 var allEvaluators = new ArrayList<>(datasetEvals);
                                 allEvaluators.addAll(itemEvals);
@@ -222,7 +227,7 @@ public class TestSuiteAssertionSampler {
                                 trace.id(), datasetItemId.get());
                         return decrementAssertionCounter(experimentId,
                                 tracesBatch.workspaceId())
-                                .then(Mono.<List<TraceToScoreLlmAsJudge>>empty());
+                                .then(Mono.empty());
                     }
 
                     Mono<Void> adjustCounter = allEvaluators.size() > 1
@@ -277,12 +282,13 @@ public class TestSuiteAssertionSampler {
         });
     }
 
-    private Mono<List<PreparedEvaluator>> fetchItemEvaluators(UUID itemId, UUID versionId, String modelName) {
+    private Mono<List<PreparedEvaluator>> fetchItemEvaluators(UUID itemId, UUID versionId, String modelName,
+            boolean useTools) {
         return datasetItemService.get(itemId, versionId)
                 .timeout(Duration.ofSeconds(testSuiteConfig.getFetchTimeoutSeconds()))
                 .map(item -> Optional.ofNullable(item.evaluators())
                         .filter(evaluators -> !evaluators.isEmpty())
-                        .map(evaluators -> evaluatorMapper.prepareEvaluators(evaluators, modelName))
+                        .map(evaluators -> evaluatorMapper.prepareEvaluators(evaluators, modelName, useTools))
                         .orElse(List.of()))
                 .defaultIfEmpty(List.of());
     }

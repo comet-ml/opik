@@ -8,6 +8,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -89,6 +90,33 @@ public class OnlineScoringEngine {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
+     * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
+     * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
+     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
+     * trace's input/output doesn't get pasted verbatim into the prompt — the agent can pull the
+     * full content via the {@code read} tool when it actually needs it.
+     */
+    public static ChatRequest prepareLlmRequest(
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType,
+            int maxReplacementChars, @NotNull String drillDownHint) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    static Map<String, String> capReplacements(Map<String, String> replacements,
+            int maxReplacementChars, String drillDownHint) {
+        return replacements.entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
+                (a, b) -> b,
+                java.util.LinkedHashMap::new));
     }
 
     /**

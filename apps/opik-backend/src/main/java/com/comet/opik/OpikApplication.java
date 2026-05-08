@@ -1,6 +1,7 @@
 package com.comet.opik;
 
 import com.comet.opik.api.error.JsonProcessingExceptionMapper;
+import com.comet.opik.api.resources.v1.events.tools.ToolsModule;
 import com.comet.opik.infrastructure.ConfigurationModule;
 import com.comet.opik.infrastructure.EncryptionUtils;
 import com.comet.opik.infrastructure.FilterUtils;
@@ -99,7 +100,7 @@ public class OpikApplication extends Application<OpikConfiguration> {
                         new ConfigurationModule(), new CacheModule(), new JobModule(), new AnthropicModule(),
                         new GeminiModule(), new OpenAIModule(), new OpenRouterModule(), new LlmModule(),
                         new AwsModule(), new UsageLimitModule(), new VertexAIModule(), new CustomLlmModule(),
-                        new OllamaModule(), new FreeModelModule())
+                        new OllamaModule(), new FreeModelModule(), new ToolsModule())
                 .installers(JobGuiceyInstaller.class)
                 .listen(new OpikGuiceyLifecycleEventListener(), new EventListenerRegistrar())
                 .enableAutoConfig()
