@@ -1,3 +1,4 @@
+import contextvars
 import logging
 import threading
 import time
@@ -23,6 +24,9 @@ class StreamingExecutor(Generic[T]):
 
     Progress bar updates happen immediately as tasks complete via future callbacks,
     even while the main thread is still submitting new tasks.
+
+    When ``workers == 1`` no thread pool is created and submitted tasks run
+    synchronously in the caller thread — equivalent to a plain ``for`` loop.
     """
 
     def __init__(
@@ -41,7 +45,10 @@ class StreamingExecutor(Generic[T]):
         self._show_score_postfix = show_score_postfix
         self._client = client
         self._task_count = 0
-        self._pool: futures.ThreadPoolExecutor
+        self._pool: Optional[futures.ThreadPoolExecutor] = None
+        self._client_context_token: Optional[
+            contextvars.Token[Optional[opik_client.Opik]]
+        ] = None
         self._submitted_futures: List[futures.Future[T]] = []
         self._progress_bar: Optional[Any] = None
         self._future_to_group: Dict[futures.Future[T], str] = {}
@@ -56,8 +63,13 @@ class StreamingExecutor(Generic[T]):
         self._first_update_done = False
 
     def __enter__(self) -> "StreamingExecutor[T]":
-        self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
-        self._pool.__enter__()
+        if self._workers > 1:
+            self._pool = futures.ThreadPoolExecutor(max_workers=self._workers)
+            self._pool.__enter__()
+        else:
+            self._client_context_token = opik_client._context_client_var.set(
+                self._client
+            )
         # Initialize progress bar on enter (lazy import for mockability)
         from opik.environment import get_tqdm_for_current_environment
 
@@ -73,7 +85,11 @@ class StreamingExecutor(Generic[T]):
         # Close progress bar if it exists
         if self._progress_bar is not None:
             self._progress_bar.close()
-        self._pool.__exit__(exc_type, exc_val, exc_tb)
+        if self._pool is not None:
+            self._pool.__exit__(exc_type, exc_val, exc_tb)
+        if self._client_context_token is not None:
+            opik_client._context_client_var.reset(self._client_context_token)
+            self._client_context_token = None
 
     def set_group_size(self, group_id: str, size: int) -> None:
         """Declare the expected number of tasks for a group.
@@ -84,7 +100,11 @@ class StreamingExecutor(Generic[T]):
         self._group_sizes[group_id] = size
 
     def submit(self, task: EvaluationTask[T], group_id: Optional[str] = None) -> None:
-        """Submit a task to the thread pool for execution.
+        """Submit a task for execution.
+
+        When workers > 1 the task is dispatched to the thread pool. When
+        workers == 1 the task runs synchronously in the caller thread before
+        ``submit()`` returns.
 
         Args:
             task: The evaluation task to execute.
@@ -94,6 +114,20 @@ class StreamingExecutor(Generic[T]):
                 via ``set_group_size()`` before submitting grouped tasks.
         """
         self._task_count += 1
+
+        if self._pool is None:
+            future: futures.Future[T] = futures.Future()
+            self._submitted_futures.append(future)
+            if group_id is not None:
+                self._future_to_group[future] = group_id
+            try:
+                result = task()
+                future.set_result(result)
+            except BaseException as exc:
+                future.set_exception(exc)
+            self._on_future_done(future)
+            return
+
         original_task = task
         client = self._client
 
