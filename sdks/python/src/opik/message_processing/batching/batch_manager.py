@@ -1,8 +1,11 @@
+import logging
 import threading
 from typing import Type, Dict
 from .. import messages
 from . import base_batcher
 from . import flushing_thread
+
+LOGGER = logging.getLogger(__name__)
 
 
 class BatchManager:
@@ -15,8 +18,7 @@ class BatchManager:
         self._message_to_batcher_mapping = message_to_batcher_mapping
         self._lock = threading.RLock()
         self._flushing_thread = flushing_thread.FlushingThread(
-            batchers=list(self._message_to_batcher_mapping.values()),
-            lock=self._lock,
+            flush_callable=self.flush_ready,
         )
 
     def start(self) -> None:
@@ -63,3 +65,21 @@ class BatchManager:
         with self._lock:
             for batcher in self._message_to_batcher_mapping.values():
                 batcher.flush()
+
+    def flush_ready(self) -> None:
+        """Flush every batcher whose flush interval has elapsed.
+
+        Invoked periodically by ``FlushingThread``. Holds the lock for the
+        whole iteration so adds and flushes serialize against each other.
+        Each batcher's flush is wrapped in its own try/except so a failure
+        on one batcher does not skip the rest in the same tick.
+        """
+        with self._lock:
+            for batcher in self._message_to_batcher_mapping.values():
+                try:
+                    if batcher.is_ready_to_flush():
+                        batcher.flush()
+                except Exception:
+                    LOGGER.exception(
+                        "Batcher flush failed; remaining batchers will still be checked."
+                    )
