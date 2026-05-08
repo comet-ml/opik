@@ -8,14 +8,7 @@ import EnvironmentsTab from "@/v2/pages/ConfigurationPage/EnvironmentsTab/Enviro
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import WorkspacePreferencesTab from "./WorkspacePreferencesTab/WorkspacePreferencesTab";
-
-export enum CONFIGURATION_TABS {
-  FEEDBACK_DEFINITIONS = "feedback-definitions",
-  ENVIRONMENTS = "environments",
-  AI_PROVIDER = "ai-provider",
-  WORKSPACE_PREFERENCES = "workspace-preferences",
-  MEMBERS = "members",
-}
+import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
 
 const DEFAULT_TAB = CONFIGURATION_TABS.FEEDBACK_DEFINITIONS;
 
