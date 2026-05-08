@@ -21,6 +21,7 @@ import CodeHighlighter, {
 } from "@/shared/CodeHighlighter/CodeHighlighter";
 
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
 import AssertionsField from "@/shared/AssertionField/AssertionsField";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import UploadField from "@/shared/UploadField/UploadField";
@@ -163,6 +164,13 @@ const CreateDatasetSidebar: React.FunctionComponent<
   }, [open]);
 
   const handleClose = useCallback(() => setOpen(false), [setOpen]);
+
+  const isDirty =
+    step !== Step.SUCCESS &&
+    (name.length > 0 ||
+      description.length > 0 ||
+      csvFile !== undefined ||
+      assertions.length > 0);
 
   const handleGoToEntity = useCallback(() => {
     navigateToEntity?.();
@@ -445,9 +453,13 @@ const CreateDatasetSidebar: React.FunctionComponent<
         onClose={handleClose}
         initialWidth={0.35}
         minWidth={450}
-        closeButtonPosition="right"
-        headerContent={
-          <span className="comet-title-xs">{`Create ${entityLabel}`}</span>
+        blockOverlayClose={isDirty}
+        header={
+          <ResizableSidePanelTopBar
+            variant="form"
+            title={`Create ${entityLabel}`}
+            onClose={handleClose}
+          />
         }
       >
         <div className="flex size-full flex-col">

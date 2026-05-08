@@ -135,7 +135,6 @@ const CompareExperimentsDetails: React.FunctionComponent<
             logsSource={LOGS_SOURCE.experiment}
             sourceFilters={experimentSourceFilters}
             title="Experiment logs"
-            backLabel={isCompare ? "Back to compare" : "Back to experiment"}
           />
         )}
         {!isCompare &&

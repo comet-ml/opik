@@ -461,7 +461,6 @@ const PlaygroundHeader = ({
               logsSource={LOGS_SOURCE.playground}
               variant="icon"
               title="Playground logs"
-              backLabel="Back to playground"
             />
           )}
         </div>

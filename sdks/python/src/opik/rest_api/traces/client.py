@@ -479,6 +479,7 @@ class TracesClient:
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         source: typing.Optional[TraceWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -516,6 +517,8 @@ class TracesClient:
 
         source : typing.Optional[TraceWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -545,6 +548,7 @@ class TracesClient:
             ttft=ttft,
             thread_id=thread_id,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -626,6 +630,7 @@ class TracesClient:
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[TraceUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -668,6 +673,8 @@ class TracesClient:
 
         source : typing.Optional[TraceUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -697,6 +704,7 @@ class TracesClient:
             thread_id=thread_id,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -2108,6 +2116,7 @@ class AsyncTracesClient:
         ttft: typing.Optional[float] = OMIT,
         thread_id: typing.Optional[str] = OMIT,
         source: typing.Optional[TraceWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2145,6 +2154,8 @@ class AsyncTracesClient:
 
         source : typing.Optional[TraceWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2177,6 +2188,7 @@ class AsyncTracesClient:
             ttft=ttft,
             thread_id=thread_id,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -2264,6 +2276,7 @@ class AsyncTracesClient:
         thread_id: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[TraceUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -2306,6 +2319,8 @@ class AsyncTracesClient:
 
         source : typing.Optional[TraceUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -2338,6 +2353,7 @@ class AsyncTracesClient:
             thread_id=thread_id,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data

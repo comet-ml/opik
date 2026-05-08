@@ -595,6 +595,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "google/gemini-3.1-flash-image-preview",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE,
+      label: "google/gemini-3.1-flash-lite",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW,
       label: "google/gemini-3.1-flash-lite-preview",
     },
@@ -697,6 +701,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCEPTION_MERCURY_CODER,
       label: "inception/mercury-coder",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T,
+      label: "inclusionai/ling-2.6-1t",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_1T_FREE,
@@ -2125,6 +2133,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
       label: "Gemini 3.1 Flash TTS Preview",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
+      label: "Gemini 3.1 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE_PREVIEW,

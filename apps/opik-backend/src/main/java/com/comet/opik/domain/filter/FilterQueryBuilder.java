@@ -104,6 +104,7 @@ public class FilterQueryBuilder {
     private static final String DATA_ANALYTICS_DB = "data";
     private static final String FULL_DATA_ANALYTICS_DB = "toString(data)";
     private static final String SOURCE_DB = "source";
+    private static final String ENVIRONMENT_DB = "environment";
     private static final String TRACE_ID_DB = "trace_id";
     private static final String SPAN_ID_DB = "span_id";
     public static final String ANNOTATION_QUEUE_IDS_ANALYTICS_DB = "taqi.annotation_queue_ids";
@@ -284,7 +285,9 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY,
                             "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
                             FieldType.DICTIONARY_STATE_DB,
-                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')")))
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = false OR JSON_VALUE(%1$s, :filterKey%2$d) = '' OR JSON_VALUE(%1$s, :filterKey%2$d) = 'null')",
+                            FieldType.ENUM,
+                            "empty(%1$s)")))
                     .put(Operator.IS_NOT_EMPTY, new EnumMap<>(Map.of(
                             FieldType.FEEDBACK_SCORES_NUMBER,
                             "empty(arrayFilter(element -> (element = lower(:filterKey%2$d)), groupArray(lower(name)))) = 0",
@@ -295,7 +298,13 @@ public class FilterQueryBuilder {
                             FieldType.DICTIONARY,
                             "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
                             FieldType.DICTIONARY_STATE_DB,
-                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')")))
+                            "(JSON_EXISTS(%1$s, :filterKey%2$d) = true AND JSON_VALUE(%1$s, :filterKey%2$d) != '' AND JSON_VALUE(%1$s, :filterKey%2$d) != 'null')",
+                            FieldType.ENUM,
+                            "notEmpty(%1$s)")))
+                    .put(Operator.IN, new EnumMap<>(Map.of(
+                            FieldType.ENUM, "%1$s IN :filter%2$d")))
+                    .put(Operator.NOT_IN, new EnumMap<>(Map.of(
+                            FieldType.ENUM, "%1$s NOT IN :filter%2$d")))
                     .build());
 
     private static final Map<TraceField, String> TRACE_FIELDS_MAP = new EnumMap<>(
@@ -329,6 +338,7 @@ public class FilterQueryBuilder {
                     .put(TraceField.CREATED_AT, CREATED_AT_DB)
                     .put(TraceField.LAST_UPDATED_AT, LAST_UPDATED_AT_DB)
                     .put(TraceField.SOURCE, SOURCE_DB)
+                    .put(TraceField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
 
     private static final Map<TraceThreadField, String> TRACE_THREAD_FIELDS_MAP = new EnumMap<>(
@@ -347,6 +357,7 @@ public class FilterQueryBuilder {
                     .put(TraceThreadField.TAGS, TAGS_DB)
                     .put(TraceThreadField.ANNOTATION_QUEUE_IDS, THREAD_ANNOTATION_QUEUE_IDS_ANALYTICS_DB)
                     .put(TraceThreadField.SOURCE, SOURCE_DB)
+                    .put(TraceThreadField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
 
     private static final Map<SpanField, String> SPAN_FIELDS_MAP = new EnumMap<>(
@@ -375,6 +386,7 @@ public class FilterQueryBuilder {
                     .put(SpanField.TYPE, TYPE_ANALYTICS_DB)
                     .put(SpanField.TRACE_ID, TRACE_ID_DB)
                     .put(SpanField.SOURCE, SOURCE_DB)
+                    .put(SpanField.ENVIRONMENT, ENVIRONMENT_DB)
                     .build());
 
     private static final Map<ExperimentField, String> EXPERIMENT_FIELDS_MAP = new EnumMap<>(
@@ -552,7 +564,9 @@ public class FilterQueryBuilder {
                 TraceField.ERROR_INFO,
                 TraceField.ERROR_TYPE,
                 TraceField.SOURCE,
-                TraceThreadField.SOURCE));
+                TraceField.ENVIRONMENT,
+                TraceThreadField.SOURCE,
+                TraceThreadField.ENVIRONMENT));
 
         map.put(FilterStrategy.EXPERIMENT_AGGREGATION, Set.of(
                 TraceField.EXPERIMENT_ID));
@@ -591,7 +605,8 @@ public class FilterQueryBuilder {
                 SpanField.ERROR_TYPE,
                 SpanField.TYPE,
                 SpanField.TRACE_ID,
-                SpanField.SOURCE));
+                SpanField.SOURCE,
+                SpanField.ENVIRONMENT));
 
         map.put(FilterStrategy.FEEDBACK_SCORES, Set.of(
                 TraceField.FEEDBACK_SCORES,
@@ -1048,7 +1063,18 @@ public class FilterQueryBuilder {
                 }
 
                 if (!NO_VALUE_OPERATORS.contains(filter.operator())) {
-                    statement.bind("filter%d".formatted(i), filter.value());
+                    if (Operator.MULTI_VALUE_OPERATORS.contains(filter.operator())) {
+                        // Comma-separated values for ENUM IN/NOT_IN; bind as String[].
+                        // Trim and drop empty tokens defensively against stray whitespace
+                        // or trailing commas in client input.
+                        statement.bind("filter%d".formatted(i),
+                                Arrays.stream(filter.value().split(","))
+                                        .map(String::trim)
+                                        .filter(StringUtils::isNotEmpty)
+                                        .toArray(String[]::new));
+                    } else {
+                        statement.bind("filter%d".formatted(i), filter.value());
+                    }
                 }
 
                 if (StringUtils.isNotBlank(filter.key())

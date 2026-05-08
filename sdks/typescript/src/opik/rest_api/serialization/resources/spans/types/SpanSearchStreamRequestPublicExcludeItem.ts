@@ -30,6 +30,7 @@ export const SpanSearchStreamRequestPublicExcludeItem: core.serialization.Schema
     "duration",
     "ttft",
     "source",
+    "environment",
 ]);
 
 export declare namespace SpanSearchStreamRequestPublicExcludeItem {
@@ -55,5 +56,6 @@ export declare namespace SpanSearchStreamRequestPublicExcludeItem {
         | "total_estimated_cost_version"
         | "duration"
         | "ttft"
-        | "source";
+        | "source"
+        | "environment";
 }
