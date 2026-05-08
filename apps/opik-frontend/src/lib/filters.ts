@@ -91,8 +91,49 @@ export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
   ] as Filter[];
 };
 
-export const generateEnvironmentFilter = (environment?: string | null) => {
+export const ENVIRONMENT_UNTAGGED_VALUE = "__untagged__";
+export const ENVIRONMENT_UNKNOWN_VALUE = "__unknown__";
+
+export const generateEnvironmentFilter = (
+  environment?: string | null,
+  envNames?: string[],
+): Filter[] => {
   if (!environment) return [];
+
+  if (environment === ENVIRONMENT_UNTAGGED_VALUE) {
+    return [
+      {
+        id: "environment_filter",
+        field: "environment",
+        type: COLUMN_TYPE.string,
+        operator: "is_empty",
+        key: "",
+        value: "",
+      },
+    ];
+  }
+
+  if (environment === ENVIRONMENT_UNKNOWN_VALUE) {
+    if (!envNames || envNames.length === 0) return [];
+    return [
+      {
+        id: "environment_filter_not_empty",
+        field: "environment",
+        type: COLUMN_TYPE.string,
+        operator: "is_not_empty",
+        key: "",
+        value: "",
+      },
+      {
+        id: "environment_filter",
+        field: "environment",
+        type: COLUMN_TYPE.string,
+        operator: "not_in",
+        key: "",
+        value: envNames.join(","),
+      },
+    ];
+  }
 
   return [
     {
@@ -103,7 +144,7 @@ export const generateEnvironmentFilter = (environment?: string | null) => {
       key: "",
       value: environment,
     },
-  ] as Filter[];
+  ];
 };
 
 export const generatePromptFilters = (promptId?: string) => {

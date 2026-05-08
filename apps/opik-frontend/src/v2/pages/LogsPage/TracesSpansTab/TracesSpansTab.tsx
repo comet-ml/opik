@@ -48,7 +48,11 @@ import {
   ROW_HEIGHT,
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
-import { generateEnvironmentFilter } from "@/lib/filters";
+import {
+  ENVIRONMENT_UNKNOWN_VALUE,
+  ENVIRONMENT_UNTAGGED_VALUE,
+  generateEnvironmentFilter,
+} from "@/lib/filters";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import {
   normalizeMetadataPaths,
@@ -462,20 +466,27 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { data: environmentsData } = useEnvironmentsList();
 
   const envList = environmentsData?.content;
-  const envInList =
-    environment && envList ? envList.some((e) => e.name === environment) : null;
+  const envNames = useMemo(() => envList?.map((e) => e.name) ?? [], [envList]);
+
+  const envIsValid = (() => {
+    if (!environment) return null;
+    if (environment === ENVIRONMENT_UNTAGGED_VALUE) return true;
+    if (!envList) return null;
+    if (environment === ENVIRONMENT_UNKNOWN_VALUE) return envList.length > 0;
+    return envList.some((e) => e.name === environment);
+  })();
 
   useEffect(() => {
-    if (envInList === false) {
+    if (envIsValid === false) {
       setEnvironment(undefined);
       setPage(1);
     }
-  }, [envInList, setEnvironment, setPage]);
+  }, [envIsValid, setEnvironment, setPage]);
 
   const effectiveFilters = useMemo(() => {
-    if (!environment || envInList === false) return filters;
-    return [...filters, ...generateEnvironmentFilter(environment)];
-  }, [filters, environment, envInList]);
+    if (!environment || envIsValid === false) return filters;
+    return [...filters, ...generateEnvironmentFilter(environment, envNames)];
+  }, [filters, environment, envIsValid, envNames]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
