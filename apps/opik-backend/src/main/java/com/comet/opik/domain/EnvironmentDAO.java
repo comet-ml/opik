@@ -25,7 +25,7 @@ interface EnvironmentDAO {
             "VALUES (:bean.id, :workspaceId, :bean.name, :bean.description, COALESCE(:bean.color, 'default'), COALESCE(:bean.position, 0), :bean.createdBy, :bean.lastUpdatedBy)")
     void save(@Bind("workspaceId") String workspaceId, @BindMethods("bean") Environment environment);
 
-    @SqlBatch("INSERT INTO environments (id, workspace_id, name, color, position, created_by, last_updated_by) "
+    @SqlBatch("INSERT IGNORE INTO environments (id, workspace_id, name, color, position, created_by, last_updated_by) "
             +
             "VALUES (:bean.id, :workspaceId, :bean.name, 'default', 0, :userName, :userName)")
     void saveBatch(@Bind("workspaceId") String workspaceId, @Bind("userName") String userName,
@@ -54,6 +54,9 @@ interface EnvironmentDAO {
 
     @SqlQuery("SELECT * FROM environments WHERE workspace_id = :workspaceId ORDER BY created_at ASC")
     List<Environment> findAll(@Bind("workspaceId") String workspaceId);
+
+    @SqlQuery("SELECT name FROM environments WHERE workspace_id = :workspaceId")
+    List<String> findAllNames(@Bind("workspaceId") String workspaceId);
 
     @SqlQuery("SELECT COUNT(*) FROM environments WHERE workspace_id = :workspaceId")
     long countByWorkspace(@Bind("workspaceId") String workspaceId);

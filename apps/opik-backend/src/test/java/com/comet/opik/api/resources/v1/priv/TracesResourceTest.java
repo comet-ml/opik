@@ -2491,7 +2491,7 @@ class TracesResourceTest {
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     class EnvironmentAutoCreate {
 
-        private static final int ENVIRONMENT_CAP = 100;
+        private static final int ENVIRONMENT_CAP = 5;
 
         @Test
         @DisplayName("when trace is created with a new environment, then it is auto-created")
@@ -2555,6 +2555,73 @@ class TracesResourceTest {
                             var page = response.readEntity(Environment.EnvironmentPage.class);
                             assertThat(page.content().stream().map(Environment::name).collect(Collectors.toSet()))
                                     .containsAll(envNames);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when batch traces share the same new environment, then it is created only once")
+        void batchCreate__whenDuplicatedEnvironmentInBatch__thenCreatedOnce() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String envName = "dup-env-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            List<Trace> traces = IntStream.range(0, 3)
+                    .mapToObj(i -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .environment(envName)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name).filter(envName::equals))
+                                    .hasSize(1);
+                        }
+                    });
+        }
+
+        @Test
+        @DisplayName("when batch traces include environment names with disallowed characters, then only valid ones are auto-created")
+        void batchCreate__whenEnvironmentNamesWithDisallowedChars__thenOnlyValidOnesAutoCreated() {
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceName = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            String validEnvName = "valid-" + RandomStringUtils.secure().nextAlphanumeric(8);
+            String invalidCharsEnvName = "invalid env name!";
+
+            List<Trace> traces = Stream.of(validEnvName, invalidCharsEnvName)
+                    .map(name -> factory.manufacturePojo(Trace.class).toBuilder()
+                            .projectName(DEFAULT_PROJECT)
+                            .environment(name)
+                            .usage(null)
+                            .feedbackScores(null)
+                            .build())
+                    .toList();
+
+            traceResourceClient.batchCreateTraces(traces, apiKey, workspaceName);
+
+            Awaitility.await()
+                    .pollInterval(200, TimeUnit.MILLISECONDS)
+                    .atMost(10, TimeUnit.SECONDS)
+                    .untilAsserted(() -> {
+                        try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
+                            var page = response.readEntity(Environment.EnvironmentPage.class);
+                            assertThat(page.content().stream().map(Environment::name))
+                                    .contains(validEnvName)
+                                    .doesNotContain(invalidCharsEnvName);
                         }
                     });
         }

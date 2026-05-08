@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
@@ -66,6 +67,7 @@ class EnvironmentServiceImpl implements EnvironmentService {
     private static final String ENVIRONMENT_CREATED_EVENT = "environment_created";
     private static final String SOURCE_MANUAL = "manual";
     private static final String SOURCE_INGESTION = "ingestion";
+    private static final Pattern NAME_PATTERN = Pattern.compile(Environment.NAME_PATTERN);
 
     private final @NonNull TransactionTemplate template;
     private final @NonNull IdGenerator idGenerator;
@@ -122,7 +124,7 @@ class EnvironmentServiceImpl implements EnvironmentService {
         List<String> validNames = names.stream()
                 .filter(StringUtils::isNotBlank)
                 .filter(name -> name.length() <= 150)
-                .filter(name -> name.matches(Environment.NAME_PATTERN))
+                .filter(name -> NAME_PATTERN.matcher(name).matches())
                 .toList();
 
         if (validNames.isEmpty()) {
@@ -134,8 +136,8 @@ class EnvironmentServiceImpl implements EnvironmentService {
                 Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
                     var repository = handle.attach(EnvironmentDAO.class);
 
-                    Set<String> existingLowercaseNames = repository.findAll(workspaceId).stream()
-                            .map(env -> env.name().toLowerCase(Locale.ROOT))
+                    Set<String> existingLowercaseNames = repository.findAllNames(workspaceId).stream()
+                            .map(name -> name.toLowerCase(Locale.ROOT))
                             .collect(Collectors.toSet());
 
                     long availableSlots = (long) environmentConfig.getMaxPerWorkspace() - existingLowercaseNames.size();
