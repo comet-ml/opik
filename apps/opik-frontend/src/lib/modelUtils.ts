@@ -157,6 +157,7 @@ export const updateProviderConfig = <
     temperature?: number;
     topP?: number;
     thinkingEffort?: AnthropicThinkingEffort;
+    reasoningEffort?: ReasoningEffort;
   },
 >(
   currentConfig: T | undefined,
@@ -171,16 +172,38 @@ export const updateProviderConfig = <
 
   const providerType = parseComposedProviderType(params.provider);
 
-  if (
-    providerType === PROVIDER_TYPE.OPEN_AI &&
-    isReasoningModel(params.model) &&
-    typeof currentConfig.temperature === "number" &&
-    currentConfig.temperature < 1
-  ) {
-    return {
-      ...currentConfig,
-      temperature: 1.0,
-    };
+  if (providerType === PROVIDER_TYPE.OPEN_AI) {
+    const next: T = { ...currentConfig };
+    let changed = false;
+
+    // Reasoning models reject temperature < 1; coerce.
+    if (
+      isReasoningModel(params.model) &&
+      typeof next.temperature === "number" &&
+      next.temperature < 1
+    ) {
+      next.temperature = 1.0;
+      changed = true;
+    }
+
+    // reasoningEffort: drop it for models without an effort option list,
+    // coerce stale values to "high" otherwise. Mirrors the Anthropic
+    // thinkingEffort handling below.
+    const effortOptions = getOpenAIReasoningEffortOptions(params.model);
+    if (effortOptions.length === 0) {
+      if (next.reasoningEffort !== undefined) {
+        next.reasoningEffort = undefined;
+        changed = true;
+      }
+    } else if (
+      next.reasoningEffort !== undefined &&
+      !effortOptions.some((o) => o.value === next.reasoningEffort)
+    ) {
+      next.reasoningEffort = "high";
+      changed = true;
+    }
+
+    return changed ? next : currentConfig;
   }
 
   if (providerType === PROVIDER_TYPE.ANTHROPIC) {
