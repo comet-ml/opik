@@ -21,6 +21,7 @@ import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
 import org.assertj.core.api.recursive.comparison.RecursiveComparisonConfiguration;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -40,6 +41,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
@@ -96,6 +98,17 @@ class EnvironmentsResourceTest {
     @AfterAll
     void tearDownAll() {
         wireMock.server().stop();
+    }
+
+    @AfterEach
+    void cleanupSharedWorkspaceEnvironments() {
+        try (var response = environmentsClient.callFind(API_KEY, WORKSPACE_NAME)) {
+            var page = response.readEntity(Environment.EnvironmentPage.class);
+            Set<UUID> ids = page.content().stream().map(Environment::id).collect(Collectors.toSet());
+            if (!ids.isEmpty()) {
+                environmentsClient.callBatchDelete(ids, API_KEY, WORKSPACE_NAME).close();
+            }
+        }
     }
 
     private static String randomEnvName() {
@@ -256,8 +269,8 @@ class EnvironmentsResourceTest {
             String capWorkspaceId = UUID.randomUUID().toString();
             mockIsolatedWorkspace(capApiKey, capWorkspaceName, capWorkspaceId);
 
-            // default max is 20 — fill the workspace then attempt one more
-            IntStream.range(0, 20).forEach(i -> environmentsClient.createEnvironment(
+            // test cap from config-test.yml — fill the workspace then attempt one more
+            IntStream.range(0, 5).forEach(i -> environmentsClient.createEnvironment(
                     buildEnvironment(), capApiKey, capWorkspaceName));
 
             try (var response = environmentsClient.callCreate(buildEnvironment(), capApiKey, capWorkspaceName)) {

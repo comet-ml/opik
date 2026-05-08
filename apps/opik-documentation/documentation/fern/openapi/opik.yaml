@@ -18696,6 +18696,7 @@ components:
       - spanLlmAsJudgeEnabled
       - spanUserDefinedMetricPythonEnabled
       - traceThreadPythonEvaluatorEnabled
+      - v1WorkspaceAllowlistIds
       - v2WorkspaceAllowlistIds
       - vertexaiProviderEnabled
       - welcomeWizardEnabled
@@ -18751,6 +18752,12 @@ components:
           items:
             minLength: 1
             type: string
+        v1WorkspaceAllowlistIds:
+          uniqueItems: true
+          type: array
+          items:
+            minLength: 1
+            type: string
         forceWorkspaceVersion:
           minLength: 1
           type: string
@@ -18760,6 +18767,9 @@ components:
           type: integer
           format: int32
         v2WorkspaceAllowlist:
+          type: string
+          writeOnly: true
+        v1WorkspaceAllowlist:
           type: string
           writeOnly: true
     SpanBatchUpdate:

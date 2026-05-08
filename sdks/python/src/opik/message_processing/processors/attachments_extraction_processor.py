@@ -77,7 +77,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
         # put the original message into the streamer for further processing
         original_message = message.original_message
         setattr(original_message, constants.MARKER_ATTRIBUTE_NAME, True)
-        self.messages_streamer.put(original_message)
+        self.messages_streamer.put(original_message, force=True)
 
     def _process_attachments_in_message(self, original: messages.BaseMessage) -> None:
         entity_details = entity_type_from_attachment_message(original)
@@ -128,7 +128,7 @@ class AttachmentsExtractionProcessor(message_processors.BaseMessageProcessor):
                 url_override=self._url_override,
                 delete_after_upload=True,  # make sure to delete attachments after upload to avoid leaking space and data
             )
-            self.messages_streamer.put(create_attachment_message)
+            self.messages_streamer.put(create_attachment_message, force=True)
 
 
 def entity_type_from_attachment_message(

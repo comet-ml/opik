@@ -211,9 +211,6 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment:
-  # Default: 1d (minimum allowed, sufficient for test duration)
-  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
-  firstTraceCreatedDedupTtl: 1d
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -851,3 +848,8 @@ agentConfig:
   # Default: 5000ms
   # Description: Duration of the distributed lock held during blueprint create/update operations
   blueprintLockDuration: 5000ms
+
+# Environment CRUD configuration
+environment:
+  # Low ceiling for tests so cap-related scenarios don't need to insert many environments.
+  maxPerWorkspace: 5
