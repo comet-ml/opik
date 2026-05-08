@@ -42,7 +42,7 @@ public interface WorkspacesService {
     Optional<OpikVersion> upsertVersionAndReturnPrevious(String workspaceId, OpikVersion version, String userName);
 
     /** Returns the row, or empty if not found / blank id. */
-    Optional<Workspace> findById(String workspaceId);
+    Optional<Workspace> findById(@NonNull String workspaceId);
 
     /**
      * Returns {@code true} only for the writer that transitioned {@code first_trace_reported_at}
@@ -92,7 +92,7 @@ class WorkspacesServiceImpl implements WorkspacesService {
     }
 
     @Override
-    public Optional<Workspace> findById(String workspaceId) {
+    public Optional<Workspace> findById(@NonNull String workspaceId) {
         if (StringUtils.isBlank(workspaceId)) {
             return Optional.empty();
         }
