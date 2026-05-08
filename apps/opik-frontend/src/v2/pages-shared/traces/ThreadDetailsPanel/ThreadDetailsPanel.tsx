@@ -547,6 +547,7 @@ const ThreadDetailsPanel: React.FC<ThreadDetailsPanelProps> = ({
                 {currentActiveSection === DetailsActionSection.Annotate && (
                   <ThreadAnnotatePanel
                     threadId={threadId}
+                    threadModelId={thread.thread_model_id}
                     projectId={projectId}
                     projectName={projectName}
                     activeSection={activeSection}

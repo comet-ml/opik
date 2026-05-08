@@ -18,6 +18,7 @@ import { Separator } from "@/ui/separator";
 
 type ThreadAnnotatePanelProps = {
   threadId: string;
+  threadModelId: string;
   projectId: string;
   projectName: string;
   activeSection: DetailsActionSectionValue | null;
@@ -28,6 +29,7 @@ type ThreadAnnotatePanelProps = {
 
 const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
   threadId,
+  threadModelId,
   projectId,
   projectName,
   activeSection,
@@ -74,9 +76,13 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
 
   const onCommentSubmit = useCallback(
     (text: string) => {
-      createThreadCommentMutation.mutate({ text, threadId, projectId });
+      createThreadCommentMutation.mutate({
+        text,
+        threadId: threadModelId,
+        projectId,
+      });
     },
-    [createThreadCommentMutation, threadId, projectId],
+    [createThreadCommentMutation, threadModelId, projectId],
   );
 
   const onCommentEdit = useCallback(
@@ -91,10 +97,10 @@ const ThreadAnnotatePanel: React.FC<ThreadAnnotatePanelProps> = ({
       threadCommentsBatchDeleteMutation.mutate({
         ids: [commentId],
         projectId,
-        threadId,
+        threadId: threadModelId,
       });
     },
-    [threadCommentsBatchDeleteMutation, projectId, threadId],
+    [threadCommentsBatchDeleteMutation, projectId, threadModelId],
   );
 
   return (
