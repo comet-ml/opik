@@ -339,6 +339,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         thread_id: Optional[str],
         source: TraceSource,
         last_updated_at: Optional[datetime.datetime] = None,
+        environment: Optional[str] = None,
     ) -> models.TraceModel:
         """
         Creates a trace model with the specified attributes. The method is abstract and must be
@@ -396,6 +397,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         total_cost: Optional[float],
         last_updated_at: Optional[datetime.datetime],
         source: TraceSource,
+        environment: Optional[str] = None,
     ) -> models.SpanModel:
         """
         Abstract method to create a span model representing a span of a trace.
@@ -498,6 +500,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             feedback_scores=None,
             spans=None,
             source=message.source,
+            environment=message.environment,
         )
 
         self._save_trace(trace)
@@ -523,6 +526,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             spans=None,
             feedback_scores=None,
             source=message.source,
+            environment=message.environment,
         )
 
         self._save_span(
@@ -638,6 +642,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             feedback_scores=None,
             error_info=error_info,
             source=message.source,
+            environment=message.environment,
         )
 
         self._save_span(
@@ -676,6 +681,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
             feedback_scores=None,
             error_info=error_info,
             source=message.source,
+            environment=message.environment,
         )
         self._save_trace(trace)
 
