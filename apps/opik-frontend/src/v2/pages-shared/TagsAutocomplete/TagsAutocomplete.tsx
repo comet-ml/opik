@@ -56,6 +56,7 @@ const TagsAutocomplete: React.FC<TagsAutocompleteProps> = ({
       page: 1,
       size: SAMPLE_SIZE,
       truncate: true,
+      stripAttachments: true,
       filters: TAGS_NOT_EMPTY_FILTER,
     },
     {
