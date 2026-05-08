@@ -15,14 +15,6 @@ public interface WorkspacesDAO {
     @SqlQuery("SELECT * FROM workspaces WHERE id = :id")
     Optional<Workspace> findById(@Bind("id") String id);
 
-    /**
-     * Read the prior {@code last_known_version} with a row-level lock so that concurrent
-     * version-determination writers serialize per workspace. Pair with {@link #upsertVersion}
-     * inside the same transaction to atomically capture the prior value before overwriting it.
-     */
-    @SqlQuery("SELECT last_known_version FROM workspaces WHERE id = :id FOR UPDATE")
-    Optional<String> findVersionForUpdate(@Bind("id") String id);
-
     @SqlUpdate("""
             INSERT INTO workspaces (id, last_known_version, version_determined_at, created_by, last_updated_by)
             VALUES (:id, :version, :determinedAt, :userName, :userName)

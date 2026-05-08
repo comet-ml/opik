@@ -213,7 +213,10 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
         var newVersion = response.opikVersion();
-        var previousVersion = workspacesService.upsertVersionAndReturnPrevious(workspaceId, newVersion, userName);
+        var previousVersion = workspacesService.findById(workspaceId)
+                .map(Workspace::lastKnownVersion)
+                .flatMap(OpikVersion::findByValue);
+        workspacesService.upsertVersion(workspaceId, newVersion, userName);
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,
