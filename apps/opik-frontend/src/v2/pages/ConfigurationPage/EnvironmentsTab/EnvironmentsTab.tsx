@@ -81,6 +81,8 @@ export const DEFAULT_COLUMN_PINNING: ColumnPinningState = {
 export const DEFAULT_SELECTED_COLUMNS: string[] = [
   COLUMN_NAME_ID,
   "description",
+  "created_at",
+  "created_by",
 ];
 
 const DEFAULT_COLUMNS_ORDER: string[] = [
