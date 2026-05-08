@@ -454,13 +454,10 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
     syncQueryWithLocalStorageOnInit: true,
   });
 
-  const [filters = EMPTY_FILTERS, setFilters] = useQueryParam(
-    `${type}_filters`,
-    JsonParam,
-    {
-      updateType: "replaceIn",
-    },
-  );
+  const [rawFilters, setFilters] = useQueryParam(`${type}_filters`, JsonParam, {
+    updateType: "replaceIn",
+  });
+  const filters = Array.isArray(rawFilters) ? rawFilters : EMPTY_FILTERS;
 
   const { data: environmentsData } = useEnvironmentsList();
 
@@ -476,9 +473,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   }, [envInList, setEnvironment, setPage]);
 
   const effectiveFilters = useMemo(() => {
-    const userFilters = filters ?? [];
-    if (!environment || envInList === false) return userFilters;
-    return [...userFilters, ...generateEnvironmentFilter(environment)];
+    if (!environment || envInList === false) return filters;
+    return [...filters, ...generateEnvironmentFilter(environment)];
   }, [filters, environment, envInList]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
