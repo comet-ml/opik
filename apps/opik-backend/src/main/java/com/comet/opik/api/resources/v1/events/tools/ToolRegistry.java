@@ -45,7 +45,7 @@ public class ToolRegistry {
         ToolExecutor executor = byName.get(name);
         if (executor == null) {
             log.warn("Unknown tool requested by judge: '{}'", name);
-            return "{\"error\": \"Unknown tool: %s\"}".formatted(name);
+            return ToolArgs.errorJson("Unknown tool: " + name);
         }
         try {
             return executor.execute(arguments, ctx);
@@ -54,7 +54,7 @@ public class ToolRegistry {
             // StackOverflowError) intentionally propagate — the JVM is in no shape to
             // continue scoring after one of those.
             log.warn("Tool '{}' threw; returning error JSON to keep judge loop alive", name, e);
-            return "{\"error\": \"Tool '%s' failed: %s\"}".formatted(name, e.getMessage());
+            return ToolArgs.errorJson("Tool '" + name + "' failed: " + e.getMessage());
         }
     }
 }

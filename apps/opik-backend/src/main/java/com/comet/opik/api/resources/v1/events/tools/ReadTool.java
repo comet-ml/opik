@@ -370,7 +370,7 @@ public class ReadTool implements ToolExecutor {
                     .warning(alreadyTruncated ? CACHE_WARNING_MESSAGE : null)
                     .build();
         }
-        log.debug("Entity {} exceeds {} chars; capping to maximum of {} chars before caching", ref, size,
+        log.debug("Entity '{}' exceeds '{}' chars; capping to maximum of '{}' chars before caching", ref, size,
                 CACHE_CAP_CHARS);
         ctx.markTruncated(ref);
         return CacheOutcome.builder()
