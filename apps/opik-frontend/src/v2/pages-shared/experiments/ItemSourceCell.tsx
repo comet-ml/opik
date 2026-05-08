@@ -58,19 +58,21 @@ const ItemSourceCell = <TData,>(context: CellContext<TData, unknown>) => {
     >
       <TooltipWrapper content={name}>
         <div className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted text-muted-slate">
+          <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-muted-slate">
             <Icon className="size-3" />
           </span>
-          {id ? (
-            <ResourceLink
-              id={id}
-              name={name}
-              resource={resource}
-              isDeleted={isDeleted}
-            />
-          ) : (
-            "-"
-          )}
+          <div className="min-w-0 flex-1">
+            {id ? (
+              <ResourceLink
+                id={id}
+                name={name}
+                resource={resource}
+                isDeleted={isDeleted}
+              />
+            ) : (
+              "-"
+            )}
+          </div>
         </div>
       </TooltipWrapper>
     </CellWrapper>
@@ -194,19 +196,23 @@ export const createItemSourceGroupCell = <TData,>(
             </TooltipWrapper>
           </Button>
         </div>
-        <div className="flex min-w-4 flex-1 items-center gap-1 overflow-hidden">
-          {id && resource ? (
-            <ResourceLink
-              id={id}
-              name={name}
-              resource={resource}
-              isDeleted={isDeleted}
-            />
-          ) : id ? (
-            <span className="comet-body-s truncate">{name ?? "-"}</span>
-          ) : (
-            <div>-</div>
-          )}
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
+          <div className="min-w-0 flex-1">
+            {id && resource ? (
+              <ResourceLink
+                id={id}
+                name={name}
+                resource={resource}
+                isDeleted={isDeleted}
+              />
+            ) : id ? (
+              <span className="comet-body-s block truncate">
+                {name ?? "-"}
+              </span>
+            ) : (
+              "-"
+            )}
+          </div>
           <div className="flex shrink-0 items-center">
             {countText}
             {isDeleted && explainer && (
