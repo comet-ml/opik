@@ -491,14 +491,10 @@ const GeneralDatasetsTab: React.FC<GeneralDatasetsTabProps> = ({
     [setGroupLimit],
   );
 
-  // Filter out name and dataset columns when grouping by dataset
+  // Name becomes the grouping anchor when any grouping is active and is rendered
+  // by the group cell, so hide it from the columns menu in that case.
   const availableColumns = useMemo(() => {
-    const isGroupingByDataset = groups.some(
-      (g) => g.field === COLUMN_DATASET_ID,
-    );
-
     return columnsDef.filter((col) => {
-      if (isGroupingByDataset && col.id === COLUMN_DATASET_ID) return false;
       if (groups.length > 0 && col.id === COLUMN_NAME_ID) return false;
       return true;
     });
