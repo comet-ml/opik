@@ -20,16 +20,28 @@ import { getLatestModelFlags } from "@/lib/modelRegistryStore";
 /**
  * Checks if a model is a reasoning model that requires temperature = 1.0.
  *
- * Primary source: the backend-fetched registry (via the module-level flag
- * index populated by useLLMProviderModelsData). A new reasoning model added
- * to the CDN YAML gets the temp=1 gate automatically.
+ * For OpenAI models, OPENAI_MODEL_CAPABILITIES is authoritative — every
+ * gating decision (sampling sliders, effort dropdown, request stripping)
+ * keys off the same map, so it must also answer the umbrella question.
  *
- * Fallback: the hardcoded REASONING_MODELS list (src/constants/llm.ts). Used
- * only before the first fetch resolves, or for non-React callers that run
- * before any component has mounted.
+ * For other providers, the backend-fetched registry wins (via the module-
+ * level flag index populated by useLLMProviderModelsData), with the
+ * hardcoded REASONING_MODELS list as a pre-fetch fallback.
  */
 export const isReasoningModel = (model?: PROVIDER_MODEL_TYPE | ""): boolean => {
   if (!model) return false;
+
+  // OpenAI: capability map is the source of truth, mirroring how Anthropic
+  // owns its supportsAnthropicThinkingEffort gating without consulting the
+  // BE flag. Stops a BE YAML entry without `reasoning: true` from silently
+  // disabling the playground reasoning-effort dropdown.
+  if (
+    getProviderFromModel(model as PROVIDER_MODEL_TYPE) === PROVIDER_TYPE.OPEN_AI
+  ) {
+    return OPENAI_MODEL_CAPABILITIES[model]?.reasoning ?? false;
+  }
+
+  // Other providers: BE flag wins; fall back to hardcoded REASONING_MODELS.
   const fetched = getLatestModelFlags(model);
   if (fetched !== undefined) {
     return fetched.reasoning;
