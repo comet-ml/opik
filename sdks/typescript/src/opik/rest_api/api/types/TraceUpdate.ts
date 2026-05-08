@@ -22,4 +22,5 @@ export interface TraceUpdate {
     threadId?: string;
     ttft?: number;
     source?: OpikApi.TraceUpdateSource;
+    environment?: string;
 }

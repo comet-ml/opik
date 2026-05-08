@@ -13,5 +13,7 @@ export const SpanFilterOperator = {
     LessThanOrEqualTo: "<=",
     IsEmpty: "is_empty",
     IsNotEmpty: "is_not_empty",
+    In: "in",
+    NotIn: "not_in",
 } as const;
 export type SpanFilterOperator = (typeof SpanFilterOperator)[keyof typeof SpanFilterOperator];

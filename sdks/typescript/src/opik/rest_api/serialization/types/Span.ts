@@ -42,6 +42,7 @@ export const Span: core.serialization.ObjectSchema<serializers.Span.Raw, OpikApi
     duration: core.serialization.number().optional(),
     ttft: core.serialization.number().optional(),
     source: SpanSource.optional(),
+    environment: core.serialization.string().optional(),
 });
 
 export declare namespace Span {
@@ -74,5 +75,6 @@ export declare namespace Span {
         duration?: number | null;
         ttft?: number | null;
         source?: SpanSource.Raw | null;
+        environment?: string | null;
     }
 }

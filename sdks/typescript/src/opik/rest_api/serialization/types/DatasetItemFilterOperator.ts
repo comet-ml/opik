@@ -20,6 +20,8 @@ export const DatasetItemFilterOperator: core.serialization.Schema<
     "<=",
     "is_empty",
     "is_not_empty",
+    "in",
+    "not_in",
 ]);
 
 export declare namespace DatasetItemFilterOperator {
@@ -35,5 +37,7 @@ export declare namespace DatasetItemFilterOperator {
         | "<"
         | "<="
         | "is_empty"
-        | "is_not_empty";
+        | "is_not_empty"
+        | "in"
+        | "not_in";
 }
