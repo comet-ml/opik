@@ -3,7 +3,7 @@ import { MockInstance } from "vitest";
 import { evaluate } from "@/evaluation/evaluate";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { EvaluationTask } from "@/evaluation/types";
+import { EvaluationTask, TASK_ERROR_SCORE_NAME } from "@/evaluation/types";
 import {
   createMockHttpResponsePromise,
   mockAPIFunction,
@@ -29,6 +29,9 @@ describe("evaluate function", () => {
   >;
   let scoreBatchOfTracesSpy: MockInstance<
     typeof opikClient.api.traces.scoreBatchOfTraces
+  >;
+  let createExperimentItemsSpy: MockInstance<
+    typeof opikClient.api.experiments.createExperimentItems
   >;
 
   beforeEach(() => {
@@ -93,10 +96,9 @@ describe("evaluate function", () => {
         }),
     );
 
-    vi.spyOn(
-      opikClient.api.experiments,
-      "createExperimentItems",
-    ).mockImplementation(mockAPIFunction);
+    createExperimentItemsSpy = vi
+      .spyOn(opikClient.api.experiments, "createExperimentItems")
+      .mockImplementation(mockAPIFunction);
 
     vi.useFakeTimers();
   });
@@ -214,7 +216,7 @@ describe("evaluate function", () => {
         testCase: expect.objectContaining({
           datasetItemId: "item-1",
           traceId: expect.any(String),
-          taskOutput: expect.objectContaining({ input: expect.any(Object) }),
+          taskOutput: {},
           scoringInputs: expect.objectContaining({
             input: "test input 1",
             expected: "test output 1",
@@ -222,7 +224,7 @@ describe("evaluate function", () => {
         }),
         scoreResults: [
           expect.objectContaining({
-            name: "task_error",
+            name: TASK_ERROR_SCORE_NAME,
             value: 0,
             reason: "task failed",
             scoringFailed: true,
@@ -246,6 +248,41 @@ describe("evaluate function", () => {
           }),
         ]),
       }),
+    );
+
+    // Failed run must still be attached to the experiment so it appears in the UI.
+    expect(createExperimentItemsSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        experimentItems: expect.arrayContaining([
+          expect.objectContaining({
+            datasetItemId: "item-1",
+            traceId: capturedTraceId,
+          }),
+        ]),
+      }),
+    );
+  });
+
+  test("surfaces original task error when experiment insert also fails", async () => {
+    const mockTask: EvaluationTask = async () => {
+      throw new Error("task failed");
+    };
+
+    createExperimentItemsSpy.mockRejectedValueOnce(new Error("insert failed"));
+
+    const result = await evaluate({
+      dataset: testDataset,
+      task: mockTask,
+      experimentName: "test-experiment",
+      client: opikClient,
+    });
+
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0].message).toBe("task failed");
+    expect(result.errors[0].error?.message).toBe("task failed");
+    expect(result.testResults).toHaveLength(1);
+    expect(result.testResults[0].scoreResults[0].name).toBe(
+      TASK_ERROR_SCORE_NAME,
     );
   });
 

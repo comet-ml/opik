@@ -21,7 +21,11 @@ export type EvaluationResult = {
   /** Name of the experiment */
   experimentName?: string;
 
-  /** Test results for all evaluated items */
+  /**
+   * Test results for all evaluated items, including failed ones.
+   * Items whose task threw will have a synthetic score named
+   * {@link TASK_ERROR_SCORE_NAME} with `scoringFailed: true`.
+   */
   testResults: EvaluationTestResult[];
 
   /** Optional URL to view detailed results in the Opik platform */
@@ -49,6 +53,19 @@ export type EvaluationError = {
 };
 
 /**
+ * Reserved score name injected into failed task runs.
+ *
+ * When a task throws, the engine adds a synthetic score with this name and
+ * `scoringFailed: true` so failed items remain visible in experiment results.
+ * Consumers can filter on this name to distinguish task-level failures from
+ * real metric scores.
+ *
+ * Note: coordinate with the Python SDK before renaming — picking a stable,
+ * collision-resistant name (OPIK-6437).
+ */
+export const TASK_ERROR_SCORE_NAME = "__opik_task_error__";
+
+/**
  * Represents the result of a metric calculation.
  */
 export type EvaluationScoreResult = {
@@ -61,7 +78,12 @@ export type EvaluationScoreResult = {
   /** Optional reason for the score */
   reason?: string;
 
-  /** Whether the scoring failed */
+  /**
+   * Whether the scoring failed due to a task-level error rather than a metric
+   * failure. When `true`, `name` will equal {@link TASK_ERROR_SCORE_NAME},
+   * which is a reserved name injected by the engine — user-defined metrics
+   * should never produce a score with that name.
+   */
   scoringFailed?: boolean;
 
   /** Optional category name for grouping scores */

@@ -35,7 +35,7 @@ vi.mock("@/evaluation/suite_evaluators/LLMJudge", () => {
 import { evaluateTestSuite } from "@/evaluation/suite/evaluateTestSuite";
 import { OpikClient } from "@/client/Client";
 import { Dataset } from "@/dataset/Dataset";
-import { EvaluationTask } from "@/evaluation/types";
+import { EvaluationTask, TASK_ERROR_SCORE_NAME } from "@/evaluation/types";
 import { LLMJudge } from "@/evaluation/suite_evaluators/LLMJudge";
 import {
   createMockHttpResponsePromise,
@@ -695,7 +695,7 @@ describe("evaluateTestSuite", () => {
       client: opikClient,
     });
 
-    // item-1 failed (produces a task_error result), item-2 succeeded
+    // item-1 failed (produces a TASK_ERROR_SCORE_NAME result), item-2 succeeded
     expect(result.testResults).toHaveLength(2);
     const failedResult = result.testResults.find(
       (r) => r.testCase.datasetItemId === "item-1"
@@ -706,7 +706,7 @@ describe("evaluateTestSuite", () => {
     expect(failedResult).toBeDefined();
     expect(failedResult?.scoreResults).toEqual([
       expect.objectContaining({
-        name: "task_error",
+        name: TASK_ERROR_SCORE_NAME,
         value: 0,
         reason: "API connection failed",
         scoringFailed: true,
