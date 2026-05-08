@@ -161,7 +161,9 @@ def test_batch_manager_flush_ready__failing_batcher__remaining_batchers_still_fl
         count=1, approximate_span_size=fake_message_factory.ONE_KILOBYTE
     )[0]
     trace = fake_message_factory.fake_create_trace_message_batch(
-        count=1, approximate_trace_size=fake_message_factory.ONE_KILOBYTE, has_ended=True
+        count=1,
+        approximate_trace_size=fake_message_factory.ONE_KILOBYTE,
+        has_ended=True,
     )[0]
     manager.process_message(span)
     manager.process_message(trace)

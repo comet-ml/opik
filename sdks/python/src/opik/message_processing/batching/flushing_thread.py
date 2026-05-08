@@ -31,7 +31,5 @@ class FlushingThread(threading.Thread):
             try:
                 self._flush_callable()
             except Exception:
-                LOGGER.exception(
-                    "FlushingThread tick failed; thread will continue."
-                )
+                LOGGER.exception("FlushingThread tick failed; thread will continue.")
             time.sleep(self._probe_interval_seconds)
