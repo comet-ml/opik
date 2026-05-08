@@ -14,7 +14,7 @@ import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useAppStore from "@/store/AppStore";
 import { Environment } from "@/types/environments";
 import { EnvironmentSquare } from "@/shared/EnvironmentLabel/EnvironmentLabel";
-import { CONFIGURATION_TABS } from "@/v2/pages/ConfigurationPage/ConfigurationPage";
+import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
 
 export const ALL_ENVIRONMENTS_VALUE = "";
 
