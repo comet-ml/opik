@@ -20,6 +20,7 @@ import com.comet.opik.api.resources.utils.resources.ExperimentResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.RequestContext;
@@ -252,7 +253,7 @@ class ExperimentProjectMigrationJobTest {
     }
 
     @Test
-    void skipExperimentWhenInferredProjectWasDeleted() {
+    void skipExperimentWhenInferredProjectWasDeleted(WorkspacesService workspacesService) {
         var apiKey = randomName("api-key");
         var workspaceName = randomName("workspace");
         var workspaceId = UUID.randomUUID().toString();
@@ -273,6 +274,11 @@ class ExperimentProjectMigrationJobTest {
         assertWorkspaceVersion1(apiKey, workspaceName);
 
         assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
+
+        // Trapped workspaces persist via the workspaces.migration_skipped_at column; the next
+        // cycle reads that list to assemble its exclusion set, so the workspace must appear here.
+        Awaitility.await().atMost(15, TimeUnit.SECONDS).untilAsserted(
+                () -> assertThat(workspacesService.findMigrationSkippedWorkspaceIds()).contains(workspaceId));
     }
 
     @Test
@@ -289,6 +295,28 @@ class ExperimentProjectMigrationJobTest {
         var experimentId = createOrphanExperiment(apiKey, workspaceName, datasetName);
 
         var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+
+        assertWorkspaceVersion1(apiKey, workspaceName);
+
+        assertExperimentUnchanged(apiKey, workspaceName, experimentId, beforeMigration);
+    }
+
+    @Test
+    void skipPreMarkedTrappedWorkspaces(WorkspacesService workspacesService) {
+        // Pre-mark a workspace as skipped via the workspaces table BEFORE seeding any experiments.
+        // The cycle's exclusion set is the union of migration.excludedWorkspaceIds config and
+        // findMigrationSkippedWorkspaceIds(), so this workspace must be omitted — proven by the
+        // eligible experiment never getting migrated.
+        var apiKey = randomName("api-key");
+        var workspaceName = randomName("workspace");
+        var workspaceId = UUID.randomUUID().toString();
+        mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, randomName("user"));
+
+        var seeded = seedCertainExperiment(apiKey, workspaceName, randomName("project"));
+        var experimentId = seeded.getLeft();
+        var beforeMigration = experimentResourceClient.getExperiment(experimentId, apiKey, workspaceName);
+
+        workspacesService.markMigrationSkipped(workspaceId, "test-pre-marked-trap");
 
         assertWorkspaceVersion1(apiKey, workspaceName);
 
