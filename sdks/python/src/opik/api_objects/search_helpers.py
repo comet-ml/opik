@@ -1,7 +1,7 @@
 from typing import Optional, List, Callable, Any
 
 from opik import synchronization
-from opik.api_objects import rest_stream_parser
+from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.api_objects.helpers import OptionalFilterParsedItemList
 from opik.rest_api import client as rest_api_client
 from opik.rest_api.types import span_public, trace_public
@@ -16,17 +16,29 @@ def search_spans_with_filters(
     truncate: bool,
     exclude: Optional[List[str]] = None,
 ) -> List[span_public.SpanPublic]:
+    def fetch_page(
+        current_batch_size: int, last_retrieved_id: Optional[str]
+    ) -> List[bytes]:
+        # The REST stream is a lazy generator — the HTTP request fires on first
+        # iteration. Wrap with list(...) so a 429 surfaces inside the rate-limit
+        # helper rather than later when read_and_parse_stream consumes the stream.
+        return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            operation_name="search_spans",
+            rest_callable=lambda: list(
+                rest_client.spans.search_spans(
+                    trace_id=trace_id,
+                    project_name=project_name,
+                    filters=filters,
+                    limit=current_batch_size,
+                    truncate=truncate,
+                    last_retrieved_id=last_retrieved_id,
+                    exclude=exclude,
+                )
+            ),
+        )
+
     spans = rest_stream_parser.read_and_parse_full_stream(
-        read_source=lambda current_batch_size,
-        last_retrieved_id: rest_client.spans.search_spans(
-            trace_id=trace_id,
-            project_name=project_name,
-            filters=filters,
-            limit=current_batch_size,
-            truncate=truncate,
-            last_retrieved_id=last_retrieved_id,
-            exclude=exclude,
-        ),
+        read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=span_public.SpanPublic,
     )
@@ -42,16 +54,25 @@ def search_traces_with_filters(
     truncate: bool,
     exclude: Optional[List[str]] = None,
 ) -> List[trace_public.TracePublic]:
+    def fetch_page(
+        current_batch_size: int, last_retrieved_id: Optional[str]
+    ) -> List[bytes]:
+        return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            operation_name="search_traces",
+            rest_callable=lambda: list(
+                rest_client.traces.search_traces(
+                    project_name=project_name,
+                    filters=filters,
+                    limit=current_batch_size,
+                    truncate=truncate,
+                    last_retrieved_id=last_retrieved_id,
+                    exclude=exclude,
+                )
+            ),
+        )
+
     traces = rest_stream_parser.read_and_parse_full_stream(
-        read_source=lambda current_batch_size,
-        last_retrieved_id: rest_client.traces.search_traces(
-            project_name=project_name,
-            filters=filters,
-            limit=current_batch_size,
-            truncate=truncate,
-            last_retrieved_id=last_retrieved_id,
-            exclude=exclude,
-        ),
+        read_source=fetch_page,
         max_results=max_results,
         parsed_item_class=trace_public.TracePublic,
     )
