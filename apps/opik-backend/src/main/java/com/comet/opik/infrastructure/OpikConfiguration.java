@@ -172,4 +172,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private EnvironmentConfig environment = new EnvironmentConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ReportGenerationConfig reportGeneration = new ReportGenerationConfig();
 }

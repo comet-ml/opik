@@ -62,6 +62,7 @@ import TestSuiteItemsPage from "@/v2/pages/TestSuiteItemsPage/TestSuiteItemsPage
 import DatasetItemsPage from "@/v2/pages/DatasetItemsPage/DatasetItemsPage";
 
 import OlliePage from "@/v2/pages/OlliePage/OlliePage";
+import ProjectHomePage from "@/v2/pages/ProjectHomePage/ProjectHomePage";
 import TracesTabRedirect from "@/v2/redirect/TracesTabRedirect";
 import ProjectDashboardsPage from "@/v2/pages/ProjectDashboardsPage/ProjectDashboardsPage";
 
@@ -210,12 +211,11 @@ const projectScopedRoute = createRoute({
   },
 });
 
-// TODO: OPIK-6260 - Restore ProjectHomePage as /home component once home page redesign is complete
-// ----------- project home (project-scoped) — temporarily shows Ollie
+// ----------- project home (project-scoped)
 const projectHomeRoute = createRoute({
   path: "/home",
   getParentRoute: () => projectScopedRoute,
-  component: OlliePage,
+  component: ProjectHomePage,
 });
 
 // ----------- ollie (project-scoped)
