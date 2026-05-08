@@ -495,9 +495,7 @@ def test_run_tests__worker_threads_1__task_runs_in_caller_thread():
         )
 
     assert len(thread_ids_during_task) == 3
-    assert all(
-        tid == caller_thread_id for tid in thread_ids_during_task
-    ), (
+    assert all(tid == caller_thread_id for tid in thread_ids_during_task), (
         f"With worker_threads=1, tasks must run in the caller thread "
         f"(id={caller_thread_id}); saw {set(thread_ids_during_task)}"
     )
@@ -545,8 +543,7 @@ def test_run_tests__worker_threads_1__no_thread_pool_executor_created():
 def test_run_tests__worker_threads_2__task_runs_in_worker_threads():
     """worker_threads=2 must dispatch tasks to threads other than the caller."""
     items = [
-        dataset_item.DatasetItem(id=f"item-{i}", input={"q": str(i)})
-        for i in range(4)
+        dataset_item.DatasetItem(id=f"item-{i}", input={"q": str(i)}) for i in range(4)
     ]
     mock_dataset = _create_mock_dataset(items=items)
     suite = _create_suite(mock_dataset)
@@ -578,9 +575,7 @@ def test_run_tests__worker_threads_2__task_runs_in_worker_threads():
         )
 
     assert len(thread_ids_during_task) == 4
-    assert all(
-        tid != caller_thread_id for tid in thread_ids_during_task
-    ), (
+    assert all(tid != caller_thread_id for tid in thread_ids_during_task), (
         f"With worker_threads=2, tasks must run off the caller thread "
         f"(id={caller_thread_id}); saw {set(thread_ids_during_task)}"
     )
