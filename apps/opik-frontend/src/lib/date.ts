@@ -61,6 +61,11 @@ export const getTimeFromNow = (value: string): string => {
     : date.format("D MMM YYYY");
 };
 
+export const formatUtcTimeAsLocal = (timeUtc: string): string => {
+  const today = dayjs.utc().format("YYYY-MM-DD");
+  return dayjs.utc(`${today}T${timeUtc}`).local().format("h:mm A");
+};
+
 export const formatRelativeDateTime = (value: string): string => {
   if (!isString(value)) return "";
 

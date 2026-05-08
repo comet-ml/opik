@@ -46,24 +46,31 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
-    // TODO: OPIK-6260 - Restore Home page item and separate Ollie route once home page redesign is complete
-    ...(showOlliePage
-      ? [
-          {
-            id: "home_group",
-            items: [
+    {
+      id: "home_group",
+      items: [
+        {
+          id: "home",
+          path: projectPath("/home"),
+          type: MENU_ITEM_TYPE.router as const,
+          icon: LayoutDashboard,
+          label: "Home",
+          disabled: !projectPrefix,
+        },
+        ...(showOlliePage
+          ? [
               {
                 id: "ollie",
-                path: projectPath("/home"),
+                path: projectPath("/ollie"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
                 label: "Opik Connect",
                 disabled: !projectPrefix,
               },
-            ],
-          },
-        ]
-      : []),
+            ]
+          : []),
+      ],
+    },
     {
       id: "observability",
       label: "Observability",
