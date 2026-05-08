@@ -538,4 +538,95 @@ describe("OpikQueryLanguage", () => {
       });
     });
   });
+
+  describe("in / not_in operators", () => {
+    it("should parse in operator on enum field (trace)", () => {
+      const oql = OpikQueryLanguage.forTraces(
+        'environment in ("prod", "staging")'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "environment",
+        operator: "in",
+        value: "prod,staging",
+      });
+    });
+
+    it("should parse not_in operator on enum field (trace)", () => {
+      const oql = OpikQueryLanguage.forTraces('environment not_in ("debug")');
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "environment",
+        operator: "not_in",
+        value: "debug",
+      });
+    });
+
+    it("should parse in operator chained with AND", () => {
+      const oql = OpikQueryLanguage.forTraces(
+        'environment in ("a", "b") and input contains "hello"'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(2);
+      expect(parsed![0]).toMatchObject({
+        field: "environment",
+        operator: "in",
+        value: "a,b",
+      });
+      expect(parsed![1]).toMatchObject({
+        field: "input",
+        operator: "contains",
+        value: "hello",
+      });
+    });
+
+    it("should parse in operator on enum field (span)", () => {
+      const oql = OpikQueryLanguage.forSpans(
+        'environment in ("debug", "prod")'
+      );
+      const parsed = oql.getFilterExpressions();
+
+      expect(parsed).toHaveLength(1);
+      expect(parsed![0]).toMatchObject({
+        field: "environment",
+        operator: "in",
+        value: "debug,prod",
+      });
+    });
+
+    it("should throw error when in operator value is not an array", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces('environment in "prod"');
+      }).toThrow(/Expected array value starting with '\('/);
+    });
+
+    it("should throw error for unterminated array", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces('environment in ("unterminated"');
+      }).toThrow(/Unterminated array value/);
+    });
+
+    it("should throw error for unquoted array element", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces("environment in (unquoted)");
+      }).toThrow(/Array elements must be quoted strings/);
+    });
+
+    it("should throw error for empty array in in operator", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces("environment in ()");
+      }).toThrow(/Expected at least one item/);
+    });
+
+    it("should throw error for empty array in not_in operator", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces("environment not_in ()");
+      }).toThrow(/Expected at least one item/);
+    });
+  });
 });

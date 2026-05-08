@@ -25,6 +25,7 @@ export class ThreadOQLConfig extends OQLConfig {
       status: "enum",
       tags: "list",
       annotation_queue_ids: "list",
+      environment: "enum",
     };
   }
 
@@ -40,9 +41,10 @@ export class ThreadOQLConfig extends OQLConfig {
       start_time: OPERATOR_SETS.DATETIME_OPS,
       end_time: OPERATOR_SETS.DATETIME_OPS,
       feedback_scores: OPERATOR_SETS.FEEDBACK_SCORES_OPS,
-      status: ["=", "!="] as const,
+      status: OPERATOR_SETS.ENUM_OPS,
       tags: OPERATOR_SETS.LIST_OPS,
       annotation_queue_ids: OPERATOR_SETS.LIST_OPS,
+      environment: OPERATOR_SETS.ENUM_OPS,
     };
   }
 

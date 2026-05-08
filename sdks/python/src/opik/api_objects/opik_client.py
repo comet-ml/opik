@@ -74,6 +74,7 @@ from ..message_processing.replay import replay_manager
 from ..rest_api import client as rest_api_client
 from ..rest_api.core.api_error import ApiError
 from ..rest_api.types import (
+    environment_public,
     project_public,
     span_public,
     trace_public,
@@ -303,6 +304,7 @@ class Opik:
         error_info: Optional[ErrorInfoDict] = None,
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
+        environment: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace_module.Trace:
         """
@@ -343,6 +345,7 @@ class Opik:
             thread_id=thread_id,
             attachments=attachments,
             source="sdk",
+            environment=environment,
         )
 
     def __internal_api__trace__(
@@ -361,6 +364,7 @@ class Opik:
         thread_id: Optional[str] = None,
         attachments: Optional[List[Attachment]] = None,
         source: TraceSource = "sdk",
+        environment: Optional[str] = None,
         **ignored_kwargs: Any,
     ) -> trace_module.Trace:
         id = id if id is not None else id_helpers.generate_id()
@@ -385,6 +389,7 @@ class Opik:
             thread_id=thread_id,
             last_updated_at=last_updated_at,
             source=source,
+            environment=environment,
         )
         self._streamer.put(create_trace_message)
         self._display_trace_url(trace_id=id, project_name=project_name)
@@ -416,6 +421,7 @@ class Opik:
             url_override=self._config.url_override,
             source=source,
             config=self._config,
+            environment=environment,
         )
 
     def copy_traces(
@@ -585,6 +591,7 @@ class Opik:
         total_cost: Optional[float] = None,
         attachments: Optional[List[Attachment]] = None,
         source: TraceSource = "sdk",
+        environment: Optional[str] = None,
     ) -> span_module.Span:
         id = id if id is not None else id_helpers.generate_id()
         start_time = (
@@ -611,6 +618,7 @@ class Opik:
                 thread_id=None,
                 last_updated_at=datetime_helpers.local_timestamp(),
                 source=source,
+                environment=environment,
             )
             self._streamer.put(create_trace_message)
 
@@ -645,6 +653,7 @@ class Opik:
             attachments=attachments,
             source=source,
             config=self._config,
+            environment=environment,
         )
 
     def update_span(
@@ -1007,6 +1016,7 @@ class Opik:
                 Supported columns:
                 - `id`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
                 - `first_message`, `last_message`: String (=, !=, contains, not_contains, starts_with, ends_with, >, <)
+                - `environment`: Enum for lifecycle stage (=, !=, in, not_in)
                 - `status`: Enum (=, !=)
                 - `start_time`, `end_time`, `created_at`, `last_updated_at`: DateTime (=, !=, >, >=, <, <=)
                 - `feedback_scores`: Numeric with dot notation (=, !=, >, >=, <, <=, is_empty, is_not_empty)
@@ -1020,6 +1030,8 @@ class Opik:
                 - `first_message contains "hello"` - Filter by first message content
                 - `feedback_scores.user_frustration > 0.5` - Filter by feedback score
                 - `tags contains "important"` - Filter by tag
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all threads in the project will be returned up to the limit.
             max_results: The maximum number of threads to retrieve. The default value is 1000.
@@ -1079,6 +1091,84 @@ class Opik:
             id=span_id,
             name=name,
         )
+
+    def create_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Create a new environment in the current workspace.
+
+        Args:
+            name: Human-readable environment name (e.g. ``production``).
+            description: Optional description.
+            color: Optional color hex code used for UI display.
+
+        Returns:
+            The created environment.
+        """
+        new_id = id_helpers.generate_id()
+        self._rest_client.environments.create_environment(
+            id=new_id,
+            name=name,
+            description=description,
+            color=color,
+        )
+        return self._rest_client.environments.get_environment_by_id(new_id)
+
+    def get_environments(self) -> List[environment_public.EnvironmentPublic]:
+        """List environments in the current workspace.
+
+        The backend caps the response at the workspace limit (default 20).
+        """
+        page = self._rest_client.environments.find_environments()
+        return list(page.content or [])
+
+    def update_environment(
+        self,
+        name: str,
+        description: Optional[str] = None,
+        color: Optional[str] = None,
+    ) -> environment_public.EnvironmentPublic:
+        """Update the description and/or color of an environment, identified by name.
+
+        Returns the updated environment.
+        """
+        existing = self._find_environment_by_name(name)
+        self._rest_client.environments.update_environment(
+            existing.id,
+            description=description,
+            color=color,
+        )
+        return self._rest_client.environments.get_environment_by_id(existing.id)
+
+    def delete_environment(self, name: str) -> None:
+        """Delete an environment by name. No-op if no matching environment exists."""
+        existing = self._find_environment_by_name(name, strict=False)
+        if existing is None:
+            return
+        self._rest_client.environments.delete_environments_batch(ids=[existing.id])
+
+    @overload
+    def _find_environment_by_name(
+        self, name: str, strict: Literal[True] = True
+    ) -> environment_public.EnvironmentPublic: ...
+
+    @overload
+    def _find_environment_by_name(
+        self, name: str, strict: Literal[False]
+    ) -> Optional[environment_public.EnvironmentPublic]: ...
+
+    def _find_environment_by_name(
+        self, name: str, strict: bool = True
+    ) -> Optional[environment_public.EnvironmentPublic]:
+        for env in self.get_environments():
+            if env.name == name:
+                return env
+        if strict:
+            raise exceptions.OpikException(f"No environment found with name {name!r}.")
+        return None
 
     def get_dataset(
         self, name: str, project_name: Optional[str] = None
@@ -1753,6 +1843,7 @@ class Opik:
 
                 Supported columns include:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
                 - `status`: String field (=, contains, not_contains only)
                 - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
                 - `input`, `output`: String fields for content (=, contains, not_contains only)
@@ -1764,6 +1855,7 @@ class Opik:
 
                 Supported operators by column:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
                 - `status`: =, contains, not_contains
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
@@ -1783,6 +1875,8 @@ class Opik:
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all traces in the project will be returned up to the limit.
             max_results: The maximum number of traces to return.
@@ -1854,6 +1948,7 @@ class Opik:
 
                 Supported columns include:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: String fields with full operator support
+                - `environment`: Enum field for lifecycle stage (=, !=, in, not_in)
                 - `status`: String field (=, contains, not_contains only)
                 - `start_time`, `end_time`: DateTime fields (use ISO 8601 format, e.g., "2024-01-01T00:00:00Z")
                 - `input`, `output`: String fields for content (=, contains, not_contains only)
@@ -1865,6 +1960,7 @@ class Opik:
 
                 Supported operators by column:
                 - `id`, `name`, `created_by`, `thread_id`, `type`, `model`, `provider`: =, !=, contains, not_contains, starts_with, ends_with, >, <
+                - `environment`: =, !=, in, not_in
                 - `status`: =, contains, not_contains
                 - `start_time`, `end_time`: =, >, <, >=, <=
                 - `input`, `output`: =, contains, not_contains
@@ -1884,6 +1980,8 @@ class Opik:
                 - `tags contains "production"` - Filter by tag
                 - `metadata.model = "gpt-4"` - Filter by metadata field
                 - `thread_id = "thread_123"` - Filter by thread ID
+                - `environment = "production"` - Filter by environment
+                - `environment in ("production", "staging")` - Filter by multiple environments
 
                 If not provided, all spans in the project/trace will be returned up to the limit.
             max_results: The maximum number of spans to return.

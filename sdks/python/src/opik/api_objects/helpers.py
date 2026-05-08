@@ -90,6 +90,25 @@ def resolve_child_span_project_name(
     return project_name
 
 
+def resolve_child_span_environment(
+    parent_environment: Optional[str],
+    child_environment: Optional[str],
+    show_warning: bool = True,
+) -> Optional[str]:
+    if (
+        show_warning
+        and child_environment is not None
+        and child_environment != parent_environment
+    ):
+        LOGGER.warning(
+            logging_messages.NESTED_SPAN_ENVIRONMENT_MISMATCH_WARNING_MESSAGE.format(
+                child_environment,
+                parent_environment if parent_environment is not None else "",
+            )
+        )
+    return parent_environment
+
+
 def add_usage_to_metadata(
     usage: Optional[Dict[str, Any]],
     metadata: Optional[Dict[str, Any]],

@@ -193,6 +193,10 @@ export class OpikClient {
   public trace = (traceData: TraceData) => {
     logger.debug("Creating new trace with data:", traceData);
     const projectName = this.resolveProjectName(traceData.projectName);
+    const environment =
+      traceData.environment !== undefined
+        ? traceData.environment
+        : this.config.environment;
     const trace = new Trace(
       {
         id: generateId(),
@@ -200,6 +204,7 @@ export class OpikClient {
         source: "sdk",
         ...traceData,
         projectName,
+        ...(environment !== undefined ? { environment } : {}),
       },
       this
     );
@@ -1949,6 +1954,59 @@ export class OpikClient {
   public logSpansFeedbackScores(scores: FeedbackScoreData[]): void {
     this.logFeedbackScores(scores, this.spanFeedbackScoresBatchQueue);
   }
+
+  public createEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    const newId = generateId();
+    await this.api.environments.createEnvironment({
+      id: newId,
+      name,
+      description: options?.description,
+      color: options?.color,
+    });
+    return this.api.environments.getEnvironmentById(newId);
+  };
+
+  public getEnvironments = async (): Promise<OpikApi.EnvironmentPublic[]> => {
+    const page = await this.api.environments.findEnvironments();
+    return page.content ?? [];
+  };
+
+  public updateEnvironment = async (
+    name: string,
+    options?: { description?: string; color?: string }
+  ): Promise<OpikApi.EnvironmentPublic> => {
+    const existing = await this._findEnvironmentByName(name, true);
+    await this.api.environments.updateEnvironment(existing!.id!, {
+      description: options?.description,
+      color: options?.color,
+    });
+    return this.api.environments.getEnvironmentById(existing!.id!);
+  };
+
+  public deleteEnvironment = async (name: string): Promise<void> => {
+    const existing = await this._findEnvironmentByName(name, false);
+    if (!existing) {
+      return;
+    }
+    await this.api.environments.deleteEnvironmentsBatch({
+      ids: [existing.id!],
+    });
+  };
+
+  private _findEnvironmentByName = async (
+    name: string,
+    strict: boolean
+  ): Promise<OpikApi.EnvironmentPublic | undefined> => {
+    const envs = await this.getEnvironments();
+    const match = envs.find((env) => env.name === name);
+    if (!match && strict) {
+      throw new Error(`No environment found with name "${name}".`);
+    }
+    return match;
+  };
 
   public flush = async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;

@@ -9,7 +9,7 @@ export interface SavedTrace extends ITrace {
   id: string;
 }
 
-interface SpanData extends Omit<ISpan, "startTime" | "traceId"> {
+interface SpanData extends Omit<ISpan, "startTime" | "traceId" | "environment"> {
   startTime?: Date;
 }
 
@@ -45,13 +45,19 @@ export class Trace {
       spanData.projectName ??
       this.opik.config.projectName;
 
+    // environment is trace-scoped; strip any caller-supplied value so JS/any callers
+    // can't override it — the parent trace's environment is applied unconditionally below.
+    const { environment: _env, ...spanDataWithoutEnv } = spanData as Record<string, unknown>;
     const spanWithId: SavedSpan = {
       id: generateId(),
       startTime: new Date(),
       source: this.data.source,
-      ...spanData,
+      ...spanDataWithoutEnv,
       projectName,
       traceId: this.data.id,
+      ...(this.data.environment !== undefined
+        ? { environment: this.data.environment }
+        : {}),
     };
 
     this.opik.spanBatchQueue.create(spanWithId);

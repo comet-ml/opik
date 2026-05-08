@@ -72,6 +72,7 @@ class SpanData(ObservationData):
             total_cost=total_cost,
             attachments=attachments,
             source=self.source,
+            environment=self.environment,
         )
 
     @property
@@ -95,6 +96,8 @@ class SpanData(ObservationData):
             start_parameters["metadata"] = self.metadata
         if self.tags is not None:
             start_parameters["tags"] = self.tags
+        if self.environment is not None:
+            start_parameters["environment"] = self.environment
 
         return start_parameters
 
@@ -122,6 +125,7 @@ class SpanData(ObservationData):
             "total_cost": self.total_cost,
             "attachments": self.attachments,
             "source": self.source,
+            "environment": self.environment,
         }
 
     def get_distributed_trace_headers(self) -> DistributedTraceHeadersDict:
