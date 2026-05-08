@@ -1136,6 +1136,8 @@ class Opik:
         Returns the updated environment.
         """
         existing = self._find_environment_by_name(name)
+        if existing is None:
+            raise exceptions.OpikException(f"No environment found with name {name!r}.")
         self._rest_client.environments.update_environment(
             existing.id,
             description=description,
@@ -1145,29 +1147,17 @@ class Opik:
 
     def delete_environment(self, name: str) -> None:
         """Delete an environment by name. No-op if no matching environment exists."""
-        existing = self._find_environment_by_name(name, strict=False)
+        existing = self._find_environment_by_name(name)
         if existing is None:
             return
         self._rest_client.environments.delete_environments_batch(ids=[existing.id])
 
-    @overload
     def _find_environment_by_name(
-        self, name: str, strict: Literal[True] = True
-    ) -> environment_public.EnvironmentPublic: ...
-
-    @overload
-    def _find_environment_by_name(
-        self, name: str, strict: Literal[False]
-    ) -> Optional[environment_public.EnvironmentPublic]: ...
-
-    def _find_environment_by_name(
-        self, name: str, strict: bool = True
+        self, name: str
     ) -> Optional[environment_public.EnvironmentPublic]:
         for env in self.get_environments():
             if env.name == name:
                 return env
-        if strict:
-            raise exceptions.OpikException(f"No environment found with name {name!r}.")
         return None
 
     def get_dataset(
