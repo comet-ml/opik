@@ -16,19 +16,29 @@ import useEnvironmentBatchDeleteMutation from "@/api/environments/useEnvironment
 import AddEditEnvironmentDialog from "@/v2/pages-shared/environments/AddEditEnvironmentDialog/AddEditEnvironmentDialog";
 import CellWrapper from "@/shared/DataTableCells/CellWrapper";
 
+type DialogState = "closed" | "edit" | "clone" | "delete";
+
 const EnvironmentsRowActionsCell: React.FunctionComponent<
   CellContext<Environment, unknown>
 > = (context) => {
   const resetKeyRef = useRef(0);
   const environment = context.row.original;
-  const [open, setOpen] = useState<boolean | number>(false);
+  const [dialog, setDialog] = useState<DialogState>("closed");
 
-  const deleteMutation = useEnvironmentBatchDeleteMutation();
+  const { mutate: deleteMutate } = useEnvironmentBatchDeleteMutation();
 
   const deleteHandler = useCallback(() => {
-    deleteMutation.mutate({ ids: [environment.id] });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [environment.id]);
+    deleteMutate({ ids: [environment.id] });
+  }, [environment.id, deleteMutate]);
+
+  const handleClose = useCallback((open: boolean) => {
+    if (!open) setDialog("closed");
+  }, []);
+
+  const openDialog = useCallback((next: Exclude<DialogState, "closed">) => {
+    setDialog(next);
+    resetKeyRef.current += 1;
+  }, []);
 
   return (
     <CellWrapper
@@ -40,14 +50,14 @@ const EnvironmentsRowActionsCell: React.FunctionComponent<
       <AddEditEnvironmentDialog
         key={`edit-${resetKeyRef.current}`}
         environment={environment}
-        open={open === 2 || open === 3}
-        setOpen={setOpen}
-        mode={open === 2 ? "edit" : "clone"}
+        open={dialog === "edit" || dialog === "clone"}
+        setOpen={handleClose}
+        mode={dialog === "edit" ? "edit" : "clone"}
       />
       <ConfirmDialog
         key={`delete-${resetKeyRef.current}`}
-        open={open === 1}
-        setOpen={setOpen}
+        open={dialog === "delete"}
+        setOpen={handleClose}
         onConfirm={deleteHandler}
         title="Delete environment"
         description="This action can’t be undone. Existing traces and spans will keep their environment value and surface under “Unrecognized environments”. Are you sure you want to continue?"
@@ -62,30 +72,17 @@ const EnvironmentsRowActionsCell: React.FunctionComponent<
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52">
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(2);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
+          <DropdownMenuItem onClick={() => openDialog("edit")}>
             <Pencil className="mr-2 size-4" />
             Edit
           </DropdownMenuItem>
-          <DropdownMenuItem
-            onClick={() => {
-              setOpen(3);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
-          >
+          <DropdownMenuItem onClick={() => openDialog("clone")}>
             <Copy className="mr-2 size-4" />
             Clone
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
-            onClick={() => {
-              setOpen(1);
-              resetKeyRef.current = resetKeyRef.current + 1;
-            }}
+            onClick={() => openDialog("delete")}
             variant="destructive"
           >
             <Trash className="mr-2 size-4" />

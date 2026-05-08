@@ -91,6 +91,21 @@ export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
   ] as Filter[];
 };
 
+export const generateEnvironmentFilter = (environment?: string | null) => {
+  if (!environment) return [];
+
+  return [
+    {
+      id: "environment_filter",
+      field: "environment",
+      type: COLUMN_TYPE.string,
+      operator: "=",
+      key: "",
+      value: environment,
+    },
+  ] as Filter[];
+};
+
 export const generatePromptFilters = (promptId?: string) => {
   if (!promptId) return undefined;
 
