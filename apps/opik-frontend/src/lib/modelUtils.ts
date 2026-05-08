@@ -3,10 +3,12 @@ import {
   COMPOSED_PROVIDER_TYPE,
   PROVIDER_MODEL_TYPE,
   PROVIDER_TYPE,
+  ReasoningEffort,
 } from "@/types/providers";
 import {
   ANTHROPIC_MODEL_CAPABILITIES,
   DEFAULT_ANTHROPIC_CONFIGS,
+  OPENAI_MODEL_CAPABILITIES,
   REASONING_MODELS,
 } from "@/constants/llm";
 import {
@@ -111,6 +113,29 @@ export const getAnthropicThinkingEffortOptions = (
     ANTHROPIC_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
       ?.thinkingEffortOptions ?? []
   ).map((value) => ({ label: EFFORT_LABELS[value], value }));
+
+const OPENAI_EFFORT_LABELS: Record<ReasoningEffort, string> = {
+  none: "None",
+  minimal: "Minimal",
+  low: "Low",
+  medium: "Medium",
+  high: "High (Default)",
+  xhigh: "xHigh",
+};
+
+export const supportsOpenAIReasoningEffort = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): boolean =>
+  !!OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+    ?.reasoningEffortOptions;
+
+export const getOpenAIReasoningEffortOptions = (
+  model?: PROVIDER_MODEL_TYPE | "",
+): Array<{ label: string; value: ReasoningEffort }> =>
+  (
+    OPENAI_MODEL_CAPABILITIES[model as PROVIDER_MODEL_TYPE]
+      ?.reasoningEffortOptions ?? []
+  ).map((value) => ({ label: OPENAI_EFFORT_LABELS[value], value }));
 
 // Single reconciler called by every model-change handler (playground, judge
 // dialog). Keeping the rules here means the form state stays valid even when
