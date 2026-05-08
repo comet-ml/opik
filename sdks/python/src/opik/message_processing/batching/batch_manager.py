@@ -13,10 +13,11 @@ class BatchManager:
         ],
     ) -> None:
         self._message_to_batcher_mapping = message_to_batcher_mapping
-        self._flushing_thread = flushing_thread.FlushingThread(
-            batchers=list(self._message_to_batcher_mapping.values())
-        )
         self._lock = threading.RLock()
+        self._flushing_thread = flushing_thread.FlushingThread(
+            batchers=list(self._message_to_batcher_mapping.values()),
+            lock=self._lock,
+        )
 
     def start(self) -> None:
         self._flushing_thread.start()
