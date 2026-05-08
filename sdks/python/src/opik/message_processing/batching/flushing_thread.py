@@ -26,13 +26,13 @@ class FlushingThread(threading.Thread):
 
     def run(self) -> None:
         while not self._closed:
-            try:
-                with self._lock:
-                    for batcher in self._batchers:
+            with self._lock:
+                for batcher in self._batchers:
+                    try:
                         if batcher.is_ready_to_flush():
                             batcher.flush()
-            except Exception:
-                LOGGER.exception(
-                    "FlushingThread iteration failed; thread will continue."
-                )
+                    except Exception:
+                        LOGGER.exception(
+                            "FlushingThread batcher flush failed; thread will continue."
+                        )
             time.sleep(self._probe_interval_seconds)
