@@ -251,11 +251,9 @@ export const sanitizeConfigForRequest = (
   if (!model) return configs;
 
   const sanitized: Record<string, unknown> = { ...configs };
+  const provider = getProviderFromModel(model as PROVIDER_MODEL_TYPE);
 
-  if (
-    getProviderFromModel(model as PROVIDER_MODEL_TYPE) ===
-    PROVIDER_TYPE.ANTHROPIC
-  ) {
+  if (provider === PROVIDER_TYPE.ANTHROPIC) {
     if (!supportsSamplingParams(model)) {
       delete sanitized.temperature;
       delete sanitized.topP;
@@ -265,6 +263,19 @@ export const sanitizeConfigForRequest = (
     if (sanitized.maxCompletionTokens == null) {
       sanitized.maxCompletionTokens =
         DEFAULT_ANTHROPIC_CONFIGS.MAX_COMPLETION_TOKENS;
+    }
+  }
+
+  if (provider === PROVIDER_TYPE.OPEN_AI && sanitized.reasoningEffort != null) {
+    if (!supportsOpenAIReasoningEffort(model)) {
+      delete sanitized.reasoningEffort;
+    } else {
+      const allowed = getOpenAIReasoningEffortOptions(model).map(
+        (o) => o.value,
+      );
+      if (!allowed.includes(sanitized.reasoningEffort as ReasoningEffort)) {
+        delete sanitized.reasoningEffort;
+      }
     }
   }
 
