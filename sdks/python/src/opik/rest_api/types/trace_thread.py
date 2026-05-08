@@ -31,6 +31,7 @@ class TraceThread(UniversalBaseModel):
     last_updated_by: typing.Optional[str] = None
     created_by: typing.Optional[str] = None
     created_at: typing.Optional[dt.datetime] = None
+    environment: typing.Optional[str] = None
 
     if IS_PYDANTIC_V2:
         model_config: typing.ClassVar[pydantic.ConfigDict] = pydantic.ConfigDict(extra="allow", frozen=True)  # type: ignore # Pydantic v2

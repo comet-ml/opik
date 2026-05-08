@@ -50,6 +50,7 @@ export const Trace: core.serialization.ObjectSchema<serializers.Trace.Raw, OpikA
     providers: core.serialization.list(core.serialization.string()).optional(),
     experiment: ExperimentItemReference.optional(),
     source: TraceSource.optional(),
+    environment: core.serialization.string().optional(),
 });
 
 export declare namespace Trace {
@@ -85,5 +86,6 @@ export declare namespace Trace {
         providers?: string[] | null;
         experiment?: ExperimentItemReference.Raw | null;
         source?: TraceSource.Raw | null;
+        environment?: string | null;
     }
 }

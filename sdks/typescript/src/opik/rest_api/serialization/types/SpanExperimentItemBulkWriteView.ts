@@ -34,6 +34,7 @@ export const SpanExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     ),
     ttft: core.serialization.number().optional(),
     source: SpanExperimentItemBulkWriteViewSource.optional(),
+    environment: core.serialization.string().optional(),
 });
 
 export declare namespace SpanExperimentItemBulkWriteView {
@@ -57,5 +58,6 @@ export declare namespace SpanExperimentItemBulkWriteView {
         total_estimated_cost_version?: string | null;
         ttft?: number | null;
         source?: SpanExperimentItemBulkWriteViewSource.Raw | null;
+        environment?: string | null;
     }
 }

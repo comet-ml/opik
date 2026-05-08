@@ -20,6 +20,8 @@ export const TraceFilterWriteOperator: core.serialization.Schema<
     "<=",
     "is_empty",
     "is_not_empty",
+    "in",
+    "not_in",
 ]);
 
 export declare namespace TraceFilterWriteOperator {
@@ -35,5 +37,7 @@ export declare namespace TraceFilterWriteOperator {
         | "<"
         | "<="
         | "is_empty"
-        | "is_not_empty";
+        | "is_not_empty"
+        | "in"
+        | "not_in";
 }

@@ -20,6 +20,8 @@ export const TraceThreadFilterPublicOperator: core.serialization.Schema<
     "<=",
     "is_empty",
     "is_not_empty",
+    "in",
+    "not_in",
 ]);
 
 export declare namespace TraceThreadFilterPublicOperator {
@@ -35,5 +37,7 @@ export declare namespace TraceThreadFilterPublicOperator {
         | "<"
         | "<="
         | "is_empty"
-        | "is_not_empty";
+        | "is_not_empty"
+        | "in"
+        | "not_in";
 }
