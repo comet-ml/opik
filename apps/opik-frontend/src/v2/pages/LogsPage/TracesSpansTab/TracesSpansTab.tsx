@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import {
   JsonParam,
   NumberParam,
@@ -464,18 +464,22 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const { data: environmentsData } = useEnvironmentsList();
 
+  const envList = environmentsData?.content;
+  const envInList =
+    environment && envList ? envList.some((e) => e.name === environment) : null;
+
+  useEffect(() => {
+    if (envInList === false) {
+      setEnvironment(undefined);
+      setPage(1);
+    }
+  }, [envInList, setEnvironment, setPage]);
+
   const effectiveFilters = useMemo(() => {
     const userFilters = filters ?? [];
-    if (!environment) return userFilters;
-
-    const envList = environmentsData?.content;
-    const envExists = envList
-      ? envList.some((e) => e.name === environment)
-      : true;
-    if (!envExists) return userFilters;
-
+    if (!environment || envInList === false) return userFilters;
     return [...userFilters, ...generateEnvironmentFilter(environment)];
-  }, [filters, environment, environmentsData?.content]);
+  }, [filters, environment, envInList]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,

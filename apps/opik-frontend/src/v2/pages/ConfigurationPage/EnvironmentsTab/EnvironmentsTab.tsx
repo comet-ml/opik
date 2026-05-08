@@ -22,6 +22,7 @@ import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { Button } from "@/ui/button";
 import { Separator } from "@/ui/separator";
 import { Environment, ENVIRONMENT_WORKSPACE_LIMIT } from "@/types/environments";
+import { usePermissions } from "@/contexts/PermissionsContext";
 import {
   COLUMN_ID_ID,
   COLUMN_NAME_ID,
@@ -97,6 +98,10 @@ const EnvironmentsTab: React.FunctionComponent = () => {
   const [search, setSearch] = useState("");
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
+  const {
+    permissions: { canConfigureWorkspaceSettings },
+  } = usePermissions();
+
   const { data, isPending, isPlaceholderData, isFetching } =
     useEnvironmentsList({
       placeholderData: keepPreviousData,
@@ -149,9 +154,11 @@ const EnvironmentsTab: React.FunctionComponent = () => {
         columnsOrder,
         selectedColumns,
       }),
-      generateActionsColumDef({ cell: EnvironmentsRowActionsCell }),
+      ...(canConfigureWorkspaceSettings
+        ? [generateActionsColumDef({ cell: EnvironmentsRowActionsCell })]
+        : []),
     ];
-  }, [columnsOrder, selectedColumns]);
+  }, [columnsOrder, selectedColumns, canConfigureWorkspaceSettings]);
 
   const resizeConfig = useMemo(
     () => ({
@@ -170,7 +177,7 @@ const EnvironmentsTab: React.FunctionComponent = () => {
   const isTableLoading =
     isPending || (isPlaceholderData && environments.length === 0);
 
-  const createButton = (
+  const createButton = canConfigureWorkspaceSettings ? (
     <Button
       variant="default"
       size="xs"
@@ -180,21 +187,24 @@ const EnvironmentsTab: React.FunctionComponent = () => {
       <Plus className="mr-1 size-4" />
       Create environment
     </Button>
-  );
+  ) : null;
+
+  const headerAction =
+    createButton && atLimit ? (
+      <TooltipWrapper
+        content={`A workspace can have up to ${ENVIRONMENT_WORKSPACE_LIMIT} environments. Delete an existing one to create a new environment.`}
+      >
+        <span>{createButton}</span>
+      </TooltipWrapper>
+    ) : (
+      createButton
+    );
 
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
         <h2 className="comet-title-xs">Environments</h2>
-        {atLimit ? (
-          <TooltipWrapper
-            content={`A workspace can have up to ${ENVIRONMENT_WORKSPACE_LIMIT} environments. Delete an existing one to create a new environment.`}
-          >
-            <span>{createButton}</span>
-          </TooltipWrapper>
-        ) : (
-          createButton
-        )}
+        {headerAction}
       </div>
       <div className="mb-4 flex items-center justify-between gap-8">
         <SearchInput
@@ -206,7 +216,9 @@ const EnvironmentsTab: React.FunctionComponent = () => {
         />
 
         <div className="flex items-center gap-2">
-          <EnvironmentsActionsPanel environments={selectedRows} />
+          {canConfigureWorkspaceSettings && (
+            <EnvironmentsActionsPanel environments={selectedRows} />
+          )}
           <Separator orientation="vertical" className="mx-2 h-4" />
           <ColumnsButton
             columns={DEFAULT_COLUMNS}
@@ -232,12 +244,14 @@ const EnvironmentsTab: React.FunctionComponent = () => {
               title="No environments yet"
               description="Create an environment to organize traces by deployment stage (development, staging, production, …)."
             >
-              <button
-                onClick={handleNewEnvironmentClick}
-                className="comet-body-s underline underline-offset-4 hover:text-primary"
-              >
-                Add environment
-              </button>
+              {canConfigureWorkspaceSettings && (
+                <button
+                  onClick={handleNewEnvironmentClick}
+                  className="comet-body-s underline underline-offset-4 hover:text-primary"
+                >
+                  Add environment
+                </button>
+              )}
             </DataTableEmptyContent>
           ) : (
             <DataTableNoMatchingData />
