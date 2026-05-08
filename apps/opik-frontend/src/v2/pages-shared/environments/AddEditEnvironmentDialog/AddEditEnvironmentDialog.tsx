@@ -37,8 +37,8 @@ type AddEditEnvironmentDialogProps = {
 const AddEditEnvironmentDialog: React.FunctionComponent<
   AddEditEnvironmentDialogProps
 > = ({ open, setOpen, environment, mode = "create" }) => {
-  const createMutation = useEnvironmentCreateMutation();
-  const updateMutation = useEnvironmentUpdateMutation();
+  const { mutate: createMutation } = useEnvironmentCreateMutation();
+  const { mutate: updateMutation } = useEnvironmentUpdateMutation();
 
   const [name, setName] = useState<string>(
     mode === "clone" && environment
@@ -87,12 +87,12 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     };
 
     if (isEdit && environment) {
-      updateMutation.mutate({
+      updateMutation({
         environmentId: environment.id,
         environment: payload,
       });
     } else {
-      createMutation.mutate({ environment: payload });
+      createMutation({ environment: payload });
     }
 
     setOpen(false);

@@ -31,6 +31,7 @@ import useTracesOrSpansList, {
 import useTracesOrSpansScoresColumns from "@/hooks/useTracesOrSpansScoresColumns";
 import {
   COLUMN_COMMENTS_ID,
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_EXPERIMENT_ID,
   COLUMN_FEEDBACK_SCORES_ID,
   COLUMN_SPAN_FEEDBACK_SCORES_ID,
@@ -216,7 +217,7 @@ const SHARED_COLUMNS: ColumnData<BaseTraceData>[] = [
     cell: ListCell as never,
   },
   {
-    id: "environment",
+    id: COLUMN_ENVIRONMENT_ID,
     label: "Environment",
     type: COLUMN_TYPE.string,
     cell: EnvironmentCell as never,
@@ -288,7 +289,7 @@ const DEFAULT_TRACES_COLUMNS: string[] = [
   "usage.total_tokens",
   "total_estimated_cost",
   "tags",
-  "environment",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -302,7 +303,7 @@ const DEFAULT_SPANS_COLUMNS: string[] = [
   "duration",
   "total_estimated_cost",
   "tags",
-  "environment",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
 ];
 
@@ -319,7 +320,7 @@ const DEFAULT_TRACES_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
-  "environment",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
   "name",
   "span_count",
@@ -346,7 +347,7 @@ const DEFAULT_SPANS_COLUMNS_ORDER: string[] = [
   "usage.completion_tokens",
   "total_estimated_cost",
   "tags",
-  "environment",
+  COLUMN_ENVIRONMENT_ID,
   COLUMN_COMMENTS_ID,
   "created_by",
   COLUMN_GUARDRAILS_ID,
@@ -1084,18 +1085,19 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         label: "ID",
         type: COLUMN_TYPE.string,
       },
-      ...SHARED_COLUMNS.filter((col) => col.id !== "environment").flatMap(
-        (col) =>
-          col.id === "error_info"
-            ? [
-                col,
-                {
-                  id: "error_type",
-                  label: "Error type",
-                  type: COLUMN_TYPE.string,
-                },
-              ]
-            : [col],
+      ...SHARED_COLUMNS.filter(
+        (col) => col.id !== COLUMN_ENVIRONMENT_ID,
+      ).flatMap((col) =>
+        col.id === "error_info"
+          ? [
+              col,
+              {
+                id: "error_type",
+                label: "Error type",
+                type: COLUMN_TYPE.string,
+              },
+            ]
+          : [col],
       ),
       ...(type === TRACE_DATA_TYPE.traces
         ? [
