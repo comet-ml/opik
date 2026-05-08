@@ -37,8 +37,8 @@ public class EnvironmentAutoCreateListener {
         Mono.fromRunnable(() -> environmentService.bulkCreate(names, event.workspaceId(), event.userName()))
                 .subscribeOn(Schedulers.boundedElastic())
                 .doOnError(error -> log.error(
-                        "Failed to auto-create environments for workspace_id '{}': '{}'",
-                        event.workspaceId(), error.getMessage(), error))
+                        "Failed to auto-create environments for workspace_id '{}'",
+                        event.workspaceId(), error))
                 .onErrorResume(error -> Mono.empty())
                 .subscribe();
     }

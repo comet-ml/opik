@@ -29,6 +29,7 @@ import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import java.sql.SQLIntegrityConstraintViolationException;
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -111,24 +112,18 @@ class EnvironmentServiceImpl implements EnvironmentService {
                 }).subscribeOn(Schedulers.boundedElastic()))
                 .block();
 
-        analyticsService.trackEvent(ENVIRONMENT_CREATED_EVENT, Map.of(
-                "environment_id", saved.id().toString(),
-                "environment_name", saved.name(),
-                "workspace_id", workspaceId,
-                "user_name", userName,
-                "source", SOURCE_MANUAL,
-                "date", Instant.now().toString()));
+        trackEnvironmentCreatedEvent(saved, workspaceId, userName, SOURCE_MANUAL, Instant.now());
 
         return get(saved.id(), workspaceId);
     }
 
     @Override
     public void bulkCreate(@NonNull Set<String> names, @NonNull String workspaceId, @NonNull String userName) {
-        Set<String> validNames = names.stream()
+        List<String> validNames = names.stream()
                 .filter(StringUtils::isNotBlank)
                 .filter(name -> name.length() <= 150)
                 .filter(name -> name.matches(Environment.NAME_PATTERN))
-                .collect(Collectors.toSet());
+                .toList();
 
         if (validNames.isEmpty()) {
             return;
@@ -139,11 +134,11 @@ class EnvironmentServiceImpl implements EnvironmentService {
                 Mono.fromCallable(() -> template.inTransaction(WRITE, handle -> {
                     var repository = handle.attach(EnvironmentDAO.class);
 
-                    Set<String> existingNames = repository.findAll(workspaceId).stream()
-                            .map(Environment::name)
+                    Set<String> existingLowercaseNames = repository.findAll(workspaceId).stream()
+                            .map(env -> env.name().toLowerCase(Locale.ROOT))
                             .collect(Collectors.toSet());
 
-                    long availableSlots = (long) environmentConfig.getMaxPerWorkspace() - existingNames.size();
+                    long availableSlots = (long) environmentConfig.getMaxPerWorkspace() - existingLowercaseNames.size();
                     if (availableSlots <= 0) {
                         log.info("Skipping environment auto-create for workspace_id '{}': cap '{}' reached",
                                 workspaceId, environmentConfig.getMaxPerWorkspace());
@@ -151,7 +146,7 @@ class EnvironmentServiceImpl implements EnvironmentService {
                     }
 
                     List<Environment> environments = validNames.stream()
-                            .filter(name -> !existingNames.contains(name))
+                            .filter(name -> !existingLowercaseNames.contains(name.toLowerCase(Locale.ROOT)))
                             .limit(availableSlots)
                             .map(name -> Environment.builder()
                                     .id(idGenerator.generateId())
@@ -175,13 +170,18 @@ class EnvironmentServiceImpl implements EnvironmentService {
         log.info("Auto-created '{}' environments for workspace_id '{}'", created.size(), workspaceId);
 
         Instant now = Instant.now();
-        created.forEach(env -> analyticsService.trackEvent(ENVIRONMENT_CREATED_EVENT, Map.of(
-                "environment_id", env.id().toString(),
-                "environment_name", env.name(),
+        created.forEach(env -> trackEnvironmentCreatedEvent(env, workspaceId, userName, SOURCE_INGESTION, now));
+    }
+
+    private void trackEnvironmentCreatedEvent(Environment environment, String workspaceId, String userName,
+            String source, Instant date) {
+        analyticsService.trackEvent(ENVIRONMENT_CREATED_EVENT, Map.of(
+                "environment_id", environment.id().toString(),
+                "environment_name", environment.name(),
                 "workspace_id", workspaceId,
                 "user_name", userName,
-                "source", SOURCE_INGESTION,
-                "date", now.toString())));
+                "source", source,
+                "date", date.toString()));
     }
 
     @Override
