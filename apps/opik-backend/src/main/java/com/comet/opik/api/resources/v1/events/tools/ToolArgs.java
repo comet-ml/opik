@@ -32,9 +32,11 @@ public final class ToolArgs {
 
     /**
      * Parses, validates, and returns the {@code type} field. Rejects
-     * {@code thread} since no tool currently caches thread entities. The tool
-     * name is interpolated into the rejection message, so the LLM sees which
-     * tool refused.
+     * {@code thread} by design — threads are not fetched as entities, they ARE
+     * the prompt context (the system prompt lists each trace by id). The error
+     * redirects the model to the right action so a misrouted call costs at most
+     * one wasted round, not many trial-and-error retries. Applies to every tool
+     * that takes a {@code type} argument (read / jq / search).
      */
     public static Result<EntityType> parseType(JsonNode root, String toolName) {
         String typeStr = textOrNull(root.get("type"));
@@ -48,7 +50,13 @@ public final class ToolArgs {
             return Result.error(errorJson("Unknown type: " + typeStr));
         }
         if (type == EntityType.THREAD) {
-            return Result.error(errorJson("type=thread is not supported by the " + toolName + " tool"));
+            return Result.error(errorJson(
+                    "type=thread is not supported by the " + toolName + " tool — threads are not"
+                            + " fetched as entities, they ARE the prompt context. Use"
+                            + " read(type=trace, id=<uuid>) on the trace ids listed in the thread"
+                            + " skeleton (system message), or jq(type=trace, id=<uuid>,"
+                            + " expression='<path>') for path-targeted lookups within a specific"
+                            + " trace."));
         }
         return Result.ok(type);
     }
