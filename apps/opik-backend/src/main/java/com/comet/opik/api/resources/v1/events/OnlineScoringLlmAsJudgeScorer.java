@@ -73,6 +73,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final TraceCompressor traceCompressor;
     private final WorkspaceNameService workspaceNameService;
     private final OpikConfiguration opikConfiguration;
+    private final OnlineScoringConfig onlineScoringConfig;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
@@ -98,6 +99,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.traceCompressor = traceCompressor;
         this.workspaceNameService = workspaceNameService;
         this.opikConfiguration = opikConfiguration;
+        this.onlineScoringConfig = config;
     }
 
     /**
@@ -173,15 +175,48 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
+            // Compute the agentic-tools gate up-front. Two cases trigger tools:
+            // (1) experimentId != null (test-suite assertion path; always tools)
+            // (2) estimated context tokens >= threshold AND agentic-tools are enabled AND the
+            //     model's provider supports tool calling (online-scoring agentic path).
+            // The size estimate uses trace fields only (no spans) — cheap and avoids an extra
+            // DB query. Big spans on small traces are caught downstream by ReadTool's per-call
+            // output cap. Provider gate is checked here rather than in shouldUseTools() because
+            // model/provider info is local to the scorer.
+            String modelName = message.llmAsJudgeCode().model().name();
+            int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(
+                    trace, java.util.List.of(), traceCompressor);
+            boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
+                    llmProviderFactory.getLlmProvider(modelName));
+            boolean overSizeThreshold = onlineScoringConfig.isAgenticToolsEnabled()
+                    && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+            boolean useTools = LlmAsJudgeToolsMode.shouldUseTools(message)
+                    || (overSizeThreshold && providerSupportsTools);
+            if (overSizeThreshold && !providerSupportsTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
+                userFacingLogger.warn(
+                        "Trace context exceeds {} tokens but provider for model '{}' does not support tool"
+                                + " calling; falling back to inline path — may overflow context window.",
+                        onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
+            } else if (overSizeThreshold && useTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
+                userFacingLogger.info(
+                        "Trace context exceeds {} tokens; switching to agentic-tools mode for traceId '{}'",
+                        onlineScoringConfig.getAgenticToolsThresholdTokens(), trace.id());
+            }
+
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
             try {
-                String modelName = message.llmAsJudgeCode().model().name();
-                if (shouldUseTools(message)) {
-                    // Assertion path: cap variable substitutions so huge trace input/output JSON
-                    // doesn't pre-load context. The agent has read/jq tools to drill in on demand.
-                    String drillDownHint = "use read(type=trace, id=%s, tier=FULL) to see full"
-                            .formatted(trace.id());
+                if (useTools) {
+                    // Tools path: cap variable substitutions so huge trace input/output JSON doesn't
+                    // pre-load context. The agent has read/jq tools to drill in on demand. Drill-hint
+                    // points the model at MEDIUM tier (path-truncated, structurally complete) and jq
+                    // for path-targeted lookups — never tier=FULL, which can blow context on huge
+                    // traces. ReadTool will silently downgrade tier=FULL anyway, but this avoids a
+                    // wasted round.
+                    String drillDownHint = ("call read(type=trace, id=%s, tier=MEDIUM) for full structure"
+                            + " with per-string truncation hints, or jq(type=trace, id=%s,"
+                            + " expression='<path>') for a specific section")
+                                    .formatted(trace.id(), trace.id());
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
                             message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
@@ -207,7 +242,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 throw exception;
             }
 
-            if (shouldUseTools(message)) {
+            if (useTools) {
                 // REQUIRED on the FIRST call only: forces ≥1 tool call before the model can
                 // emit an answer. OpenAI judges with tool_choice=AUTO consistently skip the
                 // tool loop and answer from visible context, even with explicit "you MUST
@@ -234,7 +269,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         trace.id(), summarizeResponse(chatResponse));
             }
 
-            if (shouldUseTools(message)) {
+            if (useTools) {
                 chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
             }
 
