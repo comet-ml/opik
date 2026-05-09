@@ -16,7 +16,9 @@ services:
       interval: 1s
       retries: 300
     volumes:
-      - mysql:/var/lib/mysql/:type=volume,source=~/opik/mysql
+      - type: volume
+        source: mysql
+        target: /var/lib/mysql/
 
   redis:
     image: redis:7.2.4-alpine3.19
@@ -54,8 +56,12 @@ services:
       # https://clickhouse.com/docs/en/operations/access-rights#enabling-access-control
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
     volumes:
-      - clickhouse:/var/lib/clickhouse/:type=volume,source=~/opik/clickhouse/data
-      - clickhouse-server:/var/log/clickhouse-server/:type=volume,source=~/opik/clickhouse/logs
+      - type: volume
+        source: clickhouse
+        target: /var/lib/clickhouse/
+      - type: volume
+        source: clickhouse-server
+        target: /var/log/clickhouse-server/
       - clickhouse-config:/etc/clickhouse-server/config.d
     healthcheck:
       test: [ "CMD", "wget", "--spider", "-q", "http://127.0.0.1:8123/ping" ]

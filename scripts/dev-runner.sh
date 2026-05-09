@@ -18,7 +18,18 @@ FRONTEND_DIR="$PROJECT_ROOT/apps/opik-frontend"
 WORKTREE_UTILS_ROOT="$PROJECT_ROOT"
 source "$SCRIPT_DIR/worktree-utils.sh"
 init_worktree_ports
-resolve_container_runtime
+
+# Skip runtime detection for --help/-h: no container runtime needed to print usage.
+_DR_SKIP_RUNTIME=false
+for _arg in "$@"; do
+  if [[ "$_arg" == "--help" || "$_arg" == "-h" || "$_arg" == "-help" ]]; then
+    _DR_SKIP_RUNTIME=true; break
+  fi
+done
+if [[ "$_DR_SKIP_RUNTIME" != "true" ]]; then
+  resolve_container_runtime
+fi
+unset _DR_SKIP_RUNTIME _arg
 
 # Dynamic PID and log file paths (isolated per worktree)
 BACKEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-backend.pid"

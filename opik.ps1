@@ -7,11 +7,30 @@ param (
     [string[]]$options = @()
 )
 
-# Accept --runtime passed bash-style in $options
+# Accept --runtime VALUE (space-form) passed bash-style in $options
 $runtimeIdx = [array]::IndexOf([string[]]$options, "--runtime")
-if ($runtimeIdx -ge 0 -and $runtimeIdx + 1 -lt $options.Count) {
+if ($runtimeIdx -ge 0) {
+    if ($runtimeIdx + 1 -ge $options.Count -or [string]::IsNullOrWhiteSpace($options[$runtimeIdx + 1]) -or $options[$runtimeIdx + 1].StartsWith("--")) {
+        Write-Host "❌ --runtime requires a value: docker or podman"
+        exit 1
+    }
+
     $Runtime = $options[$runtimeIdx + 1]
-    $options = $options | Where-Object { $_ -ne "--runtime" -and $_ -ne $Runtime }
+
+    $optionsBefore = if ($runtimeIdx -gt 0) { $options[0..($runtimeIdx - 1)] } else { @() }
+    $optionsAfter = if ($runtimeIdx + 2 -lt $options.Count) { $options[($runtimeIdx + 2)..($options.Count - 1)] } else { @() }
+    $options = @($optionsBefore + $optionsAfter)
+}
+
+# Accept --runtime=VALUE (equals-form) passed bash-style in $options
+for ($i = 0; $i -lt $options.Count; $i++) {
+    if ($options[$i] -match '^--runtime=(.+)$') {
+        if (-not $Runtime) { $Runtime = $Matches[1] }
+        $optionsBefore = if ($i -gt 0) { $options[0..($i - 1)] } else { @() }
+        $optionsAfter = if ($i + 1 -lt $options.Count) { $options[($i + 1)..($options.Count - 1)] } else { @() }
+        $options = @($optionsBefore + $optionsAfter)
+        break
+    }
 }
 
 # Env var fallback
@@ -298,7 +317,7 @@ function Show-Usage {
     Write-Host 'If no option is passed, the script will start missing containers and then show the system status.'
 }
 
-function Test-DockerStatus {
+function Test-RuntimeStatus {
     try {
         & $Runtime info *>&1 | Out-Null
         if ($LASTEXITCODE -ne 0) {
@@ -316,7 +335,7 @@ function Test-ContainersStatus {
     param (
         [bool]$ShowOutput = $false
     )
-    Test-DockerStatus
+    Test-RuntimeStatus
     $allOk = $true
 
     $containers = Get-Containers
@@ -478,7 +497,7 @@ function Send-InstallReport {
 }
 
 function Start-MissingContainers {
-    Test-DockerStatus
+    Test-RuntimeStatus
 
     # Generate a run-scoped anonymous ID for this installation session
     $Uuid = [guid]::NewGuid().ToString()
@@ -572,7 +591,7 @@ function Start-MissingContainers {
 }
 
 function Stop-Containers {
-    Test-DockerStatus
+    Test-RuntimeStatus
     Write-Host '[INFO] Stopping all required containers...'
 
     $dockerArgs = Get-DockerComposeCommand
@@ -582,7 +601,7 @@ function Stop-Containers {
 }
 
 function Remove-OpikData {
-    Test-DockerStatus
+    Test-RuntimeStatus
     Write-Host '[WARN] WARNING: This will remove ALL Opik data including:'
     Write-Host '   - MySQL (projects, datasets etc.)'
     Write-Host '   - ClickHouse (traces, spans, etc.)'
@@ -599,7 +618,7 @@ function Remove-OpikData {
 }
 
 function New-DemoData {
-    Test-DockerStatus
+    Test-RuntimeStatus
     Write-Host '[INFO] Creating demo data...'
 
     Initialize-BuildxBake
@@ -673,7 +692,7 @@ workspace = default
 }
 
 function Show-Banner {
-    Test-DockerStatus
+    Test-RuntimeStatus
     $uiUrl = Get-UIUrl
 
     Write-Host ''

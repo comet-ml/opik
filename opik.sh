@@ -31,10 +31,10 @@ done
 set -- "${_OPIK_NEW_ARGS[@]}"
 unset _OPIK_NEW_ARGS
 
-# Skip runtime detection for --help: no container runtime needed to print usage.
+# Skip runtime detection for --help/-h/-help: no container runtime needed to print usage.
 _OPIK_SKIP_RUNTIME_DETECTION=false
 for _arg in "$@"; do
-  if [[ "$_arg" == "--help" ]]; then
+  if [[ "$_arg" == "--help" || "$_arg" == "-h" || "$_arg" == "-help" ]]; then
     _OPIK_SKIP_RUNTIME_DETECTION=true
     break
   fi
@@ -203,7 +203,8 @@ get_system_info() {
   if [[ "$CONTAINER_RUNTIME" == "podman" ]]; then
     local compose_output=$($COMPOSE_CMD version 2>/dev/null || echo "")
     if [[ -n "$compose_output" ]]; then
-      compose_version=$(echo "$compose_output" | head -1 | sed 's/.*version[[:space:]]*//' || echo "unknown")
+      # Handle both "podman compose version X.Y.Z" and "podman-compose X.Y.Z" (no 'version' token)
+      compose_version=$(echo "$compose_output" | head -1 | grep -oE '[0-9]+\.[0-9]+[^ ]*' | head -1 || echo "")
       [[ -z "$compose_version" ]] && compose_version="unknown"
     fi
   else
