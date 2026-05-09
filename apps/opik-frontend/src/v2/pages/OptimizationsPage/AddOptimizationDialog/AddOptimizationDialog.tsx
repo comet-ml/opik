@@ -6,7 +6,7 @@ import CodeHighlighter from "@/shared/CodeHighlighter/CodeHighlighter";
 import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import SideDialog from "@/shared/SideDialog/SideDialog";
-import { SheetTitle } from "@/ui/sheet";
+import { SheetTopBar } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import ConfiguredCodeHighlighter from "@/v2/pages-shared/onboarding/ConfiguredCodeHighlighter/ConfiguredCodeHighlighter";
@@ -355,16 +355,13 @@ const AddOptimizationDialog: React.FunctionComponent<
   };
 
   return (
-    <SideDialog open={open} setOpen={openChangeHandler}>
-      <div className="pb-20">
-        <div className="pb-8">
-          <SheetTitle>Start an optimization run</SheetTitle>
-          <div className="comet-body-s m-auto mt-4 w-[468px] self-center text-center text-muted-slate">
-            Select a test suite, choose the optimizer you would like to use, and
-            we will improve your prompt for you
-          </div>
-        </div>
-        <div className="m-auto flex w-full max-w-[1250px] items-start gap-6">
+    <SideDialog
+      open={open}
+      setOpen={openChangeHandler}
+      header={<SheetTopBar variant="info" title="Start optimization run" />}
+    >
+      <div className="max-h-full overflow-y-auto px-5 pb-20 pt-4">
+        <div className="m-auto flex w-full items-start gap-6">
           <div className="flex w-[250px] shrink-0 flex-col gap-2">
             <div className="comet-title-s">Optimization algorithms</div>
             {generateList(OPTIMIZATION_ALGORITHMS_OPTIONS)}

@@ -34,6 +34,7 @@
         <opentelmetry.version>2.27.0</opentelmetry.version>
         <aws.java.sdk.version>2.44.0</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
+        <jackson-jq.version>1.6.1</jackson-jq.version>
         <mainClass>com.comet.opik.OpikApplication</mainClass>
     </properties>
 
@@ -236,6 +237,12 @@
             <groupId>jakarta.annotation</groupId>
             <artifactId>jakarta.annotation-api</artifactId>
             <version>${jakarta.annotation.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>net.thisptr</groupId>
+            <artifactId>jackson-jq</artifactId>
+            <version>${jackson-jq.version}</version>
         </dependency>
         <!-- ClickHouse migrations only with community support: https://docs.liquibase.com/start/tutorials/home.html -->
         <dependency>

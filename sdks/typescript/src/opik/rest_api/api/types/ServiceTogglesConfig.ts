@@ -24,7 +24,9 @@ export interface ServiceTogglesConfig {
     ollamaProviderEnabled: boolean;
     collaboratorsTabEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
+    v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
     defaultPageSize?: number;
     v2WorkspaceAllowlist?: string;
+    v1WorkspaceAllowlist?: string;
 }

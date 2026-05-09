@@ -22,4 +22,5 @@ export interface TraceThread {
     lastUpdatedBy?: string;
     createdBy?: string;
     createdAt?: Date;
+    environment?: string;
 }

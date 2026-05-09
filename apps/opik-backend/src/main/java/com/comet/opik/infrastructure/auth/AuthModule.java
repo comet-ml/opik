@@ -8,10 +8,12 @@ import com.comet.opik.domain.WorkspacePermissionsService;
 import com.comet.opik.domain.workspaces.AuthWorkspaceVersionService;
 import com.comet.opik.domain.workspaces.UnauthWorkspaceVersionService;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.AuthenticationConfig;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import com.google.common.base.Preconditions;
 import com.google.inject.Provides;
@@ -84,16 +86,18 @@ public class AuthModule extends DropwizardAwareModule<OpikConfiguration> {
             TransactionTemplate transactionTemplate,
             ExperimentDAO experimentDAO,
             OptimizationDAO optimizationDAO,
-            CacheManager cacheManager) {
+            CacheManager cacheManager,
+            WorkspacesService workspacesService,
+            AnalyticsService analyticsService) {
         if (!authenticationConfig.isEnabled()) {
             log.info("Authentication disabled, using UnauthWorkspaceVersionService");
             return new UnauthWorkspaceVersionService(
                     transactionTemplate, experimentDAO, optimizationDAO, serviceTogglesConfig, cacheManager,
-                    cacheConfiguration);
+                    cacheConfiguration, workspacesService, analyticsService);
         }
         log.info("Authentication enabled, using AuthWorkspaceVersionService");
         return new AuthWorkspaceVersionService(
                 transactionTemplate, experimentDAO, optimizationDAO, serviceTogglesConfig, cacheManager,
-                cacheConfiguration);
+                cacheConfiguration, workspacesService, analyticsService);
     }
 }

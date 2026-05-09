@@ -108,6 +108,24 @@ WHERE id \\<= :uuid_to_time
 .bind("workspaceId", workspaceId)
 ```
 
+## `FORMAT Values` cells must be literals (OPIK-5694)
+
+Every cell in an `INSERT ... FORMAT Values` per-row tuple must be a plain `:placeholder`
+bound to a value the driver serialises as a literal. Function calls, `if(...)`, `::`
+casts, `parseDateTime64BestEffort(...)`, `now64(...)`, `mapFromArrays(...)`,
+`toDecimal128(...)` etc. trip the fast-path parser. The insert still succeeds, but every
+row silently bumps `system.errors` codes 26 / 27 / 43 / 70 and writes to pod stderr —
+flooding logs.
+
+Bind the right shape:
+- `DateTime64(P)` → `String` formatted via `ClickHouseDateTimeFormat.formatNanos/formatMicros`
+  (not `Instant.toString()` — its `T`/`Z` form trips the fast-path).
+- `Map(K,V)` → bind a Java `Map`.
+- `Decimal128(S)` → bind a `BigDecimal` (`.toString()` would emit a quoted string which
+  Decimal cells also reject).
+- Non-nullable cell, value null → substitute the column DEFAULT in Java (e.g.
+  `Instant.now()` for `now64()`, `'default'` for an Enum8 default).
+
 ## Numeric Gotchas
 
 ### Handle NaN/Infinity

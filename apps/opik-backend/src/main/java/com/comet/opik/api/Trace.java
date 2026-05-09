@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -78,7 +79,9 @@ public record Trace(
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "List of unique provider names from all spans in this trace, sorted alphabetically") List<String> providers,
         @JsonView({
                 Trace.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "Experiment associated with this trace") ExperimentItemReference experiment,
-        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Source source){
+        @JsonView({Trace.View.Public.class, Trace.View.Write.class}) Source source,
+        @JsonView({Trace.View.Public.class,
+                Trace.View.Write.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment){
 
     @Builder(toBuilder = true)
     public record TracePage(
@@ -124,6 +127,7 @@ public record Trace(
         PROVIDERS("providers"),
         EXPERIMENT("experiment"),
         SOURCE("source"),
+        ENVIRONMENT("environment"),
         ;
 
         @JsonValue

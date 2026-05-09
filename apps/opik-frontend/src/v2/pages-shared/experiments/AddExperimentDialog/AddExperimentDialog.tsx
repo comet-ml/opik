@@ -11,7 +11,7 @@ import LoadableSelectBox from "@/shared/LoadableSelectBox/LoadableSelectBox";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { DATASET_TYPE } from "@/types/datasets";
 import SideDialog from "@/shared/SideDialog/SideDialog";
-import { SheetTitle } from "@/ui/sheet";
+import { SheetTopBar } from "@/ui/sheet";
 import ApiKeyCard from "@/v2/pages-shared/onboarding/ApiKeyCard/ApiKeyCard";
 import GoogleColabCard from "@/v2/pages-shared/onboarding/GoogleColabCard/GoogleColabCard";
 import { putConfigInCode } from "@/lib/formatCodeSnippets";
@@ -511,16 +511,13 @@ eval_results = evaluate(
   );
 
   return (
-    <SideDialog open={open && canCreateExperiments} setOpen={openChangeHandler}>
-      <div className="pb-20">
-        <div className="pb-8">
-          <SheetTitle>Create a new experiment</SheetTitle>
-          <div className="comet-body-s mx-auto mt-4 max-w-[468px] text-center text-muted-slate">
-            Select a test suite, assign the relevant evaluators, and follow the
-            instructions to track and compare your training runs
-          </div>
-        </div>
-        <div className="mx-auto flex w-full flex-col gap-6 md:max-w-[1250px] md:flex-row md:items-start">
+    <SideDialog
+      open={open && canCreateExperiments}
+      setOpen={openChangeHandler}
+      header={<SheetTopBar variant="info" title="Create new experiment" />}
+    >
+      <div className="max-h-full overflow-y-auto px-5 pb-20 pt-4">
+        <div className="mx-auto flex w-full flex-col gap-6 md:flex-row md:items-start">
           {!isTestSuite && renderEvaluatorsSection()}
           <div className="flex w-full flex-col gap-6 md:min-w-[450px] md:flex-1 md:rounded-md md:border md:border-border md:p-6">
             <div>

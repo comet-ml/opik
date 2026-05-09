@@ -3,6 +3,7 @@ package com.comet.opik.domain;
 import com.comet.opik.api.Project;
 import com.comet.opik.domain.experiments.aggregations.ExperimentAggregationPublisher;
 import com.comet.opik.domain.workspaces.WorkspaceVersionService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.ExperimentDenormalizationConfig;
 import com.comet.opik.infrastructure.ExperimentProjectMigrationConfig;
 import com.comet.opik.infrastructure.MigrationConfig;
@@ -24,9 +25,7 @@ import reactor.core.scheduler.Schedulers;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -50,20 +49,14 @@ public class ExperimentProjectMigrationService {
     private static final Attributes RESULT_ALL_SKIPPED = Attributes.of(RESULT_KEY, "all_skipped_deleted_project");
     private static final Attributes SKIP_REASON_DELETED_PROJECT = Attributes.of(stringKey("reason"), "deleted_project");
 
-    /**
-     * Process-local set of workspaces whose only certain experiments point to deleted projects.
-     * Without this, every cycle would re-attempt the same workspaces and run an expensive
-     * 3-table JOIN for nothing. The set is reset on JVM restart, so a redeployed process retries
-     * each previously-trapped workspace once before re-trapping it. Operators can permanently ban
-     * a workspace via the {@code migration.excludedWorkspaceIds} config.
-     */
-    private static final Set<String> TRAPPED_WORKSPACE_IDS = ConcurrentHashMap.newKeySet();
+    private static final String TRAPPED_REASON_DELETED_PROJECT = "deleted_project";
 
     private final @NonNull ExperimentDAO experimentDAO;
     private final @NonNull ExperimentItemService experimentItemService;
     private final @NonNull ProjectService projectService;
     private final @NonNull ExperimentAggregationPublisher experimentAggregationPublisher;
     private final @NonNull WorkspaceVersionService workspaceVersionService;
+    private final @NonNull WorkspacesService workspacesService;
     private final @NonNull ExperimentProjectMigrationConfig config;
     private final @NonNull MigrationConfig migrationConfig;
     private final @NonNull ExperimentDenormalizationConfig denormalizationConfig;
@@ -81,6 +74,7 @@ public class ExperimentProjectMigrationService {
             @NonNull ProjectService projectService,
             @NonNull ExperimentAggregationPublisher experimentAggregationPublisher,
             @NonNull WorkspaceVersionService workspaceVersionService,
+            @NonNull WorkspacesService workspacesService,
             @NonNull @Config("experimentProjectMigration") ExperimentProjectMigrationConfig config,
             @NonNull @Config("migration") MigrationConfig migrationConfig,
             @NonNull @Config("experimentDenormalization") ExperimentDenormalizationConfig denormalizationConfig) {
@@ -89,6 +83,7 @@ public class ExperimentProjectMigrationService {
         this.projectService = projectService;
         this.experimentAggregationPublisher = experimentAggregationPublisher;
         this.workspaceVersionService = workspaceVersionService;
+        this.workspacesService = workspacesService;
         this.config = config;
         this.migrationConfig = migrationConfig;
         this.denormalizationConfig = denormalizationConfig;
@@ -123,30 +118,36 @@ public class ExperimentProjectMigrationService {
     }
 
     public Mono<Void> runMigrationCycle() {
-        cycleTrappedWorkspaces.set(TRAPPED_WORKSPACE_IDS.size());
-        log.info(
-                "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}'",
-                config.workspacesPerRun(), config.experimentBatchSize(), TRAPPED_WORKSPACE_IDS.size());
-        var excludedWorkspaceIds = Stream.concat(
-                migrationConfig.getExcludedWorkspaceIds().stream(),
-                TRAPPED_WORKSPACE_IDS.stream())
-                .collect(Collectors.toUnmodifiableSet());
-        return experimentDAO.findEligibleExperimentWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
-                .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, ""))
-                .collectList()
-                .flatMapMany(eligibleWorkspaces -> {
-                    cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
-                    if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
-                        log.info("No workspaces with eligible experiments found, consider disabling the job");
-                        return Flux.empty();
-                    }
-                    log.info("Found workspaces with eligible experiments, count='{}'", eligibleWorkspaces.size());
-                    return Flux.fromIterable(eligibleWorkspaces)
-                            .concatMap(workspace -> migrateWorkspace(
-                                    workspace.workspaceId(),
-                                    workspace.experimentsCount(),
-                                    config.experimentBatchSize()));
-                })
+        return Mono.fromCallable(() -> {
+            var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
+            cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
+            log.info(
+                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}'",
+                    config.workspacesPerRun(), config.experimentBatchSize(), skippedWorkspaceIds.size());
+            return Stream.concat(
+                    migrationConfig.getExcludedWorkspaceIds().stream(),
+                    skippedWorkspaceIds.stream())
+                    .collect(Collectors.toUnmodifiableSet());
+        })
+                .subscribeOn(Schedulers.boundedElastic())
+                .flatMapMany(excludedWorkspaceIds -> experimentDAO
+                        .findEligibleExperimentWorkspaces(excludedWorkspaceIds, config.workspacesPerRun())
+                        .contextWrite(ctx -> setRequestContext(ctx, SYSTEM_USER, ""))
+                        .collectList()
+                        .flatMapMany(eligibleWorkspaces -> {
+                            cycleEligibleWorkspaces.record(eligibleWorkspaces.size());
+                            if (CollectionUtils.isEmpty(eligibleWorkspaces)) {
+                                log.info("No workspaces with eligible experiments found, consider disabling the job");
+                                return Flux.empty();
+                            }
+                            log.info("Found workspaces with eligible experiments, count='{}'",
+                                    eligibleWorkspaces.size());
+                            return Flux.fromIterable(eligibleWorkspaces)
+                                    .concatMap(workspace -> migrateWorkspace(
+                                            workspace.workspaceId(),
+                                            workspace.experimentsCount(),
+                                            config.experimentBatchSize()));
+                        }))
                 .then();
     }
 
@@ -197,9 +198,13 @@ public class ExperimentProjectMigrationService {
                         log.info(
                                 "All certain experiments point to deleted projects, marking workspace as trapped, workspaceId='{}'",
                                 workspaceId);
-                        TRAPPED_WORKSPACE_IDS.add(workspaceId);
-                        recordWorkspaceDuration(RESULT_ALL_SKIPPED, workspaceStartMillis);
-                        return Mono.empty();
+                        return Mono
+                                .fromRunnable(() -> workspacesService.markMigrationSkipped(
+                                        workspaceId, TRAPPED_REASON_DELETED_PROJECT))
+                                .subscribeOn(Schedulers.boundedElastic())
+                                .doFinally(signalType -> recordWorkspaceDuration(
+                                        RESULT_ALL_SKIPPED, workspaceStartMillis))
+                                .then(Mono.empty());
                     }
                     var byProject = validated.stream()
                             .collect(Collectors.groupingBy(ExperimentProjectMapping::projectId));
