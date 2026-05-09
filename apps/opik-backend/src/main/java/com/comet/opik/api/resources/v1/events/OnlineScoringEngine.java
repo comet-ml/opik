@@ -625,4 +625,35 @@ public class OnlineScoringEngine {
     record MessageVariableMapping(
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
     }
+
+    /**
+     * Rough character-based token estimate for the {@code {trace, spans}} composite. Used by
+     * {@code OnlineScoringLlmAsJudgeScorer} to decide whether a trace is big enough that the
+     * inline-rendered prompt would risk overflowing the model's window — which flips the
+     * scorer into the read/jq/search agentic-tools path.
+     *
+     * <p>Char-based: ~4 chars/token for natural-language English, accurate enough for tier
+     * selection. Accuracy isn't critical because the threshold itself has slack (default
+     * 50K tokens, models typically have 128K windows). For random/code content the ratio
+     * trends to ~2 chars/token; this estimator under-counts there but the per-call and
+     * cumulative output caps in {@link com.comet.opik.api.resources.v1.events.tools.ReadTool}
+     * pick up the slack.
+     */
+    public static int estimateTraceContextTokens(@NotNull Trace trace, @NotNull List<Span> spans,
+            @NotNull com.comet.opik.api.resources.v1.events.tools.TraceCompressor traceCompressor) {
+        return traceCompressor.buildFullJson(trace, spans).toString().length() / 4;
+    }
+
+    /**
+     * Whether the given provider is known to support tool-calling. Used to gate the
+     * agentic-tools path: providers that don't support tools fall back to the inline path
+     * even when the context exceeds the size threshold (which may overflow the model's
+     * window — in that case the operator should pick a different model for those workloads).
+     */
+    public static boolean supportsToolCalling(com.comet.opik.api.LlmProvider provider) {
+        return switch (provider) {
+            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
+            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
+        };
+    }
 }
