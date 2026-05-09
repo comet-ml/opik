@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Fetches an Opik entity by {@code (type, id)}, caches the FULL JSON form in
@@ -76,6 +77,23 @@ public class ReadTool implements ToolExecutor {
 
     static final String CACHE_WARNING_MESSAGE = "Entity exceeded 10 MB; only MEDIUM-tier form was cached."
             + " jq queries against this entity will reflect truncated content.";
+
+    /**
+     * Hard cap on serialized tool-output size returned to the model. When a compressed
+     * payload exceeds this many characters the tool downgrades the tier one step
+     * ({@code FULL → MEDIUM → SKELETON}) and recompresses, protecting the conversation
+     * from tool results that would overflow the model's context window. Mirrors the
+     * cache-warning downgrade in {@link #effectiveTier}, but applies to output regardless
+     * of how the cache was populated — so a model that asks for {@code tier=FULL} on a
+     * multi-MB trace still gets a result that fits its window.
+     *
+     * <p>Calibration: at ~2 chars/token (random/code worst case), 40_000 chars ≈ 20_000
+     * tokens per call. Pairs with
+     * {@link AgenticToolLoop#CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS} (cumulative cap across
+     * all rounds): up to ~7 max-cap reads fit before the cumulative budget kicks in and
+     * substitutes a budget-exhausted sentinel.
+     */
+    static final int OUTPUT_SAFETY_CHARS = 40_000;
 
     private static final ToolSpecification SPEC = ToolSpecification.builder()
             .name(NAME)
@@ -198,7 +216,10 @@ public class ReadTool implements ToolExecutor {
         // For under-cap entities outcome.cachedNode is the same node, so this is a no-op.
         ctx.cache(ref, outcome.cachedNode);
 
-        var result = traceCompressor.compress(fullJson, trace, spans, args.tier, suffixStyleFor(ref, ctx));
+        PathAwareTruncator.SuffixStyle suffix = suffixStyleFor(ref, ctx);
+        var result = guardOutput(
+                traceCompressor.compress(fullJson, trace, spans, args.tier, suffix),
+                tier -> traceCompressor.compress(fullJson, trace, spans, tier, suffix));
         return buildResponse(args, result, outcome.warning).toString();
     }
 
@@ -254,7 +275,10 @@ public class ReadTool implements ToolExecutor {
         CacheOutcome outcome = applyCacheCap(fullJson, ref, ctx);
         ctx.cache(ref, outcome.cachedNode);
 
-        var result = genericCompressor.compress(fullJson, args.tier, suffixStyleFor(ref, ctx));
+        PathAwareTruncator.SuffixStyle suffix = suffixStyleFor(ref, ctx);
+        var result = guardOutput(
+                genericCompressor.compress(fullJson, args.tier, suffix),
+                tier -> genericCompressor.compress(fullJson, tier, suffix));
         return buildResponse(args, result, outcome.warning).toString();
     }
 
@@ -447,6 +471,51 @@ public class ReadTool implements ToolExecutor {
             return CompressionTier.MEDIUM;
         }
         return tier;
+    }
+
+    /**
+     * Recompresses at a smaller tier if the initial output exceeds {@link #OUTPUT_SAFETY_CHARS}.
+     * Walks {@code FULL → MEDIUM → SKELETON}, stopping at the first tier under the cap or when
+     * no smaller tier exists.
+     *
+     * <p>The walk drives off the LAST REQUESTED tier, not {@code current.tier()}, because
+     * some compressors collapse multiple request tiers to the same returned tier (e.g.
+     * {@link GenericCompressor} returns {@code tier=MEDIUM} for both {@code MEDIUM} and
+     * {@code SKELETON} requests). Tracking the request prevents an infinite loop in that
+     * case — once we've asked for SKELETON, the next call returns SKELETON regardless of
+     * the {@code tier} field on the result.
+     */
+    private static CompressionResult guardOutput(
+            CompressionResult initial,
+            Function<CompressionTier, CompressionResult> recompress) {
+        CompressionResult current = initial;
+        CompressionTier lastRequested = current.tier();
+        while (current.payload().toString().length() > OUTPUT_SAFETY_CHARS) {
+            CompressionTier next = downgradeTierOrSame(lastRequested);
+            if (next == lastRequested) {
+                log.warn("Read tool output exceeded {} chars at smallest tier {} — returning anyway",
+                        OUTPUT_SAFETY_CHARS, lastRequested);
+                break;
+            }
+            log.info("Read tool output exceeded {} chars at tier {}, downgrading to {}",
+                    OUTPUT_SAFETY_CHARS, lastRequested, next);
+            current = recompress.apply(next);
+            lastRequested = next;
+        }
+        return current;
+    }
+
+    /**
+     * Returns the next-smaller tier, or the same tier when there is nothing smaller to
+     * fall back to. Callers must check {@code result == input} to detect "can't downgrade
+     * any further" rather than rely on a sentinel like {@code null} or {@code Optional}.
+     */
+    private static CompressionTier downgradeTierOrSame(CompressionTier tier) {
+        return switch (tier) {
+            case FULL -> CompressionTier.MEDIUM;
+            case MEDIUM -> CompressionTier.SKELETON;
+            case SKELETON, SUMMARY -> tier;
+        };
     }
 
     // ---------------- Argument parsing ----------------
