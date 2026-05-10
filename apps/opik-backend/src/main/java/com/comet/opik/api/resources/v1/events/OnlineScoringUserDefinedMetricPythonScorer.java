@@ -99,18 +99,22 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
-            // Pre-fetch spans so OnlineScoringEngine can auto-inject the built-in `spans`
-            // variable (a JSON-stringified array of all spans). Metrics that don't reference
-            // `spans` pay only the cost of the span fetch + serialization; metrics that do
-            // can compute aggregates across the full execution trace.
-            List<Span> spans = spanService.getByTraceIds(Set.of(trace.id()))
-                    .collectList()
-                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                            .put(RequestContext.USER_NAME, message.userName()))
-                    .block();
-
             try {
-                var data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
+                // Opt-in fetch: only call out to the span service when the user's metric
+                // actually declared a `spans` argument. Most trace-level Python metrics use
+                // just input/output/metadata and don't need spans — skipping the fetch for
+                // them avoids a DB query that's dwarfed only by the Python evaluator cost.
+                Map<String, String> data;
+                if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
+                    List<Span> spans = spanService.getByTraceIds(Set.of(trace.id()))
+                            .collectList()
+                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                    .put(RequestContext.USER_NAME, message.userName()))
+                            .block();
+                    data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
+                } else {
+                    data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
+                }
                 userFacingLogger.info("Sending traceId '{}' to Python evaluator using the following input:\n\n{}",
                         trace.id(), data);
                 return data;
@@ -121,6 +125,8 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             }
         }
     }
+
+    private static final String SPANS_ARGUMENT_KEY = "spans";
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Trace trace) {
         return scoreResults.stream()
