@@ -94,7 +94,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .then();
     }
 
-    private Map<String, String> prepareData(TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+    private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         var trace = message.trace();
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
@@ -104,7 +104,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 // actually declared a `spans` argument. Most trace-level Python metrics use
                 // just input/output/metadata and don't need spans — skipping the fetch for
                 // them avoids a DB query that's dwarfed only by the Python evaluator cost.
-                Map<String, String> data;
+                Map<String, Object> data;
                 if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
                     List<Span> spans = spanService.getByTraceIds(Set.of(trace.id()))
                             .collectList()
@@ -113,10 +113,13 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                             .block();
                     data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
                 } else {
-                    data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
+                    data = new java.util.LinkedHashMap<>(
+                            OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
                 }
-                userFacingLogger.info("Sending traceId '{}' to Python evaluator using the following input:\n\n{}",
-                        trace.id(), data);
+                if (userFacingLogger.isInfoEnabled()) {
+                    userFacingLogger.info("Sending traceId '{}' to Python evaluator: {}",
+                            trace.id(), summarizeData(data));
+                }
                 return data;
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
@@ -124,6 +127,26 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 throw exception;
             }
         }
+    }
+
+    /**
+     * Shape-only summary of the evaluator input for the user-facing log. The values are
+     * rendered trace content (input, output, metadata, optionally spans) — surfacing them
+     * verbatim in a stored log lands user data (potentially PII) in clear text downstream
+     * of whatever sinks the user-facing log feeds. We log keys and per-argument sizes.
+     */
+    private static String summarizeData(Map<String, Object> data) {
+        var parts = data.entrySet().stream()
+                .map(e -> {
+                    var v = e.getValue();
+                    if (v instanceof List<?> list) {
+                        return String.format("%s=list(%d)", e.getKey(), list.size());
+                    }
+                    var s = v == null ? "" : v.toString();
+                    return String.format("%s(%dc)", e.getKey(), s.length());
+                })
+                .collect(java.util.stream.Collectors.joining(", "));
+        return String.format("arguments=[%s]", parts);
     }
 
     private static final String SPANS_ARGUMENT_KEY = "spans";

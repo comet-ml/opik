@@ -344,21 +344,26 @@ public class OnlineScoringEngine {
 
     /**
      * Variant that injects a built-in {@code spans} variable holding the trace's spans
-     * serialized as a compact JSON array (sorted by start_time). Used by Python metrics whose
+     * (sorted by start_time) as a real JSON array. Used by Python metrics whose
      * {@code score(...)} signature accepts {@code spans}; the user opts in by including a
      * {@code "spans"} key in their {@code arguments} map. The value the user maps for
-     * {@code spans} is overridden with the serialized JSON — {@code spans} is a reserved
+     * {@code spans} is overridden with the typed list — {@code spans} is a reserved
      * built-in, not a regular path-resolved variable.
+     *
+     * <p>The returned map is typed as {@code Map<String, Object>} so the spans value can
+     * carry a {@code List<Span>} through Jackson serialization to the Python runner as a
+     * JSON array. The Python side receives {@code spans} as a list of dicts after
+     * {@code json.loads(...)} — not as a JSON string that the user would have to re-parse.
      *
      * <p>Caller is responsible for only invoking this overload when the user actually
      * requested spans (i.e. {@code arguments.containsKey("spans")}). The scorer makes this
      * decision so the span fetch is skipped on metrics that don't need it.
      */
-    public static Map<String, String> toReplacements(
+    public static Map<String, Object> toReplacements(
             Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
         var base = toReplacements(variables, trace);
-        var result = new java.util.HashMap<>(base);
-        result.put(SPANS_VARIABLE_NAME, serializeSpansForTrace(spans));
+        var result = new java.util.LinkedHashMap<String, Object>(base);
+        result.put(SPANS_VARIABLE_NAME, spans.stream().sorted(BY_SPAN_START_TIME).toList());
         return result;
     }
 
@@ -366,14 +371,6 @@ public class OnlineScoringEngine {
 
     private static final java.util.Comparator<Span> BY_SPAN_START_TIME = java.util.Comparator
             .comparing(Span::startTime, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
-
-    private static String serializeSpansForTrace(List<Span> spans) {
-        try {
-            return OBJECT_MAPPER.writeValueAsString(spans.stream().sorted(BY_SPAN_START_TIME).toList());
-        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-            throw new java.io.UncheckedIOException(ex);
-        }
-    }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
         return toReplacements(variables, section -> switch (section) {
