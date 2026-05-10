@@ -49,9 +49,9 @@ class Streamer:
     def use_batching(self) -> bool:
         return self._batch_preprocessor._batch_manager is not None
 
-    def put(self, message: messages.BaseMessage) -> None:
+    def put(self, message: messages.BaseMessage, force: bool = False) -> None:
         with self._lock:
-            if self._drain:
+            if self._drain and not force:
                 return
 
             self._idle = False
@@ -161,6 +161,7 @@ class Streamer:
             check_function=lambda: self._all_done(),
             timeout=timeout,
             sleep_time=0.1,
+            progress_callback=self._batch_preprocessor.flush,
         )
 
         elapsed_time = time.time() - start_time

@@ -36,6 +36,7 @@ export const SpanUpdate: core.serialization.ObjectSchema<serializers.SpanUpdate.
         errorInfo: core.serialization.property("error_info", ErrorInfo.optional()),
         ttft: core.serialization.number().optional(),
         source: SpanUpdateSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace SpanUpdate {
@@ -60,5 +61,6 @@ export declare namespace SpanUpdate {
         error_info?: ErrorInfo.Raw | null;
         ttft?: number | null;
         source?: SpanUpdateSource.Raw | null;
+        environment?: string | null;
     }
 }

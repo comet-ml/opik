@@ -355,6 +355,7 @@ class SpansClient:
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -406,6 +407,8 @@ class SpansClient:
 
         source : typing.Optional[SpanWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -442,6 +445,7 @@ class SpansClient:
             total_estimated_cost_version=total_estimated_cost_version,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -529,6 +533,7 @@ class SpansClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -583,6 +588,8 @@ class SpansClient:
 
         source : typing.Optional[SpanUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -618,6 +625,7 @@ class SpansClient:
             error_info=error_info,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -1310,6 +1318,7 @@ class AsyncSpansClient:
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1361,6 +1370,8 @@ class AsyncSpansClient:
 
         source : typing.Optional[SpanWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1400,6 +1411,7 @@ class AsyncSpansClient:
             total_estimated_cost_version=total_estimated_cost_version,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data
@@ -1493,6 +1505,7 @@ class AsyncSpansClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> None:
         """
@@ -1547,6 +1560,8 @@ class AsyncSpansClient:
 
         source : typing.Optional[SpanUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1585,6 +1600,7 @@ class AsyncSpansClient:
             error_info=error_info,
             ttft=ttft,
             source=source,
+            environment=environment,
             request_options=request_options,
         )
         return _response.data

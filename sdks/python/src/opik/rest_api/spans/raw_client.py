@@ -416,6 +416,7 @@ class RawSpansClient:
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -467,6 +468,8 @@ class RawSpansClient:
 
         source : typing.Optional[SpanWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -507,6 +510,7 @@ class RawSpansClient:
                 "total_estimated_cost_version": total_estimated_cost_version,
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -656,6 +660,7 @@ class RawSpansClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> HttpResponse[None]:
         """
@@ -710,6 +715,8 @@ class RawSpansClient:
 
         source : typing.Optional[SpanUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -749,6 +756,7 @@ class RawSpansClient:
                 ),
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -1627,6 +1635,7 @@ class AsyncRawSpansClient:
         total_estimated_cost_version: typing.Optional[str] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanWriteSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1678,6 +1687,8 @@ class AsyncRawSpansClient:
 
         source : typing.Optional[SpanWriteSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1718,6 +1729,7 @@ class AsyncRawSpansClient:
                 "total_estimated_cost_version": total_estimated_cost_version,
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",
@@ -1867,6 +1879,7 @@ class AsyncRawSpansClient:
         error_info: typing.Optional[ErrorInfo] = OMIT,
         ttft: typing.Optional[float] = OMIT,
         source: typing.Optional[SpanUpdateSource] = OMIT,
+        environment: typing.Optional[str] = OMIT,
         request_options: typing.Optional[RequestOptions] = None,
     ) -> AsyncHttpResponse[None]:
         """
@@ -1921,6 +1934,8 @@ class AsyncRawSpansClient:
 
         source : typing.Optional[SpanUpdateSource]
 
+        environment : typing.Optional[str]
+
         request_options : typing.Optional[RequestOptions]
             Request-specific configuration.
 
@@ -1960,6 +1975,7 @@ class AsyncRawSpansClient:
                 ),
                 "ttft": ttft,
                 "source": source,
+                "environment": environment,
             },
             headers={
                 "content-type": "application/json",

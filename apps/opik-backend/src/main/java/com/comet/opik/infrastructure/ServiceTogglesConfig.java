@@ -70,9 +70,20 @@ public class ServiceTogglesConfig {
 
     @JsonSetter
     public void setV2WorkspaceAllowlist(String v2WorkspaceAllowlist) {
-        this.v2WorkspaceAllowlistIds = Optional.ofNullable(v2WorkspaceAllowlist)
+        this.v2WorkspaceAllowlistIds = parseAllowlist(v2WorkspaceAllowlist);
+    }
+
+    @NotNull Set<@NotBlank String> v1WorkspaceAllowlistIds = Set.of();
+
+    @JsonSetter
+    public void setV1WorkspaceAllowlist(String v1WorkspaceAllowlist) {
+        this.v1WorkspaceAllowlistIds = parseAllowlist(v1WorkspaceAllowlist);
+    }
+
+    private static Set<String> parseAllowlist(String commaSeparated) {
+        return Optional.ofNullable(commaSeparated)
                 .filter(StringUtils::isNotBlank)
-                .map(commaSeparated -> Arrays.stream(commaSeparated.split(","))
+                .map(value -> Arrays.stream(value.split(","))
                         .map(String::strip)
                         .filter(StringUtils::isNotBlank)
                         .collect(Collectors.toUnmodifiableSet()))

@@ -5,11 +5,10 @@ import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
-import com.comet.opik.infrastructure.cache.CacheManager;
 import com.comet.opik.infrastructure.lock.LockService;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.eventbus.Subscribe;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -34,8 +33,6 @@ public class BiEventListener {
 
     public static final String FIRST_TRACE_REPORT_BI_EVENT = "opik_os_first_trace_created";
 
-    private static final String FIRST_TRACE_CREATED_KEY_FORMAT = "opik:analytics:first_trace_created:%s";
-
     private final @NonNull UsageReportService usageReportService;
     private final @NonNull ProjectService projectService;
     private final @NonNull TraceService traceService;
@@ -43,7 +40,7 @@ public class BiEventListener {
     private final @NonNull OpikConfiguration config;
     private final @NonNull BiEventService biEventService;
     private final @NonNull AnalyticsService analyticsService;
-    private final @NonNull CacheManager cacheManager;
+    private final @NonNull WorkspacesService workspacesService;
 
     @Subscribe
     public void onTracesCreated(TracesCreated event) {
@@ -127,8 +124,7 @@ public class BiEventListener {
             return;
         }
 
-        var ttl = config.getAnalytics().getFirstTraceCreatedDedupTtl().toJavaDuration();
-        if (!cacheManager.putIfAbsentSync(firstTraceCreatedKey(workspaceId), true, ttl)) {
+        if (!workspacesService.markFirstTraceReported(workspaceId, event.userName())) {
             return;
         }
 
@@ -136,10 +132,5 @@ public class BiEventListener {
                 "workspace_id", workspaceId,
                 "user_name", event.userName(),
                 "date", Instant.now().toString()), event.userName());
-    }
-
-    @VisibleForTesting
-    static String firstTraceCreatedKey(String workspaceId) {
-        return FIRST_TRACE_CREATED_KEY_FORMAT.formatted(workspaceId);
     }
 }

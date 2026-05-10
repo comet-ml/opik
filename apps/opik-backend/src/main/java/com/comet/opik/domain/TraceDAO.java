@@ -25,6 +25,7 @@ import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -208,7 +209,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -218,23 +220,24 @@ class TraceDAOImpl implements TraceDAO {
                         :project_id<item.index>,
                         :workspace_id,
                         :name<item.index>,
-                        parseDateTime64BestEffort(:start_time<item.index>, 9),
-                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :start_time<item.index>,
+                        :end_time<item.index>,
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
                         :tags<item.index>,
-                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        :last_updated_at<item.index>,
                         :error_info<item.index>,
                         :user_name,
                         :user_name,
                         :thread_id<item.index>,
-                        if(:visibility_mode<item.index> IS NULL, 'default', :visibility_mode<item.index>),
+                        :visibility_mode<item.index>,
                         :truncation_threshold<item.index>,
                         :input_slim<item.index>,
                         :output_slim<item.index>,
                         :ttft<item.index>,
-                        :source<item.index>
+                        :source<item.index>,
+                        :environment<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -269,7 +272,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 new_trace.id as id,
@@ -344,7 +348,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.source, 'unknown'), old_trace.source,
                     new_trace.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(old_trace.environment), old_trace.environment,
+                    new_trace.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -367,7 +375,8 @@ class TraceDAOImpl implements TraceDAO {
                     :input_slim as input_slim,
                     :output_slim as output_slim,
                     :ttft as ttft,
-                    :source as source
+                    :source as source,
+                    :environment as environment
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -388,7 +397,7 @@ class TraceDAOImpl implements TraceDAO {
      ***/
     private static final String UPDATE = """
             INSERT INTO traces (
-            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
+            	id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
             	id,
@@ -411,7 +420,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source
+                <if(source)> :source <else> source <endif> as source,
+                <if(environment)> :environment <else> environment <endif> as environment
             FROM traces
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -1757,7 +1767,7 @@ class TraceDAOImpl implements TraceDAO {
     //TODO: refactor to implement proper conflict resolution
     private static final String INSERT_UPDATE = """
             INSERT INTO traces (
-                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source
+                id, project_id, workspace_id, name, start_time, end_time, input, output, metadata, tags, error_info, created_at, created_by, last_updated_by, thread_id, visibility_mode, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
                 new_trace.id as id,
@@ -1842,7 +1852,11 @@ class TraceDAOImpl implements TraceDAO {
                 multiIf(
                     notEquals(old_trace.source, 'unknown'), old_trace.source,
                     new_trace.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(new_trace.environment), new_trace.environment,
+                    old_trace.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -1865,7 +1879,8 @@ class TraceDAOImpl implements TraceDAO {
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
                     <if(ttft)> :ttft <else> null <endif> as ttft,
-                    :source as source
+                    :source as source,
+                    <if(environment)> :environment <else> '' <endif> as environment
             ) as new_trace
             LEFT JOIN (
                 SELECT
@@ -2430,7 +2445,8 @@ class TraceDAOImpl implements TraceDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 t.id,
@@ -2454,7 +2470,8 @@ class TraceDAOImpl implements TraceDAO {
                 <if(input)> :input_slim <else> t.input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> t.output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> t.ttft <endif> as ttft,
-                t.source
+                t.source,
+                <if(environment)> :environment <else> t.environment <endif> as environment
             FROM traces t
             WHERE t.id IN :ids AND t.workspace_id = :workspace_id
             ORDER BY (t.workspace_id, t.project_id, t.id) DESC, t.last_updated_at DESC
@@ -2524,6 +2541,8 @@ class TraceDAOImpl implements TraceDAO {
         } else {
             statement.bindNull("source", String.class);
         }
+
+        statement.bind("environment", StringUtils.defaultString(trace.environment()));
 
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
 
@@ -2642,6 +2661,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.source())
                 .ifPresent(source -> statement.bind("source", source.getValue()));
 
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
+
         TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold", configuration);
     }
 
@@ -2680,6 +2702,9 @@ class TraceDAOImpl implements TraceDAO {
 
         Optional.ofNullable(traceUpdate.source())
                 .ifPresent(source -> template.add("source", source.getValue()));
+
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
 
         return template;
     }
@@ -2925,6 +2950,7 @@ class TraceDAOImpl implements TraceDAO {
                         getValue(exclude, Trace.TraceField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
                         .orElse(null))
+                .environment(getValue(exclude, Trace.TraceField.ENVIRONMENT, row, "environment", String.class))
                 .experiment(mapExperiment(exclude, row))
                 .build();
     }
@@ -3257,12 +3283,18 @@ class TraceDAOImpl implements TraceDAO {
 
             Statement statement = connection.createStatement(template.render());
 
+            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
+            // the same timestamp — matches the prior server-side now64(6) semantics (CH evaluates
+            // it once per query) and avoids timing-sensitive ordering in downstream MAX(...)
+            // aggregations.
+            Instant nowForBatch = Instant.now();
+
             int i = 0;
             for (Trace trace : traces) {
                 statement.bind("id" + i, trace.id())
                         .bind("project_id" + i, trace.projectId())
                         .bind("name" + i, StringUtils.defaultIfBlank(trace.name(), ""))
-                        .bind("start_time" + i, trace.startTime().toString())
+                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.startTime()))
                         .bind("tags" + i, trace.tags() != null ? trace.tags().toArray(String[]::new) : new String[]{})
                         .bind("error_info" + i,
                                 trace.errorInfo() != null ? JsonUtils.readTree(trace.errorInfo()).toString() : "")
@@ -3271,22 +3303,21 @@ class TraceDAOImpl implements TraceDAO {
                 bindInputOutputMetadataAndSlim(statement, trace, i);
 
                 if (trace.endTime() != null) {
-                    statement.bind("end_time" + i, trace.endTime().toString());
+                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(trace.endTime()));
                 } else {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                if (trace.lastUpdatedAt() != null) {
-                    statement.bind("last_updated_at" + i, trace.lastUpdatedAt().toString());
-                } else {
-                    statement.bindNull("last_updated_at" + i, String.class);
-                }
+                // Format the timestamp client-side so the SQL contains a plain string literal in the
+                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
+                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
+                // that would trip the FORMAT Values fast-path. See OPIK-5694.
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
+                        trace.lastUpdatedAt() != null ? trace.lastUpdatedAt() : nowForBatch));
 
-                if (trace.visibilityMode() != null) {
-                    statement.bind("visibility_mode" + i, trace.visibilityMode().getValue());
-                } else {
-                    statement.bindNull("visibility_mode" + i, String.class);
-                }
+                statement.bind("visibility_mode" + i, trace.visibilityMode() != null
+                        ? trace.visibilityMode().getValue()
+                        : VisibilityMode.DEFAULT.getValue());
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
@@ -3301,6 +3332,8 @@ class TraceDAOImpl implements TraceDAO {
                 } else {
                     statement.bindNull("source" + i, String.class);
                 }
+
+                statement.bind("environment" + i, StringUtils.defaultString(trace.environment()));
 
                 i++;
             }
@@ -3761,6 +3794,9 @@ class TraceDAOImpl implements TraceDAO {
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
 
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
+
         return template;
     }
 
@@ -3794,6 +3830,9 @@ class TraceDAOImpl implements TraceDAO {
         }
         Optional.ofNullable(traceUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
+
+        Optional.ofNullable(traceUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private JsonNode getMetadataWithProviders(Row row, Set<Trace.TraceField> exclude, List<String> providers) {

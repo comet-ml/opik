@@ -9,6 +9,8 @@ import { Copy } from "lucide-react";
 
 import NoData from "@/shared/NoData/NoData";
 import ResizableSidePanel from "@/shared/ResizableSidePanel/ResizableSidePanel";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import ShareURLButton from "@/shared/ShareURLButton/ShareURLButton";
 import { Button } from "@/ui/button";
 import { useToast } from "@/ui/use-toast";
@@ -147,24 +149,23 @@ const CompareExperimentsPanel: React.FunctionComponent<
     );
   };
 
-  const renderHeaderContent = () => {
-    return (
-      <div className="flex flex-auto justify-end gap-2 pl-6">
-        <ShareURLButton />
-        <Button size="sm" variant="outline" onClick={copyClickHandler}>
-          <Copy className="mr-2 size-4" />
-          Copy ID
-        </Button>
-      </div>
-    );
-  };
-
   return (
     <ResizableSidePanel
       panelId="compare-experiments"
-      entity="item"
       open={Boolean(experimentsCompareId)}
-      headerContent={renderHeaderContent()}
+      header={
+        <ResizableSidePanelTopBar variant="info" onClose={onClose}>
+          <ShareURLButton size="2xs" />
+          <Button size="2xs" variant="outline" onClick={copyClickHandler}>
+            <Copy className="mr-1 size-3.5" />
+            Copy ID
+          </Button>
+          <ResizableSidePanelArrowNavigation
+            horizontalNavigation={horizontalNavigation}
+            ignoreHotkeys={isTraceDetailsOpened}
+          />
+        </ResizableSidePanelTopBar>
+      }
       onClose={onClose}
       initialWidth={0.8}
       ignoreHotkeys={isTraceDetailsOpened}

@@ -17,6 +17,7 @@ import com.comet.opik.domain.stats.StatsMapper;
 import com.comet.opik.domain.utils.DemoDataExclusionUtils;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.auth.RequestContext;
+import com.comet.opik.utils.ClickHouseDateTimeFormat;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TruncationUtils;
 import com.comet.opik.utils.template.TemplateUtils;
@@ -115,7 +116,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SETTINGS log_comment = '<log_comment>'
             FORMAT Values
@@ -128,18 +130,18 @@ public class SpanDAO {
                         :parent_span_id<item.index>,
                         :name<item.index>,
                         :type<item.index>,
-                        parseDateTime64BestEffort(:start_time<item.index>, 9),
-                        if(:end_time<item.index> IS NULL, NULL, parseDateTime64BestEffort(:end_time<item.index>, 9)),
+                        :start_time<item.index>,
+                        :end_time<item.index>,
                         :input<item.index>,
                         :output<item.index>,
                         :metadata<item.index>,
                         :model<item.index>,
                         :provider<item.index>,
-                        toDecimal128(:total_estimated_cost<item.index>, 12),
+                        :total_estimated_cost<item.index>,
                         :total_estimated_cost_version<item.index>,
                         :tags<item.index>,
-                        mapFromArrays(:usage_keys<item.index>, :usage_values<item.index>),
-                        if(:last_updated_at<item.index> IS NULL, now64(6), parseDateTime64BestEffort(:last_updated_at<item.index>, 6)),
+                        :usage<item.index>,
+                        :last_updated_at<item.index>,
                         :error_info<item.index>,
                         :created_by<item.index>,
                         :last_updated_by<item.index>,
@@ -147,7 +149,8 @@ public class SpanDAO {
                         :input_slim<item.index>,
                         :output_slim<item.index>,
                         :ttft<item.index>,
-                        :source<item.index>
+                        :source<item.index>,
+                        :environment<item.index>
                     )
                     <if(item.hasNext)>,<endif>
                 }>
@@ -187,7 +190,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 new_span.id as id,
@@ -288,7 +292,11 @@ public class SpanDAO {
                 multiIf(
                     notEquals(old_span.source, 'unknown'), old_span.source,
                     new_span.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(old_span.environment), old_span.environment,
+                    new_span.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -317,7 +325,8 @@ public class SpanDAO {
                     :input_slim as input_slim,
                     :output_slim as output_slim,
                     :ttft as ttft,
-                    :source as source
+                    :source as source,
+                    :environment as environment
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -365,7 +374,8 @@ public class SpanDAO {
             	input_slim,
             	output_slim,
             	ttft,
-            	source
+            	source,
+            	environment
             )
             SELECT
             	id,
@@ -394,7 +404,8 @@ public class SpanDAO {
                 <if(input)> :input_slim <else> input_slim <endif> as input_slim,
                 <if(output)> :output_slim <else> output_slim <endif> as output_slim,
                 <if(ttft)> :ttft <else> ttft <endif> as ttft,
-                <if(source)> :source <else> source <endif> as source
+                <if(source)> :source <else> source <endif> as source,
+                <if(environment)> :environment <else> environment <endif> as environment
             FROM spans
             WHERE id = :id
             AND workspace_id = :workspace_id
@@ -418,7 +429,7 @@ public class SpanDAO {
             INSERT INTO spans (
                 id, project_id, workspace_id, trace_id, parent_span_id, name, type,
                 start_time, end_time, input, output, metadata, model, provider, total_estimated_cost, total_estimated_cost_version, tags, usage, error_info, created_at,
-                created_by, last_updated_by, truncation_threshold, input_slim, output_slim, ttft, source
+                created_by, last_updated_by, truncation_threshold, input_slim, output_slim, ttft, source, environment
             )
             SELECT
                 new_span.id as id,
@@ -535,7 +546,11 @@ public class SpanDAO {
                 multiIf(
                     notEquals(old_span.source, 'unknown'), old_span.source,
                     new_span.source
-                ) as source
+                ) as source,
+                multiIf(
+                    notEmpty(new_span.environment), new_span.environment,
+                    old_span.environment
+                ) as environment
             FROM (
                 SELECT
                     :id as id,
@@ -564,7 +579,8 @@ public class SpanDAO {
                     <if(input)> :input_slim <else> '' <endif> as input_slim,
                     <if(output)> :output_slim <else> '' <endif> as output_slim,
                     <if(ttft)> :ttft <else> null <endif> as ttft,
-                    :source as source
+                    :source as source,
+                    <if(environment)> :environment <else> '' <endif> as environment
             ) as new_span
             LEFT JOIN (
                 SELECT
@@ -1431,7 +1447,8 @@ public class SpanDAO {
                 input_slim,
                 output_slim,
                 ttft,
-                source
+                source,
+                environment
             )
             SELECT
                 s.id,
@@ -1463,7 +1480,8 @@ public class SpanDAO {
                         <if(input)> :input_slim <else> s.input_slim <endif> as input_slim,
                         <if(output)> :output_slim <else> s.output_slim <endif> as output_slim,
                         <if(ttft)> :ttft <else> s.ttft <endif> as ttft,
-                        s.source
+                        s.source,
+                        <if(environment)> :environment <else> s.environment <endif> as environment
                     FROM spans s
                     WHERE s.id IN :ids AND s.workspace_id = :workspace_id
                     ORDER BY (s.workspace_id, s.project_id, s.trace_id, s.parent_span_id, s.id) DESC, s.last_updated_at DESC
@@ -1510,6 +1528,10 @@ public class SpanDAO {
 
             Statement statement = connection.createStatement(template.render());
 
+            // Captured once per batch so every row whose client did not provide lastUpdatedAt gets
+            // the same timestamp — matches the prior server-side now64(6) semantics.
+            Instant nowForBatch = Instant.now();
+
             int i = 0;
             for (Span span : spans) {
                 String inputValue = TruncationUtils.toJsonString(span.input());
@@ -1520,7 +1542,7 @@ public class SpanDAO {
                         .bind("trace_id" + i, span.traceId())
                         .bind("name" + i, StringUtils.defaultIfBlank(span.name(), ""))
                         .bind("type" + i, Objects.toString(span.type(), SpanType.UNKNOWN_VALUE))
-                        .bind("start_time" + i, span.startTime().toString())
+                        .bind("start_time" + i, ClickHouseDateTimeFormat.formatNanos(span.startTime()))
                         .bind("parent_span_id" + i, span.parentSpanId() != null ? span.parentSpanId() : "")
                         .bind("input" + i, inputValue)
                         .bind("output" + i, outputValue)
@@ -1536,38 +1558,36 @@ public class SpanDAO {
                         .bind("output_slim" + i, TruncationUtils.createSlimJsonString(outputValue));
 
                 if (span.endTime() != null) {
-                    statement.bind("end_time" + i, span.endTime().toString());
+                    statement.bind("end_time" + i, ClickHouseDateTimeFormat.formatNanos(span.endTime()));
                 } else {
                     statement.bindNull("end_time" + i, String.class);
                 }
 
-                if (span.usage() != null) {
-                    Stream.Builder<String> keys = Stream.builder();
-                    Stream.Builder<Integer> values = Stream.builder();
+                Map<String, Integer> usageMap = span.usage() == null
+                        ? Map.of()
+                        : span.usage().entrySet().stream()
+                                .filter(e -> e.getValue() != null)
+                                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                statement.bind("usage" + i, usageMap);
 
-                    span.usage().forEach((key, value) -> {
-                        if (Objects.nonNull(value)) {
-                            keys.add(key);
-                            values.add(value);
-                        }
-                    });
-
-                    statement.bind("usage_keys" + i, keys.build().toArray(String[]::new));
-                    statement.bind("usage_values" + i, values.build().toArray(Integer[]::new));
-                } else {
-                    statement.bind("usage_keys" + i, new String[]{});
-                    statement.bind("usage_values" + i, new Integer[]{});
-                }
-
-                if (span.lastUpdatedAt() != null) {
-                    statement.bind("last_updated_at" + i, span.lastUpdatedAt().toString());
-                } else {
-                    statement.bindNull("last_updated_at" + i, String.class);
-                }
+                // Format the timestamp client-side so the SQL contains a plain string literal in the
+                // last_updated_at cell. Fall back to "now" when the client did not provide a value —
+                // matches the column's DEFAULT now64(6) but avoids the function call in the tuple
+                // that would trip the FORMAT Values fast-path. See OPIK-5694.
+                statement.bind("last_updated_at" + i, ClickHouseDateTimeFormat.formatMicros(
+                        span.lastUpdatedAt() != null ? span.lastUpdatedAt() : nowForBatch));
 
                 TruncationUtils.bindTruncationThreshold(statement, "truncation_threshold" + i, configuration);
 
-                bindCost(span, statement, String.valueOf(i));
+                // BULK_INSERT writes the cost cell directly into Decimal128(12) (no toDecimal128
+                // wrap), so the driver must emit an unquoted numeric literal — bind the
+                // BigDecimal itself rather than its String form. See OPIK-5694.
+                BigDecimal cost = span.totalEstimatedCost() != null ? span.totalEstimatedCost() : calculateCost(span);
+                statement.bind("total_estimated_cost" + i, cost);
+                statement.bind("total_estimated_cost_version" + i,
+                        span.totalEstimatedCost() == null && cost.compareTo(BigDecimal.ZERO) > 0
+                                ? ESTIMATED_COST_VERSION
+                                : "");
 
                 if (span.ttft() != null) {
                     statement.bind("ttft" + i, span.ttft());
@@ -1580,6 +1600,8 @@ public class SpanDAO {
                 } else {
                     statement.bindNull("source" + i, String.class);
                 }
+
+                statement.bind("environment" + i, StringUtils.defaultString(span.environment()));
 
                 i++;
             }
@@ -1666,6 +1688,8 @@ public class SpanDAO {
             } else {
                 statement.bindNull("source", String.class);
             }
+
+            statement.bind("environment", StringUtils.defaultString(span.environment()));
 
             bindUserNameAndWorkspace(statement, userName, workspaceId);
 
@@ -1824,6 +1848,9 @@ public class SpanDAO {
 
         Optional.ofNullable(spanUpdate.source())
                 .ifPresent(source -> statement.bind("source", source.getValue()));
+
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private ST newUpdateTemplate(SpanUpdate spanUpdate, String sql, boolean isManualCostExist, String queryName,
@@ -1865,6 +1892,8 @@ public class SpanDAO {
                 .ifPresent(ttft -> template.add("ttft", ttft));
         Optional.ofNullable(spanUpdate.source())
                 .ifPresent(source -> template.add("source", source.getValue()));
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
         return template;
     }
 
@@ -2128,6 +2157,7 @@ public class SpanDAO {
                         getValue(exclude, SpanField.SOURCE, row, "source", String.class))
                         .flatMap(Source::fromString)
                         .orElse(null))
+                .environment(getValue(exclude, SpanField.ENVIRONMENT, row, "environment", String.class))
                 .build();
     }
 
@@ -2653,6 +2683,8 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> template.add("ttft", ttft));
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> template.add("environment", environment));
         return template;
     }
 
@@ -2707,6 +2739,9 @@ public class SpanDAO {
         }
         Optional.ofNullable(spanUpdate.ttft())
                 .ifPresent(ttft -> statement.bind("ttft", ttft));
+
+        Optional.ofNullable(spanUpdate.environment())
+                .ifPresent(environment -> statement.bind("environment", environment));
     }
 
     private JsonNode getMetadataWithProvider(Row row, Set<SpanField> exclude, String provider) {
