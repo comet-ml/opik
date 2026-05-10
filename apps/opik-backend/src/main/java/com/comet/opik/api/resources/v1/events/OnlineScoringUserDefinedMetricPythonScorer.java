@@ -1,15 +1,18 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import jakarta.inject.Inject;
 import lombok.NonNull;
@@ -22,6 +25,7 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -37,6 +41,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
+    private final SpanService spanService;
     private final Logger userFacingLogger;
 
     @Inject
@@ -45,10 +50,12 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull TraceService traceService,
+            @NonNull SpanService spanService,
             @NonNull PythonEvaluatorService pythonEvaluatorService) {
         super(config, redisson, feedbackScoreService, traceService, USER_DEFINED_METRIC_PYTHON,
                 Constants.USER_DEFINED_METRIC_PYTHON);
         this.pythonEvaluatorService = pythonEvaluatorService;
+        this.spanService = spanService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringUserDefinedMetricPythonScorer.class);
     }
@@ -91,8 +98,19 @@ public class OnlineScoringUserDefinedMetricPythonScorer
         var trace = message.trace();
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
+
+            // Pre-fetch spans so OnlineScoringEngine can auto-inject the built-in `spans`
+            // variable (a JSON-stringified array of all spans). Metrics that don't reference
+            // `spans` pay only the cost of the span fetch + serialization; metrics that do
+            // can compute aggregates across the full execution trace.
+            List<Span> spans = spanService.getByTraceIds(Set.of(trace.id()))
+                    .collectList()
+                    .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                            .put(RequestContext.USER_NAME, message.userName()))
+                    .block();
+
             try {
-                var data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace);
+                var data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
                 userFacingLogger.info("Sending traceId '{}' to Python evaluator using the following input:\n\n{}",
                         trace.id(), data);
                 return data;

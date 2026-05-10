@@ -342,6 +342,39 @@ public class OnlineScoringEngine {
         });
     }
 
+    /**
+     * Variant that also auto-injects a built-in {@code spans} variable holding the trace's
+     * spans serialized as a compact JSON array (sorted by start_time). Metrics that don't
+     * reference {@code spans} pay only the cost of the serialization.
+     *
+     * <p>If the user explicitly mapped a variable named {@code spans} via {@code variables},
+     * the user's mapping wins — the built-in is only injected when nothing else claims the
+     * name.
+     */
+    public static Map<String, String> toReplacements(
+            Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
+        var base = toReplacements(variables, trace);
+        if (spans.isEmpty()) {
+            return base;
+        }
+        var result = new java.util.HashMap<>(base);
+        result.putIfAbsent(SPANS_VARIABLE_NAME, serializeSpansForTrace(spans));
+        return result;
+    }
+
+    private static final String SPANS_VARIABLE_NAME = "spans";
+
+    private static final java.util.Comparator<Span> BY_SPAN_START_TIME = java.util.Comparator
+            .comparing(Span::startTime, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
+
+    private static String serializeSpansForTrace(List<Span> spans) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(spans.stream().sorted(BY_SPAN_START_TIME).toList());
+        } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+            throw new java.io.UncheckedIOException(ex);
+        }
+    }
+
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
         return toReplacements(variables, section -> switch (section) {
             case INPUT -> span.input();
