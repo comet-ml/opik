@@ -325,6 +325,66 @@ class ReadToolTest {
         assertThat(result.has("cache_warning")).isFalse();
     }
 
+    @Test
+    void oversizedFullSpanDowngradesToMedium() {
+        // A span whose FULL-tier serialization exceeds OUTPUT_SAFETY_CHARS must be
+        // auto-downgraded by guardOutput. MEDIUM truncates each string > 1000 chars,
+        // so the resulting payload comfortably fits the safety cap.
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        // Single string field much larger than the per-call cap; cache cap (10 MB)
+        // is not in play, so there is no `cache_warning` to confound the assertion.
+        String fat = "x".repeat(ReadTool.OUTPUT_SAFETY_CHARS + 10_000);
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        spanJson.put("input", fat);
+        ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
+                        .formatted(spanId), ctx));
+
+        assertThat(result.get("tier").asText())
+                .as("tier=FULL must downgrade to MEDIUM when output exceeds safety cap")
+                .isEqualTo(CompressionTier.MEDIUM.name());
+        assertThat(result.get("data").get("input").asText()).contains("[TRUNCATED");
+        assertThat(result.has("cache_warning")).isFalse();
+    }
+
+    @Test
+    void guardOutputTerminatesEvenWhenCompressorCollapsesTiers() {
+        // Regression for an infinite-loop bug: GenericCompressor.pickTier collapses
+        // MEDIUM, SKELETON and SUMMARY requests all to MEDIUM. If guardOutput drove
+        // its walk off `current.tier()` (which is always MEDIUM after the first
+        // downgrade), it would keep asking for SKELETON, getting MEDIUM back, and
+        // looping forever. Many fields × moderate size each is the data shape that
+        // surfaces it: MEDIUM truncation per-string still leaves the whole entity
+        // larger than OUTPUT_SAFETY_CHARS.
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        // 60 fields × 5 KB each = 300 KB raw → MEDIUM truncates each to 1 KB =
+        // ~60 KB, still > 40 K cap, would loop without the fix.
+        String filler = "k".repeat(5_000);
+        for (int i = 0; i < 60; i++) {
+            spanJson.put("field_" + i, filler);
+        }
+        ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
+
+        // The bug manifested as a non-terminating loop, so the assertion here is
+        // primarily that the call returns at all (no timeout). Sanity-check the
+        // response shape.
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
+                        .formatted(spanId), ctx));
+
+        assertThat(result.has("data")).isTrue();
+        // After exhausting tier downgrades, the tier reported back is the smallest
+        // the compressor would produce — for GenericCompressor that's MEDIUM.
+        assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.MEDIUM.name());
+    }
+
     private static TraceToolContext newContextWithSeededTrace() {
         var trace = Trace.builder()
                 .id(UUID.randomUUID())
