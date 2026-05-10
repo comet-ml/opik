@@ -317,6 +317,24 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return LlmAsJudgeToolsMode.shouldUseTools(message);
     }
 
+    /**
+     * Cumulative cap on tool-result string length across the whole tool-call loop. Beyond
+     * this, further tool calls return a budget-exhausted sentinel so the judge has to compose
+     * its final answer from already-gathered data. Sized for ~2 chars/token (random/code
+     * worst case) so even adversarial inputs stay under a 128 K-token window after accounting
+     * for system prompt, tool specs, user prompt, and assistant turns:
+     *
+     * <p>{@code 150_000 chars / 2 chars/tok ≈ 75 K tok} of tool results, leaving ≈ 50 K tok
+     * of headroom for the rest of the conversation. Pairs with
+     * {@link com.comet.opik.api.resources.v1.events.tools.ReadTool#OUTPUT_SAFETY_CHARS}
+     * (per-call cap with auto-tier-downgrade): up to ~7 max-cap reads fit before this cap.
+     */
+    static final long CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS = 150_000L;
+
+    private static final String BUDGET_EXHAUSTED_MESSAGE = "{\"error\": \"Cumulative tool-output"
+            + " budget (%d chars) exhausted for this judgment; further tool calls return this"
+            + " error. Respond now with your best assessment from the data already gathered.\"}";
+
     // Package-private for unit tests.
     ChatResponse handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
             ChatRequest structuredRequest, TraceToScoreLlmAsJudge message) {
@@ -345,6 +363,9 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .toolChoice(ToolChoice.AUTO)
                 .build();
 
+        long toolOutputCumulative = 0L;
+        boolean budgetExhaustedLogged = false;
+
         for (int round = 0; round < MAX_TOOL_CALL_ROUNDS; round++) {
             if (!chatResponse.aiMessage().hasToolExecutionRequests()) {
                 break;
@@ -355,13 +376,28 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             for (var toolExecRequest : chatResponse.aiMessage().toolExecutionRequests()) {
                 log.debug("Tool call round '{}' for traceId '{}': tool '{}'",
                         round, trace.id(), toolExecRequest.name());
-                var result = toolRegistry.execute(
-                        toolExecRequest.name(), toolExecRequest.arguments(), ctx);
+                String result;
+                if (toolOutputCumulative >= CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS) {
+                    if (!budgetExhaustedLogged) {
+                        log.warn("Tool-output budget {} chars exhausted for traceId '{}';"
+                                + " subsequent tool calls return budget-exhausted sentinel",
+                                CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS, trace.id());
+                        budgetExhaustedLogged = true;
+                    }
+                    result = BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS);
+                } else {
+                    result = toolRegistry.execute(
+                            toolExecRequest.name(), toolExecRequest.arguments(), ctx);
+                    toolOutputCumulative += result.length();
+                }
                 messages.add(ToolExecutionResultMessage.from(toolExecRequest, result));
             }
 
+            // Defensive copy: ChatRequestBuilder stores the list by reference, so a later
+            // iteration mutating `messages` would retroactively change what an async chat
+            // client sees in this round's request. Snapshot per round.
             var followUp = toolRequest.toBuilder()
-                    .messages(messages)
+                    .messages(new ArrayList<>(messages))
                     .parameters(followUpParameters)
                     .build();
 
@@ -381,7 +417,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         + " fences — emit only the raw JSON object."));
 
         var finalRequest = structuredRequest.toBuilder()
-                .messages(messages)
+                .messages(new ArrayList<>(messages))
                 .build();
 
         return aiProxyService.scoreTrace(
