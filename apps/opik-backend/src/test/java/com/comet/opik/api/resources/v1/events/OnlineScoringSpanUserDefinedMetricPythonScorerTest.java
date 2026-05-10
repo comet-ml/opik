@@ -324,7 +324,6 @@ class OnlineScoringSpanUserDefinedMetricPythonScorerTest {
             // Then
             @SuppressWarnings("unchecked")
             ArgumentCaptor<Map<String, Object>> dataCaptor = ArgumentCaptor.forClass(Map.class);
-            @SuppressWarnings("unchecked")
             ArgumentCaptor<String> metricCaptor = ArgumentCaptor.forClass(String.class);
             verify(pythonEvaluatorService).evaluate(metricCaptor.capture(), dataCaptor.capture());
 

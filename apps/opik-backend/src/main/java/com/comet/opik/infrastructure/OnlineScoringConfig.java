@@ -60,30 +60,21 @@ public class OnlineScoringConfig {
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
+    // Field initializers (not @Builder.Default) so the defaults apply during Dropwizard's
+    // YAML deserialization (no-args constructor), not only when the builder is used.
+
     /**
      * Master switch for the agentic-tools path on LLM-as-judge online scoring. When false,
      * the inline path is used regardless of context size — the model may overflow its window
-     * on huge traces or threads, but no tool-call loop is triggered. When true, contexts that
-     * exceed {@link #agenticToolsThresholdTokens} get the read/jq/search tool surface and
-     * the {@code AgenticToolLoop} drives drill-down. Below the threshold, behaviour is
-     * unchanged regardless of this flag.
-     *
-     * <p>Defaulted via field initializer rather than {@code @Builder.Default} so the value
-     * applies during Dropwizard's YAML deserialization (which uses the no-args constructor),
-     * not just when the builder is used.
+     * on huge traces, but no tool-call loop is triggered.
      */
     @JsonProperty
     private boolean agenticToolsEnabled = true;
 
     /**
      * Estimated-tokens threshold above which the LLM-as-judge online scorer routes through
-     * the agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the
-     * threshold the inline path is used. Sized for current 128 K-token model windows; bump
-     * higher on larger windows to keep more rules on the cheaper inline path.
-     *
-     * <p>Defaulted via field initializer rather than {@code @Builder.Default} so the value
-     * applies during Dropwizard's YAML deserialization (which uses the no-args constructor),
-     * not just when the builder is used.
+     * the agentic-tools path (read/jq/search tools). Sized for 128 K-token model windows;
+     * bump higher on larger windows to keep more rules on the cheaper inline path.
      */
     @JsonProperty
     @Min(1) private int agenticToolsThresholdTokens = 50_000;
