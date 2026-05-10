@@ -493,11 +493,11 @@ public class ReadTool implements ToolExecutor {
         while (current.payload().toString().length() > OUTPUT_SAFETY_CHARS) {
             CompressionTier next = downgradeTierOrSame(lastRequested);
             if (next == lastRequested) {
-                log.warn("Read tool output exceeded {} chars at smallest tier {} — returning anyway",
+                log.warn("Read tool output exceeded '{}' chars at smallest tier '{}' — returning anyway",
                         OUTPUT_SAFETY_CHARS, lastRequested);
                 break;
             }
-            log.info("Read tool output exceeded {} chars at tier {}, downgrading to {}",
+            log.info("Read tool output exceeded '{}' chars at tier '{}', downgrading to '{}'",
                     OUTPUT_SAFETY_CHARS, lastRequested, next);
             current = recompress.apply(next);
             lastRequested = next;
