@@ -234,30 +234,30 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         List<ChatRequest> sent = requests.getAllValues();
 
-        // Round-1 follow-up: keeps tool specs (the distinguishing feature of in-loop calls).
-        // Note on size: handleToolCalls reuses the same `messages` ArrayList for the round-1
-        // follow-up and the final re-issue, then appends the forcing UserMessage after the
-        // loop. ArgumentCaptor captures the request by reference, so by assertion time the
-        // captured round-1 messages list reflects the final 4-element state (original
-        // UserMessage + AiMessage + ToolExecutionResultMessage + forcing UserMessage). We
-        // assert the shape that's still distinguishable: tool specs presence + ordering of
-        // the first three message types.
+        // Round-1 follow-up: keeps tool specs (the distinguishing feature of in-loop calls)
+        // and is a 3-element snapshot at send time (original UserMessage + the AiMessage
+        // carrying tool calls + the tool-execution result). handleToolCalls defensive-copies
+        // the `messages` list when building each round's request, so ArgumentCaptor's by-
+        // reference capture reflects the state at THE TIME OF THAT ROUND, not the final
+        // accumulated state. That copy is intentional: ChatRequestBuilder stores the list by
+        // reference, so without it any async chat client reading messages after the call
+        // returns would see later mutations bleed in.
         ChatRequest roundOne = sent.getFirst();
         assertThat(roundOne.toolSpecifications())
                 .extracting(ToolSpecification::name)
                 .containsExactly(GetTraceSpansTool.NAME);
-        assertThat(roundOne.messages()).hasSize(4);
+        assertThat(roundOne.messages()).hasSize(3);
         assertThat(roundOne.messages().get(0)).isInstanceOf(UserMessage.class);
         assertThat(roundOne.messages().get(1)).isInstanceOf(AiMessage.class);
         assertThat(roundOne.messages().get(2)).isInstanceOf(ToolExecutionResultMessage.class);
 
-        // Final re-issue: uses structuredRequest's shape (no tool specs). The forcing
-        // UserMessage is the last accumulated message — soft signal "stop calling tools,
-        // emit only JSON now" that complements the provider-native structured output.
+        // Final re-issue: uses structuredRequest's shape (no tool specs) and includes the
+        // forcing UserMessage as the last accumulated message — soft signal "stop calling
+        // tools, emit only JSON now" that complements the provider-native structured output.
+        // 4 elements: round-1's three + the forcing UserMessage appended after the loop.
         ChatRequest finalSent = sent.get(1);
         assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
         assertThat(finalSent.messages()).hasSize(4);
-        assertThat(finalSent.messages()).isEqualTo(roundOne.messages());
         assertThat(finalSent.messages().get(3)).isInstanceOf(UserMessage.class);
         assertThat(((UserMessage) finalSent.messages().get(3)).singleText())
                 .contains("Now respond with ONLY the JSON object");
