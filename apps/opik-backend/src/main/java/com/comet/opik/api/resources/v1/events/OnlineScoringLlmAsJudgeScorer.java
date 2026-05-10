@@ -216,7 +216,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     String drillDownHint = ("call read(type=trace, id=%s, tier=MEDIUM) for full structure"
                             + " with per-string truncation hints, or jq(type=trace, id=%s,"
                             + " expression='<path>') for a specific section")
-                                    .formatted(trace.id(), trace.id());
+                            .formatted(trace.id(), trace.id());
                     scoreRequest = OnlineScoringEngine.prepareLlmRequest(
                             message.llmAsJudgeCode(), trace, new InstructionStrategy(),
                             message.promptType(), MAX_PROMPT_FIELD_CHARS, drillDownHint);
