@@ -1,6 +1,7 @@
 package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
@@ -27,12 +28,14 @@ import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
 import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
@@ -174,6 +177,56 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
         }
 
         @Test
+        void skipsSpanFetchWhenSpansArgumentAbsent() {
+            // The sample metric maps only input/output; the `spans` opt-in key isn't present,
+            // so the scorer must not call out to the span service.
+            var message = sampleMessage();
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(spanService, never()).getByTraceIds(any());
+
+            @SuppressWarnings("unchecked")
+            var dataCaptor = (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>) ArgumentCaptor
+                    .forClass(Map.class);
+            verify(pythonEvaluatorService).evaluate(eq(message.code().metric()), dataCaptor.capture());
+            assertThat(dataCaptor.getValue()).doesNotContainKey("spans");
+        }
+
+        @Test
+        void fetchesSpansAndPassesThemAsListWhenSpansArgumentPresent() {
+            // User opts into spans by mapping the reserved `spans` key in their `arguments`.
+            // We verify (a) the span service is queried, and (b) the data handed to the Python
+            // evaluator carries spans as a typed List — not as a JSON string — so `json.loads`
+            // in the runner yields `spans` as a list of dicts in the metric's signature.
+            var message = sampleMessageWithSpansArgument();
+            var span = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .traceId(traceId)
+                    .build();
+
+            when(spanService.getByTraceIds(eq(Set.of(traceId)))).thenReturn(Flux.just(span));
+            when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of()));
+            when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(spanService).getByTraceIds(eq(Set.of(traceId)));
+
+            @SuppressWarnings("unchecked")
+            var dataCaptor = (ArgumentCaptor<Map<String, Object>>) (ArgumentCaptor<?>) ArgumentCaptor
+                    .forClass(Map.class);
+            verify(pythonEvaluatorService).evaluate(eq(message.code().metric()), dataCaptor.capture());
+            var capturedSpans = dataCaptor.getValue().get("spans");
+            assertThat(capturedSpans).isInstanceOf(List.class);
+            assertThat((List<?>) capturedSpans).hasSize(1)
+                    .first().isInstanceOf(Span.class);
+        }
+
+        @Test
         void propagatesEvaluatorErrorAndLogsMessage() {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
@@ -193,6 +246,15 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     }
 
     private TraceToScoreUserDefinedMetricPython sampleMessage() {
+        return sampleMessageWithArguments(Map.of("input", "input.question", "output", "output.answer"));
+    }
+
+    private TraceToScoreUserDefinedMetricPython sampleMessageWithSpansArgument() {
+        return sampleMessageWithArguments(
+                Map.of("input", "input.question", "output", "output.answer", "spans", "spans"));
+    }
+
+    private TraceToScoreUserDefinedMetricPython sampleMessageWithArguments(Map<String, String> arguments) {
         var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .id(traceId)
                 .projectId(projectId)
@@ -203,7 +265,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 .ruleName(ruleName)
                 .code(new UserDefinedMetricPythonCode(
                         "def score(input, output): return []",
-                        Map.of("input", "input.question", "output", "output.answer")))
+                        arguments))
                 .workspaceId(workspaceId)
                 .userName(userName)
                 .build();
