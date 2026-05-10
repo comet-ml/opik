@@ -343,22 +343,22 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Variant that also auto-injects a built-in {@code spans} variable holding the trace's
-     * spans serialized as a compact JSON array (sorted by start_time). Metrics that don't
-     * reference {@code spans} pay only the cost of the serialization.
+     * Variant that injects a built-in {@code spans} variable holding the trace's spans
+     * serialized as a compact JSON array (sorted by start_time). Used by Python metrics whose
+     * {@code score(...)} signature accepts {@code spans}; the user opts in by including a
+     * {@code "spans"} key in their {@code arguments} map. The value the user maps for
+     * {@code spans} is overridden with the serialized JSON — {@code spans} is a reserved
+     * built-in, not a regular path-resolved variable.
      *
-     * <p>If the user explicitly mapped a variable named {@code spans} via {@code variables},
-     * the user's mapping wins — the built-in is only injected when nothing else claims the
-     * name.
+     * <p>Caller is responsible for only invoking this overload when the user actually
+     * requested spans (i.e. {@code arguments.containsKey("spans")}). The scorer makes this
+     * decision so the span fetch is skipped on metrics that don't need it.
      */
     public static Map<String, String> toReplacements(
             Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
         var base = toReplacements(variables, trace);
-        if (spans.isEmpty()) {
-            return base;
-        }
         var result = new java.util.HashMap<>(base);
-        result.putIfAbsent(SPANS_VARIABLE_NAME, serializeSpansForTrace(spans));
+        result.put(SPANS_VARIABLE_NAME, serializeSpansForTrace(spans));
         return result;
     }
 
