@@ -274,6 +274,13 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: 100
+  # Default: true
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
+  agenticToolsEnabled: true
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
+  #   through the agentic-tools path. Below the threshold the inline path is used.
+  agenticToolsThresholdTokens: 50000
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

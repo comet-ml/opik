@@ -67,9 +67,12 @@ public class OnlineScoringConfig {
      * exceed {@link #agenticToolsThresholdTokens} get the read/jq/search tool surface and
      * the {@code AgenticToolLoop} drives drill-down. Below the threshold, behaviour is
      * unchanged regardless of this flag.
+     *
+     * <p>Defaulted via field initializer rather than {@code @Builder.Default} so the value
+     * applies during Dropwizard's YAML deserialization (which uses the no-args constructor),
+     * not just when the builder is used.
      */
     @JsonProperty
-    @lombok.Builder.Default
     private boolean agenticToolsEnabled = true;
 
     /**
@@ -77,10 +80,13 @@ public class OnlineScoringConfig {
      * the agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the
      * threshold the inline path is used. Sized for current 128 K-token model windows; bump
      * higher on larger windows to keep more rules on the cheaper inline path.
+     *
+     * <p>Defaulted via field initializer rather than {@code @Builder.Default} so the value
+     * applies during Dropwizard's YAML deserialization (which uses the no-args constructor),
+     * not just when the builder is used.
      */
     @JsonProperty
-    @Min(1) @lombok.Builder.Default
-    private int agenticToolsThresholdTokens = 50_000;
+    @Min(1) private int agenticToolsThresholdTokens = 50_000;
 
     @Data
     @Builder(toBuilder = true)

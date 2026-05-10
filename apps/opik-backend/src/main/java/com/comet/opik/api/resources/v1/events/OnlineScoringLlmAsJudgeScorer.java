@@ -179,13 +179,15 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // (1) experimentId != null (test-suite assertion path; always tools)
             // (2) estimated context tokens >= threshold AND agentic-tools are enabled AND the
             //     model's provider supports tool calling (online-scoring agentic path).
-            // The size estimate uses trace fields only (no spans) — cheap and avoids an extra
-            // DB query. Big spans on small traces are caught downstream by ReadTool's per-call
-            // output cap. Provider gate is checked here rather than in shouldUseTools() because
-            // model/provider info is local to the scorer.
+            // Size estimate uses the {trace, spans} composite — fetching spans up-front is the
+            // only way to catch the big-spans-on-small-trace shape (a trace with tiny input/output
+            // but huge per-span outputs). The fetched spans flow through to handleToolCalls so we
+            // don't pay for them twice. For traces below the threshold the cost is one DB query
+            // per scoring run, dwarfed by the LLM call.
             String modelName = message.llmAsJudgeCode().model().name();
+            List<Span> spans = fetchSpans(trace.id(), message.workspaceId(), message.userName());
             int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(
-                    trace, java.util.List.of(), traceCompressor);
+                    trace, spans, traceCompressor);
             boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                     llmProviderFactory.getLlmProvider(modelName));
             boolean overSizeThreshold = onlineScoringConfig.isAgenticToolsEnabled()
@@ -194,12 +196,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     || (overSizeThreshold && providerSupportsTools);
             if (overSizeThreshold && !providerSupportsTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
                 userFacingLogger.warn(
-                        "Trace context exceeds {} tokens but provider for model '{}' does not support tool"
+                        "Trace context exceeds '{}' tokens but provider for model '{}' does not support tool"
                                 + " calling; falling back to inline path — may overflow context window.",
                         onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
             } else if (overSizeThreshold && useTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
                 userFacingLogger.info(
-                        "Trace context exceeds {} tokens; switching to agentic-tools mode for traceId '{}'",
+                        "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
                         onlineScoringConfig.getAgenticToolsThresholdTokens(), trace.id());
             }
 
@@ -379,7 +381,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 String result;
                 if (toolOutputCumulative >= CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS) {
                     if (!budgetExhaustedLogged) {
-                        log.warn("Tool-output budget {} chars exhausted for traceId '{}';"
+                        log.warn("Tool-output budget '{}' chars exhausted for traceId '{}';"
                                 + " subsequent tool calls return budget-exhausted sentinel",
                                 CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS, trace.id());
                         budgetExhaustedLogged = true;
