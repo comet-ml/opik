@@ -7,12 +7,13 @@ reuse the same logic with no side effects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional
 
 from opik.rest_api import OpikApi
 
-from .errors import ConflictError, UnsupportedDatasetTypeError
+from .._base import BaseMigrationPlan
+from ..errors import ConflictError, UnsupportedDatasetTypeError
 from .resolver import (
     ResolvedDataset,
     ensure_destination_project_exists,
@@ -82,12 +83,19 @@ class CopyTestSuiteConfig:
     dest_project_name: str
 
 
-@dataclass
-class MigrationPlan:
+@dataclass(kw_only=True)
+class MigrationPlan(BaseMigrationPlan):
+    """Dataset-specific migration plan.
+
+    Inherits the shared ``source`` / ``actions`` shape from
+    ``BaseMigrationPlan`` and narrows ``source`` to ``ResolvedDataset``.
+    The action list contains dataset-specific records (``RenameSource``,
+    ``CreateDestination``, ``CopyTestSuiteConfig``, ``CopyCurrentItems``).
+    """
+
     source: ResolvedDataset
     target_name: str
     to_project: str
-    actions: List[object] = field(default_factory=list)
 
 
 def build_dataset_plan(

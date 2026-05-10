@@ -19,9 +19,8 @@ from rich.table import Table
 import opik
 
 from .audit import AuditLog, default_audit_path
-from .errors import MigrationError, safe_error_string
-from .executor import execute_plan, record_planned
-from .planner import (
+from .datasets.executor import execute_plan, record_planned
+from .datasets.planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
     CreateDestination,
@@ -29,6 +28,7 @@ from .planner import (
     RenameSource,
     build_dataset_plan,
 )
+from .errors import MigrationError, safe_error_string
 
 console = Console()
 

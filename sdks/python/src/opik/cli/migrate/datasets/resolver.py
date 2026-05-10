@@ -18,7 +18,7 @@ from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
 from opik.rest_api.core.api_error import ApiError
 
-from .errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
+from ..errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
 
 LOGGER = logging.getLogger(__name__)
 

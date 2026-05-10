@@ -11,7 +11,7 @@ import pytest
 from click.testing import CliRunner
 
 from opik.cli import cli
-from opik.cli.migrate import planner as planner_module
+from opik.cli.migrate.datasets import planner as planner_module
 from opik.cli.migrate.errors import (
     AmbiguityError,
     ConflictError,

@@ -1,9 +1,9 @@
-"""Executor for ``MigrationPlan`` actions.
+"""Executor for the dataset ``MigrationPlan``.
 
-Each action is wrapped in audit-log entries (``in_progress`` -> ``ok`` /
-``failed``). ``DeleteSource`` only fires after every preceding action
-succeeds; the planner already places it last, and any exception aborts the
-loop before reaching it.
+The audit-bracketed for-loop and the dry-run "record planned" loop are
+generic across entity types and live in ``cli/migrate/_base.py``. This
+module owns dataset-specific action dispatch (``_apply_action``) and the
+audit-log payload shape per action type (``_action_details``).
 """
 
 from __future__ import annotations
@@ -16,8 +16,8 @@ from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
 from rich.console import Console
 
-from .audit import AuditLog
-from .errors import safe_error_envelope
+from ..audit import AuditLog
+from .._base import execute_plan_loop, record_planned_loop
 from .planner import (
     CopyCurrentItems,
     CopyTestSuiteConfig,
@@ -35,32 +35,30 @@ def execute_plan(
     plan: MigrationPlan,
     audit: AuditLog,
 ) -> None:
-    """Apply ``plan`` against ``client``, recording each action in ``audit``."""
+    """Apply ``plan`` against ``client``, recording each action in ``audit``.
+
+    Delegates the audit-bracketed loop to ``_base.execute_plan_loop`` and
+    supplies the dataset-specific apply / details closures.
+    """
     rest_client = client.rest_client
-    for action in plan.actions:
-        details = _action_details(action)
-        audit.record(type=details["type"], status="in_progress", details=details)
-        try:
-            _apply(client, rest_client, action)
-        except Exception as exc:
-            audit.record(
-                type=details["type"],
-                status="failed",
-                details=details,
-                error=safe_error_envelope(exc),
-            )
-            raise
-        audit.record(type=details["type"], status="ok", details=details)
+
+    def _apply(action: Any) -> None:
+        _apply_action(client, rest_client, action)
+
+    execute_plan_loop(
+        plan.actions,
+        audit,
+        apply_fn=_apply,
+        details_fn=_action_details,
+    )
 
 
 def record_planned(plan: MigrationPlan, audit: AuditLog) -> None:
     """Record every planned action with status=planned (used for dry-run)."""
-    for action in plan.actions:
-        details = _action_details(action)
-        audit.record(type=details["type"], status="planned", details=details)
+    record_planned_loop(plan.actions, audit, details_fn=_action_details)
 
 
-def _apply(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
+def _apply_action(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
     # Workspace-mutating REST writes are wrapped with the SDK's 429-aware
     # retry helper so a transient rate limit doesn't abort a half-finished
     # migration. Reads (find_datasets, find_projects, retrieve_project,
