@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -9,6 +10,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -41,6 +43,8 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -64,10 +68,15 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
+    private static final String SPANS_VARIABLE_NAME = "spans";
+
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+
+    private static final Comparator<Span> BY_SPAN_START_TIME = Comparator
+            .comparing(Span::startTime, Comparator.nullsLast(Comparator.naturalOrder()));
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
@@ -116,7 +125,7 @@ public class OnlineScoringEngine {
                 Map.Entry::getKey,
                 e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
                 (a, b) -> b,
-                java.util.LinkedHashMap::new));
+                LinkedHashMap::new));
     }
 
     /**
@@ -362,15 +371,10 @@ public class OnlineScoringEngine {
     public static Map<String, Object> toReplacements(
             Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
         var base = toReplacements(variables, trace);
-        var result = new java.util.LinkedHashMap<String, Object>(base);
+        var result = new LinkedHashMap<String, Object>(base);
         result.put(SPANS_VARIABLE_NAME, spans.stream().sorted(BY_SPAN_START_TIME).toList());
         return result;
     }
-
-    private static final String SPANS_VARIABLE_NAME = "spans";
-
-    private static final java.util.Comparator<Span> BY_SPAN_START_TIME = java.util.Comparator
-            .comparing(Span::startTime, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()));
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
         return toReplacements(variables, section -> switch (section) {
@@ -670,7 +674,7 @@ public class OnlineScoringEngine {
      * pick up the slack.
      */
     public static int estimateTraceContextTokens(@NotNull Trace trace, @NotNull List<Span> spans,
-            @NotNull com.comet.opik.api.resources.v1.events.tools.TraceCompressor traceCompressor) {
+            @NotNull TraceCompressor traceCompressor) {
         return traceCompressor.buildFullJson(trace, spans).toString().length() / 4;
     }
 
@@ -680,7 +684,7 @@ public class OnlineScoringEngine {
      * even when the context exceeds the size threshold (which may overflow the model's
      * window — in that case the operator should pick a different model for those workloads).
      */
-    public static boolean supportsToolCalling(com.comet.opik.api.LlmProvider provider) {
+    public static boolean supportsToolCalling(LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;

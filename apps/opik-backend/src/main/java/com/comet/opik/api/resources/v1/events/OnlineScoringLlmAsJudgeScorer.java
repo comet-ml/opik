@@ -175,15 +175,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
-            // Compute the agentic-tools gate up-front. Two cases trigger tools:
-            // (1) experimentId != null (test-suite assertion path; always tools)
-            // (2) estimated context tokens >= threshold AND agentic-tools are enabled AND the
-            //     model's provider supports tool calling (online-scoring agentic path).
-            // Size estimate uses the {trace, spans} composite — fetching spans up-front is the
-            // only way to catch the big-spans-on-small-trace shape (a trace with tiny input/output
-            // but huge per-span outputs). The fetched spans flow through to handleToolCalls so we
-            // don't pay for them twice. For traces below the threshold the cost is one DB query
-            // per scoring run, dwarfed by the LLM call.
+            // Tools fire when experimentId != null OR the {trace, spans} composite exceeds the
+            // size threshold and the provider supports tool calling. Spans are fetched up-front
+            // so the estimate catches the small-trace-with-huge-spans shape; they pass through
+            // to handleToolCalls so the read tool's cache hits without a second query.
             String modelName = message.llmAsJudgeCode().model().name();
             List<Span> spans = fetchSpans(trace.id(), message.workspaceId(), message.userName());
             int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(

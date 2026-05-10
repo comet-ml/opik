@@ -23,9 +23,11 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -38,6 +40,8 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 public class OnlineScoringUserDefinedMetricPythonScorer
         extends
             OnlineScoringBaseScorer<TraceToScoreUserDefinedMetricPython> {
+
+    private static final String SPANS_ARGUMENT_KEY = "spans";
 
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
@@ -113,7 +117,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                             .block();
                     data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
                 } else {
-                    data = new java.util.LinkedHashMap<>(
+                    data = new LinkedHashMap<>(
                             OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
                 }
                 if (userFacingLogger.isInfoEnabled()) {
@@ -130,10 +134,9 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     }
 
     /**
-     * Shape-only summary of the evaluator input for the user-facing log. The values are
-     * rendered trace content (input, output, metadata, optionally spans) — surfacing them
-     * verbatim in a stored log lands user data (potentially PII) in clear text downstream
-     * of whatever sinks the user-facing log feeds. We log keys and per-argument sizes.
+     * Shape-only summary of the evaluator input for the user-facing log. Values are rendered
+     * trace content (input/output/metadata/spans) — logging them verbatim would land user
+     * data downstream of whatever sinks the user-facing log feeds, so we log sizes only.
      */
     private static String summarizeData(Map<String, Object> data) {
         var parts = data.entrySet().stream()
@@ -143,13 +146,11 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                         return String.format("%s=list(%d)", e.getKey(), list.size());
                     }
                     var s = v == null ? "" : v.toString();
-                    return String.format("%s(%dc)", e.getKey(), s.length());
+                    return String.format("%s=%dc", e.getKey(), s.length());
                 })
-                .collect(java.util.stream.Collectors.joining(", "));
+                .collect(Collectors.joining(", "));
         return String.format("arguments=[%s]", parts);
     }
-
-    private static final String SPANS_ARGUMENT_KEY = "spans";
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Trace trace) {
         return scoreResults.stream()

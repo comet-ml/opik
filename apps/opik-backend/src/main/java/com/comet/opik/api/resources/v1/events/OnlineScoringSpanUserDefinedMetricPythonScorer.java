@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -99,7 +100,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
             try {
-                var data = new java.util.LinkedHashMap<String, Object>(
+                var data = new LinkedHashMap<String, Object>(
                         OnlineScoringEngine.toReplacements(message.code().arguments(), span));
                 userFacingLogger.info("Sending spanId '{}' to Python evaluator using the following input:\n\n{}",
                         span.id(), data);

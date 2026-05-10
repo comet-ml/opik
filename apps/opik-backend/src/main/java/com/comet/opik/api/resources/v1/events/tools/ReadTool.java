@@ -79,19 +79,11 @@ public class ReadTool implements ToolExecutor {
             + " jq queries against this entity will reflect truncated content.";
 
     /**
-     * Hard cap on serialized tool-output size returned to the model. When a compressed
+     * Per-call cap on serialized tool-output size returned to the model. When a compressed
      * payload exceeds this many characters the tool downgrades the tier one step
-     * ({@code FULL → MEDIUM → SKELETON}) and recompresses, protecting the conversation
-     * from tool results that would overflow the model's context window. Mirrors the
-     * cache-warning downgrade in {@link #effectiveTier}, but applies to output regardless
-     * of how the cache was populated — so a model that asks for {@code tier=FULL} on a
-     * multi-MB trace still gets a result that fits its window.
-     *
-     * <p>Calibration: at ~2 chars/token (random/code worst case), 40_000 chars ≈ 20_000
-     * tokens per call. Pairs with
-     * {@link AgenticToolLoop#CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS} (cumulative cap across
-     * all rounds): up to ~7 max-cap reads fit before the cumulative budget kicks in and
-     * substitutes a budget-exhausted sentinel.
+     * ({@code FULL → MEDIUM → SKELETON}) and recompresses, so a {@code tier=FULL} request
+     * on a multi-MB trace still fits in the model's window. At ~2 chars/token worst case,
+     * this caps any single read at ~20K tokens.
      */
     static final int OUTPUT_SAFETY_CHARS = 40_000;
 
