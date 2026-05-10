@@ -4,6 +4,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
@@ -26,6 +27,7 @@ import org.redisson.api.RStreamReactive;
 import org.redisson.api.RedissonReactiveClient;
 import org.redisson.api.options.PlainOptions;
 import org.slf4j.Logger;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import uk.co.jemos.podam.api.PodamFactory;
 
@@ -62,6 +64,8 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
     private FeedbackScoreService feedbackScoreService;
     @Mock
     private TraceService traceService;
+    @Mock
+    private SpanService spanService;
     @Mock
     private PythonEvaluatorService pythonEvaluatorService;
 
@@ -104,6 +108,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                 redissonClient,
                 feedbackScoreService,
                 traceService,
+                spanService,
                 pythonEvaluatorService);
 
         projectId = UUID.randomUUID();
@@ -156,6 +161,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
                     .reason("test reason")
                     .build();
 
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
             when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
                     .thenReturn(Mono.just(List.of(pythonScore)));
             when(feedbackScoreService.scoreBatchOfTraces(any())).thenReturn(Mono.empty());
@@ -174,6 +180,7 @@ class OnlineScoringUserDefinedMetricPythonScorerTest {
             var message = sampleMessage();
             var error = new RuntimeException("Python BE timeout");
 
+            when(spanService.getByTraceIds(any())).thenReturn(Flux.empty());
             when(pythonEvaluatorService.evaluate(eq(message.code().metric()), any()))
                     .thenReturn(Mono.error(error));
 
