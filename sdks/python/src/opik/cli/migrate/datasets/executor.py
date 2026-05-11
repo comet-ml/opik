@@ -24,7 +24,9 @@ from .planner import (
     CreateDestination,
     MigrationPlan,
     RenameSource,
+    ReplayVersions,
 )
+from .version_replay import replay_all_versions
 
 LOGGER = logging.getLogger(__name__)
 _console = Console()
@@ -38,12 +40,15 @@ def execute_plan(
     """Apply ``plan`` against ``client``, recording each action in ``audit``.
 
     Delegates the audit-bracketed loop to ``_base.execute_plan_loop`` and
-    supplies the dataset-specific apply / details closures.
+    supplies the dataset-specific apply / details closures. The closure
+    captures ``plan`` and ``audit`` so the ``ReplayVersions`` branch can
+    stash version_remap / item_id_remap onto the plan and emit per-version
+    audit sub-records.
     """
     rest_client = client.rest_client
 
     def _apply(action: Any) -> None:
-        _apply_action(client, rest_client, action)
+        _apply_action(client, rest_client, action, plan=plan, audit=audit)
 
     execute_plan_loop(
         plan.actions,
@@ -58,7 +63,14 @@ def record_planned(plan: MigrationPlan, audit: AuditLog) -> None:
     record_planned_loop(plan.actions, audit, details_fn=_action_details)
 
 
-def _apply_action(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
+def _apply_action(
+    client: opik.Opik,
+    rest_client: OpikApi,
+    action: object,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
     # Workspace-mutating REST writes are wrapped with the SDK's 429-aware
     # retry helper so a transient rate limit doesn't abort a half-finished
     # migration. Reads (find_datasets, find_projects, retrieve_project,
@@ -97,6 +109,8 @@ def _apply_action(client: opik.Opik, rest_client: OpikApi, action: object) -> No
         _copy_items(client, action)
     elif isinstance(action, CopyTestSuiteConfig):
         _copy_test_suite_config(rest_client, action)
+    elif isinstance(action, ReplayVersions):
+        _replay_versions(rest_client, action, plan=plan, audit=audit)
     else:
         raise TypeError(f"Unknown migration action: {type(action).__name__}")
 
@@ -149,6 +163,43 @@ def _copy_items(client: opik.Opik, action: CopyCurrentItems) -> None:
         spinner="dots",
     ):
         dest.__internal_api__insert_items_as_dataclasses__(rebuilt)
+
+
+def _replay_versions(
+    rest_client: OpikApi,
+    action: ReplayVersions,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
+    """Resolve target id and run the per-version replay loop.
+
+    The destination dataset was created by the prior ``CreateDestination``
+    action with zero versions. ``replay_all_versions`` handles the cold
+    start itself by minting target v1 via the BE-natural write path that
+    matches the source v1's shape (content via
+    ``create_or_update_dataset_items`` or config-only via
+    ``apply_dataset_item_changes(base_version=null, override=true)``) so
+    target version count == source version count — no leading empty seed.
+    """
+    dest = rest_client.datasets.get_dataset_by_identifier(
+        dataset_name=action.dest_name, project_name=action.dest_project_name
+    )
+
+    with _console.status(f"Replaying versions → {action.dest_name}…", spinner="dots"):
+        result = replay_all_versions(
+            rest_client,
+            source_dataset_id=action.source_dataset_id,
+            source_name_after_rename=action.source_name_after_rename,
+            source_project_name=action.source_project_name,
+            dest_dataset_id=dest.id,
+            dest_name=action.dest_name,
+            dest_project_name=action.dest_project_name,
+            audit=audit,
+        )
+
+    plan.version_remap.update(result.version_remap)
+    plan.item_id_remap.update(result.item_id_remap)
 
 
 def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -> None:
@@ -232,5 +283,14 @@ def _action_details(action: object) -> Dict[str, Any]:
             "source_dataset_id": action.source_dataset_id,
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
+        }
+    if isinstance(action, ReplayVersions):
+        return {
+            "type": "replay_versions",
+            "from_dataset": action.source_name_after_rename,
+            "from_project": action.source_project_name,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
+            "is_test_suite": action.is_test_suite,
         }
     raise TypeError(f"Unknown migration action: {type(action).__name__}")

@@ -26,6 +26,7 @@ from .datasets.planner import (
     CreateDestination,
     MigrationPlan,
     RenameSource,
+    ReplayVersions,
     build_dataset_plan,
 )
 from .errors import MigrationError, safe_error_string
@@ -58,12 +59,15 @@ def migrate_group(
 
     \b
     Commands:
-        dataset    Migrate a dataset (and its current items) into a destination project
+        dataset    Migrate a dataset (and its full version history) into a destination project
 
     \b
     Examples:
-        # Migrate a dataset into project B (renames source to "<name>_v1")
+        # Migrate a dataset (full version history) into project B
         opik migrate dataset "MyDataset" --to-project=B
+
+        # Migrate only the current items (skip version history)
+        opik migrate dataset "MyDataset" --to-project=B --exclude-versions
 
         # Preview the migration without touching the backend
         opik migrate dataset "MyDataset" --to-project=B --dry-run
@@ -144,6 +148,14 @@ def _finalize_and_fail(
     help="Source project name. Omit to look up workspace-scoped datasets.",
 )
 @click.option(
+    "--exclude-versions",
+    is_flag=True,
+    help=(
+        "Skip version-history replay. Only the source's current items are "
+        "copied (one version on the target). Equivalent to Slice 1 behaviour."
+    ),
+)
+@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -160,22 +172,25 @@ def migrate_dataset_command(
     name: str,
     to_project: str,
     from_project: Optional[str],
+    exclude_versions: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
-    """Migrate a dataset (and its current items) into --to-project.
+    """Migrate a dataset (and its full version history) into --to-project.
 
     \b
     Steps performed (in order):
         1. Rename source to "<name>_v1"
         2. Create the destination dataset under --to-project
         3. (Test suites only) Apply suite-level evaluators + execution_policy
-        4. Copy the source's current items into the destination
+        4. Replay every source version onto the destination, OR (with
+           --exclude-versions) copy the source's current items only
     """
     args = {
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
+        "exclude_versions": exclude_versions,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -189,6 +204,7 @@ def migrate_dataset_command(
             name=name,
             to_project=to_project,
             from_project=from_project,
+            exclude_versions=exclude_versions,
         )
 
         _print_plan(plan)
@@ -243,5 +259,11 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "copy suite config",
                 f"latest evaluators + execution_policy → {action.dest_name}",
+            )
+        elif isinstance(action, ReplayVersions):
+            table.add_row(
+                str(idx),
+                "replay versions",
+                f"{action.source_name_after_rename} → {action.dest_name} (full history)",
             )
     console.print(table)
