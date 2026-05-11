@@ -19,6 +19,7 @@ import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.agent.tool.ToolSpecification;
@@ -63,6 +64,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
     @Mock
     private OnlineScoringConfig onlineScoringConfig;
+    @Mock
+    private ServiceTogglesConfig serviceTogglesConfig;
     @Mock
     private RedissonReactiveClient redissonClient;
     @Mock
@@ -118,6 +121,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         scorer = new OnlineScoringLlmAsJudgeScorer(
                 onlineScoringConfig,
+                serviceTogglesConfig,
                 redissonClient,
                 feedbackScoreService,
                 aiProxyService,
