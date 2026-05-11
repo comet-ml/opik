@@ -699,6 +699,10 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
 
     if (wasLastUnprocessed) {
       setCurrentView(WORKFLOW_STATUS.COMPLETED);
+    } else if (isCurrentItemProcessed) {
+      if (currentIndex < queueItems.length - 1) {
+        setCurrentIndex(currentIndex + 1);
+      }
     } else {
       handleNextUnprocessed();
     }
@@ -714,6 +718,9 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
     handleNextUnprocessed,
     unprocessedIds,
     setCurrentView,
+    isCurrentItemProcessed,
+    currentIndex,
+    queueItems.length,
   ]);
 
   useEffect(() => {
