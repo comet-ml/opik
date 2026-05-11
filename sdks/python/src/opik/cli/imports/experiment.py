@@ -382,6 +382,9 @@ def recreate_experiment(
     dataset_item_id_map: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
     debug: bool = False,
+    target_project_name: Optional[str] = None,
+    target_dataset_name: Optional[str] = None,
+    target_dataset_version_id: Optional[str] = None,
 ) -> bool:
     """Recreate a single experiment from exported data.
 
@@ -393,6 +396,17 @@ def recreate_experiment(
         dataset_item_id_map: Mapping from original dataset_item_id to new dataset_item_id (optional)
         dry_run: If True, only simulate the import without making changes
         debug: If True, print debug messages
+        target_project_name: When set, the experiment is created in this project at the
+            destination (used by ``opik migrate dataset``). When ``None`` (default,
+            import-from-disk path), the experiment lands in the client's default project
+            and ``project_name`` is recorded in metadata only.
+        target_dataset_name: When set, override the dataset name on the destination
+            experiment (used by migrate when the dataset was renamed at the target).
+            Defaults to the source experiment's ``dataset_name``.
+        target_dataset_version_id: When set, the destination experiment is pinned to
+            this dataset version. Migrate passes the remapped version id from Slice 2's
+            ``version_remap``. When ``None``, the experiment is unpinned (server picks
+            the current dataset version).
 
     Note: This function expects that traces and datasets have already been imported into the target workspace.
     When traces are imported, they receive new IDs. The trace_id_map maps original trace IDs
@@ -408,7 +422,9 @@ def recreate_experiment(
     experiment_name = (
         experiment_info.get("name") or f"recreated-{experiment_info['id']}"
     )
-    dataset_name = experiment_info["dataset_name"]
+    source_dataset_name = experiment_info["dataset_name"]
+    destination_dataset_name = target_dataset_name or source_dataset_name
+    is_migrate_path = target_project_name is not None
 
     console.print(f"[blue]Recreating experiment: {experiment_name}[/blue]")
 
@@ -419,22 +435,32 @@ def recreate_experiment(
         return True
 
     try:
-        # Get or create the dataset
-        # Ensure dataset is in the same workspace as the client
+        # Get or create the dataset.
+        # In the migrate path the dataset already exists at the destination (created
+        # by Slice 1/2); this call is a no-op fetch and ensures the experiment binds
+        # to the destination-project copy rather than the client's default.
         _ = client.get_or_create_dataset(
-            name=dataset_name,
+            name=destination_dataset_name,
             description=f"Recreated dataset for experiment {experiment_name}",
+            project_name=target_project_name,
         )
 
         debug_print(
-            f"Using dataset '{dataset_name}' for experiment '{experiment_name}'",
+            f"Using dataset '{destination_dataset_name}' for experiment '{experiment_name}'",
             debug,
         )
 
-        # Ensure project_name is in metadata for future imports
         experiment_metadata = experiment_info.get("metadata") or {}
+        experiment_metadata = experiment_metadata.copy() if experiment_metadata else {}
+
+        # Migrate path: strip prompt_versions pointers — destination prompt entity
+        # isn't migrated (epic decision: avoid dangling UI links, accept loss).
+        # Prompt content stays inline in experiment_config["prompts"].
+        if is_migrate_path:
+            experiment_metadata.pop("prompt_versions", None)
+
+        # Ensure project_name is in metadata for future imports
         if project_name and "project_name" not in experiment_metadata:
-            experiment_metadata = experiment_metadata.copy()
             experiment_metadata["project_name"] = project_name
             debug_print(
                 f"Adding project_name '{project_name}' to experiment metadata",
@@ -451,13 +477,30 @@ def recreate_experiment(
             or {}
         )
 
-        # Create the experiment
-        experiment = client.create_experiment(
-            dataset_name=dataset_name,
-            name=experiment_name,
-            experiment_config=experiment_metadata,
-            type=experiment_info.get("type", "regular"),
-        )
+        # Create the experiment.
+        # Migrate path forwards fidelity fields (evaluation_method, tags,
+        # dataset_version_id, project_name) verbatim; the import-from-disk
+        # path is unchanged to avoid silently altering historical import
+        # behavior. ``optimization_id`` is deliberately NOT forwarded on the
+        # migrate path: Slice 3 doesn't cascade the optimization entity, so
+        # the pointer would dangle. Same policy as ``prompt_versions`` above
+        # (strip rather than leave broken UI links). Slice 4 can repopulate
+        # via a remap when it ships the optimization cascade.
+        create_kwargs: Dict[str, Any] = {
+            "dataset_name": destination_dataset_name,
+            "name": experiment_name,
+            "experiment_config": experiment_metadata,
+            "type": experiment_info.get("type", "regular"),
+        }
+        if is_migrate_path:
+            create_kwargs["evaluation_method"] = experiment_info.get(
+                "evaluation_method", "dataset"
+            )
+            create_kwargs["tags"] = experiment_info.get("tags")
+            create_kwargs["dataset_version_id"] = target_dataset_version_id
+            create_kwargs["project_name"] = target_project_name
+
+        experiment = client.create_experiment(**create_kwargs)
 
         debug_print(
             f"Created experiment '{experiment_name}' with ID: {experiment.id}",
@@ -538,7 +581,17 @@ def recreate_experiment(
                 debug,
             )
 
-            # Create experiment item with mapped IDs
+            # Create experiment item with mapped IDs. Only the four FK
+            # fields are forwarded -- the BE's ExperimentItem Write view
+            # accepts only id/experiment_id/dataset_item_id/trace_id (plus
+            # project_name). Other fields like input/output/feedback_scores/
+            # assertion_results/execution_policy are READ-ONLY on the BE
+            # (Compare view); they're computed/aggregated from the
+            # underlying trace + span + assertion_results entities. The
+            # cascade ensures those entities carry the right data; the BE
+            # surfaces them on read. Trace-scoped assertion_results in
+            # particular are written via the dedicated
+            # ``assertion_results.store_assertions_batch`` endpoint.
             try:
                 experiment_item_id = id_helpers_module.generate_id()
                 rest_experiment_items.append(
