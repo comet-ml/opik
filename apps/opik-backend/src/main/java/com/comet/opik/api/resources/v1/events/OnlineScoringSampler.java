@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
@@ -11,6 +12,7 @@ import com.comet.opik.api.events.TraceToScoreLlmAsJudge;
 import com.comet.opik.api.events.TraceToScoreUserDefinedMetricPython;
 import com.comet.opik.api.events.TracesCreated;
 import com.comet.opik.api.events.TracesUpdated;
+import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.OnlineScorePublisher;
@@ -57,6 +59,7 @@ public class OnlineScoringSampler {
     private final AutomationRuleEvaluatorService ruleEvaluatorService;
     private final TraceFilterEvaluationService filterEvaluationService;
     private final TraceService traceService;
+    private final ProjectService projectService;
     private final SecureRandom secureRandom;
     private final Logger userFacingLogger;
     private final ServiceTogglesConfig serviceTogglesConfig;
@@ -67,12 +70,14 @@ public class OnlineScoringSampler {
             @NonNull AutomationRuleEvaluatorService ruleEvaluatorService,
             @NonNull TraceFilterEvaluationService filterEvaluationService,
             @NonNull OnlineScorePublisher onlineScorePublisher,
-            @NonNull TraceService traceService) throws NoSuchAlgorithmException {
+            @NonNull TraceService traceService,
+            @NonNull ProjectService projectService) throws NoSuchAlgorithmException {
         this.ruleEvaluatorService = ruleEvaluatorService;
         this.filterEvaluationService = filterEvaluationService;
         this.onlineScorePublisher = onlineScorePublisher;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceService = traceService;
+        this.projectService = projectService;
         secureRandom = SecureRandom.getInstanceStrong();
         userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringSampler.class);
     }
@@ -133,6 +138,19 @@ public class OnlineScoringSampler {
             log.info("No traces to score for workspace '{}'", workspaceId);
             return;
         }
+
+        // TraceDAO.findByIds (used by the onTracesUpdated path) populates projectId but not
+        // projectName — the ClickHouse traces table doesn't carry the name. Downstream,
+        // FeedbackScoreService.processScoreBatch groups by projectName and resolves projectId
+        // from it, so a null name there causes every score to land in "Default Project".
+        // Stamp the name back on, resolved once per project from MySQL, before publishing the
+        // scoring event.
+        Map<UUID, String> projectNamesById = stampProjectNames(traces, workspaceId);
+        traces = traces.stream()
+                .map(trace -> trace.projectName() != null
+                        ? trace
+                        : trace.toBuilder().projectName(projectNamesById.get(trace.projectId())).build())
+                .toList();
 
         var tracesByProject = traces.stream().collect(Collectors.groupingBy(Trace::projectId));
 
@@ -214,6 +232,19 @@ public class OnlineScoringSampler {
                 }
             });
         });
+    }
+
+    private Map<UUID, String> stampProjectNames(List<Trace> traces, String workspaceId) {
+        Set<UUID> missingNameProjectIds = traces.stream()
+                .filter(trace -> trace.projectName() == null)
+                .map(Trace::projectId)
+                .filter(java.util.Objects::nonNull)
+                .collect(Collectors.toSet());
+        if (missingNameProjectIds.isEmpty()) {
+            return Map.of();
+        }
+        return projectService.findByIds(workspaceId, missingNameProjectIds).stream()
+                .collect(Collectors.toMap(Project::id, Project::name));
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {

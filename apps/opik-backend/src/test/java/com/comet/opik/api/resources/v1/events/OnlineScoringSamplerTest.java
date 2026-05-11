@@ -76,6 +76,9 @@ class OnlineScoringSamplerTest {
     @Mock
     private TraceService traceService;
 
+    @Mock
+    private com.comet.opik.domain.ProjectService projectService;
+
     private OnlineScoringSampler onlineScoringSampler;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
 
@@ -94,7 +97,8 @@ class OnlineScoringSamplerTest {
                 ruleEvaluatorService,
                 new TraceFilterEvaluationService(),
                 onlineScorePublisher,
-                traceService);
+                traceService,
+                projectService);
 
         projectId = UUID.randomUUID();
         workspaceId = UUID.randomUUID().toString();
