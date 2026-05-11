@@ -684,6 +684,26 @@ public class OnlineScoringEngine {
      * even when the context exceeds the size threshold (which may overflow the model's
      * window — in that case the operator should pick a different model for those workloads).
      */
+    /**
+     * Shape-only summary of the rendered Python evaluator input for user-facing logs.
+     * Values are rendered trace/span content (input/output/metadata/spans); logging them
+     * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
+     * so we surface key names and sizes only.
+     */
+    public static String summarizeEvaluatorInput(Map<String, Object> data) {
+        var parts = data.entrySet().stream()
+                .map(e -> {
+                    var v = e.getValue();
+                    if (v instanceof List<?> list) {
+                        return String.format("%s=list(%d)", e.getKey(), list.size());
+                    }
+                    var s = v == null ? "" : v.toString();
+                    return String.format("%s=%dc", e.getKey(), s.length());
+                })
+                .collect(Collectors.joining(", "));
+        return String.format("arguments=[%s]", parts);
+    }
+
     public static boolean supportsToolCalling(LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;

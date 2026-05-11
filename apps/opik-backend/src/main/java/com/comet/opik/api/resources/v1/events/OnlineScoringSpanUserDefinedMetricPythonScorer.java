@@ -102,8 +102,10 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
             try {
                 var data = new LinkedHashMap<String, Object>(
                         OnlineScoringEngine.toReplacements(message.code().arguments(), span));
-                userFacingLogger.info("Sending spanId '{}' to Python evaluator using the following input:\n\n{}",
-                        span.id(), data);
+                if (userFacingLogger.isInfoEnabled()) {
+                    userFacingLogger.info("Sending spanId '{}' to Python evaluator: {}",
+                            span.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
+                }
                 return data;
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for spanId '{}': \n\n{}",
