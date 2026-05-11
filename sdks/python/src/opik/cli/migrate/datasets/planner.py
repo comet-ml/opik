@@ -21,15 +21,16 @@ from .resolver import (
     resolve_source,
 )
 
-# Slice 1 supports plain datasets and test suites. Test suites (type
-# 'evaluation_suite') carry suite-level evaluators + execution_policy as
-# versioned config; we copy the LATEST version's config onto the target.
+# The migrate command supports plain datasets and test suites. Test suites
+# (type 'evaluation_suite') carry suite-level evaluators + execution_policy
+# as versioned config; ``ReplayVersions`` walks every source version and
+# reproduces the suite-config history on the target natively.
 SUPPORTED_DATASET_TYPES = {None, "dataset", "evaluation_suite"}
 TEST_SUITE_TYPE = "evaluation_suite"
 
 # Hardcoded suffix appended to the source dataset's name during the rename
-# step. Slice 1 doesn't expose this as a flag; if a future slice needs it
-# configurable the planner is the right place to add it.
+# step. Not exposed as a flag today; if a future need surfaces, the planner
+# is the right place to add a parameter.
 SOURCE_SUFFIX = "_v1"
 
 
@@ -60,42 +61,18 @@ class CreateDestination:
 
 
 @dataclass(frozen=True)
-class CopyCurrentItems:
-    source_dataset_id: str
-    source_name_after_rename: str
-    source_project_name: Optional[str]
-    dest_name: str
-    dest_project_name: str
-
-
-@dataclass(frozen=True)
-class CopyTestSuiteConfig:
-    """Copy the source's LATEST suite-level evaluators + execution_policy.
-
-    Only emitted when source.type == 'evaluation_suite'. Reads from the
-    source's most recent dataset version and applies the same payload to the
-    target via apply_dataset_item_changes(override=True), creating one
-    initial version on the target with the same suite-level config.
-    """
-
-    source_dataset_id: str
-    dest_name: str
-    dest_project_name: str
-
-
-@dataclass(frozen=True)
 class ReplayVersions:
     """Replay every source dataset version onto the destination.
 
-    Replaces ``CopyCurrentItems`` when version-history replay is on (the
-    Slice 2 default). Iterates source versions chronologically, computing
-    the (adds, modifications, deletions) delta for each and applying it via
+    Iterates source versions chronologically, computing the (adds,
+    modifications, deletions) delta for each and applying it via
     ``apply_dataset_item_changes`` so the target accumulates one new
     version per source version with the same semantic content.
 
     The executor populates ``MigrationPlan.version_remap`` and
-    ``MigrationPlan.item_id_remap`` after this action runs; Slice 3 reads
-    those maps to remap experiment FK references.
+    ``MigrationPlan.item_id_remap`` after this action runs;
+    ``CascadeExperiments`` reads those maps to remap experiment FK
+    references.
     """
 
     source_dataset_id: str
@@ -110,17 +87,17 @@ class ReplayVersions:
 class CascadeExperiments:
     """Cascade every experiment referencing the source dataset.
 
-    Slice 3's umbrella action — fires once per source dataset and internally
-    loops over every experiment that referenced it. Reuses Slice 2's
-    ``version_remap`` and ``item_id_remap`` (already populated on the plan
-    by ``ReplayVersions``) to rewrite each experiment's
-    ``dataset_version_id`` / ``dataset_item_id`` FK fields, and builds its
-    own ``trace_id`` remap as traces ride along with the experiments.
+    Umbrella action — fires once per source dataset and internally loops
+    over every experiment that referenced it. Reuses ``ReplayVersions``'s
+    ``version_remap`` and ``item_id_remap`` (already populated on the plan)
+    to rewrite each experiment's ``dataset_version_id`` /
+    ``dataset_item_id`` FK fields, and builds its own ``trace_id`` remap as
+    traces ride along with the experiments.
 
     Per-experiment failures stop the cascade (the audit log captures
     partial progress on the ``failed`` entry). Per-item missing-trace /
     missing-item conditions are tallied as skip counters rather than
-    failures, matching Slice 1/2's ``skipped_items`` semantics.
+    failures.
     """
 
     source_dataset_id: str
@@ -135,14 +112,13 @@ class MigrationPlan(BaseMigrationPlan):
     Inherits the shared ``source`` / ``actions`` shape from
     ``BaseMigrationPlan`` and narrows ``source`` to ``ResolvedDataset``.
     The action list contains dataset-specific records (``RenameSource``,
-    ``CreateDestination``, ``CopyTestSuiteConfig``, ``CopyCurrentItems``,
-    ``ReplayVersions``, ``CascadeExperiments``).
+    ``CreateDestination``, ``ReplayVersions``, ``CascadeExperiments``).
 
     The executor sets ``version_remap`` / ``item_id_remap`` on the plan
-    after a successful ``ReplayVersions`` run; Slice 3's
-    ``CascadeExperiments`` reads them to remap experiment foreign-key
-    references and writes ``trace_id_remap`` for Slice 4 (optimizations
-    will need the same trace map to remap their own references).
+    after a successful ``ReplayVersions`` run; ``CascadeExperiments``
+    reads them to remap experiment foreign-key references and writes
+    ``trace_id_remap`` for downstream consumers (e.g. the optimization
+    cascade in OPIK-6417).
     """
 
     source: ResolvedDataset
@@ -158,8 +134,6 @@ def build_dataset_plan(
     name: str,
     to_project: str,
     from_project: Optional[str],
-    exclude_versions: bool = False,
-    exclude_experiments: bool = False,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
@@ -167,26 +141,17 @@ def build_dataset_plan(
     create, so the workspace-unique-name constraint never trips. The target
     keeps the source's original name.
 
-    ``exclude_versions=False`` (default since Slice 2) emits a
-    ``ReplayVersions`` action that walks the source's full version history;
-    ``exclude_versions=True`` emits a ``CopyCurrentItems`` action that
-    matches Slice 1's "current items only" behaviour.
+    The plan emits, in order:
 
-    ``exclude_experiments=False`` (default since Slice 3) appends a
-    ``CascadeExperiments`` action that recreates every experiment
-    referencing the source dataset under the destination project, copying
-    traces + spans along. ``exclude_experiments=True`` skips the cascade
-    entirely (the dataset moves alone). The combination
-    ``exclude_versions=True`` + ``exclude_experiments=False`` is rejected:
-    experiments reference specific dataset versions, and a current-items-
-    only copy doesn't preserve the version IDs the experiments need.
+      1. ``RenameSource`` — frees the source's name for the destination.
+      2. ``CreateDestination`` — creates the target dataset under ``to_project``.
+      3. ``ReplayVersions`` — replays every source dataset version onto
+         the target, populating ``plan.version_remap`` and
+         ``plan.item_id_remap``.
+      4. ``CascadeExperiments`` — recreates every experiment referencing
+         the source dataset under the destination project, with traces +
+         spans riding along.
     """
-    if exclude_versions and not exclude_experiments:
-        raise ValueError(
-            "--exclude-versions requires --exclude-experiments: experiments "
-            "reference specific dataset versions, and skipping version-history "
-            "replay leaves no remap entries for them to resolve against."
-        )
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(rest_client, to_project)
@@ -246,57 +211,26 @@ def build_dataset_plan(
         )
     )
 
-    # Test-suite config: only emit ``CopyTestSuiteConfig`` for the slice 1
-    # path (``--exclude-versions``). When replay is on, ``ReplayVersions``
-    # forwards the per-version suite-level evaluators / execution_policy on
-    # every apply call, so it reproduces the full suite-config history
-    # natively — adding ``CopyTestSuiteConfig`` on top would just create
-    # an extra leading version on the target that the source never had.
-    # Slice 1 needs ``CopyTestSuiteConfig`` because its current-items copy
-    # path goes through ``Dataset.insert()`` which doesn't carry suite-level
-    # config; without the prior config-only version, the target test suite
-    # would lose its evaluators/policy entirely.
-    if is_test_suite and exclude_versions:
-        plan.actions.append(
-            CopyTestSuiteConfig(
-                source_dataset_id=source.id,
-                dest_name=source.name,
-                dest_project_name=to_project,
-            )
+    plan.actions.append(
+        ReplayVersions(
+            source_dataset_id=source.id,
+            source_name_after_rename=name_after_rename,
+            source_project_name=source.project_name,
+            dest_name=source.name,
+            dest_project_name=to_project,
+            is_test_suite=is_test_suite,
         )
-
-    if exclude_versions:
-        plan.actions.append(
-            CopyCurrentItems(
-                source_dataset_id=source.id,
-                source_name_after_rename=name_after_rename,
-                source_project_name=source.project_name,
-                dest_name=source.name,
-                dest_project_name=to_project,
-            )
-        )
-    else:
-        plan.actions.append(
-            ReplayVersions(
-                source_dataset_id=source.id,
-                source_name_after_rename=name_after_rename,
-                source_project_name=source.project_name,
-                dest_name=source.name,
-                dest_project_name=to_project,
-                is_test_suite=is_test_suite,
-            )
-        )
+    )
 
     # Cascade experiments must run AFTER ReplayVersions so that
     # plan.version_remap / plan.item_id_remap are populated when the
     # cascade reads them.
-    if not exclude_experiments:
-        plan.actions.append(
-            CascadeExperiments(
-                source_dataset_id=source.id,
-                dest_name=source.name,
-                dest_project_name=to_project,
-            )
+    plan.actions.append(
+        CascadeExperiments(
+            source_dataset_id=source.id,
+            dest_name=source.name,
+            dest_project_name=to_project,
         )
+    )
 
     return plan

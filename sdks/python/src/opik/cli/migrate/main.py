@@ -22,8 +22,6 @@ from .audit import AuditLog, default_audit_path
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
     CascadeExperiments,
-    CopyCurrentItems,
-    CopyTestSuiteConfig,
     CreateDestination,
     MigrationPlan,
     RenameSource,
@@ -64,11 +62,8 @@ def migrate_group(
 
     \b
     Examples:
-        # Migrate a dataset (full version history) into project B
+        # Migrate a dataset (full version history + experiments cascade)
         opik migrate dataset "MyDataset" --to-project=B
-
-        # Migrate only the current items (skip version history)
-        opik migrate dataset "MyDataset" --to-project=B --exclude-versions
 
         # Preview the migration without touching the backend
         opik migrate dataset "MyDataset" --to-project=B --dry-run
@@ -149,24 +144,6 @@ def _finalize_and_fail(
     help="Source project name. Omit to look up workspace-scoped datasets.",
 )
 @click.option(
-    "--exclude-versions",
-    is_flag=True,
-    help=(
-        "Skip version-history replay. Only the source's current items are "
-        "copied (one version on the target). Equivalent to Slice 1 behaviour. "
-        "Requires --exclude-experiments."
-    ),
-)
-@click.option(
-    "--exclude-experiments",
-    is_flag=True,
-    help=(
-        "Skip cascading experiments + traces + spans into the destination "
-        "project. Only the dataset itself moves; experiments stay attached "
-        "to the renamed source dataset."
-    ),
-)
-@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -183,8 +160,6 @@ def migrate_dataset_command(
     name: str,
     to_project: str,
     from_project: Optional[str],
-    exclude_versions: bool,
-    exclude_experiments: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -194,25 +169,13 @@ def migrate_dataset_command(
     Steps performed (in order):
         1. Rename source to "<name>_v1"
         2. Create the destination dataset under --to-project
-        3. (Test suites only) Apply suite-level evaluators + execution_policy
-        4. Replay every source version onto the destination, OR (with
-           --exclude-versions) copy the source's current items only
-        5. Cascade experiments + traces + spans into the destination project
-           (skipped with --exclude-experiments)
+        3. Replay every source version onto the destination (full history)
+        4. Cascade experiments + traces + spans into the destination project
     """
-    if exclude_versions and not exclude_experiments:
-        raise click.UsageError(
-            "--exclude-versions requires --exclude-experiments: experiments "
-            "reference specific dataset versions, and a current-items-only "
-            "copy doesn't preserve the version IDs the experiments need."
-        )
-
     args = {
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
-        "exclude_versions": exclude_versions,
-        "exclude_experiments": exclude_experiments,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -226,8 +189,6 @@ def migrate_dataset_command(
             name=name,
             to_project=to_project,
             from_project=from_project,
-            exclude_versions=exclude_versions,
-            exclude_experiments=exclude_experiments,
         )
 
         _print_plan(plan)
@@ -270,18 +231,6 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "create destination",
                 f"{action.name} (project: {action.project_name})",
-            )
-        elif isinstance(action, CopyCurrentItems):
-            table.add_row(
-                str(idx),
-                "copy items",
-                f"{action.source_name_after_rename} → {action.dest_name}",
-            )
-        elif isinstance(action, CopyTestSuiteConfig):
-            table.add_row(
-                str(idx),
-                "copy suite config",
-                f"latest evaluators + execution_policy → {action.dest_name}",
             )
         elif isinstance(action, ReplayVersions):
             table.add_row(

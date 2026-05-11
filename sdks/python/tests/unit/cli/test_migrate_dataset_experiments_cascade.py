@@ -27,9 +27,6 @@ from unittest.mock import MagicMock
 import datetime as dt
 import pytest
 
-from click.testing import CliRunner
-
-from opik.cli import cli
 from opik.cli.migrate.datasets import experiments as cascade_module
 from opik.cli.migrate.datasets import planner as planner_module
 from opik.cli.migrate.datasets.experiments import (
@@ -723,30 +720,11 @@ class TestCascadeExperiments:
 
 
 # ---------------------------------------------------------------------------
-# Planner-level tests for ``--exclude-experiments`` gating
+# Planner-level test for cascade action placement in the plan
 # ---------------------------------------------------------------------------
 
 
-class TestPlannerCascadeGate:
-    def test_exclude_experiments__plan_omits_cascade_action(self) -> None:
-        rest_client = _planner_rest_client(
-            [
-                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
-                _Page([]),
-            ]
-        )
-
-        plan = planner_module.build_dataset_plan(
-            rest_client=rest_client,
-            name="MyDataset",
-            to_project="B",
-            from_project=None,
-            exclude_experiments=True,
-        )
-
-        types = [type(a).__name__ for a in plan.actions]
-        assert "CascadeExperiments" not in types
-
+class TestPlannerCascadePlacement:
     def test_default__plan_includes_cascade_after_replay(self) -> None:
         rest_client = _planner_rest_client(
             [
@@ -766,39 +744,6 @@ class TestPlannerCascadeGate:
         # CascadeExperiments must come AFTER ReplayVersions so the cascade
         # reads a populated version_remap / item_id_remap from the plan.
         assert types.index("CascadeExperiments") > types.index("ReplayVersions")
-
-
-# ---------------------------------------------------------------------------
-# CLI-level tests for the new flag + validation
-# ---------------------------------------------------------------------------
-
-
-class TestMigrateDatasetCliFlag:
-    def test_help__lists_exclude_experiments(self) -> None:
-        runner = CliRunner()
-        result = runner.invoke(cli, ["migrate", "dataset", "--help"])
-        assert result.exit_code == 0
-        assert "--exclude-experiments" in result.output
-
-    def test_exclude_versions_without_exclude_experiments__usage_error(
-        self,
-    ) -> None:
-        # Pure CLI validation: should fail BEFORE any backend call.
-        runner = CliRunner()
-        result = runner.invoke(
-            cli,
-            [
-                "migrate",
-                "dataset",
-                "MyDataset",
-                "--to-project",
-                "B",
-                "--exclude-versions",
-            ],
-        )
-        # Click ``UsageError`` exits with code 2.
-        assert result.exit_code == 2
-        assert "exclude-experiments" in result.output
 
 
 # ---------------------------------------------------------------------------
