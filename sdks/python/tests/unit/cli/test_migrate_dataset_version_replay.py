@@ -970,6 +970,58 @@ class TestVersionReplayUnit:
         assert v2_request["metadata"] == {"author": "ada", "experiment": "42"}
         assert v2_request["tags"] == ["baseline", "v1.0"]
 
+    def test_replay__progress_callback_fires_once_per_version(self) -> None:
+        # The CLI's Rich Progress bar needs per-version progress signals.
+        # ``replay_all_versions`` must invoke the optional ``progress_callback``
+        # once before each source version begins, with ``(completed_count,
+        # total, version_label)``. Pin: 3 source versions → 3 callback invocations
+        # with completed counts 0, 1, 2 and total = 3 every time.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1", version_name="v1"),
+                _SourceVersion(id="src-v2", version_hash="hv2", version_name="v2"),
+                _SourceVersion(id="src-v3", version_hash="hv3", version_name="v3"),
+            ],
+            items_per_version={
+                "hv1": [_ds_item("a", x=1)],
+                "hv2": [_ds_item("a", x=1), _ds_item("b", y=2)],
+                "hv3": [_ds_item("a", x=1), _ds_item("b", y=2), _ds_item("c", z=3)],
+                "tgt-h1": [_ds_item("tgt-a", x=1)],
+                "tgt-h2": [_ds_item("tgt-a", x=1), _ds_item("tgt-b", y=2)],
+                "tgt-h3": [
+                    _ds_item("tgt-a", x=1),
+                    _ds_item("tgt-b", y=2),
+                    _ds_item("tgt-c", z=3),
+                ],
+            },
+            applied_versions=[
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
+                _AppliedVersion(id="tgt-v3", version_hash="tgt-h3"),
+            ],
+        )
+
+        events: List[tuple] = []
+
+        def _cb(completed: int, total: int, label: str) -> None:
+            events.append((completed, total, label))
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+            progress_callback=_cb,
+        )
+
+        assert events == [(0, 3, "v1"), (1, 3, "v2"), (2, 3, "v3")]
+
     def test_replay__base_version_chains_across_calls(self) -> None:
         # Each apply call's base_version must be the previous response's id —
         # not a stale value, not the initial. Pin this so a refactor that

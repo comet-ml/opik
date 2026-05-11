@@ -28,7 +28,7 @@ import hashlib
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set
 
 from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.rest_api import OpikApi
@@ -114,6 +114,7 @@ def replay_all_versions(
     dest_name: str,
     dest_project_name: str,
     audit: AuditLog,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
 ) -> ReplayResult:
     """Replay every source version onto the destination in chronological order.
 
@@ -131,6 +132,12 @@ def replay_all_versions(
     one entry per replayed version (the per-version progress requirement
     from the ticket). The outer ``replay_versions`` action's audit
     bracketing is handled by the executor.
+
+    ``progress_callback`` is invoked once before each version begins with
+    ``(completed_count, total_versions, source_version_label)`` so callers
+    can drive a progress bar. Keeping the UI concern in the callback (not
+    in this module) means tests don't have to stub Rich; the executor owns
+    the live progress display.
     """
     versions = list(_iter_source_versions_chronological(rest_client, source_dataset_id))
     result = ReplayResult()
@@ -140,10 +147,14 @@ def replay_all_versions(
         # is left as the empty shell produced by CreateDestination.
         return result
 
+    total = len(versions)
     prev_items_by_id: Dict[str, _SourceItem] = {}
     base_version_id: Optional[str] = None
 
     for index, source_version in enumerate(versions):
+        if progress_callback is not None:
+            label = source_version.version_name or f"v{index + 1}"
+            progress_callback(index, total, label)
         curr_items_by_id = _load_version_items(
             rest_client,
             source_name_after_rename=source_name_after_rename,

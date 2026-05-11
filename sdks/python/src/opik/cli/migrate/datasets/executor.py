@@ -9,12 +9,13 @@ audit-log payload shape per action type (``_action_details``).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import opik
 from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
 from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from ..audit import AuditLog
 from .._base import execute_plan_loop, record_planned_loop
@@ -186,7 +187,30 @@ def _replay_versions(
         dataset_name=action.dest_name, project_name=action.dest_project_name
     )
 
-    with _console.status(f"Replaying versions → {action.dest_name}…", spinner="dots"):
+    # Rich Progress bar driven by the per-version callback that
+    # ``replay_all_versions`` invokes before each version begins. The task is
+    # created lazily on the first callback (we don't know the total until
+    # source-version listing finishes) and advanced once per version. Keeping
+    # the UI here means the algorithmic core in ``version_replay`` stays
+    # console-agnostic.
+    with Progress(
+        TextColumn("[bold blue]Replaying versions"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.description}"),
+        console=_console,
+        transient=False,
+    ) as progress:
+        task_id: Optional[int] = None
+
+        def _on_version_start(completed: int, total: int, label: str) -> None:
+            nonlocal task_id
+            description = f"→ {action.dest_name} · {label} ({completed + 1}/{total})"
+            if task_id is None:
+                task_id = progress.add_task(description, total=total)
+            else:
+                progress.update(task_id, completed=completed, description=description)
+
         result = replay_all_versions(
             rest_client,
             source_dataset_id=action.source_dataset_id,
@@ -196,7 +220,14 @@ def _replay_versions(
             dest_name=action.dest_name,
             dest_project_name=action.dest_project_name,
             audit=audit,
+            progress_callback=_on_version_start,
         )
+
+        # Mark the bar fully complete (the callback fires BEFORE each version,
+        # so the last update leaves the bar at N-1; advance it to N once the
+        # loop returns successfully).
+        if task_id is not None:
+            progress.update(task_id, completed=result.versions_replayed)
 
     plan.version_remap.update(result.version_remap)
     plan.item_id_remap.update(result.item_id_remap)
