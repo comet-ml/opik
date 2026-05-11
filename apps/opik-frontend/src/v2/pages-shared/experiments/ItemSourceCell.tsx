@@ -206,9 +206,7 @@ export const createItemSourceGroupCell = <TData,>(
                 isDeleted={isDeleted}
               />
             ) : id ? (
-              <span className="comet-body-s block truncate">
-                {name ?? "-"}
-              </span>
+              <span className="comet-body-s block truncate">{name ?? "-"}</span>
             ) : (
               "-"
             )}
