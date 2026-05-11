@@ -88,7 +88,6 @@ public class LocalRunnersResource {
             @QueryParam("status") LocalRunnerStatus status,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunner.LocalRunnerPage runnerPage = runnerService.listRunners(workspaceId, userName, projectId, status,
@@ -102,7 +101,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "200", description = "Runner details", content = @Content(schema = @Schema(implementation = LocalRunner.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response getRunner(@PathParam("runnerId") UUID runnerId) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunner runner = runnerService.getRunner(workspaceId, userName, runnerId);
@@ -114,7 +112,6 @@ public class LocalRunnersResource {
     @Operation(operationId = "disconnectRunner", summary = "Disconnect local runner", description = "Disconnect a local runner, terminating its connection and failing any pending jobs", responses = {
             @ApiResponse(responseCode = "204", description = "No content")})
     public Response disconnectRunner(@PathParam("runnerId") UUID runnerId) {
-        ensureEnabled();
         runnerService.disconnectRunner(runnerId);
         return Response.noContent().build();
     }
@@ -128,7 +125,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response registerAgents(@PathParam("runnerId") UUID runnerId,
             @RequestBody(description = "Map of agent name to agent definition", content = @Content(schema = @Schema(implementation = Object.class))) @NotNull @Valid Map<String, LocalRunner.Agent> agents) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         endpointJobService.registerAgents(runnerId, workspaceId, userName, agents);
@@ -143,7 +139,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response patchChecklist(@PathParam("runnerId") UUID runnerId,
             @RequestBody(content = @Content(schema = @Schema(implementation = Object.class))) @NotNull JsonNode updates) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         runnerService.patchChecklist(runnerId, workspaceId, userName, updates);
@@ -159,7 +154,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "410", description = "Gone", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response heartbeat(@PathParam("runnerId") UUID runnerId,
             @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerHeartbeatRequest.class))) LocalRunnerHeartbeatRequest body) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunnerHeartbeatResponse response = runnerService.heartbeat(runnerId, workspaceId, userName,
@@ -177,7 +171,6 @@ public class LocalRunnersResource {
     public Response createJob(
             @RequestBody(content = @Content(schema = @Schema(implementation = CreateLocalRunnerJobRequest.class))) @NotNull @Valid CreateLocalRunnerJobRequest request,
             @Context UriInfo uriInfo) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID jobId = endpointJobService.createJob(workspaceId, userName, request);
@@ -195,7 +188,6 @@ public class LocalRunnersResource {
             @QueryParam("project_id") UUID projectId,
             @QueryParam("page") @DefaultValue("0") @Min(0) int page,
             @QueryParam("size") @DefaultValue("25") @Min(1) int size) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunnerJob.LocalRunnerJobPage jobPage = endpointJobService.listJobs(runnerId, projectId, workspaceId,
@@ -210,7 +202,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public void nextJob(@PathParam("runnerId") UUID runnerId,
             @Suspended AsyncResponse asyncResponse) {
-        ensureEnabled();
         long pollTimeoutSeconds = runnerConfig.getNextJobPollTimeout().toSeconds();
         long bufferSeconds = runnerConfig.getNextJobAsyncTimeoutBuffer().toSeconds();
         asyncResponse.setTimeout(pollTimeoutSeconds + bufferSeconds, TimeUnit.SECONDS);
@@ -240,7 +231,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "200", description = "Job details", content = @Content(schema = @Schema(implementation = LocalRunnerJob.class))),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response getJob(@PathParam("jobId") UUID jobId) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         LocalRunnerJob job = endpointJobService.getJob(jobId, workspaceId, userName);
@@ -254,7 +244,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response getJobLogs(@PathParam("jobId") UUID jobId,
             @QueryParam("offset") @DefaultValue("0") @Min(0) int offset) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         List<LocalRunnerLogEntry> logs = endpointJobService.getJobLogs(jobId, offset, workspaceId, userName);
@@ -270,7 +259,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response appendLogs(@PathParam("jobId") UUID jobId,
             @RequestBody(content = @Content(array = @ArraySchema(schema = @Schema(implementation = LocalRunnerLogEntry.class)))) @NotNull @Valid List<@NotNull LocalRunnerLogEntry> entries) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         endpointJobService.appendLogs(jobId, workspaceId, userName, entries);
@@ -285,7 +273,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response reportResult(@PathParam("jobId") UUID jobId,
             @RequestBody(content = @Content(schema = @Schema(implementation = LocalRunnerJobResultRequest.class))) @NotNull @Valid LocalRunnerJobResultRequest result) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         endpointJobService.reportResult(jobId, workspaceId, userName, result);
@@ -298,7 +285,6 @@ public class LocalRunnersResource {
             @ApiResponse(responseCode = "204", description = "No content"),
             @ApiResponse(responseCode = "404", description = "Not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response cancelJob(@PathParam("jobId") UUID jobId) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         endpointJobService.cancelJob(jobId, workspaceId, userName);
@@ -316,7 +302,6 @@ public class LocalRunnersResource {
     public Response createBridgeCommand(@PathParam("runnerId") UUID runnerId,
             @RequestBody(content = @Content(schema = @Schema(implementation = BridgeCommandSubmitRequest.class))) @NotNull @Valid BridgeCommandSubmitRequest request,
             @Context UriInfo uriInfo) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         UUID commandId = connectBridgeService.createBridgeCommand(runnerId, workspaceId, userName, request);
@@ -336,7 +321,6 @@ public class LocalRunnersResource {
     public void nextBridgeCommands(@PathParam("runnerId") UUID runnerId,
             @Valid BridgeCommandNextRequest request,
             @Suspended AsyncResponse asyncResponse) {
-        ensureEnabled();
         int maxCommands = request != null ? request.effectiveMaxCommands() : 10;
         long pollTimeoutSeconds = runnerConfig.getBridgePollTimeout().toSeconds();
         long bufferSeconds = runnerConfig.getBridgeAsyncTimeoutBuffer().toSeconds();
@@ -370,7 +354,6 @@ public class LocalRunnersResource {
     public Response reportBridgeResult(@PathParam("runnerId") UUID runnerId,
             @PathParam("commandId") UUID commandId,
             @RequestBody(content = @Content(schema = @Schema(implementation = BridgeCommandResultRequest.class))) @NotNull @Valid BridgeCommandResultRequest request) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         connectBridgeService.reportBridgeCommandResult(runnerId, workspaceId, userName, commandId, request);
@@ -387,7 +370,6 @@ public class LocalRunnersResource {
             @QueryParam("wait") @DefaultValue("false") boolean wait,
             @QueryParam("timeout") @DefaultValue("30") int timeout,
             @Suspended AsyncResponse asyncResponse) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -418,11 +400,5 @@ public class LocalRunnersResource {
                                 asyncResponse.resume(Response.serverError().build());
                             }
                         });
-    }
-
-    private void ensureEnabled() {
-        if (!runnerConfig.isEnabled()) {
-            throw new WebApplicationException(Response.Status.NOT_IMPLEMENTED);
-        }
     }
 }

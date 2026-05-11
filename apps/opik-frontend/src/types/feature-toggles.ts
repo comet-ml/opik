@@ -22,5 +22,4 @@ export enum FeatureToggleKeys {
   BEDROCK_PROVIDER_ENABLED = "bedrock_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
   OLLAMA_PROVIDER_ENABLED = "ollama_provider_enabled",
-  TOGGLE_RUNNERS_ENABLED = "runners_enabled",
 }
