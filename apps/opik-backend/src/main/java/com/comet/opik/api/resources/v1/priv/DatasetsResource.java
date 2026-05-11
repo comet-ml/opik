@@ -590,17 +590,11 @@ public class DatasetsResource {
     @Operation(operationId = "createDatasetItemsFromCsv", summary = "Create dataset items from CSV file", description = "Create dataset items from uploaded CSV file. CSV should have headers in the first row. Processing happens asynchronously in batches.", responses = {
             @ApiResponse(responseCode = "202", description = "Accepted - CSV processing started"),
             @ApiResponse(responseCode = "400", description = "Bad Request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "404", description = "Not Found - CSV upload feature is disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
     })
     @RateLimited
     public Response createDatasetItemsFromCsv(
             @FormDataParam("file") @NotNull InputStream fileInputStream,
             @FormDataParam("dataset_id") @NotNull UUID datasetId) {
-
-        if (!featureFlags.isCsvUploadEnabled()) {
-            log.warn("CSV upload feature is disabled, returning 404");
-            throw new NotFoundException("CSV upload feature is not enabled");
-        }
 
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();

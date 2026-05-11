@@ -570,9 +570,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "false"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"

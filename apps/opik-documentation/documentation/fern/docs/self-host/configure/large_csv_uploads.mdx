@@ -10,25 +10,17 @@ title: Large CSV uploads
 
 # Enabling Large CSV Uploads
 
-By default, Opik supports CSV file uploads up to 20MB for dataset creation. For self-hosted deployments that need to process larger CSV files (up to 2GB), you can enable the large CSV upload feature with additional configuration.
+Opik accepts CSV file uploads of up to 2GB for dataset creation. For self-hosted deployments that need to process large CSV files, apply the additional configuration below.
 
 ## Overview
 
-When enabled, this feature allows:
+CSV upload supports:
 - **CSV files up to 2GB** in size
 - **Asynchronous processing** - files are processed in the background after upload
 
 ## Configuration Steps
 
-### 1. Enable the Feature Toggle
-
-Set the following environment variable for the Opik backend service:
-
-```bash
-TOGGLE_CSV_UPLOAD_ENABLED: true
-```
-
-### 2. Increase Idle Timeout
+### 1. Increase Idle Timeout
 
 Large file uploads require more time to transfer. Increase the server idle timeout:
 
@@ -38,7 +30,7 @@ SERVER_IDLE_TIMEOUT: 10m
 
 The default timeout is 30 seconds, which is insufficient for large file uploads. We recommend setting it to 10 minutes for files up to 2GB.
 
-### 3. Configure Nginx (Kubernetes/Helm Deployments)
+### 2. Configure Nginx (Kubernetes/Helm Deployments)
 
 If you're using the Helm chart deployment, add the following configuration to your `values.yaml`:
 
@@ -56,14 +48,14 @@ component:
       client_max_body_size: 2g
 ```
 
-### 4. Ensure Adequate Disk Space
+### 3. Ensure Adequate Disk Space
 
 The backend service temporarily buffers uploaded CSV files to disk before processing them. Ensure your backend pods/containers have:
 
 - **Minimum 50GB of disk space** available
 - **Sufficient IOPS** for concurrent file operations
 
-### 5. Optional: Adjust Batch Size
+### 4. Optional: Adjust Batch Size
 
 You can optionally configure the batch size for CSV processing:
 
@@ -88,7 +80,6 @@ Add the environment variables to the backend service:
 services:
   backend:
     environment:
-      - TOGGLE_CSV_UPLOAD_ENABLED=true
       - SERVER_IDLE_TIMEOUT=10m
       - BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE=1000
 ```
@@ -106,7 +97,6 @@ Here's a complete example for Helm chart deployments:
 component:
   backend:
     env:
-      TOGGLE_CSV_UPLOAD_ENABLED: "true"
       SERVER_IDLE_TIMEOUT: "10m"
       BATCH_OPERATIONS_DATASETS_CSV_BATCH_SIZE: "1000"
     

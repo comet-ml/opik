@@ -7,7 +7,6 @@ export enum FeatureToggleKeys {
   GUARDRAILS_ENABLED = "guardrails_enabled",
   TOGGLE_OPIK_AI_ENABLED = "opik_aienabled",
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
-  CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
   DATASET_EXPORT_ENABLED = "dataset_export_enabled",
   SPAN_LLM_AS_JUDGE_ENABLED = "span_llm_as_judge_enabled",

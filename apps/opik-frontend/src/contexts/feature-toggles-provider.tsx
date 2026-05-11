@@ -22,7 +22,6 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
-  [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
   [FeatureToggleKeys.DATASET_EXPORT_ENABLED]: true,
   [FeatureToggleKeys.OPTIMIZATION_STUDIO_ENABLED]: false,
