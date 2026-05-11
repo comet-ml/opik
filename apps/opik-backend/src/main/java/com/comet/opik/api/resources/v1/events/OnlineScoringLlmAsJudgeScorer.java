@@ -18,6 +18,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.InstructionStrategy;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.OpikConfiguration;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.data.message.AiMessage;
@@ -74,9 +75,11 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     private final WorkspaceNameService workspaceNameService;
     private final OpikConfiguration opikConfiguration;
     private final OnlineScoringConfig onlineScoringConfig;
+    private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
     public OnlineScoringLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
@@ -100,6 +103,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         this.workspaceNameService = workspaceNameService;
         this.opikConfiguration = opikConfiguration;
         this.onlineScoringConfig = config;
+        this.serviceTogglesConfig = serviceTogglesConfig;
     }
 
     /**
@@ -185,7 +189,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     trace, spans, traceCompressor);
             boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
                     llmProviderFactory.getLlmProvider(modelName));
-            boolean overSizeThreshold = onlineScoringConfig.isAgenticToolsEnabled()
+            boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                     && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
             boolean useTools = LlmAsJudgeToolsMode.shouldUseTools(message)
                     || (overSizeThreshold && providerSupportsTools);

@@ -70,6 +70,8 @@ public class ServiceTogglesConfig {
     @Deprecated
     @JsonProperty
     @NotNull boolean collaboratorsTabEnabled;
+    @JsonProperty
+    @NotNull boolean agenticToolsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
