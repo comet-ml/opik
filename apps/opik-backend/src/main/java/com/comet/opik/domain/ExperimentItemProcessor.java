@@ -47,8 +47,10 @@ public class ExperimentItemProcessor {
                             var response = chatCompletionService.create(chatRequest, message.workspaceId());
                             return new LlmCallResult(response, null, null, startTime, Instant.now());
                         } catch (Exception e) {
-                            log.warn("LLM call failed for experiment '{}', dataset item '{}'",
-                                    message.experimentId(), datasetItem.id(), e);
+                            log.error(
+                                    "LLM call failed for experiment '{}', dataset item '{}' ('{}: {}'); persisting trace with error info",
+                                    message.experimentId(), datasetItem.id(), e.getClass().getSimpleName(),
+                                    e.getMessage(), e);
                             return new LlmCallResult(null, e.getClass().getSimpleName(), e.getMessage(),
                                     startTime, Instant.now());
                         }
