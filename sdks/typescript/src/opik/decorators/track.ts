@@ -75,7 +75,7 @@ function logSpan({
     environment !== spanTrace.data.environment
   ) {
     logger.warn(
-      `Nested @track requested environment "${environment}", but the enclosing trace already uses "${spanTrace.data.environment ?? ""}". The outer environment will be used.`
+      `Nested @track requested environment "${environment}", but the enclosing trace already uses "${spanTrace.data.environment ?? "(none)"}". The outer environment will be used.`
     );
   }
 
