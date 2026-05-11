@@ -376,11 +376,16 @@ def _create_first_version_with_items(
     # zero-content change against this version. The BE allows
     # zero-content applies with a non-null base_version, so this stages
     # the version-level fields without minting another items-bearing version.
+    # ``is not None`` gating (not truthiness): an explicit ``metadata={}`` or
+    # ``user_tags=[]`` on the source means "clear the version-level field" and
+    # must round-trip to the target. ``bool({})`` / ``bool([])`` would treat
+    # those as "absent" and silently skip the follow-up, diverging from the
+    # delta path which already uses ``is not None`` (see lines 409-412).
     needs_version_field_followup = (
         suite_evaluators is not None
         or suite_execution_policy is not None
-        or bool(user_tags)
-        or bool(metadata)
+        or user_tags is not None
+        or metadata is not None
     )
     if needs_version_field_followup:
         # This adds a second target version that the source didn't have —
