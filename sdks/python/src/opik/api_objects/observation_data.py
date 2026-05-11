@@ -36,6 +36,7 @@ class ObservationData:
     error_info: Optional[ErrorInfoDict] = None
     attachments: Optional[List[attachment.Attachment]] = None
     source: TraceSource = "sdk"
+    environment: Optional[str] = None
 
     def update(self: ObservationDataT, **new_data: Any) -> ObservationDataT:
         """

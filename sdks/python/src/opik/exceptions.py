@@ -193,6 +193,12 @@ class ConfigMismatch(OpikException):
     pass
 
 
+class EnvironmentAlreadyExists(OpikException):
+    """Raised when creating an environment whose name is already taken in the workspace."""
+
+    pass
+
+
 class LLMJudgeParseError(OpikException):
     """Raised when LLMJudge output fails validation.
 

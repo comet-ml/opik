@@ -12,6 +12,7 @@ export type { ErrorInfo } from "@/rest_api/api/types/ErrorInfo";
 export type { SpanType } from "@/rest_api/api/types/SpanType";
 export { SpanType as OpikSpanType } from "@/rest_api/api/types/SpanType";
 export type { DatasetPublic } from "@/rest_api/api/types/DatasetPublic";
+export type { EnvironmentPublic as Environment } from "@/rest_api/api/types/EnvironmentPublic";
 export * from "./evaluation";
 
 // Dataset exports
