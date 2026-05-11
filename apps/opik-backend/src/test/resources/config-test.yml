@@ -570,6 +570,8 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
+  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; BE no longer reads this.
+  csvUploadEnabled: "true"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
