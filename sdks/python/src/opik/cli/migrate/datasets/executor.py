@@ -9,12 +9,13 @@ audit-log payload shape per action type (``_action_details``).
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import opik
 from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
 from rich.console import Console
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from ..audit import AuditLog
 from .._base import execute_plan_loop, record_planned_loop
@@ -24,6 +25,12 @@ from .planner import (
     CreateDestination,
     MigrationPlan,
     RenameSource,
+    ReplayVersions,
+)
+from .version_replay import (
+    _suite_evaluators_payload,
+    _suite_execution_policy_payload,
+    replay_all_versions,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -38,12 +45,15 @@ def execute_plan(
     """Apply ``plan`` against ``client``, recording each action in ``audit``.
 
     Delegates the audit-bracketed loop to ``_base.execute_plan_loop`` and
-    supplies the dataset-specific apply / details closures.
+    supplies the dataset-specific apply / details closures. The closure
+    captures ``plan`` and ``audit`` so the ``ReplayVersions`` branch can
+    stash version_remap / item_id_remap onto the plan and emit per-version
+    audit sub-records.
     """
     rest_client = client.rest_client
 
     def _apply(action: Any) -> None:
-        _apply_action(client, rest_client, action)
+        _apply_action(client, rest_client, action, plan=plan, audit=audit)
 
     execute_plan_loop(
         plan.actions,
@@ -58,7 +68,14 @@ def record_planned(plan: MigrationPlan, audit: AuditLog) -> None:
     record_planned_loop(plan.actions, audit, details_fn=_action_details)
 
 
-def _apply_action(client: opik.Opik, rest_client: OpikApi, action: object) -> None:
+def _apply_action(
+    client: opik.Opik,
+    rest_client: OpikApi,
+    action: object,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
     # Workspace-mutating REST writes are wrapped with the SDK's 429-aware
     # retry helper so a transient rate limit doesn't abort a half-finished
     # migration. Reads (find_datasets, find_projects, retrieve_project,
@@ -97,6 +114,8 @@ def _apply_action(client: opik.Opik, rest_client: OpikApi, action: object) -> No
         _copy_items(client, action)
     elif isinstance(action, CopyTestSuiteConfig):
         _copy_test_suite_config(rest_client, action)
+    elif isinstance(action, ReplayVersions):
+        _replay_versions(rest_client, action, plan=plan, audit=audit)
     else:
         raise TypeError(f"Unknown migration action: {type(action).__name__}")
 
@@ -151,6 +170,73 @@ def _copy_items(client: opik.Opik, action: CopyCurrentItems) -> None:
         dest.__internal_api__insert_items_as_dataclasses__(rebuilt)
 
 
+def _replay_versions(
+    rest_client: OpikApi,
+    action: ReplayVersions,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
+    """Resolve target id and run the per-version replay loop.
+
+    The destination dataset was created by the prior ``CreateDestination``
+    action with zero versions. ``replay_all_versions`` handles the cold
+    start itself by minting target v1 via the BE-natural write path that
+    matches the source v1's shape (content via
+    ``create_or_update_dataset_items`` or config-only via
+    ``apply_dataset_item_changes(base_version=null, override=true)``) so
+    target version count == source version count — no leading empty seed.
+    """
+    dest = rest_client.datasets.get_dataset_by_identifier(
+        dataset_name=action.dest_name, project_name=action.dest_project_name
+    )
+
+    # Rich Progress bar driven by the per-version callback that
+    # ``replay_all_versions`` invokes before each version begins. The task is
+    # created lazily on the first callback (we don't know the total until
+    # source-version listing finishes) and advanced once per version. Keeping
+    # the UI here means the algorithmic core in ``version_replay`` stays
+    # console-agnostic.
+    with Progress(
+        TextColumn("[bold blue]Replaying versions"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.description}"),
+        console=_console,
+        transient=False,
+    ) as progress:
+        task_id: Optional[int] = None
+
+        def _on_version_start(completed: int, total: int, label: str) -> None:
+            nonlocal task_id
+            description = f"→ {action.dest_name} · {label} ({completed + 1}/{total})"
+            if task_id is None:
+                task_id = progress.add_task(description, total=total)
+            else:
+                progress.update(task_id, completed=completed, description=description)
+
+        result = replay_all_versions(
+            rest_client,
+            source_dataset_id=action.source_dataset_id,
+            source_name_after_rename=action.source_name_after_rename,
+            source_project_name=action.source_project_name,
+            dest_dataset_id=dest.id,
+            dest_name=action.dest_name,
+            dest_project_name=action.dest_project_name,
+            audit=audit,
+            progress_callback=_on_version_start,
+        )
+
+        # Mark the bar fully complete (the callback fires BEFORE each version,
+        # so the last update leaves the bar at N-1; advance it to N once the
+        # loop returns successfully).
+        if task_id is not None:
+            progress.update(task_id, completed=result.versions_replayed)
+
+    plan.version_remap.update(result.version_remap)
+    plan.item_id_remap.update(result.item_id_remap)
+
+
 def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -> None:
     """Copy the source's latest suite-level evaluators + execution_policy.
 
@@ -175,15 +261,11 @@ def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -
         "change_description": "Migrated suite config from source",
     }
     if latest.evaluators:
-        request["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in latest.evaluators
-        ]
+        request["evaluators"] = _suite_evaluators_payload(latest.evaluators)
     if latest.execution_policy is not None:
-        request["execution_policy"] = {
-            "runs_per_item": latest.execution_policy.runs_per_item,
-            "pass_threshold": latest.execution_policy.pass_threshold,
-        }
+        request["execution_policy"] = _suite_execution_policy_payload(
+            latest.execution_policy
+        )
     if "evaluators" not in request and "execution_policy" not in request:
         # Latest version had no suite-level config beyond items — nothing
         # to copy. The target was already created with type='evaluation_suite'
@@ -232,5 +314,14 @@ def _action_details(action: object) -> Dict[str, Any]:
             "source_dataset_id": action.source_dataset_id,
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
+        }
+    if isinstance(action, ReplayVersions):
+        return {
+            "type": "replay_versions",
+            "from_dataset": action.source_name_after_rename,
+            "from_project": action.source_project_name,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
+            "is_test_suite": action.is_test_suite,
         }
     raise TypeError(f"Unknown migration action: {type(action).__name__}")

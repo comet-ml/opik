@@ -7,8 +7,8 @@ reuse the same logic with no side effects.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional
 
 from opik.rest_api import OpikApi
 
@@ -83,6 +83,29 @@ class CopyTestSuiteConfig:
     dest_project_name: str
 
 
+@dataclass(frozen=True)
+class ReplayVersions:
+    """Replay every source dataset version onto the destination.
+
+    Replaces ``CopyCurrentItems`` when version-history replay is on (the
+    Slice 2 default). Iterates source versions chronologically, computing
+    the (adds, modifications, deletions) delta for each and applying it via
+    ``apply_dataset_item_changes`` so the target accumulates one new
+    version per source version with the same semantic content.
+
+    The executor populates ``MigrationPlan.version_remap`` and
+    ``MigrationPlan.item_id_remap`` after this action runs; Slice 3 reads
+    those maps to remap experiment FK references.
+    """
+
+    source_dataset_id: str
+    source_name_after_rename: str
+    source_project_name: Optional[str]
+    dest_name: str
+    dest_project_name: str
+    is_test_suite: bool
+
+
 @dataclass(kw_only=True)
 class MigrationPlan(BaseMigrationPlan):
     """Dataset-specific migration plan.
@@ -90,12 +113,20 @@ class MigrationPlan(BaseMigrationPlan):
     Inherits the shared ``source`` / ``actions`` shape from
     ``BaseMigrationPlan`` and narrows ``source`` to ``ResolvedDataset``.
     The action list contains dataset-specific records (``RenameSource``,
-    ``CreateDestination``, ``CopyTestSuiteConfig``, ``CopyCurrentItems``).
+    ``CreateDestination``, ``CopyTestSuiteConfig``, ``CopyCurrentItems``,
+    ``ReplayVersions``).
+
+    The executor sets ``version_remap`` / ``item_id_remap`` on the plan
+    after a successful ``ReplayVersions`` run. Slice 3 reads them to remap
+    experiment foreign-key references; for plain Slice 2 invocations they
+    are populated for completeness even though no consumer reads them yet.
     """
 
     source: ResolvedDataset
     target_name: str
     to_project: str
+    version_remap: Dict[str, str] = field(default_factory=dict)
+    item_id_remap: Dict[str, str] = field(default_factory=dict)
 
 
 def build_dataset_plan(
@@ -103,12 +134,18 @@ def build_dataset_plan(
     name: str,
     to_project: str,
     from_project: Optional[str],
+    exclude_versions: bool = False,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
     Ordering invariant: the source rename always precedes the destination
     create, so the workspace-unique-name constraint never trips. The target
     keeps the source's original name.
+
+    ``exclude_versions=False`` (default since Slice 2) emits a
+    ``ReplayVersions`` action that walks the source's full version history;
+    ``exclude_versions=True`` emits a ``CopyCurrentItems`` action that
+    matches Slice 1's "current items only" behaviour.
     """
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
@@ -169,14 +206,17 @@ def build_dataset_plan(
         )
     )
 
-    # Test-suite config has to be applied BEFORE items: copying items creates
-    # the target's first version, after which `apply_dataset_item_changes`
-    # rejects payloads without an explicit `base_version` (override=True is
-    # not enough). Sequencing the suite-config call first means the target
-    # starts with an empty initial version that carries the suite-level
-    # evaluators+policy, and the subsequent item copy creates v2 with both
-    # the items and the inherited config.
-    if is_test_suite:
+    # Test-suite config: only emit ``CopyTestSuiteConfig`` for the slice 1
+    # path (``--exclude-versions``). When replay is on, ``ReplayVersions``
+    # forwards the per-version suite-level evaluators / execution_policy on
+    # every apply call, so it reproduces the full suite-config history
+    # natively — adding ``CopyTestSuiteConfig`` on top would just create
+    # an extra leading version on the target that the source never had.
+    # Slice 1 needs ``CopyTestSuiteConfig`` because its current-items copy
+    # path goes through ``Dataset.insert()`` which doesn't carry suite-level
+    # config; without the prior config-only version, the target test suite
+    # would lose its evaluators/policy entirely.
+    if is_test_suite and exclude_versions:
         plan.actions.append(
             CopyTestSuiteConfig(
                 source_dataset_id=source.id,
@@ -185,14 +225,26 @@ def build_dataset_plan(
             )
         )
 
-    plan.actions.append(
-        CopyCurrentItems(
-            source_dataset_id=source.id,
-            source_name_after_rename=name_after_rename,
-            source_project_name=source.project_name,
-            dest_name=source.name,
-            dest_project_name=to_project,
+    if exclude_versions:
+        plan.actions.append(
+            CopyCurrentItems(
+                source_dataset_id=source.id,
+                source_name_after_rename=name_after_rename,
+                source_project_name=source.project_name,
+                dest_name=source.name,
+                dest_project_name=to_project,
+            )
         )
-    )
+    else:
+        plan.actions.append(
+            ReplayVersions(
+                source_dataset_id=source.id,
+                source_name_after_rename=name_after_rename,
+                source_project_name=source.project_name,
+                dest_name=source.name,
+                dest_project_name=to_project,
+                is_test_suite=is_test_suite,
+            )
+        )
 
     return plan

@@ -1,10 +1,19 @@
-"""Tests for ``opik migrate`` (slice 1: dataset + workspace plan)."""
+"""Tests for ``opik migrate`` Slice 1 — current-items-only migration.
+
+Slice 1 (``--exclude-versions``) is the fallback path: rename source,
+create destination, copy current items in a single insert (one target
+version). Slice 2's full version-history replay is the default and lives
+in ``test_migrate_dataset_version_replay.py``.
+
+Shared helpers (``_DatasetRow``, ``_Page``, ``_build_fake_client``,
+``_planner_rest_client``) come from ``_migrate_helpers``.
+"""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -19,164 +28,12 @@ from opik.cli.migrate.errors import (
     ProjectNotFoundError,
 )
 
-
-def _planner_rest_client(
-    find_side_effects: List["_Page"],
-    *,
-    target_project_exists: bool = True,
-    workspace_project_names: Optional[List[str]] = None,
-) -> MagicMock:
-    """Build a rest_client mock for direct planner unit tests."""
-    rest_client = MagicMock()
-    if target_project_exists:
-        target_project = MagicMock()
-        target_project.id = "target-project-id"
-        rest_client.projects.retrieve_project.return_value = target_project
-    else:
-        from opik.rest_api.core.api_error import ApiError
-
-        rest_client.projects.retrieve_project.side_effect = ApiError(
-            status_code=404, body={}
-        )
-        # Suggestion lookup queries find_projects on the 404 path.
-        candidates = [_named(name) for name in (workspace_project_names or [])]
-        rest_client.projects.find_projects.return_value = _Page(candidates)
-    rest_client.datasets.find_datasets.side_effect = find_side_effects
-    return rest_client
-
-
-def _named(name: str) -> MagicMock:
-    obj = MagicMock()
-    obj.name = name
-    return obj
-
-
-class _DatasetRow:
-    def __init__(
-        self,
-        id: str,
-        name: str,
-        description: Optional[str] = None,
-        items: int = 0,
-        type: Optional[str] = "dataset",
-        visibility: Optional[str] = "private",
-        tags: Optional[List[str]] = None,
-        # ``project_id=None`` represents a workspace-scoped dataset (V1
-        # entity, or anything left at workspace scope after auto-migration).
-        # Tests that want a project-scoped source pass an explicit id.
-        project_id: Optional[str] = None,
-    ) -> None:
-        self.id = id
-        self.name = name
-        self.description = description
-        self.dataset_items_count = items
-        self.type = type
-        self.visibility = visibility
-        self.tags = tags
-        self.project_id = project_id
-
-
-class _Page:
-    def __init__(self, content: List[_DatasetRow]) -> None:
-        self.content = content
-
-
-def _build_fake_client(
-    *,
-    source_rows: List[_DatasetRow],
-    destination_rows: List[_DatasetRow],
-    items: List[Dict[str, object]],
-    target_project_exists: bool = True,
-) -> MagicMock:
-    """Construct an opik.Opik mock matching the executor's call surface.
-
-    The find_datasets mock returns ``source_rows`` for the first lookup
-    (source resolution) and ``destination_rows`` for the second (preflight
-    conflict check). The planner places those calls in a fixed order, so a
-    side-effect list is the simplest way to drive both branches deterministically.
-
-    ``items`` is a list of dicts; we materialize them as DatasetItem
-    dataclasses for the streaming mock (matches the real `__internal_api__
-    stream_items_as_dataclasses__` shape) so per-item fidelity assertions
-    have somewhere to land.
-    """
-    from opik.api_objects.dataset import dataset_item
-
-    rest_client = MagicMock()
-    if target_project_exists:
-        target_project = MagicMock()
-        target_project.id = "target-project-id"
-        rest_client.projects.retrieve_project.return_value = target_project
-    else:
-        from opik.rest_api.core.api_error import ApiError
-
-        rest_client.projects.retrieve_project.side_effect = ApiError(
-            status_code=404, body={}
-        )
-    rest_client.datasets.find_datasets.side_effect = [
-        _Page(source_rows),
-        _Page(destination_rows),
-    ]
-    rest_client.datasets.update_dataset = MagicMock()
-    rest_client.datasets.create_dataset = MagicMock()
-
-    client = MagicMock()
-    client.rest_client = rest_client
-    client._workspace = "default"
-
-    # Build DatasetItem dataclasses from the provided dicts so the executor's
-    # dataclass-form stream returns a realistic shape. Top-level fields like
-    # `description` / `source` / `trace_id` / `span_id` can be passed via the
-    # dict (other keys get stuffed into `data`/extra).
-    top_level = {
-        "id",
-        "trace_id",
-        "span_id",
-        "source",
-        "description",
-        "evaluators",
-        "execution_policy",
-    }
-    source_items: List[dataset_item.DatasetItem] = []
-    for raw in items:
-        kwargs = {k: v for k, v in raw.items() if k in top_level and k != "id"}
-        data = {k: v for k, v in raw.items() if k not in top_level}
-        ds_item = dataset_item.DatasetItem(**kwargs, **data)
-        if "id" in raw:
-            ds_item.id = raw["id"]  # type: ignore[assignment]
-        source_items.append(ds_item)
-
-    # MagicMock treats dunder-prefixed names as magic and blocks them by
-    # default; pre-attach plain MagicMocks so attribute access works.
-    source_dataset = MagicMock()
-    stream_mock = MagicMock(return_value=iter(source_items))
-    source_dataset.__internal_api__stream_items_as_dataclasses__ = stream_mock
-
-    dest_dataset = MagicMock()
-    insert_mock = MagicMock()
-    dest_dataset.__internal_api__insert_items_as_dataclasses__ = insert_mock
-
-    def _get_dataset(name: str, project_name: Optional[str] = None) -> MagicMock:
-        # The executor first reads from the (renamed) source, then the dest.
-        if insert_mock.call_count == 0 and not getattr(
-            _get_dataset, "_dest_handed_out", False
-        ):
-            if stream_mock.call_count == 0:
-                return source_dataset
-            _get_dataset._dest_handed_out = True  # type: ignore[attr-defined]
-            return dest_dataset
-        return dest_dataset
-
-    client.get_dataset.side_effect = _get_dataset
-    client.create_dataset = MagicMock()
-    client.delete_dataset = MagicMock()
-    return client, source_dataset, dest_dataset
-
-
-@pytest.fixture(autouse=True)
-def _no_project_resolution() -> None:
-    """``--from-project=None`` always yields ``project_id=None``; no need to mock the projects API."""
-    yield
+from ._migrate_helpers import (
+    _DatasetRow,
+    _Page,
+    _build_fake_client,
+    _planner_rest_client,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +55,7 @@ class TestMigrateHelp:
         assert result.exit_code == 0
         assert "--to-project" in result.output
         assert "--from-project" in result.output
+        assert "--exclude-versions" in result.output
         assert "--dry-run" in result.output
 
 
@@ -207,9 +65,11 @@ class TestMigrateHelp:
 
 
 class TestPlanBuilding:
-    def test_build_dataset_plan__default_flow__orders_rename_then_create_then_copy(
+    def test_build_dataset_plan__default_flow__orders_rename_then_create_then_replay(
         self,
     ) -> None:
+        # Slice 2 default: full version-history replay replaces the
+        # current-items-only copy.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
@@ -225,11 +85,94 @@ class TestPlanBuilding:
         )
 
         types = [type(a).__name__ for a in plan.actions]
-        assert types == ["RenameSource", "CreateDestination", "CopyCurrentItems"]
+        assert types == ["RenameSource", "CreateDestination", "ReplayVersions"]
         rename = plan.actions[0]
         assert rename.from_name == "MyDataset"
         assert rename.to_name == "MyDataset_v1"
         assert plan.target_name == "MyDataset"
+
+    def test_build_dataset_plan__exclude_versions__falls_back_to_copy_current_items(
+        self,
+    ) -> None:
+        # Opt-in to Slice 1 behaviour for users who explicitly don't want
+        # version-history replay.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            rest_client=rest_client,
+            name="MyDataset",
+            to_project="B",
+            from_project=None,
+            exclude_versions=True,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == ["RenameSource", "CreateDestination", "CopyCurrentItems"]
+
+    def test_build_dataset_plan__test_suite_with_replay__skips_copy_test_suite_config(
+        self,
+    ) -> None:
+        # Test suites with replay on: ``CopyTestSuiteConfig`` is intentionally
+        # NOT in the plan because ``ReplayVersions`` walks every source
+        # version and forwards each version's suite-level evaluators+policy
+        # natively. Adding ``CopyTestSuiteConfig`` would create a leading
+        # extra version on the target that the source never had.
+        rest_client = _planner_rest_client(
+            [
+                _Page(
+                    [_DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")]
+                ),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            rest_client=rest_client,
+            name="MySuite",
+            to_project="B",
+            from_project=None,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == ["RenameSource", "CreateDestination", "ReplayVersions"]
+        replay = plan.actions[-1]
+        assert replay.is_test_suite is True
+
+    def test_build_dataset_plan__test_suite_with_exclude_versions__keeps_copy_test_suite_config(
+        self,
+    ) -> None:
+        # Test suites under the slice 1 fallback (``--exclude-versions``):
+        # ``CopyTestSuiteConfig`` IS in the plan because the
+        # ``CopyCurrentItems`` path doesn't carry suite-level config.
+        rest_client = _planner_rest_client(
+            [
+                _Page(
+                    [_DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")]
+                ),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            rest_client=rest_client,
+            name="MySuite",
+            to_project="B",
+            from_project=None,
+            exclude_versions=True,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "CopyTestSuiteConfig",
+            "CopyCurrentItems",
+        ]
 
     def test_build_dataset_plan__post_rename_name_collides_workspace_wide__raises_conflict(
         self,
@@ -370,6 +313,9 @@ class TestMigrateDatasetCommand:
             )
 
     def test_migrate_dataset__happyflow(self, tmp_path: Path) -> None:
+        # ``--exclude-versions`` runs the Slice 1 current-items-only path
+        # exercised here; the Slice 2 replay path is covered by the
+        # ``TestVersionReplay`` E2E tests below.
         runner = CliRunner()
         client, source_dataset, dest_dataset = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset", description="d")],
@@ -379,7 +325,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B"],
+            ["MyDataset", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -484,7 +430,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B"],
+            ["MyDataset", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -517,7 +463,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B"],
+            ["MyDataset", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -559,7 +505,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B"],
+            ["MyDataset", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -595,7 +541,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B"],
+            ["MyDataset", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -650,7 +596,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MySuite", "--to-project", "B"],
+            ["MySuite", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -732,7 +678,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MySuite", "--to-project", "B"],
+            ["MySuite", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
@@ -796,7 +742,7 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["LegacyDS", "--to-project", "B"],
+            ["LegacyDS", "--to-project", "B", "--exclude-versions"],
             client,
             tmp_path,
         )
