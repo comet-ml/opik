@@ -184,6 +184,26 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
     reasoning: true,
     reasoningEffortOptions: ["none", "low", "medium", "high"],
   },
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_5]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
 };
 
 // Reasoning models that require temperature = 1.0
