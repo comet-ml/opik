@@ -27,7 +27,11 @@ from .planner import (
     RenameSource,
     ReplayVersions,
 )
-from .version_replay import replay_all_versions
+from .version_replay import (
+    _suite_evaluators_payload,
+    _suite_execution_policy_payload,
+    replay_all_versions,
+)
 
 LOGGER = logging.getLogger(__name__)
 _console = Console()
@@ -257,15 +261,11 @@ def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -
         "change_description": "Migrated suite config from source",
     }
     if latest.evaluators:
-        request["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in latest.evaluators
-        ]
+        request["evaluators"] = _suite_evaluators_payload(latest.evaluators)
     if latest.execution_policy is not None:
-        request["execution_policy"] = {
-            "runs_per_item": latest.execution_policy.runs_per_item,
-            "pass_threshold": latest.execution_policy.pass_threshold,
-        }
+        request["execution_policy"] = _suite_execution_policy_payload(
+            latest.execution_policy
+        )
     if "evaluators" not in request and "execution_policy" not in request:
         # Latest version had no suite-level config beyond items — nothing
         # to copy. The target was already created with type='evaluation_suite'

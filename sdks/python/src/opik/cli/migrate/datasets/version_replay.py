@@ -400,15 +400,11 @@ def _create_first_version_with_items(
         if change_description:
             request["change_description"] = change_description
         if suite_evaluators is not None:
-            request["evaluators"] = [
-                {"name": e.name, "type": e.type, "config": e.config}
-                for e in suite_evaluators
-            ]
+            request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
         if suite_execution_policy is not None:
-            request["execution_policy"] = {
-                "runs_per_item": suite_execution_policy.runs_per_item,
-                "pass_threshold": suite_execution_policy.pass_threshold,
-            }
+            request["execution_policy"] = _suite_execution_policy_payload(
+                suite_execution_policy
+            )
         # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
         if user_tags is not None:
             request["tags"] = list(user_tags)
@@ -459,15 +455,11 @@ def _create_first_version_config_only(
     if change_description:
         request["change_description"] = change_description
     if suite_evaluators is not None:
-        request["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in suite_evaluators
-        ]
+        request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
     if suite_execution_policy is not None:
-        request["execution_policy"] = {
-            "runs_per_item": suite_execution_policy.runs_per_item,
-            "pass_threshold": suite_execution_policy.pass_threshold,
-        }
+        request["execution_policy"] = _suite_execution_policy_payload(
+            suite_execution_policy
+        )
     # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
     if user_tags is not None:
         request["tags"] = list(user_tags)
@@ -543,6 +535,30 @@ def _load_version_items(
             id=item.id, content_hash=_content_hash_for(item), item=item
         )
     return by_id
+
+
+def _suite_evaluators_payload(
+    evaluators: List[evaluator_item_public.EvaluatorItemPublic],
+) -> List[Dict[str, Any]]:
+    """Convert a wire-type suite evaluator list to its write-payload shape.
+
+    Used by both ``executor._copy_test_suite_config`` (Slice 1) and the
+    three ``version_replay`` apply sites (Slice 2). Gating ("when do we
+    forward this field") is left to each caller because Slice 1 uses
+    truthy gating (``if evaluators:``) and Slice 2 uses ``is not None``
+    — the only shared concern is the field-by-field wire shape.
+    """
+    return [{"name": e.name, "type": e.type, "config": e.config} for e in evaluators]
+
+
+def _suite_execution_policy_payload(
+    execution_policy: execution_policy_public.ExecutionPolicyPublic,
+) -> Dict[str, int]:
+    """Convert a wire-type suite execution_policy to its write-payload shape."""
+    return {
+        "runs_per_item": execution_policy.runs_per_item,
+        "pass_threshold": execution_policy.pass_threshold,
+    }
 
 
 _BE_MANAGED_VERSION_TAGS = frozenset({"latest"})
@@ -713,15 +729,11 @@ def _apply_delta_and_collect_new_ids(
         # Version-level evaluators (suite-level config). Pass an empty list
         # explicitly when the source version has zero suite-level evaluators
         # so the BE doesn't inherit a stale set from the previous version.
-        request["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in suite_evaluators
-        ]
+        request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
     if suite_execution_policy is not None:
-        request["execution_policy"] = {
-            "runs_per_item": suite_execution_policy.runs_per_item,
-            "pass_threshold": suite_execution_policy.pass_threshold,
-        }
+        request["execution_policy"] = _suite_execution_policy_payload(
+            suite_execution_policy
+        )
     elif clear_suite_execution_policy:
         # Source dropped the suite-level policy between versions. BE
         # omission would inherit the stale value from base_version, so
