@@ -999,11 +999,13 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
-  # Deprecated (OPIK-6434): CSV upload is always enabled. The TOGGLE_CSV_UPLOAD_ENABLED
-  # env var is no longer consulted; value is hardcoded to preserve the
-  # /v1/private/feature-toggles response shape for older Python/TypeScript SDK clients
-  # that declare it as a required boolean. Safe to delete (along with the dangling
-  # helm-chart env-var settings) once those SDK versions are out of support.
+  # Default: true
+  # Description: Whether or not CSV upload feature is enabled for dataset items.
+  # Deprecated (OPIK-6434): hardcoded to true; the TOGGLE_CSV_UPLOAD_ENABLED env var is
+  # no longer consulted. Kept to preserve the /v1/private/feature-toggles response shape
+  # for older Python/TypeScript SDK clients that declare it as a required boolean. Safe
+  # to delete (along with the dangling helm-chart env-var settings) once those SDK
+  # versions are out of support.
   csvUploadEnabled: true
   # Default: true
   # Description: Whether or not export/download functionality is enabled
