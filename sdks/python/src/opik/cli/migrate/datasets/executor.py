@@ -19,7 +19,9 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
 
 from ..audit import AuditLog
 from .._base import execute_plan_loop, record_planned_loop
+from .experiments import cascade_experiments
 from .planner import (
+    CascadeExperiments,
     CopyCurrentItems,
     CopyTestSuiteConfig,
     CreateDestination,
@@ -116,6 +118,8 @@ def _apply_action(
         _copy_test_suite_config(rest_client, action)
     elif isinstance(action, ReplayVersions):
         _replay_versions(rest_client, action, plan=plan, audit=audit)
+    elif isinstance(action, CascadeExperiments):
+        _cascade_experiments(client, rest_client, action, plan=plan, audit=audit)
     else:
         raise TypeError(f"Unknown migration action: {type(action).__name__}")
 
@@ -281,6 +285,58 @@ def _copy_test_suite_config(rest_client: OpikApi, action: CopyTestSuiteConfig) -
     )
 
 
+def _cascade_experiments(
+    client: opik.Opik,
+    rest_client: OpikApi,
+    action: CascadeExperiments,
+    *,
+    plan: MigrationPlan,
+    audit: AuditLog,
+) -> None:
+    """Drive the experiment cascade, with a Rich Progress bar matching
+    ``_replay_versions``.
+
+    ``cascade_experiments`` is console-agnostic; the progress UI lives here
+    so the algorithmic core stays testable without Rich in the loop.
+    """
+    with Progress(
+        TextColumn("[bold blue]Cascading experiments"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TextColumn("{task.description}"),
+        console=_console,
+        transient=False,
+    ) as progress:
+        task_id: Optional[int] = None
+
+        def _on_experiment_start(completed: int, total: int, label: str) -> None:
+            nonlocal task_id
+            description = (
+                f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
+            )
+            if task_id is None:
+                task_id = progress.add_task(description, total=total)
+            else:
+                progress.update(task_id, completed=completed, description=description)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id=action.source_dataset_id,
+            target_dataset_name=action.dest_name,
+            target_project_name=action.dest_project_name,
+            version_remap=plan.version_remap,
+            item_id_remap=plan.item_id_remap,
+            audit=audit,
+            progress_callback=_on_experiment_start,
+        )
+
+        if task_id is not None:
+            progress.update(task_id, completed=result.experiments_migrated)
+
+    plan.trace_id_remap.update(result.trace_id_remap)
+
+
 def _action_details(action: object) -> Dict[str, Any]:
     if isinstance(action, RenameSource):
         return {
@@ -321,5 +377,12 @@ def _action_details(action: object) -> Dict[str, Any]:
             "to_dataset": action.dest_name,
             "to_project": action.dest_project_name,
             "is_test_suite": action.is_test_suite,
+        }
+    if isinstance(action, CascadeExperiments):
+        return {
+            "type": "cascade_experiments",
+            "source_dataset_id": action.source_dataset_id,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
         }
     raise TypeError(f"Unknown migration action: {type(action).__name__}")

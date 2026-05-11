@@ -62,6 +62,17 @@ class UnsupportedDatasetTypeError(MigrationError):
     """
 
 
+class ExperimentCascadeError(MigrationError):
+    """Raised when experiment cascade hits an unrecoverable BE response.
+
+    Used by ``cli/migrate/datasets/experiments.py`` when the BE returns a
+    response shape the cascade can't continue from — typically a successful
+    2xx with a missing experiment id or malformed trace/span payload. As
+    with ``ReplayError``, this is catastrophic but rare and routes through
+    ``MigrationError`` so the CLI surfaces it via the user-facing branch.
+    """
+
+
 def safe_error_envelope(exc: BaseException) -> Dict[str, Any]:
     """Build a sanitized error envelope for audit logs and console output.
 

@@ -106,6 +106,28 @@ class ReplayVersions:
     is_test_suite: bool
 
 
+@dataclass(frozen=True)
+class CascadeExperiments:
+    """Cascade every experiment referencing the source dataset.
+
+    Slice 3's umbrella action — fires once per source dataset and internally
+    loops over every experiment that referenced it. Reuses Slice 2's
+    ``version_remap`` and ``item_id_remap`` (already populated on the plan
+    by ``ReplayVersions``) to rewrite each experiment's
+    ``dataset_version_id`` / ``dataset_item_id`` FK fields, and builds its
+    own ``trace_id`` remap as traces ride along with the experiments.
+
+    Per-experiment failures stop the cascade (the audit log captures
+    partial progress on the ``failed`` entry). Per-item missing-trace /
+    missing-item conditions are tallied as skip counters rather than
+    failures, matching Slice 1/2's ``skipped_items`` semantics.
+    """
+
+    source_dataset_id: str
+    dest_name: str
+    dest_project_name: str
+
+
 @dataclass(kw_only=True)
 class MigrationPlan(BaseMigrationPlan):
     """Dataset-specific migration plan.
@@ -114,12 +136,13 @@ class MigrationPlan(BaseMigrationPlan):
     ``BaseMigrationPlan`` and narrows ``source`` to ``ResolvedDataset``.
     The action list contains dataset-specific records (``RenameSource``,
     ``CreateDestination``, ``CopyTestSuiteConfig``, ``CopyCurrentItems``,
-    ``ReplayVersions``).
+    ``ReplayVersions``, ``CascadeExperiments``).
 
     The executor sets ``version_remap`` / ``item_id_remap`` on the plan
-    after a successful ``ReplayVersions`` run. Slice 3 reads them to remap
-    experiment foreign-key references; for plain Slice 2 invocations they
-    are populated for completeness even though no consumer reads them yet.
+    after a successful ``ReplayVersions`` run; Slice 3's
+    ``CascadeExperiments`` reads them to remap experiment foreign-key
+    references and writes ``trace_id_remap`` for Slice 4 (optimizations
+    will need the same trace map to remap their own references).
     """
 
     source: ResolvedDataset
@@ -127,6 +150,7 @@ class MigrationPlan(BaseMigrationPlan):
     to_project: str
     version_remap: Dict[str, str] = field(default_factory=dict)
     item_id_remap: Dict[str, str] = field(default_factory=dict)
+    trace_id_remap: Dict[str, str] = field(default_factory=dict)
 
 
 def build_dataset_plan(
@@ -135,6 +159,7 @@ def build_dataset_plan(
     to_project: str,
     from_project: Optional[str],
     exclude_versions: bool = False,
+    exclude_experiments: bool = False,
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
@@ -146,7 +171,22 @@ def build_dataset_plan(
     ``ReplayVersions`` action that walks the source's full version history;
     ``exclude_versions=True`` emits a ``CopyCurrentItems`` action that
     matches Slice 1's "current items only" behaviour.
+
+    ``exclude_experiments=False`` (default since Slice 3) appends a
+    ``CascadeExperiments`` action that recreates every experiment
+    referencing the source dataset under the destination project, copying
+    traces + spans along. ``exclude_experiments=True`` skips the cascade
+    entirely (the dataset moves alone). The combination
+    ``exclude_versions=True`` + ``exclude_experiments=False`` is rejected:
+    experiments reference specific dataset versions, and a current-items-
+    only copy doesn't preserve the version IDs the experiments need.
     """
+    if exclude_versions and not exclude_experiments:
+        raise ValueError(
+            "--exclude-versions requires --exclude-experiments: experiments "
+            "reference specific dataset versions, and skipping version-history "
+            "replay leaves no remap entries for them to resolve against."
+        )
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(rest_client, to_project)
@@ -244,6 +284,18 @@ def build_dataset_plan(
                 dest_name=source.name,
                 dest_project_name=to_project,
                 is_test_suite=is_test_suite,
+            )
+        )
+
+    # Cascade experiments must run AFTER ReplayVersions so that
+    # plan.version_remap / plan.item_id_remap are populated when the
+    # cascade reads them.
+    if not exclude_experiments:
+        plan.actions.append(
+            CascadeExperiments(
+                source_dataset_id=source.id,
+                dest_name=source.name,
+                dest_project_name=to_project,
             )
         )
 

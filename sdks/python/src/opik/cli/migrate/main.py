@@ -21,6 +21,7 @@ import opik
 from .audit import AuditLog, default_audit_path
 from .datasets.executor import execute_plan, record_planned
 from .datasets.planner import (
+    CascadeExperiments,
     CopyCurrentItems,
     CopyTestSuiteConfig,
     CreateDestination,
@@ -152,7 +153,17 @@ def _finalize_and_fail(
     is_flag=True,
     help=(
         "Skip version-history replay. Only the source's current items are "
-        "copied (one version on the target). Equivalent to Slice 1 behaviour."
+        "copied (one version on the target). Equivalent to Slice 1 behaviour. "
+        "Requires --exclude-experiments."
+    ),
+)
+@click.option(
+    "--exclude-experiments",
+    is_flag=True,
+    help=(
+        "Skip cascading experiments + traces + spans into the destination "
+        "project. Only the dataset itself moves; experiments stay attached "
+        "to the renamed source dataset."
     ),
 )
 @click.option(
@@ -173,6 +184,7 @@ def migrate_dataset_command(
     to_project: str,
     from_project: Optional[str],
     exclude_versions: bool,
+    exclude_experiments: bool,
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -185,12 +197,22 @@ def migrate_dataset_command(
         3. (Test suites only) Apply suite-level evaluators + execution_policy
         4. Replay every source version onto the destination, OR (with
            --exclude-versions) copy the source's current items only
+        5. Cascade experiments + traces + spans into the destination project
+           (skipped with --exclude-experiments)
     """
+    if exclude_versions and not exclude_experiments:
+        raise click.UsageError(
+            "--exclude-versions requires --exclude-experiments: experiments "
+            "reference specific dataset versions, and a current-items-only "
+            "copy doesn't preserve the version IDs the experiments need."
+        )
+
     args = {
         "name": name,
         "to_project": to_project,
         "from_project": from_project,
         "exclude_versions": exclude_versions,
+        "exclude_experiments": exclude_experiments,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -205,6 +227,7 @@ def migrate_dataset_command(
             to_project=to_project,
             from_project=from_project,
             exclude_versions=exclude_versions,
+            exclude_experiments=exclude_experiments,
         )
 
         _print_plan(plan)
@@ -265,5 +288,11 @@ def _print_plan(plan: MigrationPlan) -> None:
                 str(idx),
                 "replay versions",
                 f"{action.source_name_after_rename} → {action.dest_name} (full history)",
+            )
+        elif isinstance(action, CascadeExperiments):
+            table.add_row(
+                str(idx),
+                "cascade experiments",
+                f"experiments + traces + spans → project {action.dest_project_name}",
             )
     console.print(table)

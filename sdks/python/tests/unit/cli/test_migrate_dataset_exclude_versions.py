@@ -56,6 +56,7 @@ class TestMigrateHelp:
         assert "--to-project" in result.output
         assert "--from-project" in result.output
         assert "--exclude-versions" in result.output
+        assert "--exclude-experiments" in result.output
         assert "--dry-run" in result.output
 
 
@@ -65,10 +66,11 @@ class TestMigrateHelp:
 
 
 class TestPlanBuilding:
-    def test_build_dataset_plan__default_flow__orders_rename_then_create_then_replay(
+    def test_build_dataset_plan__default_flow__orders_rename_then_create_then_replay_then_cascade(
         self,
     ) -> None:
-        # Slice 2 default: full version-history replay replaces the
+        # Slice 3 default: full version-history replay followed by the
+        # experiment+trace+span cascade. The two replace the slice-1
         # current-items-only copy.
         rest_client = _planner_rest_client(
             [
@@ -85,17 +87,46 @@ class TestPlanBuilding:
         )
 
         types = [type(a).__name__ for a in plan.actions]
-        assert types == ["RenameSource", "CreateDestination", "ReplayVersions"]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeExperiments",
+        ]
         rename = plan.actions[0]
         assert rename.from_name == "MyDataset"
         assert rename.to_name == "MyDataset_v1"
         assert plan.target_name == "MyDataset"
 
+    def test_build_dataset_plan__exclude_experiments__omits_cascade(
+        self,
+    ) -> None:
+        # Opt out of the experiment cascade. Default replay path otherwise.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+            ]
+        )
+
+        plan = planner_module.build_dataset_plan(
+            rest_client=rest_client,
+            name="MyDataset",
+            to_project="B",
+            from_project=None,
+            exclude_experiments=True,
+        )
+
+        types = [type(a).__name__ for a in plan.actions]
+        assert types == ["RenameSource", "CreateDestination", "ReplayVersions"]
+
     def test_build_dataset_plan__exclude_versions__falls_back_to_copy_current_items(
         self,
     ) -> None:
         # Opt-in to Slice 1 behaviour for users who explicitly don't want
-        # version-history replay.
+        # version-history replay. ``exclude_versions`` requires
+        # ``exclude_experiments`` to avoid producing a remap-less plan that
+        # the cascade would silently turn into nothing-migrated.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset")]),
@@ -109,10 +140,33 @@ class TestPlanBuilding:
             to_project="B",
             from_project=None,
             exclude_versions=True,
+            exclude_experiments=True,
         )
 
         types = [type(a).__name__ for a in plan.actions]
         assert types == ["RenameSource", "CreateDestination", "CopyCurrentItems"]
+
+    def test_build_dataset_plan__exclude_versions_without_exclude_experiments__raises(
+        self,
+    ) -> None:
+        # The combination is rejected: experiments reference specific
+        # version IDs, so skipping replay leaves no remap for the cascade.
+        rest_client = _planner_rest_client(
+            [
+                _Page([_DatasetRow(id="src-1", name="MyDataset")]),
+                _Page([]),
+            ]
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            planner_module.build_dataset_plan(
+                rest_client=rest_client,
+                name="MyDataset",
+                to_project="B",
+                from_project=None,
+                exclude_versions=True,
+            )
+        assert "exclude-experiments" in str(exc_info.value)
 
     def test_build_dataset_plan__test_suite_with_replay__skips_copy_test_suite_config(
         self,
@@ -139,8 +193,13 @@ class TestPlanBuilding:
         )
 
         types = [type(a).__name__ for a in plan.actions]
-        assert types == ["RenameSource", "CreateDestination", "ReplayVersions"]
-        replay = plan.actions[-1]
+        assert types == [
+            "RenameSource",
+            "CreateDestination",
+            "ReplayVersions",
+            "CascadeExperiments",
+        ]
+        replay = plan.actions[2]
         assert replay.is_test_suite is True
 
     def test_build_dataset_plan__test_suite_with_exclude_versions__keeps_copy_test_suite_config(
@@ -149,6 +208,7 @@ class TestPlanBuilding:
         # Test suites under the slice 1 fallback (``--exclude-versions``):
         # ``CopyTestSuiteConfig`` IS in the plan because the
         # ``CopyCurrentItems`` path doesn't carry suite-level config.
+        # Cascade is excluded (slice 1 doesn't populate version_remap).
         rest_client = _planner_rest_client(
             [
                 _Page(
@@ -164,6 +224,7 @@ class TestPlanBuilding:
             to_project="B",
             from_project=None,
             exclude_versions=True,
+            exclude_experiments=True,
         )
 
         types = [type(a).__name__ for a in plan.actions]
@@ -325,7 +386,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B", "--exclude-versions"],
+            [
+                "MyDataset",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -430,7 +497,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B", "--exclude-versions"],
+            [
+                "MyDataset",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -463,7 +536,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B", "--exclude-versions"],
+            [
+                "MyDataset",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -505,7 +584,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B", "--exclude-versions"],
+            [
+                "MyDataset",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -541,7 +626,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MyDataset", "--to-project", "B", "--exclude-versions"],
+            [
+                "MyDataset",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -596,7 +687,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MySuite", "--to-project", "B", "--exclude-versions"],
+            [
+                "MySuite",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -678,7 +775,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["MySuite", "--to-project", "B", "--exclude-versions"],
+            [
+                "MySuite",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
@@ -742,7 +845,13 @@ class TestMigrateDatasetCommand:
 
         result = self._invoke(
             runner,
-            ["LegacyDS", "--to-project", "B", "--exclude-versions"],
+            [
+                "LegacyDS",
+                "--to-project",
+                "B",
+                "--exclude-versions",
+                "--exclude-experiments",
+            ],
             client,
             tmp_path,
         )
