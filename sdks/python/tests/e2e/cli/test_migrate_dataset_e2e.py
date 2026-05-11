@@ -166,10 +166,6 @@ class TestMigrateDatasetVersionReplay:
                 {"name": "correctness", "value": 0.9, "reason": "matches reference"},
                 {"name": "latency_p95", "value": 230.5},
             ],
-            per_item_extras=[
-                {"input": {"q": f"input-{i}"}, "output": {"a": f"output-{i}"}}
-                for i in range(len(v1_item_ids))
-            ],
         )
 
         # Run the migration.
@@ -262,11 +258,13 @@ class TestMigrateDatasetVersionReplay:
         assert dest_exp.dataset_version_id in target_version_ids
 
         # Items: one per source item, with FRESH trace ids (disjoint from
-        # source), per-item input/output preserved.
+        # source). Per-item input/output/usage/cost are READ-ONLY on the BE
+        # (computed/aggregated from the underlying trace + span entities);
+        # we assert the trace + span fidelity below instead.
         dest_items = destination_experiment_items(
             rest,
-            experiment_name=experiment_name,
-            project_name=target_project_name,
+            experiment_id=dest_exp.id,
+            dataset_id=target.id,
         )
         assert len(dest_items) == len(v1_item_ids)
         dest_trace_ids = {it.trace_id for it in dest_items}
@@ -274,11 +272,6 @@ class TestMigrateDatasetVersionReplay:
             "destination experiment items should reference new trace ids, "
             "not the source's"
         )
-        # Per-item input/output round-trips via ``model_extra``.
-        for it in dest_items:
-            extra = getattr(it, "model_extra", None) or {}
-            assert extra.get("input") is not None
-            assert extra.get("output") is not None
 
         # Each destination trace exists under the target project and has the
         # same span shape as the source (root + 1 child = 2 spans).

@@ -581,39 +581,27 @@ def recreate_experiment(
                 debug,
             )
 
-            # Create experiment item with mapped IDs. On the migrate path
-            # we additionally forward every per-item write-side field the
-            # source carried (input/output/feedback_scores/assertion_results/
-            # execution_policy/description/status/usage/cost/duration) so
-            # the destination item is a verbatim copy, not just an FK
-            # shell. The cascade builds these from
-            # ``ExperimentItemPublic.model_extra`` so the BE-returned
-            # extras survive the read.
+            # Create experiment item with mapped IDs. Only the four FK
+            # fields are forwarded -- the BE's ExperimentItem Write view
+            # accepts only id/experiment_id/dataset_item_id/trace_id (plus
+            # project_name). Other fields like input/output/feedback_scores/
+            # assertion_results/execution_policy are READ-ONLY on the BE
+            # (Compare view); they're computed/aggregated from the
+            # underlying trace + span + assertion_results entities. The
+            # cascade ensures those entities carry the right data; the BE
+            # surfaces them on read. Trace-scoped assertion_results in
+            # particular are written via the dedicated
+            # ``assertion_results.store_assertions_batch`` endpoint.
             try:
                 experiment_item_id = id_helpers_module.generate_id()
-                item_kwargs: Dict[str, Any] = {
-                    "id": experiment_item_id,
-                    "experiment_id": experiment.id,
-                    "dataset_item_id": new_dataset_item_id,
-                    "trace_id": new_trace_id,
-                }
-                if is_migrate_path:
-                    for field in (
-                        "input",
-                        "output",
-                        "feedback_scores",
-                        "assertion_results",
-                        "execution_policy",
-                        "description",
-                        "status",
-                        "usage",
-                        "total_estimated_cost",
-                        "duration",
-                    ):
-                        value = item_data.get(field)
-                        if value is not None:
-                            item_kwargs[field] = value
-                rest_experiment_items.append(ExperimentItem(**item_kwargs))
+                rest_experiment_items.append(
+                    ExperimentItem(
+                        id=experiment_item_id,
+                        experiment_id=experiment.id,
+                        dataset_item_id=new_dataset_item_id,
+                        trace_id=new_trace_id,
+                    )
+                )
                 successful_items += 1
                 debug_print(
                     f"Prepared experiment item: dataset_item_id={new_dataset_item_id}, trace_id={new_trace_id}",

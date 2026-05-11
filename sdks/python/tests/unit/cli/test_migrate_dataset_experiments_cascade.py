@@ -187,32 +187,66 @@ def _cascade_rest_client(
 
     rest_client.experiments.find_experiments.side_effect = _find_experiments
 
-    def _stream_items(
-        experiment_name: str, project_name: Optional[str] = None, limit: int = 500
+    def _find_dataset_items_with_exp_items(
+        id: str,
+        experiment_ids: str,
+        page: int,
+        size: int,
+        **_kwargs: Any,
     ) -> Any:
-        # Real REST returns ``Iterator[bytes]`` of NDJSON; the cascade
-        # parses it through ``rest_stream_parser.read_and_parse_stream``
-        # into ``ExperimentItemPublic``. Emit one JSON line per item
-        # ending in ``\n`` so the parser can split on newlines.
-        items = items_by_experiment.get(experiment_name, [])
-        payloads: List[bytes] = []
-        for it in items:
-            payload: Dict[str, Any] = {
-                "id": it.id,
-                "experiment_id": it.experiment_id,
-                "trace_id": it.trace_id,
-                "dataset_item_id": it.dataset_item_id,
-            }
-            # Forward any extras the test attached (input, output,
-            # feedback_scores, assertion_results, etc.) via the
-            # ``extras`` attribute on the stand-in. Pydantic v2's
-            # ``extra='allow'`` will surface these on ``model_extra``.
-            for key, value in getattr(it, "extras", {}).items():
-                payload[key] = value
-            payloads.append(json.dumps(payload).encode("utf-8") + b"\n")
-        return iter(payloads)
+        # The real REST endpoint takes a JSON-array string for
+        # ``experiment_ids``; the mock parses it back so tests can key
+        # ``items_by_experiment`` by source experiment id. Each match
+        # returns a ``DatasetItemCompare``-shaped MagicMock with an
+        # ``experiment_items`` list of ``ExperimentItemCompare``-shaped
+        # MagicMocks carrying the FK fields + any extras (assertion_results
+        # in particular) the test attached.
+        requested_exp_ids = set(json.loads(experiment_ids))
+        if page != 1:
+            return MagicMock(content=[])
+        # Find all items across the experiments this call requested. Each
+        # dataset item carries one experiment_item per matching experiment.
+        dataset_items: List[Any] = []
+        for exp_name, exp_items in items_by_experiment.items():
+            # The test fixtures key items by experiment NAME; we need to
+            # convert back to id via the experiments_by_dataset lookup.
+            matching_exp_id: Optional[str] = None
+            for exps in experiments_by_dataset.values():
+                for exp in exps:
+                    if exp.name == exp_name and exp.id in requested_exp_ids:
+                        matching_exp_id = exp.id
+                        break
+                if matching_exp_id:
+                    break
+            if not matching_exp_id:
+                continue
+            for it in exp_items:
+                # Build the experiment_item mock with the typed fields +
+                # the test's ``extras`` (e.g. assertion_results) merged in.
+                exp_item = MagicMock()
+                exp_item.id = it.id
+                exp_item.experiment_id = matching_exp_id
+                exp_item.trace_id = it.trace_id
+                exp_item.dataset_item_id = it.dataset_item_id
+                exp_item.assertion_results = None
+                exp_item.feedback_scores = None
+                exp_item.input = None
+                exp_item.output = None
+                # Allow extras to override defaults.
+                for key, value in getattr(it, "extras", {}).items():
+                    setattr(exp_item, key, value)
+                ds_item = MagicMock(experiment_items=[exp_item])
+                dataset_items.append(ds_item)
+        return MagicMock(content=dataset_items)
 
-    rest_client.experiments.stream_experiment_items.side_effect = _stream_items
+    rest_client.datasets.find_dataset_items_with_experiment_items.side_effect = (
+        _find_dataset_items_with_exp_items
+    )
+    # MagicMock auto-attributes starting with 'assert' are blocked because
+    # the mock treats them as assertions. Explicitly pre-attach the
+    # ``assertion_results`` sub-mock so the cascade can call into it.
+    rest_client.assertion_results = MagicMock()
+    rest_client.assertion_results.store_assertions_batch = MagicMock()
 
     def _get_trace(id: str) -> _Trace:
         return traces_by_id[id]
@@ -928,34 +962,86 @@ class TestCascadeExperiments:
         # The score's id must be the NEW span id (not the source).
         assert scores[0].id != "span-root"
 
-    def test_experiment_item_fidelity__write_side_fields_forwarded(self) -> None:
-        # Source ExperimentItem carries BE-returned extras: input, output,
-        # feedback_scores, assertion_results, execution_policy, description,
-        # status, usage, total_estimated_cost, duration. The cascade should
-        # forward all of them to the destination ``create_experiment_items``
-        # call.
+    def test_trace_assertion_results__copied_to_destination_trace(self) -> None:
+        # Source experiment item carries assertion_results via the Compare
+        # view (test-suite-driven experiments). Those assertion_results are
+        # ENTITY-scoped to the trace on the BE side; the cascade re-emits
+        # them via ``store_assertions_batch(entity_type='TRACE', ...)``
+        # against the new trace id, NOT through any ExperimentItem field
+        # (which the BE silently drops on write).
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        # Source assertion results -- mock objects with the Compare view's
+        # ``value`` / ``passed`` / ``reason`` shape.
+        from unittest.mock import MagicMock as _MM
+
+        ar_pass = _MM()
+        ar_pass.value = "exact-match"
+        ar_pass.passed = True
+        ar_pass.reason = "matched reference"
+
+        ar_fail = _MM()
+        ar_fail.value = "threshold-check"
+        ar_fail.passed = False
+        ar_fail.reason = "below 0.8"
+
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+            extras={"assertion_results": [ar_pass, ar_fail]},
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture()
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        # store_assertions_batch called with entity_type=TRACE, scoped to
+        # the new destination trace id + project.
+        rest_client.assertion_results.store_assertions_batch.assert_called_once()
+        call = rest_client.assertion_results.store_assertions_batch.call_args
+        assert call.kwargs["entity_type"] == "TRACE"
+        ars = call.kwargs["assertion_results"]
+        assert len(ars) == 2
+        new_trace_id = result.trace_id_remap["src-trace-1"]
+        # Mapping: AssertionResultCompare.value -> name,
+        # AssertionResultCompare.passed -> status (passed|failed),
+        # AssertionResultCompare.reason -> reason.
+        by_name = {a.name: a for a in ars}
+        assert by_name["exact-match"].entity_id == new_trace_id
+        assert by_name["exact-match"].project_name == "DestProject"
+        assert by_name["exact-match"].status == "passed"
+        assert by_name["exact-match"].reason == "matched reference"
+        assert by_name["threshold-check"].status == "failed"
+        assert by_name["threshold-check"].reason == "below 0.8"
+        for a in ars:
+            assert a.source == "sdk"
+
+    def test_no_assertion_results__skips_store_assertions_call(self) -> None:
+        # Regular-dataset items (no assertion_results) must NOT trigger
+        # store_assertions_batch -- it would 400 on an empty batch and
+        # is a no-op semantically.
         experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
         item = _ExperimentItem(
             id="src-item-1",
             experiment_id="src-exp-1",
             trace_id="src-trace-1",
             dataset_item_id="src-ds-item-1",
-            extras={
-                "input": {"q": "what is 2+2?"},
-                "output": {"a": "4"},
-                "feedback_scores": [
-                    {"name": "correctness", "value": 1.0, "source": "sdk"}
-                ],
-                "assertion_results": [
-                    {"value": "passed", "passed": True, "reason": "exact match"}
-                ],
-                "execution_policy": {"runs_per_item": 3, "pass_threshold": 2},
-                "description": "math sanity check",
-                "status": "passed",
-                "usage": {"prompt_tokens": 12, "completion_tokens": 1},
-                "total_estimated_cost": 0.0001,
-                "duration": 230.5,
-            },
         )
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
@@ -977,34 +1063,7 @@ class TestCascadeExperiments:
             audit=_audit(),
         )
 
-        # ``recreate_experiment`` wires the cascade through to
-        # ``client._rest_client.experiments.create_experiment_items``.
-        created = client._rest_client.experiments.create_experiment_items
-        created.assert_called_once()
-        items_written = created.call_args.kwargs["experiment_items"]
-        assert len(items_written) == 1
-        written = items_written[0]
-
-        # FK fields remapped:
-        assert written.dataset_item_id == "dest-ds-item-1"
-        assert written.trace_id != "src-trace-1"  # new id minted
-
-        # Fidelity fields forwarded verbatim:
-        assert written.input == {"q": "what is 2+2?"}
-        assert written.output == {"a": "4"}
-        assert written.feedback_scores is not None
-        assert len(written.feedback_scores) == 1
-        assert written.feedback_scores[0].name == "correctness"
-        assert written.assertion_results is not None
-        assert len(written.assertion_results) == 1
-        assert written.assertion_results[0].passed is True
-        assert written.execution_policy is not None
-        assert written.execution_policy.runs_per_item == 3
-        assert written.description == "math sanity check"
-        assert written.status == "passed"
-        assert written.usage == {"prompt_tokens": 12, "completion_tokens": 1}
-        assert written.total_estimated_cost == 0.0001
-        assert written.duration == 230.5
+        rest_client.assertion_results.store_assertions_batch.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

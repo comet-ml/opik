@@ -479,31 +479,84 @@ def seed_experiment_with_trace_tree(
     if len(extras_list) != len(item_ids):
         raise ValueError("per_item_extras must have the same length as item_ids")
 
+    # ``assertion_results`` are persisted via the dedicated
+    # ``assertion_results.store_assertions_batch(entity_type='TRACE', ...)``
+    # endpoint -- the ``ExperimentItem.assertion_results`` field is dropped
+    # silently on the BE Write view (it's READ-ONLY on the Compare view,
+    # computed from the underlying assertion-results entity table). Same
+    # for the other per-item fidelity fields like input/output -- those
+    # are BE-computed read aggregates.
+    #
+    # The seed builds a separate assertion-batch from each item's extras
+    # before constructing the ExperimentItem write (which only carries the
+    # FK fields). This mirrors how the cascade itself writes assertions.
+    from opik.rest_api.types.assertion_result_batch_item import (
+        AssertionResultBatchItem,
+    )
+
+    assertion_batch: List[AssertionResultBatchItem] = []
+    assertion_results_by_trace: Dict[str, List[Dict[str, Any]]] = {}
     experiment_items_to_create: List[ExperimentItem] = []
     for item_id, trace_id, extras in zip(item_ids, trace_ids, extras_list):
-        item_kwargs: Dict[str, Any] = {
-            "id": _id_helpers.generate_id(),
-            "experiment_id": new_experiment_id,
-            "dataset_item_id": item_id,
-            "trace_id": trace_id,
-        }
-        # ``extras`` lets callers seed per-item fidelity fields the
-        # cascade should round-trip: input, output, feedback_scores,
-        # assertion_results, execution_policy, description, status,
-        # usage, total_estimated_cost, duration. Pydantic v2 ``ExperimentItem``
-        # has ``extra='allow'`` so unknown keys also pass through.
-        item_kwargs.update(extras)
-        experiment_items_to_create.append(ExperimentItem(**item_kwargs))
+        per_item_assertions = extras.get("assertion_results") or []
+        for ar in per_item_assertions:
+            value = (
+                ar.get("value") if isinstance(ar, dict) else getattr(ar, "value", None)
+            )
+            passed = (
+                ar.get("passed")
+                if isinstance(ar, dict)
+                else getattr(ar, "passed", None)
+            )
+            reason = (
+                ar.get("reason")
+                if isinstance(ar, dict)
+                else getattr(ar, "reason", None)
+            )
+            if value is None or passed is None:
+                continue
+            assertion_batch.append(
+                AssertionResultBatchItem(
+                    entity_id=trace_id,
+                    project_name=project_name,
+                    name=value,
+                    status="passed" if passed else "failed",
+                    reason=reason,
+                    source="sdk",
+                )
+            )
+            assertion_results_by_trace.setdefault(trace_id, []).append(
+                {"value": value, "passed": passed, "reason": reason}
+            )
+
+        # The remaining extras are READ-ONLY on the BE; we don't write
+        # them. Forwarding them on the ExperimentItem create payload would
+        # be silently dropped (BE Write view doesn't include them).
+        experiment_items_to_create.append(
+            ExperimentItem(
+                id=_id_helpers.generate_id(),
+                experiment_id=new_experiment_id,
+                dataset_item_id=item_id,
+                trace_id=trace_id,
+            )
+        )
 
     rest_client.experiments.create_experiment_items(
         experiment_items=experiment_items_to_create
     )
+
+    if assertion_batch:
+        rest_client.assertion_results.store_assertions_batch(
+            entity_type="TRACE",
+            assertion_results=assertion_batch,
+        )
 
     return {
         "experiment_id": new_experiment_id,
         "trace_ids": trace_ids,
         "span_ids_by_trace": span_ids_by_trace,
         "feedback_scores_by_trace": feedback_scores_by_trace,
+        "assertion_results_by_trace": assertion_results_by_trace,
     }
 
 
@@ -538,29 +591,42 @@ def find_destination_experiment(
 def destination_experiment_items(
     rest_client: OpikApi,
     *,
-    experiment_name: str,
-    project_name: str,
+    experiment_id: str,
+    dataset_id: str,
 ) -> List[Any]:
-    """Materialise the destination experiment's items (one per source item).
+    """Materialise the destination experiment's items via the Compare view.
 
-    The ``stream_experiment_items`` endpoint takes ``experiment_name`` +
-    ``project_name`` and returns raw NDJSON bytes that we parse through
-    ``rest_stream_parser`` -- ``extra='allow'`` on ``ExperimentItemPublic``
-    surfaces BE-returned fields outside the typed schema on ``model_extra``,
-    which is how the tests assert on assertion_results / feedback_scores /
-    etc. at the destination.
+    The cascade's source-side read uses
+    ``datasets.find_dataset_items_with_experiment_items`` because only the
+    Compare view surfaces ``assertion_results`` / ``feedback_scores`` /
+    ``input`` / ``output``. We use the same endpoint for destination
+    verification so tests can assert on those fields directly (the slim
+    ``stream_experiment_items`` Public view drops them).
+
+    Returns a flat list of ``ExperimentItemCompare`` -- one per source
+    experiment item.
     """
-    from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
-
-    raw_stream = rest_client.experiments.stream_experiment_items(
-        experiment_name=experiment_name,
-        project_name=project_name,
-        limit=500,
-    )
-    return rest_stream_parser.read_and_parse_stream(
-        stream=raw_stream,
-        item_class=ExperimentItemPublic,
-    )
+    experiment_ids_filter = json.dumps([experiment_id])
+    collected: List[Any] = []
+    page = 1
+    while True:
+        resp = rest_client.datasets.find_dataset_items_with_experiment_items(
+            id=dataset_id,
+            experiment_ids=experiment_ids_filter,
+            page=page,
+            size=100,
+        )
+        content = resp.content or []
+        if not content:
+            break
+        for ds_item in content:
+            for ei in ds_item.experiment_items or []:
+                if ei.experiment_id == experiment_id:
+                    collected.append(ei)
+        if len(content) < 100:
+            break
+        page += 1
+    return collected
 
 
 def destination_spans_for_trace(

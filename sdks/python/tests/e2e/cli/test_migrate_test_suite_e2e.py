@@ -242,11 +242,13 @@ def test_test_suite_full_fidelity_round_trip(
         )
 
     # ── Seed a suite-driven experiment on v2 items so the cascade has
-    # something to round-trip. Test-suite experiments carry per-item
-    # assertion_results + execution_policy (regular-dataset experiments
-    # carry feedback_scores instead -- covered in test_migrate_dataset_e2e.py).
-    # Each item gets one trace, one span, and per-item assertion_results
-    # + execution_policy that should round-trip verbatim. ──
+    # something to round-trip. Test-suite experiments carry per-trace
+    # assertion_results (regular-dataset experiments carry feedback_scores
+    # instead -- covered in test_migrate_dataset_e2e.py). Each item gets
+    # one trace, one span, and per-item assertion_results that the seed
+    # helper writes via store_assertions_batch(entity_type='TRACE', ...).
+    # The cascade re-emits them scoped to the new destination trace ids
+    # via the same endpoint. ──
     experiment_name = f"e2e-suite-exp-{random_chars()}"
     v2_item_ids = [by_q["Q1"].id, by_q["Q2"].id, by_q["Q3"].id]
     cascade_seed = seed_experiment_with_trace_tree(
@@ -264,20 +266,13 @@ def test_test_suite_full_fidelity_round_trip(
         spans_per_trace=2,
         per_item_extras=[
             {
-                "input": {"q": f"input-{i}"},
-                "output": {"a": f"output-{i}"},
                 "assertion_results": [
                     {
-                        "value": "passed" if i % 2 == 0 else "failed",
+                        "value": f"check-{i}",
                         "passed": i % 2 == 0,
                         "reason": f"assertion-reason-{i}",
                     }
                 ],
-                "execution_policy": {
-                    "runs_per_item": 3,
-                    "pass_threshold": 2,
-                },
-                "status": "passed" if i % 2 == 0 else "failed",
             }
             for i in range(len(v2_item_ids))
         ],
@@ -367,40 +362,40 @@ def test_test_suite_full_fidelity_round_trip(
     target_version_ids = {v.id for v in tgt_versions}
     assert dest_exp.dataset_version_id in target_version_ids
 
-    # Per-item assertion_results + execution_policy + status survive via
-    # the model_extra surface (the typed ExperimentItemPublic schema drops
-    # these fields, but the BE returns them under extra='allow').
+    # Per-item assertion_results survive on the destination via the
+    # Compare view (the BE persists them through the dedicated
+    # ``assertion_results.store_assertions_batch`` endpoint scoped to the
+    # destination trace ids; the Compare view aggregates them onto each
+    # ExperimentItemCompare for read).
     dest_items = destination_experiment_items(
         rest,
-        experiment_name=experiment_name,
-        project_name=target_project_name,
+        experiment_id=dest_exp.id,
+        dataset_id=target.id,
     )
     assert len(dest_items) == len(v2_item_ids)
     dest_trace_ids = {it.trace_id for it in dest_items}
     assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"]))
 
+    expected_names = {f"check-{i}" for i in range(len(v2_item_ids))}
+    seen_names: set = set()
     for dest_item in dest_items:
-        extras = getattr(dest_item, "model_extra", None) or {}
-        ars = extras.get("assertion_results")
+        ars = dest_item.assertion_results
         assert ars and len(ars) == 1, (
             "destination experiment item should carry exactly one "
-            "assertion_result (sourced verbatim from the source item)"
+            f"assertion_result; got {ars}"
         )
-        # Each assertion_result must round-trip the value/passed/reason
-        # the source seeded.
         ar = ars[0]
-        assert ar.get("value") in {"passed", "failed"}
-        assert ar.get("passed") in {True, False}
-        assert ar.get("reason", "").startswith("assertion-reason-")
-
-        # execution_policy preserved.
-        ep = extras.get("execution_policy")
-        assert ep is not None
-        assert ep.get("runs_per_item") == 3
-        assert ep.get("pass_threshold") == 2
-
-        # status preserved.
-        assert extras.get("status") in {"passed", "failed"}
+        # Compare view shape: value / passed / reason all populated
+        # because the source wrote them via store_assertions_batch (with
+        # AssertionResultBatchItem.name landing on the read side as
+        # AssertionResultCompare.value).
+        assert ar.value is not None
+        assert ar.passed in {True, False}
+        assert (ar.reason or "").startswith("assertion-reason-")
+        seen_names.add(ar.value)
+    assert seen_names == expected_names, (
+        f"expected assertion names {expected_names}, got {seen_names}"
+    )
 
     # Each destination trace exists under the target project with the
     # span tree shape preserved (root + 1 child, parent_span_id remapped).

@@ -46,15 +46,16 @@ failures, matching Slice 1/2's ``skipped_items`` semantics.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set
 
 import opik
 import opik.id_helpers as id_helpers_module
-from opik.api_objects import rest_helpers, rest_stream_parser
+from opik.api_objects import rest_helpers
 from opik.rest_api import OpikApi
-from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
+from opik.rest_api.types.experiment_item_compare import ExperimentItemCompare
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
 from opik.rest_api.types.span_write import SpanWrite
@@ -190,17 +191,23 @@ def cascade_one_experiment(
     experiment_name = source_experiment.name
     assert experiment_id is not None  # narrowed in the caller
 
-    # The streaming endpoint takes experiment_name (workspace-unique
-    # per dataset, in practice). If the BE returned an experiment
-    # without a name we can't enumerate items via the stream API.
-    if not experiment_name:
+    source_dataset_id = source_experiment.dataset_id
+    if not source_dataset_id:
         raise ExperimentCascadeError(
-            f"Source experiment {experiment_id} has no name; "
-            "stream_experiment_items requires experiment_name."
+            f"Source experiment {experiment_id} has no dataset_id; "
+            "find_dataset_items_with_experiment_items requires the "
+            "dataset id to enumerate the experiment's items."
         )
 
-    items = _stream_experiment_items(
-        rest_client, experiment_name, source_project_name=source_project_name
+    # Source-side read goes through the Compare view (rather than the
+    # ``stream_experiment_items`` Public view) because we need each
+    # item's ``assertion_results``, which only the Compare view surfaces.
+    # Trace-scoped assertion results are then re-emitted at the
+    # destination via ``store_assertions_batch`` in _copy_traces_and_spans.
+    items = _read_source_experiment_items(
+        rest_client,
+        source_dataset_id=source_dataset_id,
+        source_experiment_id=experiment_id,
     )
     if not items:
         # An experiment with no items is degenerate but recreate-able; we
@@ -211,8 +218,17 @@ def cascade_one_experiment(
             experiment_name,
         )
 
-    # Collect distinct source trace ids for the items we plan to migrate.
+    # Collect distinct source trace ids for the items we plan to migrate,
+    # plus the assertion_results keyed by trace id (one trace can carry
+    # multiple assertion results across items, though the typical 1:1
+    # shape is one item -> one trace).
     source_trace_ids: Set[str] = {item.trace_id for item in items if item.trace_id}
+    assertion_results_by_source_trace: Dict[str, List[Any]] = {}
+    for item in items:
+        if item.trace_id and item.assertion_results:
+            assertion_results_by_source_trace.setdefault(item.trace_id, []).extend(
+                item.assertion_results
+            )
 
     traces_copied, spans_copied = _copy_traces_and_spans(
         rest_client,
@@ -220,13 +236,17 @@ def cascade_one_experiment(
         source_project_name=source_project_name,
         target_project_name=target_project_name,
         trace_id_remap=result.trace_id_remap,
+        assertion_results_by_source_trace=assertion_results_by_source_trace,
     )
     result.traces_migrated += traces_copied
     result.spans_migrated += spans_copied
 
-    # Build the ExperimentData payload that recreate_experiment consumes,
-    # adapting the REST ExperimentPublic + ExperimentItemPublic into the
-    # disk-export-shaped dict the function was originally written for.
+    # Build the ExperimentData payload that recreate_experiment consumes.
+    # Only the FK fields land on the destination ExperimentItem -- the
+    # rest of the per-item fidelity (input/output/feedback_scores/
+    # assertion_results/etc.) is READ-ONLY on the BE and reconstructs
+    # from the underlying trace + span + assertion entities (which the
+    # cascade copies in _copy_traces_and_spans).
     experiment_data = _build_experiment_data(source_experiment, items)
 
     target_version_id = version_remap.get(source_experiment.dataset_version_id or "")
@@ -287,37 +307,50 @@ def _list_source_experiments(
     return collected
 
 
-def _stream_experiment_items(
+def _read_source_experiment_items(
     rest_client: OpikApi,
-    experiment_name: str,
     *,
-    source_project_name: Optional[str],
-) -> List[ExperimentItemPublic]:
-    """Stream all items for one experiment.
+    source_dataset_id: str,
+    source_experiment_id: str,
+) -> List[ExperimentItemCompare]:
+    """Read all items for one source experiment via the Compare view.
 
-    The REST endpoint takes ``experiment_name`` (not id) and returns a
-    raw NDJSON byte stream that we parse via ``rest_stream_parser``. The
-    resulting ``ExperimentItemPublic`` objects have ``extra="allow"``, so
-    any BE-returned fields outside the typed schema (input, output,
-    feedback_scores, assertion_results, execution_policy, description,
-    status, usage, total_estimated_cost, duration) survive on
-    ``item.model_extra`` -- which is what the cascade consumes to
-    reconstruct full-fidelity destination experiment items.
+    Walks ``datasets.find_dataset_items_with_experiment_items`` paginated
+    against the source dataset, filtered to a single experiment id, and
+    flattens the per-dataset-item ``experiment_items`` list into a single
+    list of ``ExperimentItemCompare``. The Compare view is required (vs.
+    the ``stream_experiment_items`` Public view) because only it surfaces
+    ``assertion_results`` -- which the cascade needs in order to re-emit
+    them at the destination scoped to the new trace id via
+    ``store_assertions_batch(entity_type='TRACE', ...)``.
 
-    ``source_project_name`` scopes the read. May be ``None`` for
-    workspace-scoped sources (the BE accepts the omission for those).
+    The endpoint takes ``experiment_ids`` as a JSON-array string -- not a
+    comma-separated value or a list -- and 400s on either of the other
+    forms.
     """
-    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.experiments.stream_experiment_items(
-            experiment_name=experiment_name,
-            project_name=source_project_name,
-            limit=_EXPERIMENT_ITEM_BATCH,
+    experiment_ids_filter = json.dumps([source_experiment_id])
+    collected: List[ExperimentItemCompare] = []
+    page = 1
+    while True:
+        response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.datasets.find_dataset_items_with_experiment_items(
+                id=source_dataset_id,
+                experiment_ids=experiment_ids_filter,
+                page=page,
+                size=_EXPERIMENT_ITEM_BATCH,
+            )
         )
-    )
-    return rest_stream_parser.read_and_parse_stream(
-        stream=raw_stream,
-        item_class=ExperimentItemPublic,
-    )
+        page_content = response.content or []
+        if not page_content:
+            break
+        for dataset_item in page_content:
+            for exp_item in dataset_item.experiment_items or []:
+                if exp_item.experiment_id == source_experiment_id:
+                    collected.append(exp_item)
+        if len(page_content) < _EXPERIMENT_ITEM_BATCH:
+            break
+        page += 1
+    return collected
 
 
 def _copy_traces_and_spans(
@@ -327,6 +360,7 @@ def _copy_traces_and_spans(
     source_project_name: Optional[str],
     target_project_name: str,
     trace_id_remap: Dict[str, str],
+    assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
 ) -> tuple[int, int]:
     """Re-emit traces + spans under ``target_project_name``.
 
@@ -337,6 +371,13 @@ def _copy_traces_and_spans(
     destination trace via ``score_batch_of_traces`` after the trace batch
     create. Span feedback scores are handled in ``_copy_spans_for_trace``
     (we have the span id remap there).
+
+    Trace-scoped assertion results (read from the source via the Compare
+    view of ``find_dataset_items_with_experiment_items``) are re-emitted
+    against the new trace ids via ``store_assertions_batch(entity_type=
+    'TRACE', ...)`` after the trace batch create. ``assertion_results_by_
+    source_trace`` is ``None`` for callers that don't read the Compare view
+    (e.g. unit tests that don't exercise the test-suite path).
     """
     if not source_trace_ids:
         return 0, 0
@@ -381,6 +422,17 @@ def _copy_traces_and_spans(
         source_to_new_trace=source_to_new_trace,
         target_project_name=target_project_name,
     )
+
+    # Re-emit per-trace assertion results. These come from the caller's
+    # Compare-view read of source experiment items (cascade_one_experiment).
+    # Skipped for callers that didn't read them.
+    if assertion_results_by_source_trace:
+        _copy_trace_assertion_results(
+            rest_client,
+            assertion_results_by_source_trace=assertion_results_by_source_trace,
+            source_to_new_trace=source_to_new_trace,
+            target_project_name=target_project_name,
+        )
 
     spans_copied = 0
     for source_trace_id, new_trace_id in source_to_new_trace.items():
@@ -441,6 +493,93 @@ def _copy_trace_feedback_scores(
     for chunk in _chunks(batch, _FEEDBACK_BATCH_SIZE):
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda c=chunk: rest_client.traces.score_batch_of_traces(scores=c)
+        )
+
+
+def _copy_trace_assertion_results(
+    rest_client: OpikApi,
+    *,
+    assertion_results_by_source_trace: Dict[str, List[Any]],
+    source_to_new_trace: Dict[str, str],
+    target_project_name: str,
+) -> None:
+    """Re-emit per-trace assertion results under the destination project.
+
+    Assertion results aren't a field on ``ExperimentItem`` (the BE drops
+    that field on write -- it's READ-ONLY on the Compare view, computed
+    from the underlying assertion-results entity table). They are written
+    via the dedicated ``assertion_results.store_assertions_batch`` endpoint
+    against a ``TRACE`` / ``SPAN`` / ``THREAD`` entity.
+
+    For Slice 3 we only ever see assertion results on items via the
+    Compare view's ``ExperimentItemCompare.assertion_results``; those are
+    the trace-scoped writes the source had. We re-emit them scoped to the
+    new destination trace id so the destination ``ExperimentItemCompare``
+    surfaces them in the same place at the same shape.
+
+    The read shape ``AssertionResultCompare`` carries ``value`` / ``passed``
+    / ``reason``; the write shape ``AssertionResultBatchItem`` requires
+    ``entity_id`` / ``name`` / ``status`` / ``source`` (+ optional
+    ``project_name`` / ``reason``). The mapping is:
+
+      AssertionResultCompare.value  <->  AssertionResultBatchItem.name
+      AssertionResultCompare.passed <->  AssertionResultBatchItem.status
+                                          ("passed" | "failed")
+      AssertionResultCompare.reason <->  AssertionResultBatchItem.reason
+    """
+    from opik.rest_api.types.assertion_result_batch_item import (
+        AssertionResultBatchItem,
+    )
+
+    batch: List[AssertionResultBatchItem] = []
+    for source_trace_id, results in assertion_results_by_source_trace.items():
+        new_trace_id = source_to_new_trace.get(source_trace_id)
+        if not new_trace_id:
+            # Trace wasn't copied (e.g. earlier idempotent-skip); nothing
+            # to remap against.
+            continue
+        for ar in results:
+            # ``ar`` is an ``AssertionResultCompare``; defensive .get for
+            # callers passing dict-like stand-ins in tests.
+            value = (
+                getattr(ar, "value", None)
+                if not isinstance(ar, dict)
+                else ar.get("value")
+            )
+            passed = (
+                getattr(ar, "passed", None)
+                if not isinstance(ar, dict)
+                else ar.get("passed")
+            )
+            reason = (
+                getattr(ar, "reason", None)
+                if not isinstance(ar, dict)
+                else ar.get("reason")
+            )
+            if value is None or passed is None:
+                # Skip degenerate entries; the BE write rejects items
+                # missing the required ``name``/``status`` fields.
+                continue
+            batch.append(
+                AssertionResultBatchItem(
+                    entity_id=new_trace_id,
+                    project_name=target_project_name,
+                    name=value,
+                    status="passed" if passed else "failed",
+                    reason=reason,
+                    source="sdk",
+                )
+            )
+
+    if not batch:
+        return
+
+    for chunk in _chunks(batch, _FEEDBACK_BATCH_SIZE):
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest_client.assertion_results.store_assertions_batch(
+                entity_type="TRACE",
+                assertion_results=c,
+            )
         )
 
 
@@ -628,7 +767,7 @@ def _to_error_info_write(error_info: Any) -> Any:
 
 
 def _build_experiment_data(
-    source: ExperimentPublic, items: List[ExperimentItemPublic]
+    source: ExperimentPublic, items: List[ExperimentItemCompare]
 ) -> ExperimentData:
     """Adapt the REST ``ExperimentPublic`` + items into the
     ``ExperimentData`` dataclass that ``recreate_experiment`` consumes.
@@ -638,14 +777,18 @@ def _build_experiment_data(
     can read fields like ``type`` / ``evaluation_method`` / ``optimization_id``
     / ``tags`` / ``metadata`` / ``dataset_name`` verbatim.
 
-    Per-item fidelity: ``ExperimentItemPublic`` exposes only the FK fields in
-    its typed schema (id, experiment_id, dataset_item_id, trace_id), but the
-    BE returns a richer payload that ``extra='allow'`` surfaces on
-    ``model_extra``. We pull every field the destination ``ExperimentItem``
-    write surface accepts -- input, output, feedback_scores,
-    assertion_results, execution_policy, description, status, usage,
-    total_estimated_cost, duration -- so the cascaded item is a verbatim
-    copy of the source item, not just an FK shell.
+    Per-item payload carries only the FK fields. The BE's ``ExperimentItem``
+    Write view accepts only ``id`` / ``experiment_id`` / ``dataset_item_id``
+    / ``trace_id`` (plus ``project_name``); every other per-item field
+    surfaced on the Compare view (``input`` / ``output`` /
+    ``feedback_scores`` / ``assertion_results`` / ``execution_policy`` /
+    ``description`` / ``status`` / ``usage`` / ``total_estimated_cost`` /
+    ``duration``) is READ-ONLY and computed/aggregated from the underlying
+    trace + span + assertion-result entities. The cascade ensures those
+    underlying entities are populated correctly at the destination (traces
+    + spans copied with feedback scores; assertion results copied via the
+    dedicated ``assertion_results.store_assertions_batch`` endpoint scoped
+    to the new trace id); the BE surfaces the rest on read.
     """
     # ``optimization_id`` is intentionally omitted from the payload: Slice 3
     # doesn't cascade the optimization entity (Slice 4 owns it), so even if
@@ -666,59 +809,15 @@ def _build_experiment_data(
             source.evaluation_method if source.evaluation_method else "dataset"
         ),
     }
-    items_dicts = [_experiment_item_to_dict(item) for item in items]
+    items_dicts = [
+        {
+            "id": item.id,
+            "trace_id": item.trace_id,
+            "dataset_item_id": item.dataset_item_id,
+        }
+        for item in items
+    ]
     return ExperimentData(experiment=experiment_dict, items=items_dicts)
-
-
-# Per-item fields the migrate path forwards to the destination
-# ``ExperimentItem`` write payload. Sourced from ``ExperimentItemPublic.model_extra``
-# (BE returns them; the typed schema drops them). Kept as a module-level
-# constant so the production code and the unit-test stand-in stay in sync.
-#
-# Some fields are dataset-type-specific in practice:
-#   - ``feedback_scores`` -> regular ``dataset`` experiments
-#   - ``assertion_results`` / ``execution_policy`` -> ``evaluation_suite``
-#     (test suite) experiments
-#   - the rest (``input``, ``output``, ``usage``, ``total_estimated_cost``,
-#     ``duration``, ``description``, ``status``) are common to both
-#
-# We don't branch on dataset type because the BE-returned shape IS the
-# source of truth: a regular-dataset item won't have ``assertion_results``
-# in its read payload, so the ``is not None`` guard in
-# ``_experiment_item_to_dict`` drops it naturally. Same the other way.
-# This keeps a single code path and stays robust if the BE evolves which
-# fields apply to which type.
-_EXPERIMENT_ITEM_FIDELITY_FIELDS = (
-    "input",
-    "output",
-    "feedback_scores",
-    "assertion_results",
-    "execution_policy",
-    "description",
-    "status",
-    "usage",
-    "total_estimated_cost",
-    "duration",
-)
-
-
-def _experiment_item_to_dict(item: ExperimentItemPublic) -> Dict[str, Any]:
-    """Flatten an experiment item read into the dict shape
-    ``recreate_experiment`` consumes.
-
-    The typed FK fields land first; the BE-returned extras come from
-    ``model_extra`` (pydantic v2) and are passed through verbatim.
-    """
-    out: Dict[str, Any] = {
-        "id": item.id,
-        "trace_id": item.trace_id,
-        "dataset_item_id": item.dataset_item_id,
-    }
-    extras = getattr(item, "model_extra", None) or {}
-    for field_name in _EXPERIMENT_ITEM_FIDELITY_FIELDS:
-        if field_name in extras and extras[field_name] is not None:
-            out[field_name] = extras[field_name]
-    return out
 
 
 def _chunks(seq: List[Any], size: int) -> List[List[Any]]:
