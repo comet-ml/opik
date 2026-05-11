@@ -18746,6 +18746,8 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
+          deprecated: true
+          description: "Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend. Field retained for response-shape compatibility with older SDK clients; will be removed in a future release."
         v2WorkspaceAllowlistIds:
           uniqueItems: true
           type: array

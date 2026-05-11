@@ -1038,9 +1038,13 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
-  # Default: false
-  # Description: Whether or not Collaborators tab feature is enabled
-  collaboratorsTabEnabled: ${TOGGLE_COLLABORATORS_TAB_ENABLED:-"false"}
+  # Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend.
+  # The TOGGLE_COLLABORATORS_TAB_ENABLED env var is no longer consulted; value is
+  # hardcoded to preserve the /v1/private/feature-toggles response shape for older
+  # Python/TypeScript SDK clients that declare it as a required boolean. Safe to
+  # delete (along with the dangling helm-chart env-var settings) once those SDK
+  # versions are out of support.
+  collaboratorsTabEnabled: false
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
