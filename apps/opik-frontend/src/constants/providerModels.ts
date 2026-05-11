@@ -719,6 +719,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "inclusionai/ling-2.6-flash:free",
     },
     {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
+      label: "inclusionai/ring-2.6-1t:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.INFLECTION_INFLECTION_3_PI,
       label: "inflection/inflection-3-pi",
     },
@@ -1902,6 +1906,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HUNYUAN_A13B_INSTRUCT,
       label: "tencent/hunyuan-a13b-instruct",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW,
+      label: "tencent/hy3-preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.TENCENT_HY3_PREVIEW_FREE,
