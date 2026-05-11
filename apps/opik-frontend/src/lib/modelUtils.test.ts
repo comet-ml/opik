@@ -418,6 +418,13 @@ describe("sanitizeConfigForRequest", () => {
     expect(result.reasoningEffort).toBe("minimal");
   });
 
+  it("keeps xhigh for gpt-5.5 (the only OpenAI model that accepts it)", () => {
+    const result = sanitizeConfigForRequest(PROVIDER_MODEL_TYPE.GPT_5_5, {
+      reasoningEffort: "xhigh",
+    });
+    expect(result.reasoningEffort).toBe("xhigh");
+  });
+
   it("does not touch reasoningEffort for non-OpenAI providers", () => {
     const result = sanitizeConfigForRequest(
       PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_6,

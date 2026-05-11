@@ -202,7 +202,7 @@ export const OPENAI_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.GPT_5_5]: {
     reasoning: true,
-    reasoningEffortOptions: ["none", "low", "medium", "high"],
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
 };
 
