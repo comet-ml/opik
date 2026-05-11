@@ -20,7 +20,6 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   projectId,
@@ -202,7 +201,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           disabled: !projectPrefix,
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },
