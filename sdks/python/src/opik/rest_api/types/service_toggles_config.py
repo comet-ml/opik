@@ -34,7 +34,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
     bedrock_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="bedrockProviderEnabled")]
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
-    collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
     v2workspace_allowlist_ids: typing_extensions.Annotated[
         typing.List[str], FieldMetadata(alias="v2WorkspaceAllowlistIds")
     ]

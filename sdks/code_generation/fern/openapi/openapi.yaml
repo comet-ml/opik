@@ -18678,7 +18678,6 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - collaboratorsTabEnabled
       - csvUploadEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
@@ -18743,8 +18742,6 @@ components:
         customllmProviderEnabled:
           type: boolean
         ollamaProviderEnabled:
-          type: boolean
-        collaboratorsTabEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true
