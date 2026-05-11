@@ -400,9 +400,9 @@ def _create_first_version_with_items(
         if change_description:
             request["change_description"] = change_description
         if suite_evaluators is not None:
-            request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
+            request["evaluators"] = _evaluators_payload(suite_evaluators)
         if suite_execution_policy is not None:
-            request["execution_policy"] = _suite_execution_policy_payload(
+            request["execution_policy"] = _execution_policy_payload(
                 suite_execution_policy
             )
         # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
@@ -455,11 +455,9 @@ def _create_first_version_config_only(
     if change_description:
         request["change_description"] = change_description
     if suite_evaluators is not None:
-        request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
+        request["evaluators"] = _evaluators_payload(suite_evaluators)
     if suite_execution_policy is not None:
-        request["execution_policy"] = _suite_execution_policy_payload(
-            suite_execution_policy
-        )
+        request["execution_policy"] = _execution_policy_payload(suite_execution_policy)
     # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
     if user_tags is not None:
         request["tags"] = list(user_tags)
@@ -537,24 +535,39 @@ def _load_version_items(
     return by_id
 
 
-def _suite_evaluators_payload(
+def _evaluators_payload(
     evaluators: List[evaluator_item_public.EvaluatorItemPublic],
 ) -> List[Dict[str, Any]]:
-    """Convert a wire-type suite evaluator list to its write-payload shape.
+    """Convert a wire-type evaluator list to its write-payload shape.
 
-    Used by both ``executor._copy_test_suite_config`` (Slice 1) and the
-    three ``version_replay`` apply sites (Slice 2). Gating ("when do we
-    forward this field") is left to each caller because Slice 1 uses
-    truthy gating (``if evaluators:``) and Slice 2 uses ``is not None``
-    — the only shared concern is the field-by-field wire shape.
+    The BE uses the same ``EvaluatorItemPublic`` wire type at both the
+    version level (suite evaluators) and the item level (per-item
+    evaluator overrides), so this helper serves all five sites:
+    ``_copy_test_suite_config`` (Slice 1), the three
+    ``version_replay`` apply sites (Slice 2), and the per-item
+    ``_added_item_payload`` / ``_edited_item_payload`` (Slice 2).
+
+    Gating ("when do we forward this field") is left to each caller —
+    Slice 1's ``_copy_test_suite_config`` uses truthy gating
+    (``if evaluators:``) while Slice 2 uses ``is not None``. The only
+    shared concern is the field-by-field wire shape.
+
+    Intentionally NOT used by ``_content_hash_for`` — the hash function
+    builds an in-memory dict for sha256, not a wire payload. Coupling
+    them would silently rehash every item if a future BE field is added
+    to the wire payload, breaking idempotency on re-runs.
     """
     return [{"name": e.name, "type": e.type, "config": e.config} for e in evaluators]
 
 
-def _suite_execution_policy_payload(
+def _execution_policy_payload(
     execution_policy: execution_policy_public.ExecutionPolicyPublic,
 ) -> Dict[str, int]:
-    """Convert a wire-type suite execution_policy to its write-payload shape."""
+    """Convert a wire-type execution_policy to its write-payload shape.
+
+    See ``_evaluators_payload`` for shared-vs-not-shared rationale —
+    same applies here.
+    """
     return {
         "runs_per_item": execution_policy.runs_per_item,
         "pass_threshold": execution_policy.pass_threshold,
@@ -729,11 +742,9 @@ def _apply_delta_and_collect_new_ids(
         # Version-level evaluators (suite-level config). Pass an empty list
         # explicitly when the source version has zero suite-level evaluators
         # so the BE doesn't inherit a stale set from the previous version.
-        request["evaluators"] = _suite_evaluators_payload(suite_evaluators)
+        request["evaluators"] = _evaluators_payload(suite_evaluators)
     if suite_execution_policy is not None:
-        request["execution_policy"] = _suite_execution_policy_payload(
-            suite_execution_policy
-        )
+        request["execution_policy"] = _execution_policy_payload(suite_execution_policy)
     elif clear_suite_execution_policy:
         # Source dropped the suite-level policy between versions. BE
         # omission would inherit the stale value from base_version, so
@@ -836,15 +847,9 @@ def _added_item_payload(
     if item.tags is not None:
         payload["tags"] = list(item.tags)
     if item.evaluators is not None:
-        payload["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in item.evaluators
-        ]
+        payload["evaluators"] = _evaluators_payload(item.evaluators)
     if item.execution_policy is not None:
-        payload["execution_policy"] = {
-            "runs_per_item": item.execution_policy.runs_per_item,
-            "pass_threshold": item.execution_policy.pass_threshold,
-        }
+        payload["execution_policy"] = _execution_policy_payload(item.execution_policy)
     return payload
 
 
@@ -909,10 +914,7 @@ def _edited_item_payload(
     # override. When neither side has them, omit the key entirely so the
     # BE leaves the (already-absent) override alone.
     if item.evaluators is not None:
-        payload["evaluators"] = [
-            {"name": e.name, "type": e.type, "config": e.config}
-            for e in item.evaluators
-        ]
+        payload["evaluators"] = _evaluators_payload(item.evaluators)
     elif prev.evaluators is not None:
         payload["evaluators"] = []
 
@@ -922,10 +924,7 @@ def _edited_item_payload(
     # treats omission as "inherit," which would silently retain the prior
     # override.
     if item.execution_policy is not None:
-        payload["execution_policy"] = {
-            "runs_per_item": item.execution_policy.runs_per_item,
-            "pass_threshold": item.execution_policy.pass_threshold,
-        }
+        payload["execution_policy"] = _execution_policy_payload(item.execution_policy)
     elif prev.execution_policy is not None:
         payload["clear_execution_policy"] = True
 
