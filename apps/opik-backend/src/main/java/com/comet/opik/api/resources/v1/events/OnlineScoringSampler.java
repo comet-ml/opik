@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.Project;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Source;
 import com.comet.opik.api.Trace;
@@ -39,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -145,12 +145,7 @@ public class OnlineScoringSampler {
         // from it, so a null name there causes every score to land in "Default Project".
         // Stamp the name back on, resolved once per project from MySQL, before publishing the
         // scoring event.
-        Map<UUID, String> projectNamesById = stampProjectNames(traces, workspaceId);
-        traces = traces.stream()
-                .map(trace -> trace.projectName() != null
-                        ? trace
-                        : trace.toBuilder().projectName(projectNamesById.get(trace.projectId())).build())
-                .toList();
+        traces = stampMissingProjectNames(traces, workspaceId);
 
         var tracesByProject = traces.stream().collect(Collectors.groupingBy(Trace::projectId));
 
@@ -234,17 +229,42 @@ public class OnlineScoringSampler {
         });
     }
 
-    private Map<UUID, String> stampProjectNames(List<Trace> traces, String workspaceId) {
+    /**
+     * Returns the given trace list with each {@code projectName == null} entry rebuilt
+     * with the name resolved from {@link ProjectService#findIdToNameByIds}. Entries that
+     * already carry a projectName, and entries whose projectId isn't resolvable, pass
+     * through unchanged — the latter logs a warning. We deliberately don't fail-fast on
+     * an unresolved id: a transient lookup miss shouldn't drop scoring entirely; the
+     * downstream {@code FeedbackScoreService} will fall back to Default Project via the
+     * existing contract, and the warn log surfaces the issue for follow-up.
+     */
+    private List<Trace> stampMissingProjectNames(List<Trace> traces, String workspaceId) {
         Set<UUID> missingNameProjectIds = traces.stream()
                 .filter(trace -> trace.projectName() == null)
                 .map(Trace::projectId)
-                .filter(java.util.Objects::nonNull)
+                .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
         if (missingNameProjectIds.isEmpty()) {
-            return Map.of();
+            return traces;
         }
-        return projectService.findByIds(workspaceId, missingNameProjectIds).stream()
-                .collect(Collectors.toMap(Project::id, Project::name));
+        Map<UUID, String> projectNamesById = projectService.findIdToNameByIds(
+                workspaceId, missingNameProjectIds);
+        return traces.stream()
+                .map(trace -> {
+                    if (trace.projectName() != null) {
+                        return trace;
+                    }
+                    String resolved = projectNamesById.get(trace.projectId());
+                    if (resolved == null) {
+                        log.warn(
+                                "Could not resolve projectName for projectId '{}' on traceId '{}' in workspace '{}';"
+                                        + " scoring will proceed but the feedback score may not land on the expected project",
+                                trace.projectId(), trace.id(), workspaceId);
+                        return trace;
+                    }
+                    return trace.toBuilder().projectName(resolved).build();
+                })
+                .toList();
     }
 
     private boolean shouldSampleTrace(AutomationRuleEvaluator<?, ?> evaluator, String workspaceId, Trace trace) {

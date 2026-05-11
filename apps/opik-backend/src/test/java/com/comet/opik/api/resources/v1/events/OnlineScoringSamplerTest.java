@@ -540,6 +540,71 @@ class OnlineScoringSamplerTest {
         }
     }
 
+    @Nested
+    class ProjectNameEnrichmentTests {
+
+        @Test
+        void enrichesProjectNameOnUpdatedTracesMissingIt() {
+            var trace = createTrace(Source.SDK).toBuilder().projectName(null).build();
+            var traceUpdate = TraceUpdate.builder().endTime(Instant.now()).build();
+            var event = new TracesUpdated(Set.of(projectId), Set.of(trace.id()),
+                    workspaceId, userName, traceUpdate);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+
+            when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
+            when(projectService.findIdToNameByIds(eq(workspaceId), eq(Set.of(projectId))))
+                    .thenReturn(Map.of(projectId, "resolved-project-name"));
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesUpdated(event);
+
+            @SuppressWarnings("unchecked")
+            var captor = (ArgumentCaptor<List<TraceToScoreLlmAsJudge>>) (ArgumentCaptor<?>) ArgumentCaptor
+                    .forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            assertThat(captor.getValue()).hasSize(1);
+            assertThat(captor.getValue().get(0).trace().projectName()).isEqualTo("resolved-project-name");
+        }
+
+        @Test
+        void leavesProjectNameNullAndStillPublishesWhenLookupMisses() {
+            var trace = createTrace(Source.SDK).toBuilder().projectName(null).build();
+            var traceUpdate = TraceUpdate.builder().endTime(Instant.now()).build();
+            var event = new TracesUpdated(Set.of(projectId), Set.of(trace.id()),
+                    workspaceId, userName, traceUpdate);
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+
+            when(traceService.getByIds(List.of(trace.id()))).thenReturn(Flux.just(trace));
+            when(projectService.findIdToNameByIds(eq(workspaceId), eq(Set.of(projectId))))
+                    .thenReturn(Map.of()); // lookup miss
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesUpdated(event);
+
+            @SuppressWarnings("unchecked")
+            var captor = (ArgumentCaptor<List<TraceToScoreLlmAsJudge>>) (ArgumentCaptor<?>) ArgumentCaptor
+                    .forClass(List.class);
+            verify(onlineScorePublisher).enqueueMessage(captor.capture(),
+                    eq(AutomationRuleEvaluatorType.LLM_AS_JUDGE));
+            assertThat(captor.getValue()).hasSize(1);
+            assertThat(captor.getValue().get(0).trace().projectName()).isNull();
+        }
+
+        @Test
+        void skipsProjectServiceLookupWhenAllTracesAlreadyHaveProjectName() {
+            // The TracesCreated path already sets projectName upstream; verify we
+            // don't pay an unnecessary MySQL round-trip in that case.
+            var trace = createTrace(Source.SDK); // projectName populated by podam
+            var evaluator = createLlmEvaluator(true, 1.0f, List.of());
+            whenFindAllLlmEvaluators(evaluator);
+
+            onlineScoringSampler.onTracesCreated(new TracesCreated(List.of(trace), workspaceId, userName));
+
+            verifyNoInteractions(projectService);
+        }
+    }
+
     private Trace createTrace(Source source) {
         return podamFactory.manufacturePojo(Trace.class).toBuilder()
                 .projectId(projectId)
