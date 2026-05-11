@@ -589,6 +589,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         size: size as number,
         search: trimmedSearch,
         truncate: truncationEnabled,
+        stripAttachments: true,
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,
@@ -669,6 +670,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
       type: type as TRACE_DATA_TYPE,
       page: 1,
       size: 1,
+      stripAttachments: true,
       logsSource: LOGS_SOURCE.sdk,
     },
     {

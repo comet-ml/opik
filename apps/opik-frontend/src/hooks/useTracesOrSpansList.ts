@@ -25,6 +25,7 @@ type UseTracesOrSpansListParams = {
   page: number;
   size: number;
   truncate?: boolean;
+  stripAttachments?: boolean;
   fromTime?: string;
   toTime?: string;
   exclude?: string[];

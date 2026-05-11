@@ -383,6 +383,7 @@ const TraceQueueItemsTab: React.FC<TraceQueueItemsTabProps> = ({
       size: size as number,
       search: search as string,
       truncate: truncationEnabled,
+      stripAttachments: true,
     },
     {
       placeholderData: keepPreviousData,

@@ -574,6 +574,7 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
         size: size as number,
         search: trimmedSearch,
         truncate: truncationEnabled,
+        stripAttachments: true,
         fromTime: intervalStart,
         toTime: intervalEnd,
         exclude: excludeFields,
