@@ -90,7 +90,6 @@ class LocalRunnerServiceImplTest {
         stringRedis = new StringRedisClient(redisClient);
 
         runnerConfig = new LocalRunnerConfig();
-        runnerConfig.setEnabled(true);
         runnerConfig.setHeartbeatTtl(Duration.seconds(2));
         runnerConfig.setNextJobPollTimeout(Duration.seconds(1));
         runnerConfig.setMaxPendingJobsPerRunner(3);

@@ -46,10 +46,6 @@ public class LocalRunnerReaperJob extends Job implements InterruptableJob {
             return;
         }
 
-        if (!runnerConfig.isEnabled()) {
-            return;
-        }
-
         lockService.bestEffortLock(
                 REAPER_LOCK,
                 Mono.fromRunnable(() -> runnerService.reapDeadRunners()),

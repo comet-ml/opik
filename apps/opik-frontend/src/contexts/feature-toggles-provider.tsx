@@ -21,7 +21,6 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.PYTHON_EVALUATOR_ENABLED]: false,
   [FeatureToggleKeys.GUARDRAILS_ENABLED]: false,
   [FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED]: false,
-  [FeatureToggleKeys.TOGGLE_ALERTS_ENABLED]: false,
   [FeatureToggleKeys.WELCOME_WIZARD_ENABLED]: false,
   [FeatureToggleKeys.CSV_UPLOAD_ENABLED]: false,
   [FeatureToggleKeys.EXPORT_ENABLED]: true,
@@ -38,8 +37,6 @@ const DEFAULT_STATE: FeatureToggles = {
   [FeatureToggleKeys.BEDROCK_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.CUSTOMLLM_PROVIDER_ENABLED]: false,
   [FeatureToggleKeys.OLLAMA_PROVIDER_ENABLED]: false,
-  [FeatureToggleKeys.COLLABORATORS_TAB_ENABLED]: false,
-  [FeatureToggleKeys.TOGGLE_RUNNERS_ENABLED]: false,
 };
 
 const initialState: FeatureTogglesState = {

@@ -286,6 +286,13 @@ class OpikConfig(pydantic_settings.BaseSettings):
     This is to control the number of times unauthorized message types are retried before giving up. If None, there is no limit.
     """
 
+    environment: Optional[str] = None
+    """
+    Default environment name applied to traces and spans when no explicit
+    ``environment=`` argument is provided.
+    Env var: OPIK_ENVIRONMENT
+    """
+
     suppress_batching_update_warning: bool = False
     """
     Suppress the warning about potential data loss when calling .end() or .update()

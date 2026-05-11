@@ -15,7 +15,6 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v1/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   canViewExperiments,
@@ -170,7 +169,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           count: "alerts",
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },

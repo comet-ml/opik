@@ -63,6 +63,7 @@ public class ExperimentProjectMigrationService {
 
     private final LongHistogram cycleEligibleWorkspaces;
     private final LongGauge cycleTrappedWorkspaces;
+    private final LongGauge cycleEnvExcludedWorkspaces;
     private final LongHistogram workspaceDuration;
     private final LongCounter experimentsSkipped;
     private final LongHistogram batchSize;
@@ -100,6 +101,12 @@ public class ExperimentProjectMigrationService {
                         "Number of workspaces locally skipped because all their certain experiments point to deleted projects")
                 .ofLongs()
                 .build();
+        this.cycleEnvExcludedWorkspaces = meter
+                .gaugeBuilder("%s.cycle.env_excluded_workspaces".formatted(METRIC_NAMESPACE))
+                .setDescription(
+                        "Number of workspaces excluded from migration via the MIGRATION_EXCLUDED_WORKSPACE_IDS env var. Mirrors trapped_workspaces so the dashboard can show both exclusion paths side by side.")
+                .ofLongs()
+                .build();
         this.workspaceDuration = meter
                 .histogramBuilder("%s.workspace.duration".formatted(METRIC_NAMESPACE))
                 .setDescription("Duration of a single workspace migration, tagged by result")
@@ -120,12 +127,15 @@ public class ExperimentProjectMigrationService {
     public Mono<Void> runMigrationCycle() {
         return Mono.fromCallable(() -> {
             var skippedWorkspaceIds = workspacesService.findMigrationSkippedWorkspaceIds();
+            var envExcludedWorkspaceIds = migrationConfig.getExcludedWorkspaceIds();
             cycleTrappedWorkspaces.set(skippedWorkspaceIds.size());
+            cycleEnvExcludedWorkspaces.set(envExcludedWorkspaceIds.size());
             log.info(
-                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}'",
-                    config.workspacesPerRun(), config.experimentBatchSize(), skippedWorkspaceIds.size());
+                    "Starting experiment project migration cycle, workspacesPerRun='{}', batchSize='{}', trappedWorkspaces='{}', envExcludedWorkspaces='{}'",
+                    config.workspacesPerRun(), config.experimentBatchSize(), skippedWorkspaceIds.size(),
+                    envExcludedWorkspaceIds.size());
             return Stream.concat(
-                    migrationConfig.getExcludedWorkspaceIds().stream(),
+                    envExcludedWorkspaceIds.stream(),
                     skippedWorkspaceIds.stream())
                     .collect(Collectors.toUnmodifiableSet());
         })

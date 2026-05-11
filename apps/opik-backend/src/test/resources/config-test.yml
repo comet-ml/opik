@@ -610,7 +610,7 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Description: Whether or not Collaborators tab feature is enabled
+  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; UI no longer reads this.
   collaboratorsTabEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
@@ -635,7 +635,6 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
-  enabled: true
   jobTimeout: 30s
   maxPendingJobsPerRunner: 100
   heartbeatTtl: 15s

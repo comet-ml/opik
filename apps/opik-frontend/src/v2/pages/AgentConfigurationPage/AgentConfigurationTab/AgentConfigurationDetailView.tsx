@@ -95,6 +95,7 @@ const AgentConfigurationDetailView: React.FC<
     ],
     page: 1,
     size: 1,
+    stripAttachments: true,
   });
 
   const hasTraces = (tracesData?.total ?? 0) > 0;
