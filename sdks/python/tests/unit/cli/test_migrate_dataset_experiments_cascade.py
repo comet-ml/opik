@@ -89,11 +89,19 @@ class _ExperimentItem:
         experiment_id: str,
         trace_id: str,
         dataset_item_id: str,
+        extras: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.id = id
         self.experiment_id = experiment_id
         self.trace_id = trace_id
         self.dataset_item_id = dataset_item_id
+        # ``extras`` becomes the per-item BE-returned payload outside the
+        # typed schema (input, output, feedback_scores, assertion_results,
+        # execution_policy, description, status, usage, etc.). The mock
+        # rest_client serialises this dict as JSON alongside the typed
+        # fields; ``ExperimentItemPublic.extra='allow'`` surfaces it on
+        # ``model_extra`` for the cascade to consume.
+        self.extras = extras or {}
 
 
 class _Trace:
@@ -898,6 +906,83 @@ class TestCascadeExperiments:
         assert scores[0].project_name == "DestProject"
         # The score's id must be the NEW span id (not the source).
         assert scores[0].id != "span-root"
+
+    def test_experiment_item_fidelity__write_side_fields_forwarded(self) -> None:
+        # Source ExperimentItem carries BE-returned extras: input, output,
+        # feedback_scores, assertion_results, execution_policy, description,
+        # status, usage, total_estimated_cost, duration. The cascade should
+        # forward all of them to the destination ``create_experiment_items``
+        # call.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+            extras={
+                "input": {"q": "what is 2+2?"},
+                "output": {"a": "4"},
+                "feedback_scores": [
+                    {"name": "correctness", "value": 1.0, "source": "sdk"}
+                ],
+                "assertion_results": [
+                    {"value": "passed", "passed": True, "reason": "exact match"}
+                ],
+                "execution_policy": {"runs_per_item": 3, "pass_threshold": 2},
+                "description": "math sanity check",
+                "status": "passed",
+                "usage": {"prompt_tokens": 12, "completion_tokens": 1},
+                "total_estimated_cost": 0.0001,
+                "duration": 230.5,
+            },
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture()
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        # ``recreate_experiment`` wires the cascade through to
+        # ``client._rest_client.experiments.create_experiment_items``.
+        created = client._rest_client.experiments.create_experiment_items
+        created.assert_called_once()
+        items_written = created.call_args.kwargs["experiment_items"]
+        assert len(items_written) == 1
+        written = items_written[0]
+
+        # FK fields remapped:
+        assert written.dataset_item_id == "dest-ds-item-1"
+        assert written.trace_id != "src-trace-1"  # new id minted
+
+        # Fidelity fields forwarded verbatim:
+        assert written.input == {"q": "what is 2+2?"}
+        assert written.output == {"a": "4"}
+        assert written.feedback_scores is not None
+        assert len(written.feedback_scores) == 1
+        assert written.feedback_scores[0].name == "correctness"
+        assert written.assertion_results is not None
+        assert len(written.assertion_results) == 1
+        assert written.assertion_results[0].passed is True
+        assert written.execution_policy is not None
+        assert written.execution_policy.runs_per_item == 3
+        assert written.description == "math sanity check"
+        assert written.status == "passed"
+        assert written.usage == {"prompt_tokens": 12, "completion_tokens": 1}
+        assert written.total_estimated_cost == 0.0001
+        assert written.duration == 230.5
 
 
 # ---------------------------------------------------------------------------

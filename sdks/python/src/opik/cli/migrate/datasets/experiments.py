@@ -602,6 +602,15 @@ def _build_experiment_data(
     the BE schema field names; we mirror that here so ``recreate_experiment``
     can read fields like ``type`` / ``evaluation_method`` / ``optimization_id``
     / ``tags`` / ``metadata`` / ``dataset_name`` verbatim.
+
+    Per-item fidelity: ``ExperimentItemPublic`` exposes only the FK fields in
+    its typed schema (id, experiment_id, dataset_item_id, trace_id), but the
+    BE returns a richer payload that ``extra='allow'`` surfaces on
+    ``model_extra``. We pull every field the destination ``ExperimentItem``
+    write surface accepts -- input, output, feedback_scores,
+    assertion_results, execution_policy, description, status, usage,
+    total_estimated_cost, duration -- so the cascaded item is a verbatim
+    copy of the source item, not just an FK shell.
     """
     # ``optimization_id`` is intentionally omitted from the payload: Slice 3
     # doesn't cascade the optimization entity (Slice 4 owns it), so even if
@@ -622,15 +631,59 @@ def _build_experiment_data(
             source.evaluation_method if source.evaluation_method else "dataset"
         ),
     }
-    items_dicts = [
-        {
-            "id": item.id,
-            "trace_id": item.trace_id,
-            "dataset_item_id": item.dataset_item_id,
-        }
-        for item in items
-    ]
+    items_dicts = [_experiment_item_to_dict(item) for item in items]
     return ExperimentData(experiment=experiment_dict, items=items_dicts)
+
+
+# Per-item fields the migrate path forwards to the destination
+# ``ExperimentItem`` write payload. Sourced from ``ExperimentItemPublic.model_extra``
+# (BE returns them; the typed schema drops them). Kept as a module-level
+# constant so the production code and the unit-test stand-in stay in sync.
+#
+# Some fields are dataset-type-specific in practice:
+#   - ``feedback_scores`` -> regular ``dataset`` experiments
+#   - ``assertion_results`` / ``execution_policy`` -> ``evaluation_suite``
+#     (test suite) experiments
+#   - the rest (``input``, ``output``, ``usage``, ``total_estimated_cost``,
+#     ``duration``, ``description``, ``status``) are common to both
+#
+# We don't branch on dataset type because the BE-returned shape IS the
+# source of truth: a regular-dataset item won't have ``assertion_results``
+# in its read payload, so the ``is not None`` guard in
+# ``_experiment_item_to_dict`` drops it naturally. Same the other way.
+# This keeps a single code path and stays robust if the BE evolves which
+# fields apply to which type.
+_EXPERIMENT_ITEM_FIDELITY_FIELDS = (
+    "input",
+    "output",
+    "feedback_scores",
+    "assertion_results",
+    "execution_policy",
+    "description",
+    "status",
+    "usage",
+    "total_estimated_cost",
+    "duration",
+)
+
+
+def _experiment_item_to_dict(item: ExperimentItemPublic) -> Dict[str, Any]:
+    """Flatten an experiment item read into the dict shape
+    ``recreate_experiment`` consumes.
+
+    The typed FK fields land first; the BE-returned extras come from
+    ``model_extra`` (pydantic v2) and are passed through verbatim.
+    """
+    out: Dict[str, Any] = {
+        "id": item.id,
+        "trace_id": item.trace_id,
+        "dataset_item_id": item.dataset_item_id,
+    }
+    extras = getattr(item, "model_extra", None) or {}
+    for field_name in _EXPERIMENT_ITEM_FIDELITY_FIELDS:
+        if field_name in extras and extras[field_name] is not None:
+            out[field_name] = extras[field_name]
+    return out
 
 
 def _chunks(seq: List[Any], size: int) -> List[List[Any]]:

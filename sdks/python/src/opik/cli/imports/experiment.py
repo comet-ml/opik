@@ -581,17 +581,39 @@ def recreate_experiment(
                 debug,
             )
 
-            # Create experiment item with mapped IDs
+            # Create experiment item with mapped IDs. On the migrate path
+            # we additionally forward every per-item write-side field the
+            # source carried (input/output/feedback_scores/assertion_results/
+            # execution_policy/description/status/usage/cost/duration) so
+            # the destination item is a verbatim copy, not just an FK
+            # shell. The cascade builds these from
+            # ``ExperimentItemPublic.model_extra`` so the BE-returned
+            # extras survive the read.
             try:
                 experiment_item_id = id_helpers_module.generate_id()
-                rest_experiment_items.append(
-                    ExperimentItem(
-                        id=experiment_item_id,
-                        experiment_id=experiment.id,
-                        dataset_item_id=new_dataset_item_id,
-                        trace_id=new_trace_id,
-                    )
-                )
+                item_kwargs: Dict[str, Any] = {
+                    "id": experiment_item_id,
+                    "experiment_id": experiment.id,
+                    "dataset_item_id": new_dataset_item_id,
+                    "trace_id": new_trace_id,
+                }
+                if is_migrate_path:
+                    for field in (
+                        "input",
+                        "output",
+                        "feedback_scores",
+                        "assertion_results",
+                        "execution_policy",
+                        "description",
+                        "status",
+                        "usage",
+                        "total_estimated_cost",
+                        "duration",
+                    ):
+                        value = item_data.get(field)
+                        if value is not None:
+                            item_kwargs[field] = value
+                rest_experiment_items.append(ExperimentItem(**item_kwargs))
                 successful_items += 1
                 debug_print(
                     f"Prepared experiment item: dataset_item_id={new_dataset_item_id}, trace_id={new_trace_id}",
