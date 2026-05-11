@@ -375,6 +375,8 @@ class Opik:
         last_updated_at = datetime_helpers.local_timestamp()
 
         project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         create_trace_message = messages.CreateTraceMessage(
             trace_id=id,
@@ -600,6 +602,8 @@ class Opik:
         )
 
         project_name = self._resolve_project_name(project_name)
+        if environment is None:
+            environment = self._config.environment
 
         if trace_id is None:
             trace_id = id_helpers.generate_id()
