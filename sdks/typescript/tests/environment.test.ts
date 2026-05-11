@@ -97,6 +97,35 @@ describe("environment feature", () => {
       expect(spans[1].environment).toBe("production");
       createSpansSpy.mockRestore();
     });
+
+    it("Trace.span warns when caller passes a mismatched environment", () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      const client = new Opik();
+      vi.spyOn(client.api.spans, "createSpans").mockImplementation(mockAPIFunction);
+      vi.spyOn(client.api.traces, "createTraces").mockImplementation(mockAPIFunction);
+
+      const trace = client.trace({ name: "t", environment: "production" });
+      (trace.span as (d: Record<string, unknown>) => unknown)({ name: "s", environment: "staging" });
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain("staging");
+      expect(warnSpy.mock.calls[0][0]).toContain("production");
+    });
+
+    it("Span.span warns when caller passes a mismatched environment", () => {
+      const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined);
+      const client = new Opik();
+      vi.spyOn(client.api.spans, "createSpans").mockImplementation(mockAPIFunction);
+      vi.spyOn(client.api.traces, "createTraces").mockImplementation(mockAPIFunction);
+
+      const trace = client.trace({ name: "t", environment: "production" });
+      const child = trace.span({ name: "s1" });
+      (child.span as (d: Record<string, unknown>) => unknown)({ name: "s2", environment: "staging" });
+
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0][0]).toContain("staging");
+      expect(warnSpy.mock.calls[0][0]).toContain("production");
+    });
   });
 
   describe("createEnvironment", () => {
