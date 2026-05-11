@@ -203,3 +203,69 @@ def test_create_span_message__environment_field_default_is_none_for_backwards_co
         source="sdk",
     )
     assert msg.environment is None
+
+
+def _update_span_messages(streamer: MagicMock):
+    return [
+        c.args[0]
+        for c in streamer.put.call_args_list
+        if isinstance(c.args[0], messages.UpdateSpanMessage)
+    ]
+
+
+def _update_trace_messages(streamer: MagicMock):
+    return [
+        c.args[0]
+        for c in streamer.put.call_args_list
+        if isinstance(c.args[0], messages.UpdateTraceMessage)
+    ]
+
+
+def test_span_end__preserves_environment_in_update_message():
+    client = opik_client.Opik(project_name="test-project")
+    streamer = _capture_messages(client)
+
+    trace = client.trace(name="t", environment="staging")
+    span = trace.span(name="s")
+    span.end()
+
+    update_msgs = _update_span_messages(streamer)
+    assert len(update_msgs) == 1
+    assert update_msgs[0].environment == "staging"
+
+
+def test_span_update__preserves_environment_in_update_message():
+    client = opik_client.Opik(project_name="test-project")
+    streamer = _capture_messages(client)
+
+    trace = client.trace(name="t", environment="production")
+    span = trace.span(name="s")
+    span.update(output={"result": "ok"})
+
+    update_msgs = _update_span_messages(streamer)
+    assert len(update_msgs) == 1
+    assert update_msgs[0].environment == "production"
+
+
+def test_trace_end__preserves_environment_in_update_message():
+    client = opik_client.Opik(project_name="test-project")
+    streamer = _capture_messages(client)
+
+    trace = client.trace(name="t", environment="staging")
+    trace.end()
+
+    update_msgs = _update_trace_messages(streamer)
+    assert len(update_msgs) == 1
+    assert update_msgs[0].environment == "staging"
+
+
+def test_trace_update__preserves_environment_in_update_message():
+    client = opik_client.Opik(project_name="test-project")
+    streamer = _capture_messages(client)
+
+    trace = client.trace(name="t", environment="production")
+    trace.update(output={"result": "ok"})
+
+    update_msgs = _update_trace_messages(streamer)
+    assert len(update_msgs) == 1
+    assert update_msgs[0].environment == "production"
