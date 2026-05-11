@@ -715,6 +715,10 @@ start_frontend() {
     # Enable assistant sidebar only when ollie is actually serving requests.
     # ollie_healthy covers both ollie-we-spawned and ollie-already-running
     # (reused instances). ollie_running alone would miss the reuse case.
+    # Always unset first so a stale value from the parent shell / CI / a
+    # previous dev-runner invocation cannot leak into the FE process and
+    # silently re-enable the sidebar gate.
+    unset VITE_ASSISTANT_SIDEBAR_BASE_URL
     if ollie_enabled && ollie_healthy; then
         export VITE_ASSISTANT_SIDEBAR_BASE_URL="http://localhost:${OLLIE_CONSOLE_PORT}"
         log_debug "  VITE_ASSISTANT_SIDEBAR_BASE_URL=$VITE_ASSISTANT_SIDEBAR_BASE_URL"

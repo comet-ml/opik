@@ -10,22 +10,31 @@ const IS_ASSISTANT_DEV = Boolean(
   import.meta.env.VITE_ASSISTANT_SIDEBAR_BASE_URL,
 );
 
-const CometAssistantSidebar = lazy(
-  () => import("@/plugins/comet/AssistantSidebar"),
-);
-
 interface Props {
   surface?: BridgeSurface;
   onWidthChange: (width: number) => void;
 }
 
-const AssistantSidebar: React.FC<Props> = (props) => {
-  if (!IS_ASSISTANT_DEV) return null;
-  return (
+// When the dev flag is unset we export `undefined`, so `setupPlugins`'s
+// `if (plugin.default)` check skips registration entirely. Consumers like
+// `SideBarMenuItems` (showOlliePage = !!AssistantSidebar) and `PageLayout`
+// (showAssistantSidebar = !!AssistantSidebar) then see `null` in the store
+// and correctly hide the menu item and layout slot. Returning a component
+// that renders null would still register a truthy reference and leak both.
+let AssistantSidebar: React.FC<Props> | undefined;
+
+if (IS_ASSISTANT_DEV) {
+  const CometAssistantSidebar = lazy(
+    () => import("@/plugins/comet/AssistantSidebar"),
+  );
+
+  const Wrapped: React.FC<Props> = (props) => (
     <Suspense fallback={null}>
       <CometAssistantSidebar {...props} />
     </Suspense>
   );
-};
+  Wrapped.displayName = "AssistantSidebar";
+  AssistantSidebar = Wrapped;
+}
 
 export default AssistantSidebar;
