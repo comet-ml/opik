@@ -129,7 +129,7 @@
         <dependency>
             <groupId>software.amazon.jdbc</groupId>
             <artifactId>aws-advanced-jdbc-wrapper</artifactId>
-            <version>3.3.0</version>
+            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>io.dropwizard</groupId>
