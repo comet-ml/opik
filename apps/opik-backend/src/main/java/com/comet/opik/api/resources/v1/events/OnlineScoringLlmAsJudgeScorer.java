@@ -187,22 +187,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             List<Span> spans = fetchSpans(trace.id(), message.workspaceId(), message.userName());
             int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(
                     trace, spans, traceCompressor);
-            boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
-                    llmProviderFactory.getLlmProvider(modelName));
-            boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
-                    && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
-            boolean useTools = LlmAsJudgeToolsMode.shouldUseTools(message)
-                    || (overSizeThreshold && providerSupportsTools);
-            if (overSizeThreshold && !providerSupportsTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
-                userFacingLogger.warn(
-                        "Trace context exceeds '{}' tokens but provider for model '{}' does not support tool"
-                                + " calling; falling back to inline path — may overflow context window.",
-                        onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
-            } else if (overSizeThreshold && useTools && !LlmAsJudgeToolsMode.shouldUseTools(message)) {
-                userFacingLogger.info(
-                        "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
-                        onlineScoringConfig.getAgenticToolsThresholdTokens(), trace.id());
-            }
+            boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName);
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -316,6 +301,35 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
         return LlmAsJudgeToolsMode.shouldUseTools(message);
+    }
+
+    /**
+     * Routing decision for whether to attach tool specs + run the tool-call loop. Tools fire
+     * when either the experimentId-driven branch applies (test-suite assertion) or the
+     * size-based branch applies (toggle on, context above threshold, provider supports tools).
+     * Side-effects: emits one of two user-facing diagnostic logs when the size branch is
+     * non-trivial, so operators can correlate the routing decision with the trace.
+     */
+    // Package-private for unit tests.
+    boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName) {
+        boolean experimentIdPath = LlmAsJudgeToolsMode.shouldUseTools(message);
+        boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
+                llmProviderFactory.getLlmProvider(modelName));
+        boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
+                && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+        boolean useTools = experimentIdPath || (overSizeThreshold && providerSupportsTools);
+
+        if (!experimentIdPath && overSizeThreshold && !providerSupportsTools) {
+            userFacingLogger.warn(
+                    "Trace context exceeds '{}' tokens but provider for model '{}' does not support tool"
+                            + " calling; falling back to inline path — may overflow context window.",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
+        } else if (!experimentIdPath && overSizeThreshold && useTools) {
+            userFacingLogger.info(
+                    "Trace context exceeds '{}' tokens; switching to agentic-tools mode for traceId '{}'",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), message.trace().id());
+        }
+        return useTools;
     }
 
     /**

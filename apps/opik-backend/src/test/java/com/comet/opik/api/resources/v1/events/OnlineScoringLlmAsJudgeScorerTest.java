@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
@@ -34,8 +35,11 @@ import dev.langchain4j.model.chat.response.ChatResponse;
 import io.dropwizard.util.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockedStatic;
@@ -139,6 +143,47 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void tearDown() {
         if (mockedFactory != null) {
             mockedFactory.close();
+        }
+    }
+
+    @Nested
+    class RoutingGateTests {
+
+        // Truth table: experimentId × toggle × tokens >= threshold × provider supports tools → useTools.
+        // The first row tests the experimentId shortcut (always true). Below that, the size-based
+        // branch — true only when toggle=on AND tokens>=threshold AND provider supports tools.
+        @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4} → expected useTools={5}")
+        @CsvSource({
+                // experimentId path → always tools, regardless of everything else
+                "true,  false, 0,     50000, OPEN_AI, true",
+                "true,  true,  60000, 50000, OPEN_AI, true",
+                "true,  true,  60000, 50000, OLLAMA,  true",
+                // size-based path — all three preconditions must hold
+                "false, true,  60000, 50000, OPEN_AI, true",
+                "false, true,  50000, 50000, OPEN_AI, true",
+                // below threshold → inline
+                "false, true,  49999, 50000, OPEN_AI, false",
+                // toggle off → inline even on huge contexts
+                "false, false, 60000, 50000, OPEN_AI, false",
+                // provider doesn't support tool calling → inline (operator must pick a different model)
+                "false, true,  60000, 50000, OLLAMA,  false",
+                // no preconditions met
+                "false, false, 0,     50000, OPEN_AI, false",
+        })
+        void gateMatchesTruthTable(
+                boolean hasExperimentId, boolean toggleEnabled, int estimatedTokens,
+                int thresholdTokens, LlmProvider provider, boolean expectedUseTools) {
+            String modelName = "gpt-test";
+            TraceToScoreLlmAsJudge message = hasExperimentId
+                    ? newMessage(UUID.randomUUID())
+                    : newMessageWithoutExperimentId(UUID.randomUUID());
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens()).thenReturn(thresholdTokens);
+            lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
+
+            boolean useTools = scorer.shouldUseAgenticTools(message, estimatedTokens, modelName);
+
+            assertThat(useTools).isEqualTo(expectedUseTools);
         }
     }
 
@@ -405,6 +450,14 @@ class OnlineScoringLlmAsJudgeScorerTest {
     }
 
     private static TraceToScoreLlmAsJudge newMessage(UUID traceId) {
+        return buildMessage(traceId, UUID.randomUUID());
+    }
+
+    private static TraceToScoreLlmAsJudge newMessageWithoutExperimentId(UUID traceId) {
+        return buildMessage(traceId, null);
+    }
+
+    private static TraceToScoreLlmAsJudge buildMessage(UUID traceId, UUID experimentId) {
         Trace trace = Trace.builder()
                 .id(traceId)
                 .projectId(UUID.randomUUID())
@@ -425,7 +478,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 null,
                 Map.of(),
                 PromptType.MUSTACHE,
-                UUID.randomUUID());
+                experimentId);
     }
 
     /** Silences "unused import" on Span — used implicitly through Flux<Span>. */
