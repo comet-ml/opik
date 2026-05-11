@@ -10,22 +10,17 @@ import {
   DropdownMenuTrigger,
 } from "@/ui/dropdown-menu";
 import { Button } from "@/ui/button";
-import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
 import useAppStore from "@/store/AppStore";
 import { Environment } from "@/types/environments";
 import { EnvironmentSquare } from "@/shared/EnvironmentLabel/EnvironmentLabel";
 import { CONFIGURATION_TABS } from "@/v2/constants/configuration";
-import {
-  ENVIRONMENT_UNKNOWN_VALUE,
-  ENVIRONMENT_NONE_VALUE,
-} from "@/lib/filters";
+import { ENVIRONMENT_UNTAGGED_VALUE } from "@/lib/filters";
 
 export const ALL_ENVIRONMENTS_VALUE = "";
 
 const ALL_ENVIRONMENTS_LABEL = "All environments";
-const NO_ENVIRONMENT_LABEL = "No environment";
-const UNKNOWN_LABEL = "Unknown environment";
+const UNTAGGED_LABEL = "Untagged";
 
 type EnvironmentFilterSelectProps = {
   value: string;
@@ -48,22 +43,9 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
 
   const triggerLabel = (() => {
     if (selectedEnvironment) return selectedEnvironment.name;
-    if (value === ENVIRONMENT_NONE_VALUE) return NO_ENVIRONMENT_LABEL;
-    if (value === ENVIRONMENT_UNKNOWN_VALUE) return UNKNOWN_LABEL;
+    if (value === ENVIRONMENT_UNTAGGED_VALUE) return UNTAGGED_LABEL;
     return ALL_ENVIRONMENTS_LABEL;
   })();
-
-  const unknownDisabled = environments.length === 0;
-
-  const unknownItem = (
-    <DropdownMenuItem
-      selected={value === ENVIRONMENT_UNKNOWN_VALUE}
-      disabled={unknownDisabled}
-      onSelect={() => onChange(ENVIRONMENT_UNKNOWN_VALUE)}
-    >
-      {UNKNOWN_LABEL}
-    </DropdownMenuItem>
-  );
 
   return (
     <DropdownMenu>
@@ -93,18 +75,11 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
           {ALL_ENVIRONMENTS_LABEL}
         </DropdownMenuItem>
         <DropdownMenuItem
-          selected={value === ENVIRONMENT_NONE_VALUE}
-          onSelect={() => onChange(ENVIRONMENT_NONE_VALUE)}
+          selected={value === ENVIRONMENT_UNTAGGED_VALUE}
+          onSelect={() => onChange(ENVIRONMENT_UNTAGGED_VALUE)}
         >
-          {NO_ENVIRONMENT_LABEL}
+          {UNTAGGED_LABEL}
         </DropdownMenuItem>
-        {unknownDisabled ? (
-          <TooltipWrapper content="Configure at least one environment to filter for unknown values.">
-            <div>{unknownItem}</div>
-          </TooltipWrapper>
-        ) : (
-          unknownItem
-        )}
         {environments.length > 0 && <DropdownMenuSeparator />}
         <div className="max-h-80 overflow-y-auto">
           {environments.map((env) => (
@@ -127,7 +102,7 @@ const EnvironmentFilterSelect: React.FC<EnvironmentFilterSelectProps> = ({
             params={{ workspaceName }}
             search={{ tab: CONFIGURATION_TABS.ENVIRONMENTS }}
           >
-            <SlidersHorizontal className="mr-2 size-4 shrink-0 text-light-slate" />
+            <SlidersHorizontal className="mr-2 size-3.5 shrink-0 text-muted-slate" />
             Manage environments
           </Link>
         </DropdownMenuItem>

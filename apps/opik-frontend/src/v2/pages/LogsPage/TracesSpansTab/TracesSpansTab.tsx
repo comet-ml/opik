@@ -49,8 +49,7 @@ import {
 } from "@/types/shared";
 import { CUSTOM_FILTER_VALIDATION_REGEXP } from "@/constants/filters";
 import {
-  ENVIRONMENT_UNKNOWN_VALUE,
-  ENVIRONMENT_NONE_VALUE,
+  ENVIRONMENT_UNTAGGED_VALUE,
   generateEnvironmentFilter,
 } from "@/lib/filters";
 import useEnvironmentsList from "@/api/environments/useEnvironmentsList";
@@ -466,13 +465,11 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
   const { data: environmentsData } = useEnvironmentsList();
 
   const envList = environmentsData?.content;
-  const envNames = useMemo(() => envList?.map((e) => e.name) ?? [], [envList]);
 
   const envIsValid = (() => {
     if (!environment) return null;
-    if (environment === ENVIRONMENT_NONE_VALUE) return true;
+    if (environment === ENVIRONMENT_UNTAGGED_VALUE) return true;
     if (!envList) return null;
-    if (environment === ENVIRONMENT_UNKNOWN_VALUE) return envList.length > 0;
     return envList.some((e) => e.name === environment);
   })();
 
@@ -485,8 +482,8 @@ export const TracesSpansTab: React.FC<TracesSpansTabProps> = ({
 
   const effectiveFilters = useMemo(() => {
     if (!environment || envIsValid === false) return filters;
-    return [...filters, ...generateEnvironmentFilter(environment, envNames)];
-  }, [filters, environment, envIsValid, envNames]);
+    return [...filters, ...generateEnvironmentFilter(environment)];
+  }, [filters, environment, envIsValid]);
 
   const isGuardrailsEnabled = useIsFeatureEnabled(
     FeatureToggleKeys.GUARDRAILS_ENABLED,
