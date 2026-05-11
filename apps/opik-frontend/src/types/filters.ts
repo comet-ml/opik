@@ -8,6 +8,7 @@ export type FilterOperator =
   | "ends_with"
   | "is_empty"
   | "is_not_empty"
+  | "not_in"
   | "="
   | ">"
   | ">="
