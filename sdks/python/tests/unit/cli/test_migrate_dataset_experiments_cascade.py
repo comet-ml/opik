@@ -25,6 +25,8 @@ from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock
 
 import datetime as dt
+import json
+
 import pytest
 
 from opik.cli.migrate.datasets import experiments as cascade_module
@@ -177,9 +179,28 @@ def _cascade_rest_client(
 
     rest_client.experiments.find_experiments.side_effect = _find_experiments
 
-    def _stream_items(experiment_id: str, limit: int) -> Any:
-        # ``stream_experiment_items`` returns an iterable.
-        return iter(items_by_experiment.get(experiment_id, []))
+    def _stream_items(experiment_name: str, limit: int) -> Any:
+        # Real REST returns ``Iterator[bytes]`` of NDJSON; the cascade
+        # parses it through ``rest_stream_parser.read_and_parse_stream``
+        # into ``ExperimentItemPublic``. Emit one JSON line per item
+        # ending in ``\n`` so the parser can split on newlines.
+        items = items_by_experiment.get(experiment_name, [])
+        payloads: List[bytes] = []
+        for it in items:
+            payload: Dict[str, Any] = {
+                "id": it.id,
+                "experiment_id": it.experiment_id,
+                "trace_id": it.trace_id,
+                "dataset_item_id": it.dataset_item_id,
+            }
+            # Forward any extras the test attached (input, output,
+            # feedback_scores, assertion_results, etc.) via the
+            # ``extras`` attribute on the stand-in. Pydantic v2's
+            # ``extra='allow'`` will surface these on ``model_extra``.
+            for key, value in getattr(it, "extras", {}).items():
+                payload[key] = value
+            payloads.append(json.dumps(payload).encode("utf-8") + b"\n")
+        return iter(payloads)
 
     rest_client.experiments.stream_experiment_items.side_effect = _stream_items
 
@@ -291,7 +312,7 @@ class TestCascadeExperiments:
 
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
@@ -337,7 +358,7 @@ class TestCascadeExperiments:
         )
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
@@ -376,7 +397,7 @@ class TestCascadeExperiments:
         )
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
@@ -416,7 +437,7 @@ class TestCascadeExperiments:
         )
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
@@ -496,7 +517,7 @@ class TestCascadeExperiments:
         ]
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": spans},
         )
@@ -567,7 +588,7 @@ class TestCascadeExperiments:
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
             items_by_experiment={
-                "src-exp-1": [item_with_good_trace, item_with_orphan_trace]
+                "experiment": [item_with_good_trace, item_with_orphan_trace]
             },
             traces_by_id={
                 "src-trace-1": _Trace(id="src-trace-1"),
@@ -622,7 +643,7 @@ class TestCascadeExperiments:
         )
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item_mapped, item_unmapped]},
+            items_by_experiment={"experiment": [item_mapped, item_unmapped]},
             traces_by_id={
                 "src-trace-1": _Trace(id="src-trace-1"),
                 "src-trace-2": _Trace(id="src-trace-2"),
@@ -649,8 +670,12 @@ class TestCascadeExperiments:
     def test_trace_id_remap__accumulates_across_experiments(self) -> None:
         # Two experiments sharing the SAME source trace must not double-copy
         # the trace; the second experiment reuses the first's mapping.
-        experiment_a = _Experiment(id="src-exp-a", dataset_version_id="src-v-1")
-        experiment_b = _Experiment(id="src-exp-b", dataset_version_id="src-v-1")
+        experiment_a = _Experiment(
+            id="src-exp-a", name="exp-a", dataset_version_id="src-v-1"
+        )
+        experiment_b = _Experiment(
+            id="src-exp-b", name="exp-b", dataset_version_id="src-v-1"
+        )
         shared_item_a = _ExperimentItem(
             id="src-item-a",
             experiment_id="src-exp-a",
@@ -667,8 +692,8 @@ class TestCascadeExperiments:
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment_a, experiment_b]},
             items_by_experiment={
-                "src-exp-a": [shared_item_a],
-                "src-exp-b": [shared_item_b],
+                "exp-a": [shared_item_a],
+                "exp-b": [shared_item_b],
             },
             traces_by_id={"src-trace-shared": _Trace(id="src-trace-shared")},
             spans_by_trace={"src-trace-shared": []},
@@ -755,7 +780,7 @@ class TestCascadeExperiments:
 
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
@@ -800,7 +825,7 @@ class TestCascadeExperiments:
 
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
@@ -848,7 +873,7 @@ class TestCascadeExperiments:
         ]
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
-            items_by_experiment={"src-exp-1": [item]},
+            items_by_experiment={"experiment": [item]},
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": spans},
         )

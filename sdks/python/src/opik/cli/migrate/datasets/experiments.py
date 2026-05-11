@@ -52,7 +52,7 @@ from typing import Any, Callable, Dict, List, Optional, Set
 
 import opik
 import opik.id_helpers as id_helpers_module
-from opik.api_objects import rest_helpers
+from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.rest_api import OpikApi
 from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
 from opik.rest_api.types.experiment_public import ExperimentPublic
@@ -178,16 +178,26 @@ def cascade_one_experiment(
     Mutates ``result`` in place.
     """
     experiment_id = source_experiment.id
+    experiment_name = source_experiment.name
     assert experiment_id is not None  # narrowed in the caller
 
-    items = list(_stream_experiment_items(rest_client, experiment_id))
+    # The streaming endpoint takes experiment_name (workspace-unique
+    # per dataset, in practice). If the BE returned an experiment
+    # without a name we can't enumerate items via the stream API.
+    if not experiment_name:
+        raise ExperimentCascadeError(
+            f"Source experiment {experiment_id} has no name; "
+            "stream_experiment_items requires experiment_name."
+        )
+
+    items = _stream_experiment_items(rest_client, experiment_name)
     if not items:
         # An experiment with no items is degenerate but recreate-able; we
         # still recreate it so users see the row at the destination.
         LOGGER.info(
             "Experiment %s (%s) has no items; recreating empty.",
             experiment_id,
-            source_experiment.name,
+            experiment_name,
         )
 
     # Collect distinct source trace ids for the items we plan to migrate.
@@ -266,21 +276,29 @@ def _list_source_experiments(
 
 
 def _stream_experiment_items(
-    rest_client: OpikApi, experiment_id: str
+    rest_client: OpikApi, experiment_name: str
 ) -> List[ExperimentItemPublic]:
     """Stream all items for one experiment.
 
-    ``stream_experiment_items`` returns an iterator of parsed items; we
-    materialise the list because we need two passes (one to collect source
-    trace ids, one to build the recreate-payload).
+    The REST endpoint takes ``experiment_name`` (not id) and returns a
+    raw NDJSON byte stream that we parse via ``rest_stream_parser``. The
+    resulting ``ExperimentItemPublic`` objects have ``extra="allow"``, so
+    any BE-returned fields outside the typed schema (input, output,
+    feedback_scores, assertion_results, execution_policy, description,
+    status, usage, total_estimated_cost, duration) survive on
+    ``item.model_extra`` -- which is what the cascade consumes to
+    reconstruct full-fidelity destination experiment items.
     """
-    response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
         lambda: rest_client.experiments.stream_experiment_items(
-            experiment_id=experiment_id,
+            experiment_name=experiment_name,
             limit=_EXPERIMENT_ITEM_BATCH,
         )
     )
-    return list(response)
+    return rest_stream_parser.read_and_parse_stream(
+        stream=raw_stream,
+        item_class=ExperimentItemPublic,
+    )
 
 
 def _copy_traces_and_spans(
