@@ -1,25 +1,43 @@
 import { useQuery } from "@tanstack/react-query";
+import uniqBy from "lodash/uniqBy";
 import { QueryConfig } from "./api";
 import { Workspace } from "./types";
-import { uniqBy } from "lodash";
+import useUserWorkspacesLite from "@/plugins/comet/useUserWorkspacesLite";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useAdminOrganizationWorkspaces from "@/plugins/comet/useAdminOrganizationWorkspaces";
 
-// all workspaces of organizations
 export default function useAllWorkspaces(options?: QueryConfig<Workspace[]>) {
-  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces(options);
-  const { data: allUserWorkspaces } = useAdminOrganizationWorkspaces(options);
+  const enabled = Boolean(options?.enabled);
+  const { data: liteResult } = useUserWorkspacesLite({ enabled });
+
+  const isUnsupported = liteResult?.kind === "unsupported";
+  const liteData = liteResult?.kind === "data" ? liteResult.data : undefined;
+
+  const fallbackEnabled = enabled && isUnsupported;
+
+  const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
+    enabled: fallbackEnabled,
+  });
+  const { data: adminOrgWorkspaces } = useAdminOrganizationWorkspaces({
+    enabled: fallbackEnabled,
+  });
+
+  const hasLite = liteData !== undefined;
+  const hasFallback =
+    isUnsupported && !!userInvitedWorkspaces && !!adminOrgWorkspaces;
 
   return useQuery({
     queryKey: ["all-user-workspaces", { enabled: true }],
     queryFn: async () => {
-      return !allUserWorkspaces || !userInvitedWorkspaces
-        ? undefined
-        : uniqBy(
-            [...allUserWorkspaces, ...userInvitedWorkspaces],
-            "workspaceId",
-          );
+      if (hasLite) return liteData;
+      if (hasFallback) {
+        return uniqBy(
+          [...adminOrgWorkspaces, ...userInvitedWorkspaces],
+          "workspaceId",
+        );
+      }
+      return undefined;
     },
-    enabled: !!allUserWorkspaces && !!userInvitedWorkspaces,
+    enabled: hasLite || hasFallback,
   });
 }
