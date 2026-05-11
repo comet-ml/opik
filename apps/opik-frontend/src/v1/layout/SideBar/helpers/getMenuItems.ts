@@ -170,7 +170,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           count: "alerts",
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },
