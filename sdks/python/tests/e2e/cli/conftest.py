@@ -536,12 +536,15 @@ def find_destination_experiment(
 
 
 def destination_experiment_items(
-    rest_client: OpikApi, *, experiment_name: str
+    rest_client: OpikApi,
+    *,
+    experiment_name: str,
+    project_name: str,
 ) -> List[Any]:
     """Materialise the destination experiment's items (one per source item).
 
-    The ``stream_experiment_items`` endpoint takes ``experiment_name``
-    (not id) and returns raw NDJSON bytes that we parse through
+    The ``stream_experiment_items`` endpoint takes ``experiment_name`` +
+    ``project_name`` and returns raw NDJSON bytes that we parse through
     ``rest_stream_parser`` -- ``extra='allow'`` on ``ExperimentItemPublic``
     surfaces BE-returned fields outside the typed schema on ``model_extra``,
     which is how the tests assert on assertion_results / feedback_scores /
@@ -550,7 +553,9 @@ def destination_experiment_items(
     from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
 
     raw_stream = rest_client.experiments.stream_experiment_items(
-        experiment_name=experiment_name, limit=500
+        experiment_name=experiment_name,
+        project_name=project_name,
+        limit=500,
     )
     return rest_stream_parser.read_and_parse_stream(
         stream=raw_stream,
@@ -558,13 +563,23 @@ def destination_experiment_items(
     )
 
 
-def destination_spans_for_trace(rest_client: OpikApi, *, trace_id: str) -> List[Any]:
-    """Read all destination spans for one destination trace, paginating."""
+def destination_spans_for_trace(
+    rest_client: OpikApi, *, trace_id: str, project_name: str
+) -> List[Any]:
+    """Read all destination spans for one destination trace, paginating.
+
+    ``get_spans_by_project`` requires ``project_name`` (or ``project_id``)
+    on the request; without it the BE 400s. We pass the destination
+    project name explicitly.
+    """
     out: List[Any] = []
     page = 1
     while True:
         resp = rest_client.spans.get_spans_by_project(
-            trace_id=trace_id, page=page, size=100
+            project_name=project_name,
+            trace_id=trace_id,
+            page=page,
+            size=100,
         )
         if not resp.content:
             break

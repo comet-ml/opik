@@ -104,6 +104,7 @@ def cascade_experiments(
     rest_client: OpikApi,
     *,
     source_dataset_id: str,
+    source_project_name: Optional[str],
     target_dataset_name: str,
     target_project_name: str,
     version_remap: Dict[str, str],
@@ -113,6 +114,12 @@ def cascade_experiments(
 ) -> ExperimentCascadeResult:
     """Enumerate source experiments referencing ``source_dataset_id`` and
     recreate each one at the destination, with traces+spans riding along.
+
+    ``source_project_name`` scopes the source-side reads
+    (``stream_experiment_items``, ``get_spans_by_project``); both BE
+    endpoints reject calls that omit it. May be ``None`` for workspace-
+    scoped sources (e.g. V1 datasets that auto-migration left at workspace
+    scope) -- the BE accepts the omission for those.
 
     ``progress_callback(completed, total, label)`` fires once before each
     experiment so callers can drive a progress bar; matches the shape used
@@ -148,6 +155,7 @@ def cascade_experiments(
             client,
             rest_client,
             source_experiment=experiment,
+            source_project_name=source_project_name,
             target_dataset_name=target_dataset_name,
             target_project_name=target_project_name,
             version_remap=version_remap,
@@ -166,6 +174,7 @@ def cascade_one_experiment(
     rest_client: OpikApi,
     *,
     source_experiment: ExperimentPublic,
+    source_project_name: Optional[str],
     target_dataset_name: str,
     target_project_name: str,
     version_remap: Dict[str, str],
@@ -190,7 +199,9 @@ def cascade_one_experiment(
             "stream_experiment_items requires experiment_name."
         )
 
-    items = _stream_experiment_items(rest_client, experiment_name)
+    items = _stream_experiment_items(
+        rest_client, experiment_name, source_project_name=source_project_name
+    )
     if not items:
         # An experiment with no items is degenerate but recreate-able; we
         # still recreate it so users see the row at the destination.
@@ -206,6 +217,7 @@ def cascade_one_experiment(
     traces_copied, spans_copied = _copy_traces_and_spans(
         rest_client,
         source_trace_ids=source_trace_ids,
+        source_project_name=source_project_name,
         target_project_name=target_project_name,
         trace_id_remap=result.trace_id_remap,
     )
@@ -276,7 +288,10 @@ def _list_source_experiments(
 
 
 def _stream_experiment_items(
-    rest_client: OpikApi, experiment_name: str
+    rest_client: OpikApi,
+    experiment_name: str,
+    *,
+    source_project_name: Optional[str],
 ) -> List[ExperimentItemPublic]:
     """Stream all items for one experiment.
 
@@ -288,10 +303,14 @@ def _stream_experiment_items(
     status, usage, total_estimated_cost, duration) survive on
     ``item.model_extra`` -- which is what the cascade consumes to
     reconstruct full-fidelity destination experiment items.
+
+    ``source_project_name`` scopes the read. May be ``None`` for
+    workspace-scoped sources (the BE accepts the omission for those).
     """
     raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
         lambda: rest_client.experiments.stream_experiment_items(
             experiment_name=experiment_name,
+            project_name=source_project_name,
             limit=_EXPERIMENT_ITEM_BATCH,
         )
     )
@@ -305,6 +324,7 @@ def _copy_traces_and_spans(
     rest_client: OpikApi,
     *,
     source_trace_ids: Set[str],
+    source_project_name: Optional[str],
     target_project_name: str,
     trace_id_remap: Dict[str, str],
 ) -> tuple[int, int]:
@@ -367,6 +387,7 @@ def _copy_traces_and_spans(
         spans_copied += _copy_spans_for_trace(
             rest_client,
             source_trace_id=source_trace_id,
+            source_project_name=source_project_name,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
         )
@@ -427,6 +448,7 @@ def _copy_spans_for_trace(
     rest_client: OpikApi,
     *,
     source_trace_id: str,
+    source_project_name: Optional[str],
     new_trace_id: str,
     target_project_name: str,
 ) -> int:
@@ -443,7 +465,11 @@ def _copy_spans_for_trace(
     )
 
     source_spans = list(
-        _fetch_spans_for_trace(rest_client, source_trace_id=source_trace_id)
+        _fetch_spans_for_trace(
+            rest_client,
+            source_trace_id=source_trace_id,
+            source_project_name=source_project_name,
+        )
     )
     if not source_spans:
         return 0
@@ -507,14 +533,23 @@ def _copy_spans_for_trace(
 
 
 def _fetch_spans_for_trace(
-    rest_client: OpikApi, *, source_trace_id: str
+    rest_client: OpikApi,
+    *,
+    source_trace_id: str,
+    source_project_name: Optional[str],
 ) -> List[SpanPublic]:
-    """Search source spans by trace_id, paginating to exhaustion."""
+    """Search source spans by trace_id, paginating to exhaustion.
+
+    ``get_spans_by_project`` requires ``project_name`` (or ``project_id``)
+    on the request -- it 400s without it -- so we always pass through the
+    source project name.
+    """
     collected: List[SpanPublic] = []
     page = 1
     while True:
         response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.spans.get_spans_by_project(
+                project_name=source_project_name,
                 trace_id=source_trace_id,
                 page=page,
                 size=_SPAN_SEARCH_PAGE_SIZE,

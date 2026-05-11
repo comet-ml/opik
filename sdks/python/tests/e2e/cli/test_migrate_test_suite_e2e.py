@@ -370,7 +370,11 @@ def test_test_suite_full_fidelity_round_trip(
     # Per-item assertion_results + execution_policy + status survive via
     # the model_extra surface (the typed ExperimentItemPublic schema drops
     # these fields, but the BE returns them under extra='allow').
-    dest_items = destination_experiment_items(rest, experiment_name=experiment_name)
+    dest_items = destination_experiment_items(
+        rest,
+        experiment_name=experiment_name,
+        project_name=target_project_name,
+    )
     assert len(dest_items) == len(v2_item_ids)
     dest_trace_ids = {it.trace_id for it in dest_items}
     assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"]))
@@ -401,7 +405,11 @@ def test_test_suite_full_fidelity_round_trip(
     # Each destination trace exists under the target project with the
     # span tree shape preserved (root + 1 child, parent_span_id remapped).
     for new_trace_id in dest_trace_ids:
-        dest_spans = destination_spans_for_trace(rest, trace_id=new_trace_id)
+        dest_spans = destination_spans_for_trace(
+            rest,
+            trace_id=new_trace_id,
+            project_name=target_project_name,
+        )
         assert len(dest_spans) == 2
         roots = [s for s in dest_spans if s.parent_span_id is None]
         assert len(roots) == 1

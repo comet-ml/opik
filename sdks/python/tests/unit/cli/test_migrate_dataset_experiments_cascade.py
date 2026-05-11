@@ -187,7 +187,9 @@ def _cascade_rest_client(
 
     rest_client.experiments.find_experiments.side_effect = _find_experiments
 
-    def _stream_items(experiment_name: str, limit: int) -> Any:
+    def _stream_items(
+        experiment_name: str, project_name: Optional[str] = None, limit: int = 500
+    ) -> Any:
         # Real REST returns ``Iterator[bytes]`` of NDJSON; the cascade
         # parses it through ``rest_stream_parser.read_and_parse_stream``
         # into ``ExperimentItemPublic``. Emit one JSON line per item
@@ -218,7 +220,13 @@ def _cascade_rest_client(
     rest_client.traces.get_trace_by_id.side_effect = _get_trace
     rest_client.traces.create_traces = MagicMock()
 
-    def _get_spans_by_project(trace_id: str, page: int, size: int) -> Any:
+    def _get_spans_by_project(
+        trace_id: str,
+        page: int,
+        size: int,
+        project_name: Optional[str] = None,
+        project_id: Optional[str] = None,
+    ) -> Any:
         content = spans_by_trace.get(trace_id, []) if page == 1 else []
         return MagicMock(content=content)
 
@@ -274,6 +282,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={},
@@ -330,6 +339,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -376,6 +386,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -415,6 +426,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -455,6 +467,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -535,6 +548,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -614,6 +628,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -664,6 +679,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -712,6 +728,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -749,6 +766,7 @@ class TestCascadeExperiments:
                 client,
                 rest_client,
                 source_dataset_id="src-dataset-1",
+                source_project_name="SourceProject",
                 target_dataset_name="MyDataset",
                 target_project_name="DestProject",
                 version_remap={},
@@ -798,6 +816,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -843,6 +862,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -891,6 +911,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
@@ -948,6 +969,7 @@ class TestCascadeExperiments:
             client,
             rest_client,
             source_dataset_id="src-dataset-1",
+            source_project_name="SourceProject",
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},

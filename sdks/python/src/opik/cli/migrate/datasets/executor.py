@@ -217,6 +217,7 @@ def _cascade_experiments(
             client,
             rest_client,
             source_dataset_id=action.source_dataset_id,
+            source_project_name=action.source_project_name,
             target_dataset_name=action.dest_name,
             target_project_name=action.dest_project_name,
             version_remap=plan.version_remap,

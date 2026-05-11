@@ -263,7 +263,11 @@ class TestMigrateDatasetVersionReplay:
 
         # Items: one per source item, with FRESH trace ids (disjoint from
         # source), per-item input/output preserved.
-        dest_items = destination_experiment_items(rest, experiment_name=experiment_name)
+        dest_items = destination_experiment_items(
+            rest,
+            experiment_name=experiment_name,
+            project_name=target_project_name,
+        )
         assert len(dest_items) == len(v1_item_ids)
         dest_trace_ids = {it.trace_id for it in dest_items}
         assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"])), (
@@ -279,7 +283,11 @@ class TestMigrateDatasetVersionReplay:
         # Each destination trace exists under the target project and has the
         # same span shape as the source (root + 1 child = 2 spans).
         for new_trace_id in dest_trace_ids:
-            dest_spans = destination_spans_for_trace(rest, trace_id=new_trace_id)
+            dest_spans = destination_spans_for_trace(
+                rest,
+                trace_id=new_trace_id,
+                project_name=target_project_name,
+            )
             assert len(dest_spans) == 2, (
                 f"trace {new_trace_id} should have 2 spans (root + child), "
                 f"got {len(dest_spans)}"
