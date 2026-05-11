@@ -31,6 +31,7 @@ import pytest
 import opik
 
 from ...conftest import random_chars
+from ...testlib import generate_project_name
 from ._cascade_comparison import compare_cascade
 from .conftest import (
     apply_changes,
@@ -47,7 +48,11 @@ from .conftest import (
     stream_items_wire,
 )
 
-PROJECT_NAME = "e2e-cli-migrate-dataset"  # consumed by configure_e2e_tests_env
+# Per ``sdks/python/AGENTS.md``: every e2e module sources PROJECT_NAME from
+# ``generate_project_name("e2e", __name__)`` so backend project names are
+# isolated per test module + the autouse ``configure_e2e_tests_env`` fixture
+# can patch ``OPIK_PROJECT_NAME`` to match.
+PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
 @pytest.fixture

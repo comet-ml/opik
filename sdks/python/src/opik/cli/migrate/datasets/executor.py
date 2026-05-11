@@ -205,9 +205,16 @@ def _cascade_experiments(
 
         def _on_experiment_start(completed: int, total: int, label: str) -> None:
             nonlocal task_id
-            description = (
-                f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
-            )
+            # ``label == "done"`` signals the cascade's final tick (completed=total).
+            # In that frame we drop the ``(N/total)`` suffix so the bar doesn't
+            # render ``(total+1/total)`` from the +1 offset that helps mid-loop
+            # ticks read as "currently processing the (Nth+1) experiment".
+            if label == "done":
+                description = f"→ {action.dest_project_name} · done"
+            else:
+                description = (
+                    f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
+                )
             if task_id is None:
                 task_id = progress.add_task(description, total=total)
             else:
@@ -217,7 +224,6 @@ def _cascade_experiments(
             client,
             rest_client,
             source_dataset_id=action.source_dataset_id,
-            source_project_name=action.source_project_name,
             target_dataset_name=action.dest_name,
             target_project_name=action.dest_project_name,
             version_remap=plan.version_remap,
@@ -225,9 +231,12 @@ def _cascade_experiments(
             audit=audit,
             progress_callback=_on_experiment_start,
         )
-
-        if task_id is not None:
-            progress.update(task_id, completed=result.experiments_migrated)
+        # No post-cascade ``progress.update`` here: the callback's final
+        # ``progress_callback(total, total, "done")`` tick already advanced
+        # the bar to ``completed=total``. Overwriting with
+        # ``result.experiments_migrated`` would drop the bar below 100% when
+        # any experiment was skipped (e.g. ``recreate_experiment`` returned
+        # False because all items missed the trace_id remap).
 
     plan.trace_id_remap.update(result.trace_id_remap)
 

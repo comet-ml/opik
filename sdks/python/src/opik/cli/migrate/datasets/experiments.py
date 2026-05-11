@@ -105,7 +105,6 @@ def cascade_experiments(
     rest_client: OpikApi,
     *,
     source_dataset_id: str,
-    source_project_name: Optional[str],
     target_dataset_name: str,
     target_project_name: str,
     version_remap: Dict[str, str],
@@ -116,15 +115,40 @@ def cascade_experiments(
     """Enumerate source experiments referencing ``source_dataset_id`` and
     recreate each one at the destination, with traces+spans riding along.
 
-    ``source_project_name`` scopes the source-side reads
-    (``stream_experiment_items``, ``get_spans_by_project``); both BE
-    endpoints reject calls that omit it. May be ``None`` for workspace-
-    scoped sources (e.g. V1 datasets that auto-migration left at workspace
-    scope) -- the BE accepts the omission for those.
+    Source-side reads (``get_spans_by_project``) scope by ``project_id``
+    PER-EXPERIMENT -- derived from ``source_experiment.project_id`` on
+    each iteration -- because experiments are always project-scoped
+    (unlike datasets, which can be workspace-scoped) and cross-project
+    experiments referencing the same source dataset legitimately live
+    in different projects.
 
     ``progress_callback(completed, total, label)`` fires once before each
     experiment so callers can drive a progress bar; matches the shape used
     by ``version_replay.replay_all_versions``.
+
+    Returns
+    -------
+    ExperimentCascadeResult
+        Aggregated cascade outcome, mutated in place as each source
+        experiment is processed. Fields:
+
+        - ``trace_id_remap`` -- source trace id -> newly-minted destination
+          trace id. Stashed on ``plan.trace_id_remap`` by the executor so
+          Slice 4 (optimization cascade) can reuse the mapping when it
+          remaps optimization-level trace references.
+        - ``experiments_migrated`` / ``experiments_skipped`` -- per-
+          experiment counters. An experiment is "skipped" only when
+          ``recreate_experiment`` returns ``False`` (degenerate cases like
+          all items missing a trace mapping); fatal errors raise
+          ``ExperimentCascadeError`` instead.
+        - ``traces_migrated`` / ``spans_migrated`` -- per-entity counters
+          aggregating across every source experiment processed.
+        - ``items_skipped_missing_trace`` / ``items_skipped_missing_item``
+          -- per-experiment-item skip counters, tallied after the recreate
+          call by comparing each source item's ``trace_id`` /
+          ``dataset_item_id`` against the remaps.
+        - ``skipped_experiments`` -- bounded list of
+          ``{"id", "name", "reason"}`` entries for the audit log.
     """
     result = ExperimentCascadeResult()
     del audit  # not currently used (umbrella action wraps via execute_plan_loop)
@@ -156,7 +180,6 @@ def cascade_experiments(
             client,
             rest_client,
             source_experiment=experiment,
-            source_project_name=source_project_name,
             target_dataset_name=target_dataset_name,
             target_project_name=target_project_name,
             version_remap=version_remap,
@@ -175,7 +198,6 @@ def cascade_one_experiment(
     rest_client: OpikApi,
     *,
     source_experiment: ExperimentPublic,
-    source_project_name: Optional[str],
     target_dataset_name: str,
     target_project_name: str,
     version_remap: Dict[str, str],
@@ -184,6 +206,15 @@ def cascade_one_experiment(
 ) -> None:
     """Migrate one source experiment: read items -> copy traces + spans ->
     recreate experiment via ``imports.experiment.recreate_experiment``.
+
+    The source project is derived from ``source_experiment.project_id`` --
+    experiments are always project-scoped on the BE, so every experiment
+    returned by ``find_experiments(dataset_id=...)`` carries a non-null
+    ``project_id`` (even when the dataset itself was workspace-scoped).
+    Using per-experiment ``project_id`` -- rather than threading a single
+    dataset-level project -- means cross-project experiments (i.e. ones
+    living in a project other than the source dataset's project) read
+    their traces / spans from the correct scope.
 
     Mutates ``result`` in place.
     """
@@ -197,6 +228,17 @@ def cascade_one_experiment(
             f"Source experiment {experiment_id} has no dataset_id; "
             "find_dataset_items_with_experiment_items requires the "
             "dataset id to enumerate the experiment's items."
+        )
+
+    source_project_id = source_experiment.project_id
+    if not source_project_id:
+        # Defensive: the BE should never return a project-less
+        # experiment (experiments are always project-scoped). If it
+        # does, fail clearly rather than letting ``get_spans_by_project``
+        # 400 with an opaque message.
+        raise ExperimentCascadeError(
+            f"Source experiment {experiment_id} has no project_id; "
+            "cascade requires project_id to scope span reads."
         )
 
     # Source-side read goes through the Compare view (rather than the
@@ -233,7 +275,7 @@ def cascade_one_experiment(
     traces_copied, spans_copied = _copy_traces_and_spans(
         rest_client,
         source_trace_ids=source_trace_ids,
-        source_project_name=source_project_name,
+        source_project_id=source_project_id,
         target_project_name=target_project_name,
         trace_id_remap=result.trace_id_remap,
         assertion_results_by_source_trace=assertion_results_by_source_trace,
@@ -357,7 +399,7 @@ def _copy_traces_and_spans(
     rest_client: OpikApi,
     *,
     source_trace_ids: Set[str],
-    source_project_name: Optional[str],
+    source_project_id: str,
     target_project_name: str,
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
@@ -439,7 +481,7 @@ def _copy_traces_and_spans(
         spans_copied += _copy_spans_for_trace(
             rest_client,
             source_trace_id=source_trace_id,
-            source_project_name=source_project_name,
+            source_project_id=source_project_id,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
         )
@@ -587,7 +629,7 @@ def _copy_spans_for_trace(
     rest_client: OpikApi,
     *,
     source_trace_id: str,
-    source_project_name: Optional[str],
+    source_project_id: str,
     new_trace_id: str,
     target_project_name: str,
 ) -> int:
@@ -607,7 +649,7 @@ def _copy_spans_for_trace(
         _fetch_spans_for_trace(
             rest_client,
             source_trace_id=source_trace_id,
-            source_project_name=source_project_name,
+            source_project_id=source_project_id,
         )
     )
     if not source_spans:
@@ -675,20 +717,22 @@ def _fetch_spans_for_trace(
     rest_client: OpikApi,
     *,
     source_trace_id: str,
-    source_project_name: Optional[str],
+    source_project_id: str,
 ) -> List[SpanPublic]:
     """Search source spans by trace_id, paginating to exhaustion.
 
-    ``get_spans_by_project`` requires ``project_name`` (or ``project_id``)
-    on the request -- it 400s without it -- so we always pass through the
-    source project name.
+    ``get_spans_by_project`` requires ``project_id`` (or ``project_name``)
+    on the request -- it 400s without it. We scope by ``project_id``
+    because the caller has the source experiment's project_id directly
+    (every experiment is project-scoped on the BE), avoiding a name
+    lookup round-trip.
     """
     collected: List[SpanPublic] = []
     page = 1
     while True:
         response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.spans.get_spans_by_project(
-                project_name=source_project_name,
+                project_id=source_project_id,
                 trace_id=source_trace_id,
                 page=page,
                 size=_SPAN_SEARCH_PAGE_SIZE,

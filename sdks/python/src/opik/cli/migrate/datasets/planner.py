@@ -101,13 +101,15 @@ class CascadeExperiments:
     """
 
     source_dataset_id: str
-    # Project the source experiments + their traces + spans live under.
-    # May be ``None`` for workspace-scoped sources. The cascade passes this
-    # to ``stream_experiment_items`` and ``get_spans_by_project`` because
-    # those endpoints scope reads by project and reject calls that omit it.
-    source_project_name: Optional[str]
     dest_name: str
     dest_project_name: str
+    # NB: the cascade does NOT carry a dataset-level source project name.
+    # Source-side reads (``find_dataset_items_with_experiment_items``,
+    # ``get_spans_by_project``) scope by ``project_id`` on a PER-EXPERIMENT
+    # basis -- ``source_experiment.project_id`` -- because experiments
+    # are always project-scoped (unlike datasets, which can be workspace-
+    # scoped) and cross-project experiments referencing the same source
+    # dataset legitimately live in different projects.
 
 
 @dataclass(kw_only=True)
@@ -233,7 +235,6 @@ def build_dataset_plan(
     plan.actions.append(
         CascadeExperiments(
             source_dataset_id=source.id,
-            source_project_name=source.project_name,
             dest_name=source.name,
             dest_project_name=to_project,
         )
