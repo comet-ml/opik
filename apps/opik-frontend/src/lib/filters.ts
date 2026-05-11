@@ -91,7 +91,7 @@ export const generateLogsSourceFilter = (source: LOGS_SOURCE) => {
   ] as Filter[];
 };
 
-export const ENVIRONMENT_UNTAGGED_VALUE = "__untagged__";
+export const ENVIRONMENT_NONE_VALUE = "__untagged__";
 export const ENVIRONMENT_UNKNOWN_VALUE = "__unknown__";
 
 export const generateEnvironmentFilter = (
@@ -100,7 +100,7 @@ export const generateEnvironmentFilter = (
 ): Filter[] => {
   if (!environment) return [];
 
-  if (environment === ENVIRONMENT_UNTAGGED_VALUE) {
+  if (environment === ENVIRONMENT_NONE_VALUE) {
     return [
       {
         id: "environment_filter",
