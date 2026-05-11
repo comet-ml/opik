@@ -73,6 +73,7 @@ _EXPERIMENT_ITEM_BATCH = 500
 _SPAN_SEARCH_PAGE_SIZE = 500
 _TRACE_BATCH_SIZE = 100
 _SPAN_BATCH_SIZE = 100
+_FEEDBACK_BATCH_SIZE = 500
 
 
 @dataclass
@@ -293,6 +294,11 @@ def _copy_traces_and_spans(
 
     Populates ``trace_id_remap`` in place with one entry per copied trace.
     Returns ``(traces_copied, spans_copied)`` for counter aggregation.
+
+    Feedback scores on each source trace are re-emitted against the new
+    destination trace via ``score_batch_of_traces`` after the trace batch
+    create. Span feedback scores are handled in ``_copy_spans_for_trace``
+    (we have the span id remap there).
     """
     if not source_trace_ids:
         return 0, 0
@@ -305,11 +311,13 @@ def _copy_traces_and_spans(
 
     trace_writes: List[TraceWrite] = []
     source_to_new_trace: Dict[str, str] = {}
+    source_traces_by_id: Dict[str, TracePublic] = {}
 
     for source_trace_id in new_source_ids:
         source_trace = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda sid=source_trace_id: rest_client.traces.get_trace_by_id(id=sid)
         )
+        source_traces_by_id[source_trace_id] = source_trace
         new_trace_id = id_helpers_module.generate_id()
         source_to_new_trace[source_trace_id] = new_trace_id
         trace_writes.append(
@@ -326,6 +334,16 @@ def _copy_traces_and_spans(
     trace_id_remap.update(source_to_new_trace)
     traces_copied = len(trace_writes)
 
+    # Re-emit feedback scores on the destination traces. The trace create
+    # path doesn't accept feedback scores -- they live in a separate
+    # per-trace table that score_batch_of_traces writes into.
+    _copy_trace_feedback_scores(
+        rest_client,
+        source_traces_by_id=source_traces_by_id,
+        source_to_new_trace=source_to_new_trace,
+        target_project_name=target_project_name,
+    )
+
     spans_copied = 0
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         spans_copied += _copy_spans_for_trace(
@@ -338,6 +356,55 @@ def _copy_traces_and_spans(
     return traces_copied, spans_copied
 
 
+def _copy_trace_feedback_scores(
+    rest_client: OpikApi,
+    *,
+    source_traces_by_id: Dict[str, TracePublic],
+    source_to_new_trace: Dict[str, str],
+    target_project_name: str,
+) -> None:
+    """Re-emit per-trace feedback scores under the destination project.
+
+    Reads ``feedback_scores`` off each source trace's read payload (already
+    fetched during the trace copy, no extra round-trip) and rewrites them
+    as a single ``score_batch_of_traces`` call keyed by the destination
+    trace id.
+
+    No-op for traces with no feedback scores. The cascade does not copy
+    ``span_feedback_scores`` here -- those are an aggregated view of
+    span-level scores, not separately persisted.
+    """
+    from opik.rest_api.types.feedback_score_batch_item import (
+        FeedbackScoreBatchItem,
+    )
+
+    batch: List[FeedbackScoreBatchItem] = []
+    for source_trace_id, new_trace_id in source_to_new_trace.items():
+        source = source_traces_by_id.get(source_trace_id)
+        if source is None or not source.feedback_scores:
+            continue
+        for score in source.feedback_scores:
+            batch.append(
+                FeedbackScoreBatchItem(
+                    id=new_trace_id,
+                    project_name=target_project_name,
+                    name=score.name,
+                    category_name=score.category_name,
+                    value=score.value,
+                    reason=score.reason,
+                    source=score.source,
+                )
+            )
+
+    if not batch:
+        return
+
+    for chunk in _chunks(batch, _FEEDBACK_BATCH_SIZE):
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda c=chunk: rest_client.traces.score_batch_of_traces(scores=c)
+        )
+
+
 def _copy_spans_for_trace(
     rest_client: OpikApi,
     *,
@@ -346,7 +413,17 @@ def _copy_spans_for_trace(
     target_project_name: str,
 ) -> int:
     """Read source spans for one trace, mint new ids preserving the parent
-    tree, and batch-create at the destination."""
+    tree, and batch-create at the destination.
+
+    After the span batch create, re-emit per-span feedback scores against
+    the new span ids so span-level scores (cost, quality, etc.) survive
+    the cascade. ``score_batch_of_spans`` is the write surface; spans
+    don't accept feedback scores on the create payload directly.
+    """
+    from opik.rest_api.types.feedback_score_batch_item import (
+        FeedbackScoreBatchItem,
+    )
+
     source_spans = list(
         _fetch_spans_for_trace(rest_client, source_trace_id=source_trace_id)
     )
@@ -362,6 +439,7 @@ def _copy_spans_for_trace(
 
     span_id_remap: Dict[str, str] = {}
     span_writes: List[SpanWrite] = []
+    span_feedback_batch: List[FeedbackScoreBatchItem] = []
     for span_dict in span_dicts:
         original_id = span_dict.get("id")
         new_span_id = id_helpers_module.generate_id()
@@ -381,10 +459,31 @@ def _copy_spans_for_trace(
             )
         )
 
+        # Collect per-span feedback scores keyed by the new span id so
+        # we can batch-emit them after the spans land.
+        for score in span_dict.get("feedback_scores") or []:
+            span_feedback_batch.append(
+                FeedbackScoreBatchItem(
+                    id=new_span_id,
+                    project_name=target_project_name,
+                    name=score["name"],
+                    category_name=score.get("category_name"),
+                    value=score["value"],
+                    reason=score.get("reason"),
+                    source=score["source"],
+                )
+            )
+
     for batch in _chunks(span_writes, _SPAN_BATCH_SIZE):
         rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda b=batch: rest_client.spans.create_spans(spans=b)
         )
+
+    if span_feedback_batch:
+        for chunk in _chunks(span_feedback_batch, _FEEDBACK_BATCH_SIZE):
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda c=chunk: rest_client.spans.score_batch_of_spans(scores=c)
+            )
 
     return len(span_writes)
 

@@ -110,6 +110,7 @@ class _Trace:
         error_info: Optional[Any] = None,
         last_updated_at: Optional[dt.datetime] = None,
         ttft: Optional[float] = None,
+        feedback_scores: Optional[List[Any]] = None,
     ) -> None:
         self.id = id
         self.name = name
@@ -123,6 +124,10 @@ class _Trace:
         self.error_info = error_info
         self.last_updated_at = last_updated_at
         self.ttft = ttft
+        # ``cascade`` reads source.feedback_scores after the trace copy to
+        # decide whether to re-emit any per-trace feedback. None / [] is a
+        # valid "no scores" state.
+        self.feedback_scores = feedback_scores
 
 
 class _Span:
@@ -717,6 +722,157 @@ class TestCascadeExperiments:
                 item_id_remap={},
                 audit=_audit(),
             )
+
+    def test_trace_feedback_scores__copied_to_destination_trace(self) -> None:
+        # Source trace carries a feedback score; the cascade must re-emit
+        # it against the new destination trace id via
+        # ``traces.score_batch_of_traces`` (the trace create payload
+        # doesn't accept feedback scores -- they live in a separate table).
+        from unittest.mock import MagicMock
+
+        score_a = MagicMock()
+        score_a.name = "correctness"
+        score_a.category_name = None
+        score_a.value = 0.9
+        score_a.reason = "looks good"
+        score_a.source = "sdk"
+
+        score_b = MagicMock()
+        score_b.name = "latency_p95"
+        score_b.category_name = None
+        score_b.value = 230.5
+        score_b.reason = None
+        score_b.source = "online_scoring"
+
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        trace = _Trace(id="src-trace-1", feedback_scores=[score_a, score_b])
+
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"src-exp-1": [item]},
+            traces_by_id={"src-trace-1": trace},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture()
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        new_trace_id = result.trace_id_remap["src-trace-1"]
+
+        # score_batch_of_traces called exactly once with both scores,
+        # rewritten to point at the destination trace id + project.
+        rest_client.traces.score_batch_of_traces.assert_called_once()
+        kwargs = rest_client.traces.score_batch_of_traces.call_args.kwargs
+        scores = kwargs["scores"]
+        assert len(scores) == 2
+        names = {s.name for s in scores}
+        assert names == {"correctness", "latency_p95"}
+        for s in scores:
+            assert s.id == new_trace_id
+            assert s.project_name == "DestProject"
+
+    def test_trace_without_feedback_scores__skips_score_batch_call(self) -> None:
+        # No-op path: when a source trace carries no feedback scores, the
+        # cascade must NOT call score_batch_of_traces (saves a round-trip).
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        trace = _Trace(id="src-trace-1", feedback_scores=None)
+
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"src-exp-1": [item]},
+            traces_by_id={"src-trace-1": trace},
+            spans_by_trace={"src-trace-1": []},
+        )
+        client = _client_with_recreate_capture()
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        rest_client.traces.score_batch_of_traces.assert_not_called()
+
+    def test_span_feedback_scores__copied_to_destination_spans(self) -> None:
+        # Span-level feedback scores ride along on the spans' read payload
+        # (``span_dict["feedback_scores"]``). Cascade must re-emit them
+        # against the new span ids via ``spans.score_batch_of_spans``.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        spans = [
+            _Span(
+                id="span-root",
+                parent_span_id=None,
+                name="root",
+                feedback_scores=[
+                    {
+                        "name": "span-quality",
+                        "category_name": None,
+                        "value": 0.75,
+                        "reason": "ok",
+                        "source": "sdk",
+                    }
+                ],
+            ),
+        ]
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"src-exp-1": [item]},
+            traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
+            spans_by_trace={"src-trace-1": spans},
+        )
+        client = _client_with_recreate_capture()
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        rest_client.spans.score_batch_of_spans.assert_called_once()
+        kwargs = rest_client.spans.score_batch_of_spans.call_args.kwargs
+        scores = kwargs["scores"]
+        assert len(scores) == 1
+        assert scores[0].name == "span-quality"
+        assert scores[0].project_name == "DestProject"
+        # The score's id must be the NEW span id (not the source).
+        assert scores[0].id != "span-root"
 
 
 # ---------------------------------------------------------------------------
