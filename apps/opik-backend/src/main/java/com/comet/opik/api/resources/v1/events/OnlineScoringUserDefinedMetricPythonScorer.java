@@ -27,7 +27,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -122,7 +121,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 }
                 if (userFacingLogger.isInfoEnabled()) {
                     userFacingLogger.info("Sending traceId '{}' to Python evaluator: {}",
-                            trace.id(), summarizeData(data));
+                            trace.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
                 }
                 return data;
             } catch (Exception exception) {
@@ -131,25 +130,6 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 throw exception;
             }
         }
-    }
-
-    /**
-     * Shape-only summary of the evaluator input for the user-facing log. Values are rendered
-     * trace content (input/output/metadata/spans) — logging them verbatim would land user
-     * data downstream of whatever sinks the user-facing log feeds, so we log sizes only.
-     */
-    private static String summarizeData(Map<String, Object> data) {
-        var parts = data.entrySet().stream()
-                .map(e -> {
-                    var v = e.getValue();
-                    if (v instanceof List<?> list) {
-                        return String.format("%s=list(%d)", e.getKey(), list.size());
-                    }
-                    var s = v == null ? "" : v.toString();
-                    return String.format("%s=%dc", e.getKey(), s.length());
-                })
-                .collect(Collectors.joining(", "));
-        return String.format("arguments=[%s]", parts);
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Trace trace) {
