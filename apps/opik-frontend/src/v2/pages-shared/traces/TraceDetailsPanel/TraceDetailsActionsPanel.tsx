@@ -9,7 +9,6 @@ import {
   Download,
   MoreHorizontal,
   Share,
-  Sparkles,
   Trash,
 } from "lucide-react";
 import uniq from "lodash/uniq";
@@ -38,10 +37,6 @@ import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/Resiz
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
-  DetailsActionSection,
-  DetailsActionSectionValue,
-} from "@/v2/pages-shared/traces/DetailsActionSection";
-import {
   mapRowDataForExport,
   TRACE_EXPORT_COLUMNS,
 } from "@/lib/traces/exportUtils";
@@ -67,7 +62,6 @@ type TraceDetailsActionsPanelProps = {
   onDelete: () => void;
   onClose: () => void;
   treeData: Array<Trace | Span>;
-  setActiveSection: (v: DetailsActionSectionValue) => void;
   horizontalNavigation?: ArrowNavigationConfig;
 };
 
@@ -84,13 +78,9 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   onDelete,
   onClose,
   treeData,
-  setActiveSection,
   horizontalNavigation,
 }) => {
   const [popupOpen, setPopupOpen] = useState(false);
-  const isAIInspectorEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.TOGGLE_OPIK_AI_ENABLED,
-  );
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
@@ -217,19 +207,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
       leftIcon={traceType && <BaseTraceDataTypeIcon type={traceType} />}
       onClose={onClose}
     >
-      {isAIInspectorEnabled && (
-        <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
-          <Button
-            variant="outline"
-            size="2xs"
-            onClick={() => setActiveSection(DetailsActionSection.AIAssistants)}
-          >
-            <Sparkles className="size-3.5 shrink-0" />
-            <span className="ml-1.5">Improve with Ollie</span>
-          </Button>
-        </TooltipWrapper>
-      )}
-
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="icon-2xs">

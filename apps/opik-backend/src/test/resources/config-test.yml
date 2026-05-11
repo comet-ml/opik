@@ -565,7 +565,7 @@ serviceToggles:
   # Description: Whether or not to enable the span user-defined metric Python evaluator
   spanUserDefinedMetricPythonEnabled: "false"
   # Default: false
-  # Description: Whether or not OpikAI feature is enabled
+  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; UI no longer reads this.
   opikAIEnabled: "false"
   # Default: false
   # Description: Whether or not Alert feature is enabled

@@ -4,7 +4,6 @@ export const DetailsActionSection = {
   Annotate: "annotate",
   Annotations: "annotations",
   Comments: "comments",
-  AIAssistants: "ai_assistants",
 } as const;
 export type DetailsActionSectionValue =
   (typeof DetailsActionSection)[keyof typeof DetailsActionSection];
@@ -14,5 +13,4 @@ export const DetailsActionSectionParam =
     DetailsActionSection.Annotate,
     DetailsActionSection.Annotations,
     DetailsActionSection.Comments,
-    DetailsActionSection.AIAssistants,
   ]);

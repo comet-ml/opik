@@ -19,7 +19,6 @@ import useTraceById from "@/api/traces/useTraceById";
 import { Skeleton } from "@/ui/skeleton";
 import TraceDataViewer from "./TraceDataViewer/TraceDataViewer";
 import TraceTreeViewer from "./TraceTreeViewer/TraceTreeViewer";
-import TraceAIViewer from "./TraceAIViewer/TraceAIViewer";
 import AnnotatePanel from "./AnnotatePanel/AnnotatePanel";
 import AgentGraphHeader from "./AgentGraphHeader";
 import AgentGraphTab from "./TraceDataViewer/AgentGraphTab";
@@ -395,14 +394,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
                       setActiveSection={setActiveSection}
                     />
                   )}
-                  {activeSection === DetailsActionSection.AIAssistants && (
-                    <TraceAIViewer
-                      traceId={traceId}
-                      activeSection={activeSection}
-                      setActiveSection={setActiveSection}
-                      spans={spansData?.content}
-                    />
-                  )}
                 </ResizablePanel>
               </>
             )}
@@ -446,7 +437,6 @@ const TraceDetailsPanel: React.FunctionComponent<TraceDetailsPanelProps> = ({
           onDelete={handleTraceDelete}
           onClose={onClose}
           treeData={treeData}
-          setActiveSection={setActiveSection}
           horizontalNavigation={horizontalNavigation}
         />
       }

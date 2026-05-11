@@ -991,8 +991,14 @@ serviceToggles:
   # Description: Whether or not to enable the span user-defined metric Python evaluator
   spanUserDefinedMetricPythonEnabled: ${TOGGLE_SPAN_USER_DEFINED_METRIC_PYTHON_ENABLED:-"true"}
   # Default: false
-  # Description: Whether or not OpikAI feature is enabled
-  opikAIEnabled: ${TOGGLE_OPIK_AI_ENABLED:-"false"}
+  # Deprecated (OPIK-6434): the in-app "Opik AI" assistant UI surface was paused
+  # (OPIK-6029) and is false in every flavour per the Opik 2.0 config matrix.
+  # TOGGLE_OPIK_AI_ENABLED is no longer consulted by the UI (no frontend
+  # consumers) and isOpikAIEnabled() has 0 backend consumers. Hardcoded to false
+  # here; field kept on the response for /v1/private/feature-toggles SDK
+  # contract compatibility. Safe to remove once older SDK clients are out of
+  # support.
+  opikAIEnabled: "false"
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: ${TOGGLE_ALERTS_ENABLED:-"true"}
