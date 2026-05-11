@@ -45,7 +45,6 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
-import reactor.core.publisher.Flux;
 
 import java.time.Instant;
 import java.util.List;
@@ -229,7 +228,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
-        ChatResponse result = scorer.handleToolCalls(plainResponse, toolRequest, structuredRequest, message);
+        ChatResponse result = scorer.handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of());
 
         assertThat(result).isSameAs(plainResponse);
         verifyNoInteractions(aiProxyService);
@@ -240,9 +239,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void handleToolCallsAccumulatesResultsAndFinalizesWithStructuredRequestShape() {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
-
-        // Spans for the active trace (empty list is fine — the pre-seed just caches an empty composite).
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
         // Initial response: model wants to call get_trace_spans.
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
@@ -273,7 +269,8 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .messages(UserMessage.from("score"))
                 .build();
 
-        ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message);
+        ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
+                List.of());
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -317,8 +314,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
 
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
-
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
                 .id("call-1")
                 .name(GetTraceSpansTool.NAME)
@@ -347,7 +342,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message))
+                        initialResponse, toolRequest, structuredRequest, message, List.of()))
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -358,8 +353,6 @@ class OnlineScoringLlmAsJudgeScorerTest {
     void handleToolCallsCapsAtMaxRoundsAndStillFiresWrapUpStructuredCall() {
         UUID traceId = UUID.randomUUID();
         TraceToScoreLlmAsJudge message = newMessage(traceId);
-
-        when(spanService.getByTraceIds(Set.of(traceId))).thenReturn(Flux.empty());
 
         // Initial response (passed in by the caller) carries a tool call — round 0's tools.
         ToolExecutionRequest toolReq = ToolExecutionRequest.builder()
@@ -402,7 +395,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message);
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of());
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);

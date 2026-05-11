@@ -256,7 +256,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             }
 
             if (useTools) {
-                chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message);
+                chatResponse = handleToolCalls(chatResponse, scoreRequest, structuredRequest, message, spans);
             }
 
             // When scoreNameMapping is empty (regular online scoring), names pass through unchanged.
@@ -352,7 +352,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     // Package-private for unit tests.
     ChatResponse handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
-            ChatRequest structuredRequest, TraceToScoreLlmAsJudge message) {
+            ChatRequest structuredRequest, TraceToScoreLlmAsJudge message, List<Span> spans) {
 
         AiMessage aiMessage = chatResponse.aiMessage();
         if (!aiMessage.hasToolExecutionRequests()) {
@@ -360,7 +360,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         }
 
         var trace = message.trace();
-        var spans = fetchSpans(trace.id(), message.workspaceId(), message.userName());
         var ctx = new TraceToolContext(trace, spans, message.workspaceId(), message.userName());
         // Pre-seed the active trace into the cache so read/jq/search can hit it without re-fetching.
         ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
