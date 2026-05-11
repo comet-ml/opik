@@ -25,6 +25,7 @@ export const TraceExperimentItemBulkWriteView: core.serialization.ObjectSchema<
     ttft: core.serialization.number().optional(),
     threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
     source: TraceExperimentItemBulkWriteViewSource.optional(),
+    environment: core.serialization.string().optional(),
 });
 
 export declare namespace TraceExperimentItemBulkWriteView {
@@ -43,5 +44,6 @@ export declare namespace TraceExperimentItemBulkWriteView {
         ttft?: number | null;
         thread_id?: string | null;
         source?: TraceExperimentItemBulkWriteViewSource.Raw | null;
+        environment?: string | null;
     }
 }

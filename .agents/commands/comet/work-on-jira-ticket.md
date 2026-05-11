@@ -106,10 +106,14 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
 #### 6b. Worktree Path (if using worktree)
 
 1. Slugify `{TICKET-SUMMARY}` for the worktree name: replace any character not in `[A-Za-z0-9._-]` with `-`, collapse consecutive `-` into one, and trim leading/trailing `-`. Then call `EnterWorktree` with name `{USERNAME}-OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}`.
-2. Inside the worktree, create the properly named branch (using the same slugified summary):
+2. Inside the worktree, fetch the latest remote state and create the properly named branch based on `origin/main` (using the same slugified summary):
    ```bash
-   git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY}
+   git fetch origin
+   git checkout -b {USERNAME}/OPIK-{TICKET-NUMBER}-{SLUGIFIED-SUMMARY} origin/main
    ```
+   The worktree intentionally branches off `origin/main` regardless of the parent checkout's current branch or local `main` state, and skips the rebase-strategy prompt — isolation is the whole point of the worktree.
+
+   Do not inspect or prompt about the parent checkout's working tree (staged, unstaged, or untracked files; current branch). Worktrees are physically isolated, so parent state has no effect on the worktree and is not the agent's concern in this path.
 3. Continue with implementation in the worktree directory.
 
 #### 6c. Normal Path (if not using worktree)
@@ -205,6 +209,7 @@ If the `EnterWorktree` tool is not available (e.g., running in Cursor or another
   - Apply code changes according to the plan
   - Run quality checks and tests
   - Commit changes with proper ticket number prefix
+- **Post-push PR description sync**: Whenever this skill (or any follow-up step the user runs from this conversation) invokes `git push` or `git push --force-with-lease` to a branch with an open PR in `comet-ml/opik`, invoke the `_pr-description-sync` sub-skill (`.agents/commands/comet/_pr-description-sync.md`) immediately after the push completes. The sub-skill is a no-op when no PR exists, when the description is already in sync, or when the user has opted out of refreshes for this repo. This keeps the PR description aligned with what was actually shipped instead of what was claimed when the PR was opened.
 - **If user declined**: Provide manual implementation guidance and stop
 
 ---

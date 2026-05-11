@@ -2,11 +2,10 @@ import React, { useMemo, useState } from "react";
 import { useSearch } from "@tanstack/react-router";
 import { flatMap, get, uniq } from "lodash";
 import md5 from "md5";
-import { FoldVertical, RotateCw, UnfoldVertical } from "lucide-react";
+import { FoldVertical, UnfoldVertical } from "lucide-react";
 
 import useRulesLogsList from "@/api/automations/useRulesLogsList";
 import NoData from "@/shared/NoData/NoData";
-import Loader from "@/shared/Loader/Loader";
 import { Button } from "@/ui/button";
 import PageBodyScrollContainer from "@/v2/layout/PageBodyScrollContainer/PageBodyScrollContainer";
 import PageBodyStickyContainer from "@/shared/PageBodyStickyContainer/PageBodyStickyContainer";
@@ -14,6 +13,7 @@ import PageBodyStickyTableWrapper from "@/v2/layout/PageBodyStickyTableWrapper/P
 import DataTable from "@/shared/DataTable/DataTable";
 import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import ExpandableTextCell from "@/shared/DataTableCells/ExpandableTextCell";
+import RefreshButton from "@/shared/RefreshButton/RefreshButton";
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import { COLUMN_TYPE, ColumnData } from "@/types/shared";
 import {
@@ -163,11 +163,9 @@ const AutomationLogsPage = () => {
     return <NoData message="No rule parameters set."></NoData>;
   }
 
-  if (isPending) {
-    return <Loader />;
-  }
+  const isTableLoading = isPending || (isPlaceholderData && rows.length === 0);
 
-  if (rows.length === 0) {
+  if (!isTableLoading && rows.length === 0) {
     return <NoData message="There are no logs for this rule."></NoData>;
   }
 
@@ -180,18 +178,11 @@ const AutomationLogsPage = () => {
         >
           <h1 className="comet-title-xs truncate break-words">Logs</h1>
           <div className="flex items-center gap-2">
-            <TooltipWrapper content="Refresh logs list">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="shrink-0"
-                onClick={() => {
-                  refetch();
-                }}
-              >
-                <RotateCw />
-              </Button>
-            </TooltipWrapper>
+            <RefreshButton
+              tooltip="Refresh logs list"
+              isFetching={isFetching}
+              onRefresh={() => refetch()}
+            />
             <TooltipWrapper
               content={allExpanded ? "Collapse all" : "Expand all"}
             >
@@ -213,7 +204,10 @@ const AutomationLogsPage = () => {
           getRowId={(row) => row.id}
           stickyHeader
           resizeConfig={resizeConfig}
-          showLoadingOverlay={isPlaceholderData && isFetching}
+          showSkeleton={isTableLoading}
+          showLoadingOverlay={
+            !isTableLoading && isPlaceholderData && isFetching
+          }
         />
       </PageBodyScrollContainer>
     </div>

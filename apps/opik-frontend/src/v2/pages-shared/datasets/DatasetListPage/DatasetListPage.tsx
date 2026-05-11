@@ -15,7 +15,6 @@ import DataTableNoData from "@/shared/DataTableNoData/DataTableNoData";
 import PageEmptyState from "@/shared/PageEmptyState/PageEmptyState";
 import useProjectDatasetsList from "@/api/datasets/useProjectDatasetsList";
 import { Dataset, DATASET_TYPE, DatasetListType } from "@/types/datasets";
-import Loader from "@/shared/Loader/Loader";
 import AddEditDatasetDialog from "@/v2/pages-shared/datasets/AddEditDatasetDialog/AddEditDatasetDialog";
 import AddEditTestSuiteDialog from "@/v2/pages-shared/datasets/AddEditTestSuiteDialog/AddEditTestSuiteDialog";
 import CreateDatasetSidebar from "@/v2/pages-shared/datasets/CreateDatasetSidebar/CreateDatasetSidebar";
@@ -304,7 +303,9 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
   );
   const total = data?.total ?? 0;
   const noData = !search && filters.length === 0;
-  const isEmpty = noData && datasets.length === 0;
+  const isTableLoading =
+    isPending || (isPlaceholderData && datasets.length === 0);
+  const isEmpty = !isTableLoading && noData && datasets.length === 0;
   const noDataText = noData ? config.noDataText : "No search results";
 
   const [selectedColumns, setSelectedColumns] = useLocalStorageState<string[]>(
@@ -418,10 +419,6 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
     ],
   );
 
-  if (isPending || (isPlaceholderData && datasets.length === 0)) {
-    return <Loader />;
-  }
-
   return (
     <div className="flex min-h-full flex-col pt-4">
       <div className="mb-4 flex min-h-7 items-center justify-between">
@@ -505,7 +502,10 @@ const DatasetListPage: React.FunctionComponent<DatasetListPageProps> = ({
                 )}
               </DataTableNoData>
             }
-            showLoadingOverlay={isPlaceholderData && isFetching}
+            showSkeleton={isTableLoading}
+            showLoadingOverlay={
+              !isTableLoading && isPlaceholderData && isFetching
+            }
           />
           <div className="py-4">
             <DataTablePagination

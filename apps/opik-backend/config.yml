@@ -466,9 +466,6 @@ analytics:
   # Default: empty
   # Description: Environment name included in every analytics event (e.g. "staging", "production")
   environment: ${OPIK_ANALYTICS_ENVIRONMENT:-}
-  # Default: 30d
-  # Description: TTL for the per-workspace first_trace_created dedup key in Redis
-  firstTraceCreatedDedupTtl: ${OPIK_ANALYTICS_FIRST_TRACE_CREATED_DEDUP_TTL:-30d}
 
 # Configuration for anonymous usage reporting
 usageReport:
@@ -748,6 +745,11 @@ optimizationLogs:
   # Description: Maximum number of concurrent S3 uploads during sync
   syncConcurrency: ${OPTIMIZATION_LOGS_SYNC_CONCURRENCY:-5}
 
+# Environment CRUD configuration
+environment:
+  # Maximum number of environments allowed per workspace.
+  maxPerWorkspace: ${OPIK_ENVIRONMENT_MAX_PER_WORKSPACE:-100}
+
 # Data retention policy enforcement
 # The job splits the workspace UUID space into N=executionsPerDay fractions and processes one fraction per tick.
 # Use a value that divides 1440 evenly for consistent interval spacing (e.g., 1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20, 24, 30, 32, 36, 48, 60, 80, 96, 120, 144, 160, 180, 240, 288).
@@ -926,6 +928,51 @@ pythonEvaluator:
   # Default: 500ms
   # Description: Min delay between retry attempts
   minRetryDelay: ${PYTHON_EVALUATOR_MIN_RETRY_DELAY:-500ms}
+  # Default: 10s
+  # Description: Max wait for a Python evaluator response read per call.
+  readTimeout: ${PYTHON_EVALUATOR_READ_TIMEOUT:-10s}
+  # Default: 5s
+  # Description: Max wait for the TCP/TLS connection to the Python evaluator to be established.
+  connectTimeout: ${PYTHON_EVALUATOR_CONNECT_TIMEOUT:-5s}
+
+# JAX-RS Jersey client configuration. This is the singleton HTTP client shared in the service.
+jerseyClient:
+  # Default: 30s
+  # Description: Overall response read timeout. Per-call timeouts can override via Jersey ClientProperties.READ_TIMEOUT.
+  timeout: ${JERSEY_CLIENT_TIMEOUT:-30s}
+  # Default: 2s
+  # Description: The maximum time to wait for a connection to open.
+  connectionTimeout: ${JERSEY_CLIENT_CONNECTION_TIMEOUT:-2s}
+  # Default: 1s
+  # Description: The maximum time to wait for a connection to be returned from the connection pool.
+  connectionRequestTimeout: ${JERSEY_CLIENT_CONNECTION_REQUEST_TIMEOUT:-1s}
+  # Default: 5m
+  # Description: Max connection lifetime; recycles connections to drain stale upstream pods after rollouts.
+  timeToLive: ${JERSEY_CLIENT_TIME_TO_LIVE:-5m}
+  # Default: 256
+  # Description: The maximum number of concurrent open connections.
+  maxConnections: ${JERSEY_CLIENT_MAX_CONNECTIONS:-256}
+  # Default: 64
+  # Description: The maximum number of concurrent open connections per route.
+  maxConnectionsPerRoute: ${JERSEY_CLIENT_MAX_CONNECTIONS_PER_ROUTE:-64}
+  # Default: 5s
+  # Description: The maximum time before a persistent connection is checked to remain active. If set to 0, no inactivity check will be performed.
+  validateAfterInactivityPeriod: ${JERSEY_CLIENT_VALIDATE_AFTER_INACTIVITY:-5s}
+  # Default: 16
+  # Description: Minimum idle Jersey async worker threads.
+  minThreads: ${JERSEY_CLIENT_MIN_THREADS:-16}
+  # Default: 128
+  # Description: Maximum Jersey async worker threads.
+  maxThreads: ${JERSEY_CLIENT_MAX_THREADS:-128}
+  # Default: 64
+  # Description: The size of the work queue of the pool used for asynchronous requests. Additional threads will be spawn only if the queue is reached its maximum size.
+  workQueueSize: ${JERSEY_CLIENT_WORK_QUEUE_SIZE:-64}
+  # Default: false
+  # Description: Whether to send gzipped request bodies. Off because not all upstreams handle Content-Encoding: gzip on requests.
+  gzipEnabledForRequests: ${JERSEY_CLIENT_GZIP_ENABLED_FOR_REQUESTS:-false}
+  # Default: false
+  # Description: Whether to enable Transfer-Encoding: chunked on outbound request bodies. Off because sending Content-Length is universally accepted.
+  chunkedEncodingEnabled: ${JERSEY_CLIENT_CHUNKED_ENCODING_ENABLED:-false}
 
 serviceToggles:
   # Default: true
@@ -1002,11 +1049,19 @@ serviceToggles:
   # Use case: gradual V2 rollout — allowlist specific workspace IDs for V2 while the rest use entity-based determination.
   # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
   v2WorkspaceAllowlist: ${TOGGLE_V2_WORKSPACE_ALLOWLIST:-""}
+  # Default: "" (empty, no allowlisted workspaces)
+  # Description: Comma-separated list of workspace IDs that should always receive V1 navigation.
+  # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
+  # Scope: Per-workspace — only listed workspace IDs are affected, all others follow normal determination.
+  # Priority: Second — overridden by v2WorkspaceAllowlist; overrides forceWorkspaceVersion and all subsequent determination logic.
+  # Use case: customer-driven V1 stickiness — pin specific workspaces to legacy navigation without affecting the rest of the deployment.
+  # Operational impact: empty/missing means no allowlisting. Non-allowlisted workspaces are unaffected.
+  v1WorkspaceAllowlist: ${TOGGLE_V1_WORKSPACE_ALLOWLIST:-""}
   # Default: disabled
   # Description: Forces ALL workspaces to a specific navigation version.
   # Valid values: "disabled" (use version 1 entity check), "version_1" (force legacy), "version_2" (force project-first).
   # Scope: Global — applies to all workspaces regardless of their entity state.
-  # Priority: Second highest — overridden by v2WorkspaceAllowlist for listed workspaces.
+  # Priority: Third — overridden by v2WorkspaceAllowlist and v1WorkspaceAllowlist for listed workspaces.
   # Overrides: When not "disabled", overrides the version entity check and auth gate entirely.
   # Operational impact: Default is "disabled" (entity-based determination). Override to "version_1" or "version_2" if global enforcement is needed.
   forceWorkspaceVersion: ${TOGGLE_FORCE_WORKSPACE_VERSION:-"disabled"}
@@ -1309,6 +1364,37 @@ datasetVersioningMigration:
   # Description: Job execution timeout in seconds for the items_total migration
   # Should be long enough to complete the entire migration process
   itemsTotalJobTimeoutSeconds: ${DATASET_VERSION_ITEMS_TOTAL_MIGRATION_JOB_TIMEOUT_SECONDS:-3600}
+
+# Experiment Project Migration configuration
+# Assigns project_id to orphan experiments (V1 → V2 workspace migration).
+# Runs as a recurring job, processing workspaces in batches.
+experimentProjectMigration:
+  # Master switch — disabled by default, enable for staged rollout
+  enabled: ${EXPERIMENT_PROJECT_MIGRATION_ENABLED:-false}
+  # Number of workspaces to process per job run (smallest first)
+  workspacesPerRun: ${EXPERIMENT_PROJECT_MIGRATION_WORKSPACES_PER_RUN:-20}
+  # Number of experiments to update per ClickHouse INSERT batch
+  experimentBatchSize: ${EXPERIMENT_PROJECT_MIGRATION_BATCH_SIZE:-1000}
+  # Interval between recurring job runs
+  interval: ${EXPERIMENT_PROJECT_MIGRATION_INTERVAL:-30s}
+  # Delay before first run after app startup
+  startupDelay: ${EXPERIMENT_PROJECT_MIGRATION_STARTUP_DELAY:-30s}
+  # Distributed lock timeout — prevents overlap across replicas.
+  # Intentionally shorter than jobTimeout: the lock covers typical cycle duration (minutes) and
+  # prevents redundant scheduling across replicas. Cycles that exceed lockTimeout tolerate replica
+  # overlap because the migration is idempotent (WHERE project_id = '' skips already-migrated rows).
+  lockTimeout: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_TIMEOUT:-5m}
+  # Max time to wait for the distributed lock when another replica holds it. Kept brief so a held
+  # lock doesn't block this fire — the next scheduled tick will try again.
+  lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
+  # Per-cycle timeout — safety net for stuck cycles, not normal completion
+  jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+
+# Shared configuration for V1 → V2 entity project migration jobs
+# Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
+migration:
+  # Comma-separated workspace IDs to exclude (e.g. internal Comet workspaces)
+  excludedWorkspaceIds: ${MIGRATION_EXCLUDED_WORKSPACE_IDS:-}
 
 llmModelRegistry:
   defaultResource: ${LLM_MODEL_REGISTRY_DEFAULT_RESOURCE:-llm-models-default.yaml}

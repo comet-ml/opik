@@ -158,6 +158,7 @@ export enum PROVIDER_MODEL_TYPE {
   ARCEE_AI_VIRTUOSO_LARGE = "arcee-ai/virtuoso-large",
   ARLIAI_QWQ_32B_ARLIAI_RPR_V1 = "arliai/qwq-32b-arliai-rpr-v1",
   ARLIAI_QWQ_32B_ARLIAI_RPR_V1_FREE = "arliai/qwq-32b-arliai-rpr-v1:free",
+  BAIDU_COBUDDY_FREE = "baidu/cobuddy:free",
   BAIDU_ERNIE_4_5_21B_A3B = "baidu/ernie-4.5-21b-a3b",
   BAIDU_ERNIE_4_5_21B_A3B_THINKING = "baidu/ernie-4.5-21b-a3b-thinking",
   BAIDU_ERNIE_4_5_300B_A47B = "baidu/ernie-4.5-300b-a47b",
@@ -219,6 +220,7 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_GEMINI_3_PRO_IMAGE_PREVIEW = "google/gemini-3-pro-image-preview",
   GOOGLE_GEMINI_3_PRO_PREVIEW = "google/gemini-3-pro-preview",
   GOOGLE_GEMINI_3_1_FLASH_IMAGE_PREVIEW = "google/gemini-3.1-flash-image-preview",
+  GOOGLE_GEMINI_3_1_FLASH_LITE = "google/gemini-3.1-flash-lite",
   GOOGLE_GEMINI_3_1_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   GOOGLE_GEMINI_3_1_PRO_PREVIEW_CUSTOMTOOLS = "google/gemini-3.1-pro-preview-customtools",
@@ -241,12 +243,15 @@ export enum PROVIDER_MODEL_TYPE {
   GOOGLE_LYRIA_3_PRO_PREVIEW = "google/lyria-3-pro-preview",
   GRYPHE_MYTHOMAX_L2_13B = "gryphe/mythomax-l2-13b",
   IBM_GRANITE_GRANITE_4_0_H_MICRO = "ibm-granite/granite-4.0-h-micro",
+  IBM_GRANITE_GRANITE_4_1_8B = "ibm-granite/granite-4.1-8b",
   INCEPTION_MERCURY = "inception/mercury",
   INCEPTION_MERCURY_2 = "inception/mercury-2",
   INCEPTION_MERCURY_CODER = "inception/mercury-coder",
+  INCLUSIONAI_LING_2_6_1T = "inclusionai/ling-2.6-1t",
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
+  INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
   KWAIPILOT_KAT_CODER_PRO = "kwaipilot/kat-coder-pro",
@@ -285,6 +290,7 @@ export enum PROVIDER_MODEL_TYPE {
   MICROSOFT_PHI_3_MINI_128K_INSTRUCT = "microsoft/phi-3-mini-128k-instruct",
   MICROSOFT_PHI_3_5_MINI_128K_INSTRUCT = "microsoft/phi-3.5-mini-128k-instruct",
   MICROSOFT_PHI_4 = "microsoft/phi-4",
+  MICROSOFT_PHI_4_MINI_INSTRUCT = "microsoft/phi-4-mini-instruct",
   MICROSOFT_PHI_4_MULTIMODAL_INSTRUCT = "microsoft/phi-4-multimodal-instruct",
   MICROSOFT_PHI_4_REASONING_PLUS = "microsoft/phi-4-reasoning-plus",
   MICROSOFT_WIZARDLM_2_8X22B = "microsoft/wizardlm-2-8x22b",
@@ -320,6 +326,7 @@ export enum PROVIDER_MODEL_TYPE {
   MISTRALAI_MISTRAL_LARGE_2411 = "mistralai/mistral-large-2411",
   MISTRALAI_MISTRAL_LARGE_2512 = "mistralai/mistral-large-2512",
   MISTRALAI_MISTRAL_MEDIUM_3 = "mistralai/mistral-medium-3",
+  MISTRALAI_MISTRAL_MEDIUM_3_5 = "mistralai/mistral-medium-3-5",
   MISTRALAI_MISTRAL_MEDIUM_3_1 = "mistralai/mistral-medium-3.1",
   MISTRALAI_MISTRAL_NEMO = "mistralai/mistral-nemo",
   MISTRALAI_MISTRAL_NEMO_FREE = "mistralai/mistral-nemo:free",
@@ -425,6 +432,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENAI_GPT_5_5_PRO = "openai/gpt-5.5-pro",
   OPENAI_GPT_AUDIO = "openai/gpt-audio",
   OPENAI_GPT_AUDIO_MINI = "openai/gpt-audio-mini",
+  OPENAI_GPT_CHAT_LATEST = "openai/gpt-chat-latest",
   OPENAI_GPT_OSS_120B = "openai/gpt-oss-120b",
   OPENAI_GPT_OSS_120B_EXACTO = "openai/gpt-oss-120b:exacto",
   OPENAI_GPT_OSS_120B_FREE = "openai/gpt-oss-120b:free",
@@ -448,6 +456,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_FREE = "openrouter/free",
   OPENROUTER_HEALER_ALPHA = "openrouter/healer-alpha",
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
+  OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
   OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
   PERPLEXITY_SONAR = "perplexity/sonar",
   PERPLEXITY_SONAR_DEEP_RESEARCH = "perplexity/sonar-deep-research",
@@ -539,6 +548,7 @@ export enum PROVIDER_MODEL_TYPE {
   STEPFUN_STEP_3_5_FLASH_FREE = "stepfun/step-3.5-flash:free",
   SWITCHPOINT_ROUTER = "switchpoint/router",
   TENCENT_HUNYUAN_A13B_INSTRUCT = "tencent/hunyuan-a13b-instruct",
+  TENCENT_HY3_PREVIEW = "tencent/hy3-preview",
   TENCENT_HY3_PREVIEW_FREE = "tencent/hy3-preview:free",
   THEDRUMMER_ANUBIS_70B_V1_1 = "thedrummer/anubis-70b-v1.1",
   THEDRUMMER_CYDONIA_24B_V4_1 = "thedrummer/cydonia-24b-v4.1",
@@ -565,6 +575,7 @@ export enum PROVIDER_MODEL_TYPE {
   X_AI_GROK_4_20_BETA = "x-ai/grok-4.20-beta",
   X_AI_GROK_4_20_MULTI_AGENT = "x-ai/grok-4.20-multi-agent",
   X_AI_GROK_4_20_MULTI_AGENT_BETA = "x-ai/grok-4.20-multi-agent-beta",
+  X_AI_GROK_4_3 = "x-ai/grok-4.3",
   X_AI_GROK_CODE_FAST_1 = "x-ai/grok-code-fast-1",
   XIAOMI_MIMO_V2_FLASH = "xiaomi/mimo-v2-flash",
   XIAOMI_MIMO_V2_OMNI = "xiaomi/mimo-v2-omni",
@@ -609,6 +620,7 @@ export enum PROVIDER_MODEL_TYPE {
   GEMINI_3_PRO_IMAGE_PREVIEW = "gemini-3-pro-image-preview",
   GEMINI_3_PRO = "gemini-3-pro-preview",
   GEMINI_3_1_FLASH_IMAGE_PREVIEW = "gemini-3.1-flash-image-preview",
+  GEMINI_3_1_FLASH_LITE = "gemini-3.1-flash-lite",
   GEMINI_3_1_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_3_1_FLASH_TTS_PREVIEW = "gemini-3.1-flash-tts-preview",
   GEMINI_3_1_PRO = "gemini-3.1-pro-preview",
@@ -720,10 +732,11 @@ export type AnthropicThinkingEffort =
   | "low"
   | "medium"
   | "high"
+  | "xhigh"
   | "max";
 
 export interface LLMAnthropicConfigsType {
-  temperature: number;
+  temperature?: number;
   maxCompletionTokens: number;
   topP?: number;
   seed?: number | null;

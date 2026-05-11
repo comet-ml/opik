@@ -67,6 +67,28 @@ export interface LogProcessor {
   finishLogging: () => void;
 }
 
+export const NOOP_LOG_PROCESSOR: LogProcessor = {
+  log: () => {},
+  finishLogging: () => {},
+};
+
+export const buildLogProcessor = ({
+  datasetName,
+  canLogTraceSpanThread,
+  canCreateExperiments,
+  args,
+}: {
+  datasetName: string | null;
+  canLogTraceSpanThread: boolean;
+  canCreateExperiments: boolean;
+  args: LogProcessorArgs;
+}): LogProcessor => {
+  const shouldLog = datasetName
+    ? canLogTraceSpanThread && canCreateExperiments
+    : canLogTraceSpanThread;
+  return shouldLog ? createLogPlaygroundProcessor(args) : NOOP_LOG_PROCESSOR;
+};
+
 const createBatchTraces = async (traces: LogTrace[]) => {
   return api.post(`${TRACES_REST_ENDPOINT}batch`, {
     traces: traces.map(snakeCaseObj),

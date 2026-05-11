@@ -33,7 +33,7 @@ interface TraceThreadMapper {
     @Mapping(target = "lastMessage", ignore = true)
     @Mapping(target = "numberOfMessages", ignore = true)
     TraceThreadModel mapFromThreadIdModel(TraceThreadIdModel traceThread, String userName, TraceThreadStatus status,
-            Instant lastUpdatedAt, Source source);
+            Instant lastUpdatedAt, Source source, String environment);
 
     default TraceThreadModel mapFromRow(Row row) {
         return TraceThreadModel.builder()
@@ -67,6 +67,7 @@ interface TraceThreadMapper {
                 .numberOfMessages(RowUtils.getOptionalValue(row, "number_of_messages", Long.class))
                 .source(Source.fromString(RowUtils.getOptionalValue(row, "source", String.class))
                         .orElse(null))
+                .environment(RowUtils.getOptionalValue(row, "environment", String.class))
                 .build();
     }
 

@@ -29,6 +29,7 @@ export const TraceUpdate: core.serialization.ObjectSchema<serializers.TraceUpdat
         threadId: core.serialization.property("thread_id", core.serialization.string().optional()),
         ttft: core.serialization.number().optional(),
         source: TraceUpdateSource.optional(),
+        environment: core.serialization.string().optional(),
     });
 
 export declare namespace TraceUpdate {
@@ -47,5 +48,6 @@ export declare namespace TraceUpdate {
         thread_id?: string | null;
         ttft?: number | null;
         source?: TraceUpdateSource.Raw | null;
+        environment?: string | null;
     }
 }

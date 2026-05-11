@@ -49,6 +49,7 @@ import com.comet.opik.domain.cost.CostService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
+import com.comet.opik.infrastructure.db.TransactionTemplateAsync;
 import com.comet.opik.infrastructure.usagelimit.Quota;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.AttachmentPayloadUtilsTest;
@@ -1486,6 +1487,7 @@ class SpansResourceTest {
                     .traceId(generator.generate())
                     .startTime(Instant.now())
                     .createdAt(Instant.now())
+                    .environment("")
                     .build();
             var expectedSpanId = spanResourceClient.createSpan(expectedSpan, API_KEY, TEST_WORKSPACE);
 
@@ -1976,6 +1978,7 @@ class SpansResourceTest {
                             .traceId(generator.generate())
                             .startTime(Instant.now())
                             .createdAt(Instant.now())
+                            .environment("")
                             .build())
                     .toList();
             spanResourceClient.batchCreateSpans(expectedSpans0, API_KEY, TEST_WORKSPACE);
@@ -2090,6 +2093,70 @@ class SpansResourceTest {
                     assertThat(actualResponse.getStatus()).isEqualTo(HttpStatus.SC_NO_CONTENT);
                 }
             }
+        }
+
+        @Test
+        @DisplayName("when batch spans are inserted, no FORMAT Values fast-path errors are emitted (OPIK-5694)")
+        void batch__whenSpansAreInserted__thenNoFastPathErrorsEmitted(
+                TransactionTemplateAsync templateAsync) {
+            var workspaceName = "workspace-" + RandomStringUtils.secure().nextAlphanumeric(32);
+            var workspaceId = UUID.randomUUID().toString();
+            AuthTestUtils.mockTargetWorkspace(wireMock.server(), API_KEY, workspaceName, workspaceId, USER);
+
+            long parseInputBefore = readClickHouseErrorCount(templateAsync, 27);
+            long convertTypeBefore = readClickHouseErrorCount(templateAsync, 70);
+            long illegalArgBefore = readClickHouseErrorCount(templateAsync, 43);
+            long parseQuotedBefore = readClickHouseErrorCount(templateAsync, 26);
+
+            // Cover every null/non-null branch of the fields this PR touches in BULK_INSERT:
+            // - endTime: null (row A) + non-null (row B)
+            // - lastUpdatedAt: null (row A) + non-null (row B)
+            // - usage: null (row A) + non-empty Map (row B)
+            // - totalEstimatedCost: null (row A, calculated path) + explicit BigDecimal (row B)
+            var rowA = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .endTime(null)
+                    .duration(null)
+                    .lastUpdatedAt(null)
+                    .usage(null)
+                    .totalEstimatedCost(null)
+                    .feedbackScores(null)
+                    .build();
+            var rowB = podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .usage(Map.of("prompt_tokens", 12, "completion_tokens", 7))
+                    .totalEstimatedCost(new java.math.BigDecimal("0.000123456789"))
+                    .feedbackScores(null)
+                    .build();
+
+            spanResourceClient.batchCreateSpans(List.of(rowA, rowB), API_KEY, workspaceName);
+
+            // After the fix, the spans BULK_INSERT must not increment any of the FORMAT Values
+            // fast-path counters. See OPIK-5694.
+            assertThat(readClickHouseErrorCount(templateAsync, 70) - convertTypeBefore)
+                    .as("CANNOT_CONVERT_TYPE (70): NULL bound to non-nullable last_updated_at")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 27) - parseInputBefore)
+                    .as("CANNOT_PARSE_INPUT_ASSERTION_FAILED (27): function expressions in Values cells")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 43) - illegalArgBefore)
+                    .as("ILLEGAL_TYPE_OF_ARGUMENT (43): same fast-path fallback path")
+                    .isZero();
+            assertThat(readClickHouseErrorCount(templateAsync, 26) - parseQuotedBefore)
+                    .as("CANNOT_PARSE_QUOTED_STRING (26): same fast-path fallback path")
+                    .isZero();
+        }
+
+        private long readClickHouseErrorCount(TransactionTemplateAsync templateAsync, int errorCode) {
+            return templateAsync.nonTransaction(connection -> {
+                var statement = connection.createStatement(
+                        "SELECT value FROM system.errors WHERE code = :code");
+                statement.bind("code", errorCode);
+                return Mono.from(statement.execute())
+                        .flatMap(result -> Mono.from(result.map((row, meta) -> {
+                            Long value = row.get("value", Long.class);
+                            return value != null ? value : 0L;
+                        })))
+                        .defaultIfEmpty(0L);
+            }).block();
         }
     }
 
@@ -4345,6 +4412,172 @@ class SpansResourceTest {
             SpanAssertions.assertSpan(page.content(),
                     List.of(unknownSourceSpan, sdkSpan),
                     List.of(experimentSpan), USER);
+        }
+    }
+
+    @Nested
+    @DisplayName("Filter spans by environment")
+    class FilterSpansByEnvironment {
+
+        private Span buildSpan(String projectName, UUID traceId, String environment) {
+            return podamFactory.manufacturePojo(Span.class).toBuilder()
+                    .projectName(projectName)
+                    .traceId(traceId)
+                    .environment(environment)
+                    .usage(null)
+                    .feedbackScores(null)
+                    .build();
+        }
+
+        private UUID newTrace(String projectName) {
+            var trace = podamFactory.manufacturePojo(Trace.class).toBuilder()
+                    .projectName(projectName)
+                    .build();
+            return traceResourceClient.createTrace(trace, API_KEY, TEST_WORKSPACE);
+        }
+
+        @Test
+        @DisplayName("EQUAL returns only matching environment")
+        void filterByEnvironmentEqual() {
+            var projectName = "span-env-equal-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var matching = buildSpan(projectName, traceId, "production");
+            var other = buildSpan(projectName, traceId, "staging");
+
+            spanResourceClient.createSpan(matching, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(other, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.EQUAL)
+                    .value("production")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(matching), List.of(other), USER);
+        }
+
+        @Test
+        @DisplayName("IS_EMPTY returns Untagged spans")
+        void filterByEnvironmentIsEmpty() {
+            var projectName = "span-env-untagged-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var untagged = buildSpan(projectName, traceId, "");
+            var tagged = buildSpan(projectName, traceId, "production");
+
+            spanResourceClient.createSpan(untagged, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(tagged, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.IS_EMPTY)
+                    .value("")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(untagged), List.of(tagged), USER);
+        }
+
+        @Test
+        @DisplayName("NOT_EQUAL excludes matching environment")
+        void filterByEnvironmentNotEqual() {
+            var projectName = "span-env-not-equal-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var excluded = buildSpan(projectName, traceId, "production");
+            var kept = buildSpan(projectName, traceId, "staging");
+
+            spanResourceClient.createSpan(excluded, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(kept, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.NOT_EQUAL)
+                    .value("production")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(kept), List.of(excluded), USER);
+        }
+
+        @Test
+        @DisplayName("IS_NOT_EMPTY excludes Untagged spans")
+        void filterByEnvironmentIsNotEmpty() {
+            var projectName = "span-env-not-untagged-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var untagged = buildSpan(projectName, traceId, "");
+            var tagged = buildSpan(projectName, traceId, "production");
+
+            spanResourceClient.createSpan(untagged, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(tagged, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.IS_NOT_EMPTY)
+                    .value("")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(tagged), List.of(untagged), USER);
+        }
+
+        @Test
+        @DisplayName("IN returns spans matching any of the values")
+        void filterByEnvironmentIn() {
+            var projectName = "span-env-in-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var dev = buildSpan(projectName, traceId, "development");
+            var staging = buildSpan(projectName, traceId, "staging");
+            var prod = buildSpan(projectName, traceId, "production");
+
+            spanResourceClient.createSpan(dev, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(staging, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(prod, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.IN)
+                    .value("development,staging")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(staging, dev), List.of(prod), USER);
+        }
+
+        @Test
+        @DisplayName("NOT_IN returns spans with environments outside the predefined set (Unknown)")
+        void filterByEnvironmentNotIn() {
+            var projectName = "span-env-not-in-" + UUID.randomUUID();
+            var traceId = newTrace(projectName);
+            var dev = buildSpan(projectName, traceId, "development");
+            var staging = buildSpan(projectName, traceId, "staging");
+            var prod = buildSpan(projectName, traceId, "production");
+            var custom = buildSpan(projectName, traceId, "qa");
+
+            spanResourceClient.createSpan(dev, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(staging, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(prod, API_KEY, TEST_WORKSPACE);
+            spanResourceClient.createSpan(custom, API_KEY, TEST_WORKSPACE);
+
+            var filters = List.of(SpanFilter.builder()
+                    .field(SpanField.ENVIRONMENT)
+                    .operator(Operator.NOT_IN)
+                    .value("development,staging,production")
+                    .build());
+
+            var page = spanResourceClient.findSpans(TEST_WORKSPACE, API_KEY, projectName, null, 1, 10,
+                    null, null, filters, List.of(), List.of());
+
+            SpanAssertions.assertSpan(page.content(), List.of(custom), List.of(dev, staging, prod), USER);
         }
     }
 }

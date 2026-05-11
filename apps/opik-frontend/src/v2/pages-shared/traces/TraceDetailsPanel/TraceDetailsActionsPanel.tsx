@@ -5,7 +5,6 @@ import { json2csv } from "json-2-csv";
 import get from "lodash/get";
 import {
   ArrowUpRight,
-  ChevronsRight,
   Copy,
   Download,
   MoreHorizontal,
@@ -24,8 +23,6 @@ import useAppStore, { useActiveProjectId } from "@/store/AppStore";
 import useTraceDeleteMutation from "@/api/traces/useTraceDeleteMutation";
 import { useToast } from "@/ui/use-toast";
 import { Button } from "@/ui/button";
-import { HotkeyDisplay } from "@/ui/hotkey-display";
-import { Separator } from "@/ui/separator";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +33,8 @@ import {
 import TooltipWrapper from "@/shared/TooltipWrapper/TooltipWrapper";
 import ConfirmDialog from "@/shared/ConfirmDialog/ConfirmDialog";
 import BaseTraceDataTypeIcon from "@/shared/BaseTraceDataTypeIcon/BaseTraceDataTypeIcon";
+import ResizableSidePanelTopBar from "@/shared/ResizableSidePanel/ResizableSidePanelTopBar";
+import ResizableSidePanelArrowNavigation from "@/shared/ResizableSidePanel/ResizableSidePanelArrowNavigation";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
 import { FeatureToggleKeys } from "@/types/feature-toggles";
 import {
@@ -48,7 +47,6 @@ import {
 } from "@/lib/traces/exportUtils";
 import { TRACE_DATA_TYPE } from "@/hooks/useTracesOrSpansList";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import { useHotkeys } from "react-hotkeys-hook";
 
 type ArrowNavigationConfig = {
   hasPrevious: boolean;
@@ -113,20 +111,6 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   }, [treeData, traceId]);
   const canNavigateToExperiment =
     Boolean(experiment) && canViewExperiments && Boolean(activeProjectId);
-
-  useHotkeys(
-    "j",
-    () =>
-      horizontalNavigation?.hasPrevious && horizontalNavigation.onChange(-1),
-    { enabled: Boolean(horizontalNavigation), enableOnFormTags: false },
-    [horizontalNavigation],
-  );
-  useHotkeys(
-    "k",
-    () => horizontalNavigation?.hasNext && horizontalNavigation.onChange(1),
-    { enabled: Boolean(horizontalNavigation), enableOnFormTags: false },
-    [horizontalNavigation],
-  );
 
   const handleTraceDelete = useCallback(() => {
     onDelete();
@@ -227,194 +211,163 @@ const TraceDetailsActionsPanel: React.FunctionComponent<
   );
 
   return (
-    <div className="flex flex-auto items-center justify-between">
-      <div className="flex items-center gap-1 overflow-hidden">
-        <TooltipWrapper content="Close panel">
-          <Button variant="ghost" size="icon-2xs" onClick={onClose}>
-            <ChevronsRight />
+    <ResizableSidePanelTopBar
+      variant="info"
+      title={traceName}
+      leftIcon={traceType && <BaseTraceDataTypeIcon type={traceType} />}
+      onClose={onClose}
+    >
+      {isAIInspectorEnabled && (
+        <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
+          <Button
+            variant="outline"
+            size="2xs"
+            onClick={() => setActiveSection(DetailsActionSection.AIAssistants)}
+          >
+            <Sparkles className="size-3.5 shrink-0" />
+            <span className="ml-1.5">Improve with Ollie</span>
           </Button>
         </TooltipWrapper>
-        {traceType && <BaseTraceDataTypeIcon type={traceType} />}
-        <span className="comet-body-s-accented truncate">{traceName}</span>
-      </div>
+      )}
 
-      <div className="flex shrink-0 items-center gap-2 pl-4">
-        {isAIInspectorEnabled && (
-          <TooltipWrapper content="Debug your trace with AI assistance (OpikAssist)">
-            <Button
-              variant="outline"
-              size="2xs"
-              onClick={() =>
-                setActiveSection(DetailsActionSection.AIAssistants)
-              }
-            >
-              <Sparkles className="size-3.5 shrink-0" />
-              <span className="ml-1.5">Improve with Ollie</span>
-            </Button>
-          </TooltipWrapper>
-        )}
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon-2xs">
-              <span className="sr-only">Actions menu</span>
-              <MoreHorizontal />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="icon-2xs">
+            <span className="sr-only">Actions menu</span>
+            <MoreHorizontal />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52">
+          <DropdownMenuItem
+            onClick={() => {
+              toast({ description: "URL copied to clipboard" });
+              copy(window.location.href);
+            }}
+          >
+            <Share className="mr-2 size-4" />
+            Share
+          </DropdownMenuItem>
+          <TooltipWrapper content={traceId} side="left">
             <DropdownMenuItem
               onClick={() => {
-                toast({ description: "URL copied to clipboard" });
-                copy(window.location.href);
+                toast({ description: "Trace ID copied to clipboard" });
+                copy(traceId);
               }}
             >
-              <Share className="mr-2 size-4" />
-              Share
+              <Copy className="mr-2 size-4" />
+              Copy trace ID
             </DropdownMenuItem>
-            <TooltipWrapper content={traceId} side="left">
+          </TooltipWrapper>
+          {spanId && (
+            <TooltipWrapper content={spanId} side="left">
               <DropdownMenuItem
                 onClick={() => {
-                  toast({ description: "Trace ID copied to clipboard" });
-                  copy(traceId);
+                  toast({ description: "Span ID copied to clipboard" });
+                  copy(spanId);
                 }}
               >
                 <Copy className="mr-2 size-4" />
-                Copy trace ID
+                Copy span ID
               </DropdownMenuItem>
             </TooltipWrapper>
-            {spanId && (
-              <TooltipWrapper content={spanId} side="left">
-                <DropdownMenuItem
-                  onClick={() => {
-                    toast({ description: "Span ID copied to clipboard" });
-                    copy(spanId);
-                  }}
-                >
-                  <Copy className="mr-2 size-4" />
-                  Copy span ID
-                </DropdownMenuItem>
+          )}
+          <DropdownMenuSeparator />
+          {(["csv", "json"] as const).map((format) => {
+            const item = (
+              <DropdownMenuItem
+                key={format}
+                onClick={() => handleExport(format)}
+                disabled={!isExportEnabled}
+              >
+                <Download className="mr-2 size-4" />
+                Export as {format.toUpperCase()}
+              </DropdownMenuItem>
+            );
+
+            return isExportEnabled ? (
+              item
+            ) : (
+              <TooltipWrapper
+                key={format}
+                content="Export functionality is disabled for this installation"
+                side="left"
+              >
+                <div>{item}</div>
               </TooltipWrapper>
-            )}
-            <DropdownMenuSeparator />
-            {(["csv", "json"] as const).map((format) => {
-              const item = (
-                <DropdownMenuItem
-                  key={format}
-                  onClick={() => handleExport(format)}
-                  disabled={!isExportEnabled}
-                >
-                  <Download className="mr-2 size-4" />
-                  Export as {format.toUpperCase()}
-                </DropdownMenuItem>
-              );
+            );
+          })}
+          {canDeleteTraces && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setPopupOpen(true)}
+                variant="destructive"
+              >
+                <Trash className="mr-2 size-4" />
+                Delete trace
+              </DropdownMenuItem>
+            </>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-              return isExportEnabled ? (
-                item
-              ) : (
-                <TooltipWrapper
-                  key={format}
-                  content="Export functionality is disabled for this installation"
-                  side="left"
-                >
-                  <div>{item}</div>
-                </TooltipWrapper>
-              );
-            })}
-            {canDeleteTraces && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => setPopupOpen(true)}
-                  variant="destructive"
-                >
-                  <Trash className="mr-2 size-4" />
-                  Delete trace
-                </DropdownMenuItem>
-              </>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      {canDeleteTraces && (
+        <ConfirmDialog
+          open={popupOpen}
+          setOpen={setPopupOpen}
+          onConfirm={handleTraceDelete}
+          title="Delete trace"
+          description="Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?"
+          confirmText="Delete trace"
+          confirmButtonVariant="destructive"
+        />
+      )}
 
-        {canDeleteTraces && (
-          <ConfirmDialog
-            open={popupOpen}
-            setOpen={setPopupOpen}
-            onConfirm={handleTraceDelete}
-            title="Delete trace"
-            description="Deleting a trace will also remove the trace data from related experiment samples. This action can't be undone. Are you sure you want to continue?"
-            confirmText="Delete trace"
-            confirmButtonVariant="destructive"
-          />
-        )}
+      <ResizableSidePanelArrowNavigation
+        horizontalNavigation={horizontalNavigation}
+      />
 
-        {horizontalNavigation && (
-          <>
-            <Separator orientation="vertical" className="mx-1 h-4" />
-            <Button
-              variant="outline"
-              size="2xs"
-              disabled={!horizontalNavigation.hasPrevious}
-              onClick={() => horizontalNavigation.onChange(-1)}
-              className="gap-1"
-            >
-              Previous
-              <HotkeyDisplay hotkey="J" variant="outline" size="2xs" />
-            </Button>
-            <Button
-              variant="outline"
-              size="2xs"
-              disabled={!horizontalNavigation.hasNext}
-              onClick={() => horizontalNavigation.onChange(1)}
-              className="gap-1"
-            >
-              Next
-              <HotkeyDisplay hotkey="K" variant="outline" size="2xs" />
-            </Button>
-          </>
-        )}
-
-        {canNavigateToExperiment && experiment && (
-          <TooltipWrapper
-            content={`View this item in experiment: ${experiment.name}`}
+      {canNavigateToExperiment && experiment && (
+        <TooltipWrapper
+          content={`View this item in experiment: ${experiment.name}`}
+        >
+          <Button
+            variant="outline"
+            size="2xs"
+            onClick={() =>
+              navigate({
+                to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
+                params: {
+                  workspaceName,
+                  projectId: activeProjectId as string,
+                  datasetId: experiment.dataset_id,
+                },
+                search: {
+                  experiments: [experiment.id],
+                  row: experiment.dataset_item_id,
+                },
+              })
+            }
           >
-            <Button
-              variant="outline"
-              size="2xs"
-              onClick={() =>
-                navigate({
-                  to: "/$workspaceName/projects/$projectId/experiments/$datasetId/compare",
-                  params: {
-                    workspaceName,
-                    projectId: activeProjectId as string,
-                    datasetId: experiment.dataset_id,
-                  },
-                  search: {
-                    experiments: [experiment.id],
-                    row: experiment.dataset_item_id,
-                  },
-                })
-              }
-            >
-              Experiment
-              <ArrowUpRight className="ml-1 size-3.5" />
-            </Button>
-          </TooltipWrapper>
-        )}
+            Experiment
+            <ArrowUpRight className="ml-1 size-3.5" />
+          </Button>
+        </TooltipWrapper>
+      )}
 
-        {hasThread && (
-          <TooltipWrapper content="Go to thread">
-            <Button
-              variant="outline"
-              size="2xs"
-              onClick={() => setThreadId!(threadId)}
-            >
-              Thread
-              <ArrowUpRight className="ml-1 size-3.5" />
-            </Button>
-          </TooltipWrapper>
-        )}
-      </div>
-    </div>
+      {hasThread && (
+        <TooltipWrapper content="Go to thread">
+          <Button
+            variant="outline"
+            size="2xs"
+            onClick={() => setThreadId!(threadId)}
+          >
+            Thread
+            <ArrowUpRight className="ml-1 size-3.5" />
+          </Button>
+        </TooltipWrapper>
+      )}
+    </ResizableSidePanelTopBar>
   );
 };
 

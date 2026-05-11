@@ -8,6 +8,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorSpanLlmAsJudge;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
+import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
 import com.comet.opik.utils.JsonUtils;
@@ -34,11 +35,12 @@ import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.StringEscapeUtils;
+import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -88,6 +90,33 @@ public class OnlineScoringEngine {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Variant of {@link #prepareLlmRequest(LlmAsJudgeCode, Trace, StructuredOutputStrategy, PromptType)}
+     * that caps each rendered variable substitution at {@code maxReplacementChars}. Values longer
+     * than the cap are replaced with their first {@code maxReplacementChars} chars followed by
+     * {@code drillDownHint}. Used by the test-suite-assertion (tool-enabled) path, so a 50K-token
+     * trace's input/output doesn't get pasted verbatim into the prompt — the agent can pull the
+     * full content via the {@code read} tool when it actually needs it.
+     */
+    public static ChatRequest prepareLlmRequest(
+            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType,
+            int maxReplacementChars, @NotNull String drillDownHint) {
+        Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
+        Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
+        var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    static Map<String, String> capReplacements(Map<String, String> replacements,
+            int maxReplacementChars, String drillDownHint) {
+        return replacements.entrySet().stream().collect(Collectors.toMap(
+                Map.Entry::getKey,
+                e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
+                (a, b) -> b,
+                java.util.LinkedHashMap::new));
     }
 
     /**
@@ -507,44 +536,59 @@ public class OnlineScoringEngine {
                 .toList();
     }
 
-    public static List<FeedbackScoreBatchItem> toFeedbackScores(@NotNull ChatResponse chatResponse) {
+    public record ParsedFeedbackScores(List<FeedbackScoreBatchItem> scores, List<String> nullScoreNames) {
+        public static ParsedFeedbackScores empty() {
+            return new ParsedFeedbackScores(List.of(), List.of());
+        }
+    }
+
+    public static void logSkippedNullScores(
+            Logger userFacingLogger, ParsedFeedbackScores parsed, String entityType, Object entityId) {
+        parsed.nullScoreNames().forEach(name -> userFacingLogger.info(
+                "Skipped score '{}' for {} '{}' because the judge returned a null value (treated as not applicable)",
+                name, entityType, entityId));
+    }
+
+    public static ParsedFeedbackScores toFeedbackScores(@NotNull ChatResponse chatResponse) {
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
             structuredResponse = OBJECT_MAPPER.readTree(content);
             if (!structuredResponse.isObject()) {
                 log.info("ChatResponse content returned into an empty JSON result");
-                return Collections.emptyList();
+                return ParsedFeedbackScores.empty();
             }
         } catch (JsonProcessingException e) {
             log.error("parsing LLM response into a JSON: {}", content, e);
-            return Collections.emptyList();
+            return ParsedFeedbackScores.empty();
         }
-        var spliterator = Spliterators.spliteratorUnknownSize(
-                structuredResponse.properties().iterator(), Spliterator.ORDERED | Spliterator.NONNULL);
-        List<FeedbackScoreBatchItem> results = StreamSupport.stream(spliterator, false)
-                .map(scoreMetric -> {
-                    var scoreName = scoreMetric.getKey();
-                    var scoreNested = scoreMetric.getValue();
-                    if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
-                        log.info("No score found for '{}' score in {}", scoreName, scoreNested);
-                        return null;
-                    }
-                    var resultBuilder = FeedbackScoreBatchItem.builder()
-                            .name(scoreName)
-                            .reason(scoreNested.path(REASON_FIELD_NAME).asText())
-                            .source(ScoreSource.ONLINE_SCORING);
-                    var actualScore = scoreNested.path(SCORE_FIELD_NAME);
-                    if (actualScore.isBoolean()) {
-                        resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
-                    } else {
-                        resultBuilder.value(actualScore.decimalValue());
-                    }
-                    return resultBuilder.build();
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toList());
-        if (results.isEmpty()) {
+        List<FeedbackScoreBatchItem> results = new ArrayList<>();
+        List<String> nullScoreNames = new ArrayList<>();
+        structuredResponse.properties().forEach(scoreMetric -> {
+            var scoreName = scoreMetric.getKey();
+            var scoreNested = scoreMetric.getValue();
+            if (scoreNested == null || scoreNested.isMissingNode() || !scoreNested.has(SCORE_FIELD_NAME)) {
+                log.debug("No score found for '{}' score in {}", scoreName, scoreNested);
+                return;
+            }
+            var actualScore = scoreNested.path(SCORE_FIELD_NAME);
+            if (actualScore.isNull()) {
+                log.debug("Skipping '{}' score because the judge returned a null value", scoreName);
+                nullScoreNames.add(scoreName);
+                return;
+            }
+            var resultBuilder = FeedbackScoreBatchItem.builder()
+                    .name(scoreName)
+                    .reason(scoreNested.path(REASON_FIELD_NAME).asText())
+                    .source(ScoreSource.ONLINE_SCORING);
+            if (actualScore.isBoolean()) {
+                resultBuilder.value(actualScore.asBoolean() ? BigDecimal.ONE : BigDecimal.ZERO);
+            } else {
+                resultBuilder.value(actualScore.decimalValue());
+            }
+            results.add(resultBuilder.build());
+        });
+        if (results.isEmpty() && nullScoreNames.isEmpty()) {
             var topLevelKeys = StreamSupport.stream(
                     Spliterators.spliteratorUnknownSize(structuredResponse.fieldNames(),
                             Spliterator.ORDERED | Spliterator.NONNULL),
@@ -555,7 +599,7 @@ public class OnlineScoringEngine {
                     "Invalid LLM output format for feedback scores. Expected structure: { '<scoreName>': { 'score': <number|boolean>, 'reason': <string> } }. Top-level keys: '{}'. Raw response (truncated): '{}'",
                     topLevelKeys, truncated);
         }
-        return results;
+        return new ParsedFeedbackScores(results, nullScoreNames);
     }
 
     private static String extractJson(String response) {

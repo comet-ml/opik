@@ -1660,3 +1660,301 @@ class TestLocalEmulatorMessageProcessorTraceTreesProperty:
             ),
         ]
         assert_helpers.assert_equal(expected=EXPECTED_TRACE_TREE, actual=trace_trees)
+
+
+class TestLocalEmulatorMessageProcessorDuplicateCreateMessages:
+    """Regression tests for OPIK-6372.
+
+    The streamer's batch / replay machinery can deliver the START and FULL
+    Create messages for the same trace/span out of order, including a START
+    arriving after the FULL one. The emulator must converge on a single
+    merged entity per id rather than producing duplicates with stale fields.
+    """
+
+    def setup_method(self):
+        self.processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=True
+        )
+        self.start_time = datetime_helpers.local_timestamp()
+        self.end_time = self.start_time + datetime.timedelta(seconds=1)
+
+    def _full_span_message(self):
+        return messages.CreateSpanMessage(
+            span_id="span_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id=None,
+            name="foo",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input={"k": 1},
+            output={"is_error": False},
+            metadata=None,
+            tags=None,
+            type="tool",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+
+    def _start_span_message(self):
+        return messages.CreateSpanMessage(
+            span_id="span_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id=None,
+            name="foo",
+            start_time=self.start_time,
+            end_time=None,
+            input={"k": 1},
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def _full_trace_message(self):
+        return messages.CreateTraceMessage(
+            trace_id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output={"final": True},
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+
+    def _start_trace_message(self):
+        return messages.CreateTraceMessage(
+            trace_id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            thread_id=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+    def test_start_span_arriving_after_full_span_keeps_full_fields(self):
+        # OPIK-6372: replay/race could deliver the START span after the FULL
+        # one. The emulator must keep the FULL fields (type=tool, output set).
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._full_span_message())
+        self.processor.process(self._start_span_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.id == "span_1"
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_full_span_arriving_after_start_span_keeps_full_fields(self):
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._start_span_message())
+        self.processor.process(self._full_span_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_start_trace_arriving_after_full_trace_keeps_full_output(self):
+        # OPIK-6372: same race for traces — START must not erase output set
+        # by the already-processed FULL message and must not produce a
+        # duplicate trace_trees entry.
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._start_trace_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].id == "trace_1"
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+
+    def test_full_after_start_does_not_produce_duplicate_trace_entries(self):
+        self.processor.process(self._start_trace_message())
+        self.processor.process(self._full_trace_message())
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+
+    def test_full_then_start_via_batch_messages_keeps_full_fields(self):
+        # Full chain reproduction: batch messages are what the emulator
+        # actually receives in production after the streamer batches the
+        # individual create messages.
+        full_trace = trace_write.TraceWrite(
+            id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output={"final": True},
+            metadata=None,
+            tags=None,
+            error_info=None,
+            last_updated_at=self.end_time,
+            thread_id=None,
+            source="sdk",
+        )
+        start_trace = trace_write.TraceWrite(
+            id="trace_1",
+            project_name="test_project",
+            name="t",
+            start_time=self.start_time,
+            end_time=None,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            error_info=None,
+            last_updated_at=None,
+            thread_id=None,
+            source="sdk",
+        )
+        full_span = span_write.SpanWrite(
+            id="span_1",
+            project_name="test_project",
+            trace_id="trace_1",
+            parent_span_id=None,
+            name="foo",
+            type="tool",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input={"k": 1},
+            output={"is_error": False},
+            metadata=None,
+            model=None,
+            provider=None,
+            tags=None,
+            usage=None,
+            error_info=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+        start_span = span_write.SpanWrite(
+            id="span_1",
+            project_name="test_project",
+            trace_id="trace_1",
+            parent_span_id=None,
+            name="foo",
+            type="general",
+            start_time=self.start_time,
+            end_time=None,
+            input={"k": 1},
+            output=None,
+            metadata=None,
+            model=None,
+            provider=None,
+            tags=None,
+            usage=None,
+            error_info=None,
+            last_updated_at=None,
+            source="sdk",
+        )
+
+        self.processor.process(messages.CreateSpansBatchMessage(batch=[full_span]))
+        self.processor.process(messages.CreateTraceBatchMessage(batch=[full_trace]))
+        self.processor.process(messages.CreateTraceBatchMessage(batch=[start_trace]))
+        self.processor.process(messages.CreateSpansBatchMessage(batch=[start_span]))
+
+        trace_trees = self.processor.trace_trees
+
+        assert len(trace_trees) == 1
+        assert trace_trees[0].output == {"final": True}
+        assert trace_trees[0].end_time == self.end_time
+        assert len(trace_trees[0].spans) == 1
+        span = trace_trees[0].spans[0]
+        assert span.type == "tool"
+        assert span.output == {"is_error": False}
+        assert span.end_time == self.end_time
+
+    def test_late_start_does_not_drop_attached_children(self):
+        # If a parent span has already had a child attached and then a stale
+        # start message for the parent arrives, the child must remain.
+        self.processor.process(self._full_trace_message())
+        self.processor.process(self._full_span_message())
+        child_message = messages.CreateSpanMessage(
+            span_id="child_1",
+            trace_id="trace_1",
+            project_name="test_project",
+            parent_span_id="span_1",
+            name="child",
+            start_time=self.start_time,
+            end_time=self.end_time,
+            input=None,
+            output=None,
+            metadata=None,
+            tags=None,
+            type="general",
+            usage=None,
+            model=None,
+            provider=None,
+            error_info=None,
+            total_cost=None,
+            last_updated_at=self.end_time,
+            source="sdk",
+        )
+        self.processor.process(child_message)
+
+        # build the tree once so child gets attached to the parent's `.spans`
+        first_read = self.processor.trace_trees
+        assert len(first_read[0].spans) == 1
+        assert len(first_read[0].spans[0].spans) == 1
+
+        # late start arrives — must not reset the child link
+        self.processor.process(self._start_span_message())
+
+        trace_trees = self.processor.trace_trees
+        assert len(trace_trees) == 1
+        assert len(trace_trees[0].spans) == 1
+        parent = trace_trees[0].spans[0]
+        assert parent.type == "tool"
+        assert len(parent.spans) == 1
+        assert parent.spans[0].id == "child_1"
+
+    def test_merge_duplicates_false_preserves_old_append_behavior(self):
+        # Callers can still opt out of de-duplication; in that case duplicate
+        # Create messages are kept verbatim (used by some test fixtures).
+        processor = local_emulator_message_processor.LocalEmulatorMessageProcessor(
+            active=True, merge_duplicates=False
+        )
+        processor.process(self._full_trace_message())
+        processor.process(self._start_trace_message())
+
+        assert len(processor.trace_trees) == 2

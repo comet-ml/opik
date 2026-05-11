@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Clock, FilePen, Pencil, User } from "lucide-react";
 
 import { ConfigHistoryItem } from "@/types/agent-configs";
 import { formatDate, getTimeFromNow } from "@/lib/date";
 import Loader from "@/shared/Loader/Loader";
-import { cn } from "@/lib/utils";
 import { Card } from "@/ui/card";
 import DeployToPopover from "./DeployToPopover";
 import BlueprintValuesList from "@/v2/pages-shared/traces/ConfigurationTab/BlueprintValuesList";
@@ -17,8 +16,9 @@ import NavigationTag from "@/shared/NavigationTag/NavigationTag";
 import { RESOURCE_TYPE } from "@/shared/ResourceLink/ResourceLink";
 import { COLUMN_TYPE } from "@/types/shared";
 import { Separator } from "@/ui/separator";
-import DiffVersionPopover from "./DiffVersionPopover";
+import DiffVersionMenu from "./DiffVersionMenu";
 import AgentConfigTagList from "./AgentConfigTagList";
+import SingleLineExpandableText from "@/shared/SingleLineExpandableText/SingleLineExpandableText";
 import ExpandAllToggle from "@/v2/pages-shared/agent-configuration/fields/ExpandAllToggle";
 import { useFieldsCollapse } from "@/v2/pages-shared/agent-configuration/fields/useFieldsCollapse";
 import {
@@ -26,13 +26,48 @@ import {
   hasAnyExpandableField,
 } from "@/v2/pages-shared/agent-configuration/fields/blueprintFieldLayout";
 
-const DESCRIPTION_TRUNCATE_LENGTH = 80;
-
 type AgentConfigurationDetailViewProps = {
   item: ConfigHistoryItem;
   projectId: string;
   versions: ConfigHistoryItem[];
   onEdit: () => void;
+};
+
+type DiffVersionInfo = {
+  label: string;
+  blueprintId: string;
+};
+
+type ComparedVersionState = DiffVersionInfo & {
+  createdAt: string;
+};
+
+const parseTimestamp = (value: string | undefined | null): number | null => {
+  if (!value) return null;
+  const ms = new Date(value).getTime();
+  return Number.isFinite(ms) ? ms : null;
+};
+
+const getDiffDialogProps = (
+  current: ConfigHistoryItem,
+  selected: ComparedVersionState,
+): { base: DiffVersionInfo; diff: DiffVersionInfo } => {
+  const currentVersion: DiffVersionInfo = {
+    label: current.name,
+    blueprintId: current.id,
+  };
+  const selectedVersion: DiffVersionInfo = {
+    label: selected.label,
+    blueprintId: selected.blueprintId,
+  };
+  const currentMs = parseTimestamp(current.created_at);
+  const selectedMs = parseTimestamp(selected.createdAt);
+  if (currentMs === null || selectedMs === null) {
+    return { base: currentVersion, diff: selectedVersion };
+  }
+  return selectedMs < currentMs
+    ? { base: selectedVersion, diff: currentVersion }
+    : { base: currentVersion, diff: selectedVersion };
 };
 
 const AgentConfigurationDetailView: React.FC<
@@ -60,21 +95,25 @@ const AgentConfigurationDetailView: React.FC<
     ],
     page: 1,
     size: 1,
+    stripAttachments: true,
   });
 
   const hasTraces = (tracesData?.total ?? 0) > 0;
 
   const [diffOpen, setDiffOpen] = useState(false);
-  const [comparedVersion, setComparedVersion] = useState<{
-    label: string;
-    blueprintId: string;
-  } | null>(null);
-  const [notesExpanded, setNotesExpanded] = useState(false);
+  const [comparedVersion, setComparedVersion] =
+    useState<ComparedVersionState | null>(null);
+
+  useEffect(() => {
+    setComparedVersion(null);
+    setDiffOpen(false);
+  }, [item.id]);
 
   const handleSelectDiffVersion = (versionItem: ConfigHistoryItem) => {
     setComparedVersion({
       label: versionItem.name,
       blueprintId: versionItem.id,
+      createdAt: versionItem.created_at,
     });
     setDiffOpen(true);
   };
@@ -82,9 +121,6 @@ const AgentConfigurationDetailView: React.FC<
   const isLatestVersion = versions[0]?.id === item.id;
 
   const description = item.description;
-
-  const descriptionIsLong =
-    (description?.length ?? 0) > DESCRIPTION_TRUNCATE_LENGTH;
 
   const collapsibleKeys = useMemo(
     () => collectMultiLineKeys(agentConfig?.values ?? []),
@@ -104,7 +140,7 @@ const AgentConfigurationDetailView: React.FC<
             <h2 className="comet-title-m">{item.name}</h2>
             <AgentConfigTagList tags={item.tags} maxWidth={200} />
             {versions.length > 1 && (
-              <DiffVersionPopover
+              <DiffVersionMenu
                 currentItemId={item.id}
                 versions={versions}
                 onSelectVersion={handleSelectDiffVersion}
@@ -162,30 +198,9 @@ const AgentConfigurationDetailView: React.FC<
         {description && (
           <div className="comet-body-s flex w-full min-w-0 items-start gap-1 text-light-slate">
             <FilePen className="mt-1 size-3 shrink-0" />
-            <div
-              className={cn(
-                "flex min-w-0 flex-1 items-baseline gap-1",
-                notesExpanded && "flex-wrap",
-              )}
-            >
-              <span
-                className={cn(
-                  "min-w-0",
-                  notesExpanded ? "break-words" : "truncate",
-                )}
-              >
-                {description}
-              </span>
-              {descriptionIsLong && (
-                <button
-                  type="button"
-                  className="shrink-0 text-light-slate underline"
-                  onClick={() => setNotesExpanded((v) => !v)}
-                >
-                  {notesExpanded ? "Show less" : "Show more"}
-                </button>
-              )}
-            </div>
+            <SingleLineExpandableText key={item.id}>
+              {description}
+            </SingleLineExpandableText>
           </div>
         )}
         <div className="comet-body-s mt-1 flex items-center gap-1 text-light-slate">
@@ -227,14 +242,7 @@ const AgentConfigurationDetailView: React.FC<
         <BlueprintDiffDialog
           open={diffOpen}
           setOpen={setDiffOpen}
-          base={{
-            label: item.name,
-            blueprintId: item.id,
-          }}
-          diff={{
-            label: comparedVersion.label,
-            blueprintId: comparedVersion.blueprintId,
-          }}
+          {...getDiffDialogProps(item, comparedVersion)}
         />
       )}
     </>

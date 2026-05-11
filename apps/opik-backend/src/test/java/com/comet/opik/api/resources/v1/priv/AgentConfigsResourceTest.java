@@ -22,13 +22,16 @@ import com.comet.opik.domain.AgentBlueprint.BlueprintType;
 import com.comet.opik.domain.AgentConfigEnv;
 import com.comet.opik.domain.AgentConfigValue;
 import com.comet.opik.domain.AgentConfigValue.ValueType;
+import com.comet.opik.domain.DemoData;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.redis.testcontainers.RedisContainer;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hc.core5.http.HttpStatus;
+import org.awaitility.Awaitility;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
@@ -50,10 +53,19 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.comet.opik.api.resources.utils.AgentConfigValueAssertionUtils.assertConfigValue;
 import static com.comet.opik.api.resources.utils.AgentConfigValueAssertionUtils.assertConfigValues;
+import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
+import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension;
+import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
+import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
+import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
@@ -95,13 +107,27 @@ class AgentConfigsResourceTest {
         wireMock = WireMockUtils.startWireMock();
 
         DatabaseAnalyticsFactory databaseAnalyticsFactory = ClickHouseContainerUtils
-                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, ClickHouseContainerUtils.DATABASE_NAME);
+                .newDatabaseAnalyticsFactory(CLICKHOUSE_CONTAINER, DATABASE_NAME);
 
         MigrationUtils.runMysqlDbMigration(MYSQL);
         MigrationUtils.runClickhouseDbMigration(CLICKHOUSE_CONTAINER);
 
-        APP = TestDropwizardAppExtensionUtils.newTestDropwizardAppExtension(
-                MYSQL.getJdbcUrl(), databaseAnalyticsFactory, wireMock.runtimeInfo(), REDIS.getRedisURI());
+        wireMock.server().stubFor(post(urlPathEqualTo("/v1/notify/event"))
+                .willReturn(okJson("{\"message\":\"Event added successfully\",\"success\":\"true\"}")));
+
+        APP = newTestDropwizardAppExtension(
+                TestDropwizardAppExtensionUtils.AppContextConfig.builder()
+                        .jdbcUrl(MYSQL.getJdbcUrl())
+                        .databaseAnalyticsFactory(databaseAnalyticsFactory)
+                        .redisUrl(REDIS.getRedisURI())
+                        .runtimeInfo(wireMock.runtimeInfo())
+                        .usageReportEnabled(true)
+                        .usageReportUrl("%s/v1/notify/event".formatted(wireMock.runtimeInfo().getHttpBaseUrl()))
+                        .customConfigs(List.of(
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.enabled", "true"),
+                                new TestDropwizardAppExtensionUtils.CustomConfig("analytics.environment",
+                                        "test")))
+                        .build());
     }
 
     private final PodamFactory factory = PodamFactoryUtils.newPodamFactory();
@@ -172,6 +198,8 @@ class AgentConfigsResourceTest {
                     .blueprint(blueprint)
                     .build();
 
+            wireMock.server().resetRequests();
+
             var blueprintId = agentConfigsResourceClient.createAgentConfig(request, API_KEY,
                     TEST_WORKSPACE, HttpStatus.SC_CREATED);
 
@@ -179,6 +207,65 @@ class AgentConfigsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(prodBlueprint).isNotNull();
             assertThat(prodBlueprint.id()).isEqualTo(blueprintId);
+
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
+
+            Awaitility.await().atMost(30, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(WORKSPACE_ID)))));
+                wireMock.server().verify(postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))
+                                .and(matchingJsonPath("$.event_properties.workspace_id",
+                                        equalTo(WORKSPACE_ID)))
+                                .and(matchingJsonPath("$.event_properties.config_environment",
+                                        equalTo("prod")))
+                                .and(matchingJsonPath("$.event_properties.deployed_to_prod",
+                                        equalTo("true")))
+                                .and(matchingJsonPath("$.event_properties.environment",
+                                        equalTo("test")))));
+            });
+        }
+
+        @Test
+        @DisplayName("Success: demo project does not emit analytics events")
+        void createAgentConfig__demoProject__doesNotSendAnalyticsEvents() {
+            var demoProjectName = DemoData.PROJECTS.getFirst();
+
+            var values = List.of(
+                    AgentConfigValue.builder()
+                            .key("model")
+                            .value("gpt-4")
+                            .type(ValueType.STRING)
+                            .build());
+
+            var blueprint = AgentBlueprint.builder()
+                    .type(BlueprintType.BLUEPRINT)
+                    .description("Demo config")
+                    .values(values)
+                    .build();
+
+            var request = AgentConfigCreate.builder()
+                    .projectName(demoProjectName)
+                    .blueprint(blueprint)
+                    .build();
+
+            wireMock.server().resetRequests();
+
+            agentConfigsResourceClient.createAgentConfig(request, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var savedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_saved";
+            var deployedEvent = AnalyticsService.EVENT_PREFIX + "agent_config_deployed";
+
+            Awaitility.await().during(2, TimeUnit.SECONDS).atMost(5, TimeUnit.SECONDS).untilAsserted(() -> {
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(savedEvent))));
+                wireMock.server().verify(0, postRequestedFor(urlPathEqualTo("/v1/notify/event"))
+                        .withRequestBody(matchingJsonPath("$.event_type", equalTo(deployedEvent))));
+            });
         }
 
         @ParameterizedTest
@@ -562,6 +649,198 @@ class AgentConfigsResourceTest {
                     TEST_WORKSPACE, HttpStatus.SC_OK);
             assertThat(retrieved.name()).isEqualTo("v2");
             assertThat(retrieved.description()).isEqualTo("Updated blueprint");
+        }
+
+        private void createInitialBlueprint(UUID projectId, List<AgentConfigValue> values) {
+            agentConfigsResourceClient.createAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description(RandomStringUtils.insecure().nextAlphanumeric(10))
+                                    .values(values)
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+        }
+
+        @Test
+        @DisplayName("Success: auto-generates description listing added keys when none provided")
+        void updateAgentConfig__noDescription__addsKeys__thenAutoGeneratesDescription() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
+            var existingKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var newKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var existingValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var newValue = RandomStringUtils.insecure().nextNumeric(5);
+
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(existingKey).value(existingValue).type(ValueType.STRING).build()));
+
+            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key(existingKey).value(existingValue)
+                                                    .type(ValueType.STRING).build(),
+                                            AgentConfigValue.builder().key(newKey).value(newValue)
+                                                    .type(ValueType.FLOAT).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(retrieved.description()).isEqualTo("Added " + newKey);
+        }
+
+        Stream<Arguments> modifiedKeyValueTypes() {
+            return Stream.of(
+                    arguments(ValueType.FLOAT, RandomStringUtils.insecure().nextNumeric(3),
+                            RandomStringUtils.insecure().nextNumeric(4), true),
+                    arguments(ValueType.INTEGER, RandomStringUtils.insecure().nextNumeric(3),
+                            RandomStringUtils.insecure().nextNumeric(4), true),
+                    arguments(ValueType.BOOLEAN, "true", "false", true),
+                    arguments(ValueType.STRING, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false),
+                    arguments(ValueType.PROMPT, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false),
+                    arguments(ValueType.PROMPT_COMMIT, RandomStringUtils.insecure().nextAlphanumeric(10),
+                            RandomStringUtils.insecure().nextAlphanumeric(10), false));
+        }
+
+        @ParameterizedTest
+        @MethodSource("modifiedKeyValueTypes")
+        @DisplayName("Success: auto-generates description when a key is modified, including new value for primitives only")
+        void updateAgentConfig__noDescription__modifiesKey__thenAutoGeneratesDescription(ValueType type,
+                String oldValue, String newValue, boolean includeValueInDescription) {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
+            var key = RandomStringUtils.insecure().nextAlphanumeric(10);
+
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(key).value(oldValue).type(type).build()));
+
+            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key(key).value(newValue)
+                                                    .type(type).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            var expectedDescription = includeValueInDescription
+                    ? "Modified " + key + " to " + newValue
+                    : "Modified " + key;
+            assertThat(retrieved.description()).isEqualTo(expectedDescription);
+        }
+
+        @Test
+        @DisplayName("Success: auto-generates description listing removed keys")
+        void updateAgentConfig__noDescription__removesKey__thenAutoGeneratesDescription() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
+            var keptKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var removedKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var keptValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var removedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(keptKey).value(keptValue).type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key(removedKey).value(removedValue).type(ValueType.STRING).build()));
+
+            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key(keptKey).value(keptValue)
+                                                    .type(ValueType.STRING).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(retrieved.description()).isEqualTo("Removed " + removedKey);
+        }
+
+        @Test
+        @DisplayName("Success: explicit description overrides auto-generation")
+        void updateAgentConfig__withExplicitDescription__thenExplicitDescriptionIsUsed() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
+            var key = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var oldValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var newValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var explicitDescription = RandomStringUtils.insecure().nextAlphanumeric(20);
+
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(key).value(oldValue).type(ValueType.STRING).build()));
+
+            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .description(explicitDescription)
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key(key).value(newValue)
+                                                    .type(ValueType.STRING).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(retrieved.description()).isEqualTo(explicitDescription);
+        }
+
+        @Test
+        @DisplayName("Success: auto-generates description combining added, modified, and removed keys")
+        void updateAgentConfig__noDescription__mixedChanges__thenAutoGeneratesDescription() {
+            var projectId = projectResourceClient.createProject(UUID.randomUUID().toString(), API_KEY, TEST_WORKSPACE);
+            var addedKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var modifiedKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var removedKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var unchangedKey = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var modifiedOldValue = RandomStringUtils.insecure().nextNumeric(3);
+            var modifiedNewValue = RandomStringUtils.insecure().nextNumeric(4);
+            var unchangedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var addedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+            var removedValue = RandomStringUtils.insecure().nextAlphanumeric(10);
+
+            createInitialBlueprint(projectId, List.of(
+                    AgentConfigValue.builder().key(unchangedKey).value(unchangedValue).type(ValueType.STRING).build(),
+                    AgentConfigValue.builder().key(modifiedKey).value(modifiedOldValue).type(ValueType.INTEGER).build(),
+                    AgentConfigValue.builder().key(removedKey).value(removedValue).type(ValueType.STRING).build()));
+
+            var blueprintId = agentConfigsResourceClient.updateAgentConfig(
+                    AgentConfigCreate.builder()
+                            .projectId(projectId)
+                            .blueprint(AgentBlueprint.builder()
+                                    .type(BlueprintType.BLUEPRINT)
+                                    .values(List.of(
+                                            AgentConfigValue.builder().key(unchangedKey).value(unchangedValue)
+                                                    .type(ValueType.STRING).build(),
+                                            AgentConfigValue.builder().key(modifiedKey).value(modifiedNewValue)
+                                                    .type(ValueType.INTEGER).build(),
+                                            AgentConfigValue.builder().key(addedKey).value(addedValue)
+                                                    .type(ValueType.STRING).build()))
+                                    .build())
+                            .build(),
+                    API_KEY, TEST_WORKSPACE, HttpStatus.SC_CREATED);
+
+            var retrieved = agentConfigsResourceClient.getBlueprintById(blueprintId, null, API_KEY,
+                    TEST_WORKSPACE, HttpStatus.SC_OK);
+            assertThat(retrieved.description()).isEqualTo(
+                    "Added " + addedKey + ". Modified " + modifiedKey + " to " + modifiedNewValue
+                            + ". Removed " + removedKey);
         }
 
     }

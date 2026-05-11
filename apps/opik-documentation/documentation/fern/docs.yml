@@ -542,6 +542,9 @@ redirects:
   - source: "/docs/opik/changelog/2024/:slug*"
     destination: "/docs/opik/changelog"
     permanent: true
+  - source: "/docs/opik/changelog/2026/:slug*"
+    destination: "/docs/opik/changelog"
+    permanent: true
   # Configuration to Workspace Settings redirects (configuration section was renamed and moved)
   - source: "/docs/opik/configuration"
     destination: "/docs/opik/administration/workspace-settings/overview"

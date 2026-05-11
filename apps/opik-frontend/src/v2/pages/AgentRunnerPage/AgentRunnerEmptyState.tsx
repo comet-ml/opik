@@ -5,8 +5,9 @@ import { buildDocsUrl } from "@/v2/lib/utils";
 import TimelineStep from "@/shared/TimelineStep/TimelineStep";
 import CodeSnippet from "@/shared/CodeSnippet/CodeSnippet";
 import AgentSandboxFlowDiagram from "./AgentSandboxFlowDiagram";
-import ProjectIcon from "@/shared/ProjectIcon/ProjectIcon";
+import ProjectAvatar from "@/shared/ProjectIcon/ProjectAvatar";
 import useActiveProjectName from "@/hooks/useActiveProjectName";
+import { useActiveProjectId } from "@/store/AppStore";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 
 const ENTRYPOINT_SNIPPET_PYTHON = `import opik
@@ -32,13 +33,14 @@ const myAgent = track(
 
 const AgentRunnerEmptyState: React.FC = () => {
   const projectName = useActiveProjectName();
+  const activeProjectId = useActiveProjectId();
   const command = `opik endpoint --project "${projectName}" -- <your app start command>`;
 
   return (
     <div className="flex flex-1 justify-center gap-16 px-10 pt-16">
       <div className="w-full max-w-lg">
         <div className="mb-1 flex items-center gap-2">
-          <ProjectIcon index={0} size="lg" />
+          <ProjectAvatar projectId={activeProjectId} size="lg" />
           <h2 className="comet-title-m">Connect your agent</h2>
         </div>
         <p className="comet-body-s mb-8 text-muted-slate">

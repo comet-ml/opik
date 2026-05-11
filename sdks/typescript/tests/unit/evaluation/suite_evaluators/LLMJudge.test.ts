@@ -447,13 +447,11 @@ describe("LLMJudge", () => {
         name: "Output is relevant",
         value: 1,
         reason: "Relevant",
-        categoryName: "suite_assertion",
       });
       expect(results[1]).toEqual({
         name: "Output is concise",
         value: 0,
         reason: "Too long",
-        categoryName: "suite_assertion",
       });
     });
 
@@ -480,7 +478,7 @@ describe("LLMJudge", () => {
       expect(results[0].scoringFailed).toBe(true);
       expect(results[0].value).toBe(0);
       expect(results[0].name).toBe("Is correct");
-      expect(results[0].categoryName).toBe("suite_assertion");
+      expect(results[0].categoryName).toBeUndefined();
     });
   });
 });

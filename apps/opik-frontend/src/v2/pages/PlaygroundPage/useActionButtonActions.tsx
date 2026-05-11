@@ -40,9 +40,11 @@ import usePlaygroundStore, {
 } from "@/store/PlaygroundStore";
 
 import { useToast } from "@/ui/use-toast";
-import createLogPlaygroundProcessor, {
+import { usePermissions } from "@/contexts/PermissionsContext";
+import {
   LogProcessorArgs,
   TraceMapping,
+  buildLogProcessor,
 } from "@/api/playground/createLogPlaygroundProcessor";
 import usePromptDatasetItemCombination, {
   DatasetItemPromptCombination,
@@ -78,6 +80,10 @@ const useActionButtonActions = ({
   const queryClient = useQueryClient();
 
   const { toast } = useToast();
+
+  const {
+    permissions: { canLogTraceSpanThread, canCreateExperiments },
+  } = usePermissions();
 
   const isRunning = useIsRunning();
   const setAllRunning = useSetAllRunning();
@@ -595,9 +601,11 @@ const useActionButtonActions = ({
     isToStopRef.current = false;
     setAllRunning(true);
 
-    const logProcessor = createLogPlaygroundProcessor({
-      ...logProcessorHandlers,
-      projectName,
+    const logProcessor = buildLogProcessor({
+      datasetName,
+      canLogTraceSpanThread,
+      canCreateExperiments,
+      args: { ...logProcessorHandlers, projectName },
     });
 
     const combinations = createCombinations();
@@ -637,6 +645,9 @@ const useActionButtonActions = ({
     maxConcurrentRequests,
     setProgress,
     projectName,
+    datasetName,
+    canLogTraceSpanThread,
+    canCreateExperiments,
   ]);
 
   const runAll = useCallback(async () => {
@@ -653,9 +664,11 @@ const useActionButtonActions = ({
 
       setPromptRunning(promptId, true);
 
-      const logProcessor = createLogPlaygroundProcessor({
-        ...logProcessorHandlers,
-        projectName,
+      const logProcessor = buildLogProcessor({
+        datasetName,
+        canLogTraceSpanThread,
+        canCreateExperiments,
+        args: { ...logProcessorHandlers, projectName },
       });
 
       const combinations: DatasetItemPromptCombination[] =
@@ -686,6 +699,9 @@ const useActionButtonActions = ({
       logProcessorHandlers,
       processCombination,
       projectName,
+      datasetName,
+      canLogTraceSpanThread,
+      canCreateExperiments,
     ],
   );
 

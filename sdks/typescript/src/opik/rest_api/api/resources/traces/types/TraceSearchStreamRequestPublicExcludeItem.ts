@@ -29,6 +29,7 @@ export const TraceSearchStreamRequestPublicExcludeItem = {
     Providers: "providers",
     Experiment: "experiment",
     Source: "source",
+    Environment: "environment",
 } as const;
 export type TraceSearchStreamRequestPublicExcludeItem =
     (typeof TraceSearchStreamRequestPublicExcludeItem)[keyof typeof TraceSearchStreamRequestPublicExcludeItem];

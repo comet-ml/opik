@@ -519,8 +519,8 @@ class FindSpansResourceTest {
                                                 .value(FilterTestUtils.getInvalidValue(filter.getKey()))
                                                 .build());
                                 case ERROR_CONTAINER -> Stream.of();
-                                case LIST -> {
-                                    // For LIST fields, skip invalid value tests for NO_VALUE_OPERATORS
+                                case LIST, ENUM -> {
+                                    // For LIST, ENUM fields, skip invalid value tests for NO_VALUE_OPERATORS
                                     // because these operators don't care about the value
                                     if (Operator.NO_VALUE_OPERATORS.contains(operator)) {
                                         yield Stream.empty();
@@ -3933,7 +3933,14 @@ class FindSpansResourceTest {
                     Arguments.of(errorInfoComparator,
                             SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.ASC).build()),
                     Arguments.of(errorInfoComparator.reversed(),
-                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()));
+                            SortingField.builder().field(SortableFields.ERROR_INFO).direction(Direction.DESC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment)
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.ASC).build()),
+                    Arguments.of(Comparator.comparing(Span::environment).reversed()
+                            .thenComparing(Comparator.comparing(Span::id).reversed()),
+                            SortingField.builder().field(SortableFields.ENVIRONMENT).direction(Direction.DESC)
+                                    .build()));
         }
 
         @Test

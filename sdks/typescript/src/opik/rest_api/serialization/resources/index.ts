@@ -15,6 +15,8 @@ export * as chatCompletions from "./chatCompletions/index.js";
 export * from "./datasets/client/requests/index.js";
 export * as datasets from "./datasets/index.js";
 export * from "./datasets/types/index.js";
+export * from "./environments/client/requests/index.js";
+export * as environments from "./environments/index.js";
 export * from "./experiments/client/requests/index.js";
 export * as experiments from "./experiments/index.js";
 export * from "./experiments/types/index.js";

@@ -10,6 +10,7 @@ import { ChatCompletionsClient } from "./api/resources/chatCompletions/client/Cl
 import { CheckClient } from "./api/resources/check/client/Client.js";
 import { DashboardsClient } from "./api/resources/dashboards/client/Client.js";
 import { DatasetsClient } from "./api/resources/datasets/client/Client.js";
+import { EnvironmentsClient } from "./api/resources/environments/client/Client.js";
 import { ExperimentsClient } from "./api/resources/experiments/client/Client.js";
 import { FeedbackDefinitionsClient } from "./api/resources/feedbackDefinitions/client/Client.js";
 import { GuardrailsClient } from "./api/resources/guardrails/client/Client.js";
@@ -61,6 +62,7 @@ export class OpikApiClient {
     protected _chatCompletions: ChatCompletionsClient | undefined;
     protected _dashboards: DashboardsClient | undefined;
     protected _datasets: DatasetsClient | undefined;
+    protected _environments: EnvironmentsClient | undefined;
     protected _experiments: ExperimentsClient | undefined;
     protected _feedbackDefinitions: FeedbackDefinitionsClient | undefined;
     protected _guardrails: GuardrailsClient | undefined;
@@ -131,6 +133,10 @@ export class OpikApiClient {
 
     public get datasets(): DatasetsClient {
         return (this._datasets ??= new DatasetsClient(this._options));
+    }
+
+    public get environments(): EnvironmentsClient {
+        return (this._environments ??= new EnvironmentsClient(this._options));
     }
 
     public get experiments(): ExperimentsClient {

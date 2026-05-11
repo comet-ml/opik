@@ -5,6 +5,7 @@ import com.comet.opik.domain.ExperimentDAO;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.infrastructure.CacheConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
+import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.cache.CacheManager;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
@@ -27,9 +28,11 @@ public class AuthWorkspaceVersionService extends AbstractWorkspaceVersionService
             @NonNull OptimizationDAO optimizationDAO,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             @NonNull CacheManager cacheManager,
-            @NonNull CacheConfiguration cacheConfiguration) {
+            @NonNull CacheConfiguration cacheConfiguration,
+            @NonNull WorkspacesService workspacesService,
+            @NonNull AnalyticsService analyticsService) {
         super(transactionTemplate, experimentDAO, optimizationDAO, serviceTogglesConfig, cacheManager,
-                cacheConfiguration);
+                cacheConfiguration, workspacesService, analyticsService);
     }
 
     @Override

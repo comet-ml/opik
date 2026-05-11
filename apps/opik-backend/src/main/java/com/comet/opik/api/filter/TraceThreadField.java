@@ -20,6 +20,7 @@ public enum TraceThreadField implements Field {
     TAGS(TAGS_QUERY_PARAM, FieldType.LIST),
     ANNOTATION_QUEUE_IDS(ANNOTATION_QUEUE_IDS_QUERY_PARAM, FieldType.LIST),
     SOURCE(SOURCE_QUERY_PARAM, FieldType.ENUM_LEGACY),
+    ENVIRONMENT(ENVIRONMENT_QUERY_PARAM, FieldType.ENUM),
     ;
 
     private final String queryParamField;

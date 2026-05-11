@@ -107,7 +107,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     last_updated_at,
                     last_updated_by,
                     created_by,
-                    created_at
+                    created_at,
+                    environment
                 FROM (
                     SELECT
                         *,
@@ -170,7 +171,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -350,6 +352,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 tt.tags as tags,
+                if(tt.environment = '', t.environment, tt.environment) as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -378,7 +381,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     max(t.last_updated_at) as last_updated_at,
                     argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                     argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at
+                    min(t.created_at) as created_at,
+                    argMin(t.environment, t.start_time) as environment
                 FROM traces_final AS t
                     LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                 GROUP BY
@@ -489,7 +493,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -748,7 +753,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     created_by,
                     last_updated_by,
                     created_at,
-                    last_updated_at
+                    last_updated_at,
+                    environment
                 FROM trace_threads
                 WHERE workspace_id = :workspace_id
                 AND project_id = :project_id
@@ -893,6 +899,7 @@ class ThreadDAOImpl implements ThreadDAO {
                 if(tt.status = 'unknown', 'active', tt.status) as status,
                 if(LENGTH(CAST(tt.thread_model_id AS Nullable(String))) > 0, tt.thread_model_id, NULL) as thread_model_id,
                 tt.tags as tags,
+                if(tt.environment = '', t.environment, tt.environment) as environment,
                 fsagg.feedback_scores_list as feedback_scores_list,
                 fsagg.feedback_scores as feedback_scores,
                 c.comments AS comments
@@ -921,7 +928,8 @@ class ThreadDAOImpl implements ThreadDAO {
                     max(t.last_updated_at) as last_updated_at,
                     argMax(t.last_updated_by, t.last_updated_at) as last_updated_by,
                     argMin(t.created_by, t.created_at) as created_by,
-                    min(t.created_at) as created_at
+                    min(t.created_at) as created_at,
+                    argMin(t.environment, t.start_time) as environment
                 FROM traces_final AS t
                 LEFT JOIN spans_agg AS s ON t.id = s.trace_id
                 GROUP BY t.workspace_id, t.project_id, t.thread_id
@@ -1054,7 +1062,8 @@ class ThreadDAOImpl implements ThreadDAO {
                         created_by,
                         last_updated_by,
                         created_at,
-                        last_updated_at
+                        last_updated_at,
+                        environment
                     FROM trace_threads
                     WHERE workspace_id = :workspace_id
                     AND project_id = :project_id
@@ -1494,6 +1503,7 @@ class ThreadDAOImpl implements ThreadDAO {
                         .map(tags -> Arrays.stream(tags).collect(Collectors.toSet()))
                         .filter(set -> !set.isEmpty())
                         .orElse(null))
+                .environment(row.get("environment", String.class))
                 .build());
     }
 }

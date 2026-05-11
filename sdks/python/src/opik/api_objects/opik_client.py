@@ -82,6 +82,7 @@ from ..rest_api.types import (
     trace_filter_public,
 )
 from ..types import (
+    BatchAssertionResultDict,
     BatchFeedbackScoreDict,
     ErrorInfoDict,
     FeedbackScoreDict,
@@ -901,6 +902,62 @@ class Opik:
             )
 
             self._streamer.put(add_trace_feedback_scores_batch_message)
+
+    def log_assertion_results(
+        self,
+        assertion_results: List[BatchAssertionResultDict],
+        project_name: Optional[str] = None,
+    ) -> None:
+        """
+        Log assertion results for traces via the dedicated assertion-results
+        ingestion endpoint.
+
+        Args:
+            assertion_results: A list of assertion result dictionaries. Each entry
+                requires `id` (trace id), `name`, and `status` ("passed" or "failed").
+            project_name: The project the traces belong to. If not provided, falls
+                back to the active project context, then to the client's default.
+        """
+        resolved_project_name = self._resolve_project_name(project_name)
+
+        valid_items = []
+        for item in assertion_results:
+            if not (item.get("id") and item.get("name")):
+                continue
+            if item.get("status") not in ("passed", "failed"):
+                LOGGER.error(
+                    "Skipping assertion result with invalid status %r — "
+                    "must be 'passed' or 'failed': %s",
+                    item.get("status"),
+                    item,
+                )
+                continue
+            valid_items.append(item)
+
+        if len(valid_items) == 0:
+            LOGGER.error(
+                f"No valid assertion results to log from provided ones: {assertion_results}"
+            )
+            return
+
+        assertion_messages = [
+            messages.AssertionResultMessage(
+                entity_id=item["id"],
+                project_name=item.get("project_name") or resolved_project_name,
+                name=item["name"],
+                status=item["status"],
+                reason=item.get("reason"),
+                source="sdk",
+            )
+            for item in valid_items
+        ]
+
+        for batch in sequence_splitter.split_into_batches(
+            assertion_messages,
+            max_payload_size_MB=opik_config.MAX_BATCH_SIZE_MB,
+            max_length=constants.FEEDBACK_SCORES_MAX_BATCH_SIZE,
+        ):
+            self._streamer.put(messages.AddAssertionResultsBatchMessage(batch=batch))
 
     def log_threads_feedback_scores(
         self, scores: List[BatchFeedbackScoreDict], project_name: Optional[str] = None

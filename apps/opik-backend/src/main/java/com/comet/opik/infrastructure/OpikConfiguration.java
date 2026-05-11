@@ -1,6 +1,7 @@
 package com.comet.opik.infrastructure;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.dropwizard.client.JerseyClientConfiguration;
 import io.dropwizard.db.DataSourceFactory;
 import io.dropwizard.jobs.JobConfiguration;
 import jakarta.validation.Valid;
@@ -84,6 +85,9 @@ public class OpikConfiguration extends JobConfiguration {
     private PythonEvaluatorConfig pythonEvaluator = new PythonEvaluatorConfig();
 
     @Valid @NotNull @JsonProperty
+    private JerseyClientConfiguration jerseyClient = new JerseyClientConfiguration();
+
+    @Valid @NotNull @JsonProperty
     private ServiceTogglesConfig serviceToggles = new ServiceTogglesConfig();
 
     @Valid @NotNull @JsonProperty
@@ -120,6 +124,13 @@ public class OpikConfiguration extends JobConfiguration {
     private DatasetVersioningMigrationConfig datasetVersioningMigration = new DatasetVersioningMigrationConfig();
 
     @Valid @NotNull @JsonProperty
+    private MigrationConfig migration = new MigrationConfig();
+
+    @Valid @NotNull @JsonProperty
+    private ExperimentProjectMigrationConfig experimentProjectMigration = ExperimentProjectMigrationConfig.builder()
+            .build();
+
+    @Valid @NotNull @JsonProperty
     private LocalRunnerConfig localRunner = new LocalRunnerConfig();
 
     @Valid @NotNull @JsonProperty
@@ -142,4 +153,7 @@ public class OpikConfiguration extends JobConfiguration {
 
     @Valid @NotNull @JsonProperty
     private AgentConfigConfiguration agentConfig = new AgentConfigConfiguration();
+
+    @Valid @NotNull @JsonProperty
+    private EnvironmentConfig environment = new EnvironmentConfig();
 }

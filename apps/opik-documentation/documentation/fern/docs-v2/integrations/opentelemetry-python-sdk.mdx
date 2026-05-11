@@ -134,3 +134,32 @@ if __name__ == "__main__":
 
 Using `thread_id` as a span attribute allows you to group related spans into a single conversational thread.
 Created threads can be used to evaluate multi-turn conversations as described in the [Multi-turn conversations](/evaluation/evaluate_threads) guide.
+
+## Linking OpenTelemetry spans to an existing Opik trace
+
+If a service instrumented with OpenTelemetry is invoked by another service that is already producing an Opik trace (via the Opik SDK or `@track`), you can link the OpenTelemetry spans to the existing Opik trace and parent span by propagating two HTTP headers (`opik_trace_id`, `opik_parent_span_id`) and calling the Opik bridging helper on the receiving side. The helper sets the `opik.trace_id` / `opik.parent_span_id` attributes on the OpenTelemetry boundary span so the Opik OTLP ingest endpoint attaches the span to the right parent.
+
+### Recommended setup: register `OpikSpanProcessor`
+
+`distributed_trace.attach_to_parent` only sets the Opik attributes on the *boundary* span. Children created inside that span via `start_as_current_span` inherit OTel context but not those attributes — without extra wiring they end up orphaned in a synthetic Opik trace. Register `OpikSpanProcessor` on the same `TracerProvider` as your OTLP exporter to propagate the Opik IDs down the entire attached subtree:
+
+```python
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opik.integrations.otel import OpikSpanProcessor
+
+provider = TracerProvider()
+provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+
+# Mints opik.span_id and threads opik.trace_id / opik.parent_span_id onto every
+# descendant of a span that was attached via distributed_trace.attach_to_parent.
+provider.add_span_processor(OpikSpanProcessor())
+
+trace.set_tracer_provider(provider)
+```
+
+The processor only mutates spans whose parent already carries Opik attributes (set by `attach_to_parent` on the boundary, or inherited from upstream W3C `baggage`). Spans outside an attached subtree are left untouched.
+
+For the full client/server pattern with Python and TypeScript examples, see [Distributed Traces with a Remote Service Using OpenTelemetry](/tracing/advanced/log_distributed_traces#distributed-traces-with-a-remote-service-using-opentelemetry).

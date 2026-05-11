@@ -1012,11 +1012,15 @@ def regenerate_llm_models_yaml(
                 model_id = entry.value
                 lines.append(f'  - id: "{model_id}"')
 
-            # Emit label only for dropdown-visible entries and only when it
-            # differs from the id — saves bytes on OpenRouter and matches the
-            # FE fallback (`label ?? id`).
+            # Emit a label for every dropdown-visible entry, even when it
+            # equals the id. The FE filter uses label-presence as the
+            # "is this dropdown-visible?" signal, so dropping labels for
+            # OpenRouter (where label == id by convention) made every
+            # OpenRouter model invisible in the picker (OPIK-6360). The
+            # extra ~30KB on the cold-cached YAML is a non-issue compared
+            # to the correctness fragility of the omit-when-equal rule.
             is_dropdown_entry = entry.value in dropdown_values
-            if is_dropdown_entry and entry.label and entry.label != model_id:
+            if is_dropdown_entry and entry.label:
                 escaped_label = entry.label.replace('"', '\\"')
                 lines.append(f'    label: "{escaped_label}"')
 
@@ -1082,6 +1086,7 @@ def _get_vertexai_models_from_prices(prices: dict) -> list[tuple[str, bool]]:
 def main():
     parser = argparse.ArgumentParser(description="Sync LLM provider model definitions")
     parser.add_argument("--dry-run", action="store_true", help="Preview changes without writing")
+    parser.add_argument("--force-regen", action="store_true", help="Regenerate and write files even when no new models were found")
     args = parser.parse_args()
 
     print("## Provider Model Sync\n")
@@ -1257,12 +1262,15 @@ def main():
             print(f"- Total models: {len(entries)} (dropdown: {len(dropdown)})")
         print()
 
-    if total_added == 0:
+    if total_added == 0 and not args.force_regen:
         if total_stale > 0:
             print(f"No new models found. {total_stale} stale model(s) flagged for manual review.")
         else:
             print("No changes found.")
         sys.exit(1)
+
+    if total_added == 0 and args.force_regen:
+        print("No new models found, but --force-regen set: regenerating files anyway.")
 
     if args.dry_run:
         print(f"\n**Dry run**: {total_added} added. No files written.")

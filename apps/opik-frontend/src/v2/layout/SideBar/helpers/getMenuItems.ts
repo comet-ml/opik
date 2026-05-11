@@ -20,7 +20,6 @@ import {
   MENU_ITEM_TYPE,
   MenuItemGroup,
 } from "@/v2/layout/SideBar/MenuItem/SidebarMenuItem";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 
 const getMenuItems = ({
   projectId,
@@ -29,7 +28,7 @@ const getMenuItems = ({
   canViewDashboards,
   canUsePlayground,
   canViewOptimizationRuns,
-  showHome,
+  showOlliePage,
 }: {
   projectId: string | null;
   canViewExperiments: boolean;
@@ -37,7 +36,7 @@ const getMenuItems = ({
   canViewDashboards: boolean;
   canUsePlayground: boolean;
   canViewOptimizationRuns: boolean;
-  showHome: boolean;
+  showOlliePage: boolean;
 }): MenuItemGroup[] => {
   const projectPrefix = projectId
     ? "/$workspaceName/projects/$projectId"
@@ -47,13 +46,14 @@ const getMenuItems = ({
     projectPrefix ? `${projectPrefix}${suffix}` : undefined;
 
   return [
-    ...(showHome
+    // TODO: OPIK-6260 - Restore Home page item and separate Ollie route once home page redesign is complete
+    ...(showOlliePage
       ? [
           {
-            id: "opik_connect_group",
+            id: "home_group",
             items: [
               {
-                id: "opik_connect",
+                id: "ollie",
                 path: projectPath("/home"),
                 type: MENU_ITEM_TYPE.router as const,
                 icon: OllieOwl,
@@ -201,7 +201,6 @@ const getMenuItems = ({
           icon: Bell,
           label: "Alerts",
           disabled: !projectPrefix,
-          featureFlag: FeatureToggleKeys.TOGGLE_ALERTS_ENABLED,
         },
       ],
     },

@@ -6,14 +6,15 @@ import {
   PROVIDER_MODEL_TYPE,
   AnthropicThinkingEffort,
 } from "@/types/providers";
-import {
-  DEFAULT_ANTHROPIC_CONFIGS,
-  ANTHROPIC_THINKING_EFFORT_OPTIONS,
-} from "@/constants/llm";
+import { DEFAULT_ANTHROPIC_CONFIGS } from "@/constants/llm";
 import PromptModelConfigsTooltipContent from "@/v1/pages-shared/llm/PromptModelSettings/providerConfigs/PromptModelConfigsTooltipContent";
 import { Button } from "@/ui/button";
 import { X } from "lucide-react";
-import { supportsAnthropicThinkingEffort } from "@/lib/modelUtils";
+import {
+  getAnthropicThinkingEffortOptions,
+  supportsAnthropicThinkingEffort,
+  supportsSamplingParams,
+} from "@/lib/modelUtils";
 import SelectBox from "@/shared/SelectBox/SelectBox";
 import { Label } from "@/ui/label";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -31,6 +32,8 @@ const AnthropicModelConfigs = ({
   model,
 }: AnthropicModelConfigsProps) => {
   const showThinkingEffort = supportsAnthropicThinkingEffort(model);
+  const showSamplingParams = supportsSamplingParams(model);
+  const thinkingEffortOptions = getAnthropicThinkingEffortOptions(model);
   const hasTemperatureValue = !isNil(configs.temperature);
   const hasTopPValue = !isNil(configs.topP);
   const temperatureDisabled = hasTopPValue && !hasTemperatureValue;
@@ -66,45 +69,47 @@ const AnthropicModelConfigs = ({
 
   return (
     <div className="flex w-72 flex-col gap-6">
-      <div className="space-y-2">
-        <div
-          className={
-            temperatureDisabled ? "pointer-events-none opacity-50" : ""
-          }
-        >
-          <SliderInputControl
-            value={
-              configs.temperature ??
-              (temperatureDisabled
-                ? undefined
-                : DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE)
+      {showSamplingParams && (
+        <div className="space-y-2">
+          <div
+            className={
+              temperatureDisabled ? "pointer-events-none opacity-50" : ""
             }
-            onChange={handleTemperatureChange}
-            id="temperature"
-            min={0}
-            max={1}
-            step={0.01}
-            defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
-            label="Temperature"
-            tooltip={
-              <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive. Note: Anthropic models require using either Temperature OR Top P, not both." />
-            }
-          />
-        </div>
-        {hasTemperatureValue && (
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="2xs"
-              onClick={handleClearTemperature}
-              aria-label="Clear temperature to use Top P"
-            >
-              <X className="mr-1 size-3" />
-              Clear to use Top P
-            </Button>
+          >
+            <SliderInputControl
+              value={
+                configs.temperature ??
+                (temperatureDisabled
+                  ? undefined
+                  : DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE)
+              }
+              onChange={handleTemperatureChange}
+              id="temperature"
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TEMPERATURE}
+              label="Temperature"
+              tooltip={
+                <PromptModelConfigsTooltipContent text="Controls randomness: Lowering results in less random completions. As the temperature approaches zero, the model will become deterministic and repetitive. Note: Anthropic models require using either Temperature OR Top P, not both." />
+              }
+            />
           </div>
-        )}
-      </div>
+          {hasTemperatureValue && (
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={handleClearTemperature}
+                aria-label="Clear temperature to use Top P"
+              >
+                <X className="mr-1 size-3" />
+                Clear to use Top P
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <SliderInputControl
         value={
@@ -123,39 +128,41 @@ const AnthropicModelConfigs = ({
         }
       />
 
-      <div className="space-y-2">
-        <div className={topPDisabled ? "pointer-events-none opacity-50" : ""}>
-          <SliderInputControl
-            value={
-              configs.topP ??
-              (topPDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P)
-            }
-            onChange={handleTopPChange}
-            id="topP"
-            min={0}
-            max={1}
-            step={0.01}
-            defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
-            label="Top P"
-            tooltip={
-              <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. Note: Anthropic models require using either Temperature OR Top P, not both." />
-            }
-          />
-        </div>
-        {hasTopPValue && (
-          <div className="flex justify-end">
-            <Button
-              variant="ghost"
-              size="2xs"
-              onClick={handleClearTopP}
-              aria-label="Clear Top P to use temperature"
-            >
-              <X className="mr-1 size-3" />
-              Clear to use Temperature
-            </Button>
+      {showSamplingParams && (
+        <div className="space-y-2">
+          <div className={topPDisabled ? "pointer-events-none opacity-50" : ""}>
+            <SliderInputControl
+              value={
+                configs.topP ??
+                (topPDisabled ? undefined : DEFAULT_ANTHROPIC_CONFIGS.TOP_P)
+              }
+              onChange={handleTopPChange}
+              id="topP"
+              min={0}
+              max={1}
+              step={0.01}
+              defaultValue={DEFAULT_ANTHROPIC_CONFIGS.TOP_P}
+              label="Top P"
+              tooltip={
+                <PromptModelConfigsTooltipContent text="Controls diversity via nucleus sampling: 0.5 means half of all likelihood-weighted options are considered. Note: Anthropic models require using either Temperature OR Top P, not both." />
+              }
+            />
           </div>
-        )}
-      </div>
+          {hasTopPValue && (
+            <div className="flex justify-end">
+              <Button
+                variant="ghost"
+                size="2xs"
+                onClick={handleClearTopP}
+                aria-label="Clear Top P to use temperature"
+              >
+                <X className="mr-1 size-3" />
+                Clear to use Temperature
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
 
       <SliderInputControl
         value={configs.throttling ?? DEFAULT_ANTHROPIC_CONFIGS.THROTTLING}
@@ -202,7 +209,7 @@ const AnthropicModelConfigs = ({
             onChange={(value: AnthropicThinkingEffort) =>
               onChange({ thinkingEffort: value })
             }
-            options={ANTHROPIC_THINKING_EFFORT_OPTIONS}
+            options={thinkingEffortOptions}
             placeholder="Select thinking effort"
           />
         </div>

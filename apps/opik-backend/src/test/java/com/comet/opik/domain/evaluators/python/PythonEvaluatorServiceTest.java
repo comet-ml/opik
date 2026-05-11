@@ -75,6 +75,8 @@ class PythonEvaluatorServiceTest {
         pythonEvaluatorConfig.setMaxRetryAttempts(4);
         pythonEvaluatorConfig.setMinRetryDelay(Duration.milliseconds(100));
         pythonEvaluatorConfig.setMaxRetryDelay(Duration.milliseconds(100));
+        pythonEvaluatorConfig.setConnectTimeout(Duration.seconds(1));
+        pythonEvaluatorConfig.setReadTimeout(Duration.seconds(5));
 
         config = new OpikConfiguration();
         config.setPythonEvaluator(pythonEvaluatorConfig);
@@ -116,7 +118,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -168,7 +170,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -203,7 +205,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -239,7 +241,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluate(code, data);
+            var actualScores = pythonEvaluatorService.evaluate(code, data).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -265,7 +267,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
@@ -294,7 +296,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Invalid Python code");
 
@@ -320,7 +322,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(ProcessingException.class)
                     .hasMessageContaining("Connection refused");
 
@@ -359,7 +361,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluateThread(code, context);
+            var actualScores = pythonEvaluatorService.evaluateThread(code, context).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -406,7 +408,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When
-            var actualScores = pythonEvaluatorService.evaluateThread(code, context);
+            var actualScores = pythonEvaluatorService.evaluateThread(code, context).block();
 
             // Then
             assertThat(actualScores).isEqualTo(expectedScores);
@@ -432,7 +434,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluateThread(code, context))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluateThread(code, context).block())
                     .isInstanceOf(RuntimeException.class);
 
             // Should retry 4 times + initial attempt = 5 total calls
@@ -471,7 +473,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(BadRequestException.class)
                     .hasMessageContaining("Custom error message");
         }
@@ -504,7 +506,7 @@ class PythonEvaluatorServiceTest {
             }).when(asyncInvoker).post(any(Entity.class), any(InvocationCallback.class));
 
             // When & Then
-            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data))
+            assertThatThrownBy(() -> pythonEvaluatorService.evaluate(code, data).block())
                     .isInstanceOf(InternalServerErrorException.class)
                     .hasMessageContaining(
                             "Python evaluation failed (HTTP 500): Unknown error during Python evaluation");

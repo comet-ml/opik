@@ -61,7 +61,6 @@ import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
 import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_EMPTY_MESSAGES;
-import static com.comet.opik.domain.llm.ChatCompletionService.ERROR_NO_COMPLETION_TOKENS;
 import static com.comet.opik.domain.llm.LlmProviderFactory.ERROR_MODEL_NOT_SUPPORTED;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -334,12 +333,7 @@ class ChatCompletionsResourceTest {
                         .stream(false)
                         .model(AnthropicModelName.CLAUDE_SONNET_3_7.toString())
                         .maxCompletionTokens(100).build()),
-                        ERROR_EMPTY_MESSAGES),
-                arguments(named("no max tokens", podamFactory.manufacturePojo(ChatCompletionRequest.Builder.class)
-                        .stream(false)
-                        .model(AnthropicModelName.CLAUDE_SONNET_3_7.toString())
-                        .addUserMessage("Say 'Hello World'").build()),
-                        ERROR_NO_COMPLETION_TOKENS));
+                        ERROR_EMPTY_MESSAGES));
     }
 
     private void createLlmProviderApiKey(String workspaceName) {

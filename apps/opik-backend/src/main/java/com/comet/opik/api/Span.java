@@ -14,6 +14,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.PositiveOrZero;
+import jakarta.validation.constraints.Size;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
@@ -83,7 +84,9 @@ public record Span(
         @JsonView({Span.View.Public.class, Span.View.Write.class,
                 ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Schema(description = "Time to first token in milliseconds") @PositiveOrZero Double ttft,
         @JsonView({Span.View.Public.class, Span.View.Write.class,
-                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) Source source){
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) Source source,
+        @JsonView({Span.View.Public.class, Span.View.Write.class,
+                ExperimentItemBulkUpload.View.ExperimentItemBulkWriteView.class}) @Size(max = 150, message = "cannot exceed 150 characters") String environment){
 
     @Builder(toBuilder = true)
     public record SpanPage(
@@ -122,7 +125,8 @@ public record Span(
         TOTAL_ESTIMATED_COST_VERSION("total_estimated_cost_version"),
         DURATION("duration"),
         TTFT("ttft"),
-        SOURCE("source");
+        SOURCE("source"),
+        ENVIRONMENT("environment");
 
         @JsonValue
         private final String value;

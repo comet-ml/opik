@@ -43,10 +43,8 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
   const isExportEnabled = useIsFeatureEnabled(FeatureToggleKeys.EXPORT_ENABLED);
 
   const {
-    permissions: { canDeleteTraces, canTagTrace },
+    permissions: { canDeleteTraces, canLogTraceSpanThread },
   } = usePermissions();
-
-  const canManageTags = type === TRACE_DATA_TYPE.spans || canTagTrace;
 
   const showEvaluate =
     type === TRACE_DATA_TYPE.traces || type === TRACE_DATA_TYPE.spans;
@@ -94,7 +92,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
           confirmButtonVariant="destructive"
         />
       )}
-      {canManageTags && (
+      {canLogTraceSpanThread && (
         <AddTagDialog
           key={`tag-${resetKeyRef.current}`}
           rows={selectedRows}
@@ -122,7 +120,7 @@ const TracesActionsPanel: React.FunctionComponent<TracesActionsPanelProps> = ({
         disabled={disabled}
         dataType={type === TRACE_DATA_TYPE.traces ? "traces" : "spans"}
       />
-      {canManageTags && (
+      {canLogTraceSpanThread && (
         <TooltipWrapper content="Manage tags">
           <Button
             variant="outline"
