@@ -132,7 +132,13 @@ export class ValueParser {
       }
 
       const item = this.parseQuotedString(tokenizer, tokenizer.getPosition());
-      items.push(item.value as string);
+      const itemValue = item.value as string;
+      if (itemValue.includes(",")) {
+        throw new Error(
+          `Array element values cannot contain commas (got: "${itemValue}"). The backend uses comma as the array delimiter.`
+        );
+      }
+      items.push(itemValue);
     }
 
     return { value: items.join(",") };

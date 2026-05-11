@@ -628,5 +628,19 @@ describe("OpikQueryLanguage", () => {
         OpikQueryLanguage.forTraces("environment not_in ()");
       }).toThrow(/Expected at least one item/);
     });
+
+    it("should throw error when a single array element contains a comma", () => {
+      // The backend splits on comma to recover individual values, so a comma
+      // inside a value cannot be represented — reject it early with a clear message.
+      expect(() => {
+        OpikQueryLanguage.forTraces('environment in ("hello,world")');
+      }).toThrow(/Array element values cannot contain commas/);
+    });
+
+    it("should throw error when any array element in a multi-item array contains a comma", () => {
+      expect(() => {
+        OpikQueryLanguage.forTraces('environment in ("a,b", "c")');
+      }).toThrow(/Array element values cannot contain commas/);
+    });
   });
 });
