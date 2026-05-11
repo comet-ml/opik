@@ -126,6 +126,7 @@ class _Trace:
         last_updated_at: Optional[dt.datetime] = None,
         ttft: Optional[float] = None,
         feedback_scores: Optional[List[Any]] = None,
+        project_id: Optional[str] = "src-project-1",
     ) -> None:
         self.id = id
         self.name = name
@@ -143,6 +144,12 @@ class _Trace:
         # decide whether to re-emit any per-trace feedback. None / [] is a
         # valid "no scores" state.
         self.feedback_scores = feedback_scores
+        # Spans are read scoped to the TRACE's project_id (not the
+        # experiment's), so the stand-in carries one. Default matches the
+        # default ``_Experiment.project_id`` so existing tests behave as
+        # before; tests that exercise cross-project trace scenarios
+        # override per-trace.
+        self.project_id = project_id
 
 
 class _Span:
@@ -1054,6 +1061,78 @@ class TestCascadeExperiments:
         )
 
         rest_client.assertion_results.store_assertions_batch.assert_not_called()
+
+    def test_span_read_uses_trace_project_not_experiment_project(self) -> None:
+        # Defensive scenario: an experiment lives in project X but its
+        # traces live in different projects (Y, Z) -- which the BE allows
+        # because ExperimentItem.project_id is derived from the trace, not
+        # validated against the experiment. The cascade must scope the
+        # span read by each trace's own project_id, not by the experiment's.
+        # Otherwise spans of traces in Y/Z would be silently dropped when
+        # we query with project_id=X.
+        experiment = _Experiment(
+            id="src-exp-1",
+            dataset_version_id="src-v-1",
+            project_id="project-X",  # experiment's nominal project
+        )
+        items = [
+            _ExperimentItem(
+                id="src-item-1",
+                experiment_id="src-exp-1",
+                trace_id="src-trace-in-Y",
+                dataset_item_id="src-ds-item-1",
+            ),
+            _ExperimentItem(
+                id="src-item-2",
+                experiment_id="src-exp-1",
+                trace_id="src-trace-in-Z",
+                dataset_item_id="src-ds-item-2",
+            ),
+        ]
+        # Each trace declares its OWN project_id, distinct from the
+        # experiment's.
+        traces = {
+            "src-trace-in-Y": _Trace(id="src-trace-in-Y", project_id="project-Y"),
+            "src-trace-in-Z": _Trace(id="src-trace-in-Z", project_id="project-Z"),
+        }
+        spans = {
+            "src-trace-in-Y": [_Span(id="span-Y", parent_span_id=None, name="y-root")],
+            "src-trace-in-Z": [_Span(id="span-Z", parent_span_id=None, name="z-root")],
+        }
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": items},
+            traces_by_id=traces,
+            spans_by_trace=spans,
+        )
+        client = _client_with_recreate_capture()
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={
+                "src-ds-item-1": "dest-ds-item-1",
+                "src-ds-item-2": "dest-ds-item-2",
+            },
+            audit=_audit(),
+        )
+
+        # The span-list endpoint should have been called once per trace,
+        # each with the TRACE's project_id -- not the experiment's. Build
+        # a (trace_id -> project_id) map from the actual call args and
+        # assert no call used project-X (the experiment's project).
+        span_list_calls = rest_client.spans.get_spans_by_project.call_args_list
+        scoping_by_trace = {
+            call.kwargs["trace_id"]: call.kwargs["project_id"]
+            for call in span_list_calls
+        }
+        assert scoping_by_trace["src-trace-in-Y"] == "project-Y"
+        assert scoping_by_trace["src-trace-in-Z"] == "project-Z"
+        assert "project-X" not in scoping_by_trace.values()
 
 
 # ---------------------------------------------------------------------------

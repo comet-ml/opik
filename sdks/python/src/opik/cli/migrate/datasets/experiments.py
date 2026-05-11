@@ -420,6 +420,13 @@ def _copy_traces_and_spans(
     'TRACE', ...)`` after the trace batch create. ``assertion_results_by_
     source_trace`` is ``None`` for callers that don't read the Compare view
     (e.g. unit tests that don't exercise the test-suite path).
+
+    ``source_project_id`` is only a defensive fallback used when an
+    individual source trace has a null ``project_id`` field. Per-trace
+    span reads use the trace's own ``project_id`` -- spans live in the
+    same project as their parent trace, which may differ from the
+    experiment's project (the BE does not enforce single-project
+    invariance across an experiment's traces).
     """
     if not source_trace_ids:
         return 0, 0
@@ -478,10 +485,22 @@ def _copy_traces_and_spans(
 
     spans_copied = 0
     for source_trace_id, new_trace_id in source_to_new_trace.items():
+        # Per-trace span scoping: spans live in the same project as their
+        # parent trace, which may differ from the experiment's project_id
+        # (the BE doesn't enforce single-project invariance across an
+        # experiment's traces -- ExperimentItem.project_id is derived from
+        # the trace, not validated against the experiment). Using each
+        # trace's own project_id ensures we read its spans correctly even
+        # when an experiment's traces are scattered across multiple projects.
+        # Falls back to the experiment-level source_project_id only if a
+        # trace's project_id is somehow null (defensive; shouldn't happen
+        # in practice).
+        source_trace = source_traces_by_id[source_trace_id]
+        trace_project_id = source_trace.project_id or source_project_id
         spans_copied += _copy_spans_for_trace(
             rest_client,
             source_trace_id=source_trace_id,
-            source_project_id=source_project_id,
+            source_project_id=trace_project_id,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
         )
