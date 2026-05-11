@@ -58,7 +58,7 @@ const ConfigurationPage = () => {
             >
               Workspace preferences
             </TabsTrigger>
-            {CollaboratorsTabTrigger && (
+            {CollaboratorsTabTrigger && CollaboratorsTab && (
               <CollaboratorsTabTrigger value={CONFIGURATION_TABS.MEMBERS} />
             )}
           </TabsList>
@@ -75,7 +75,7 @@ const ConfigurationPage = () => {
             <WorkspacePreferencesTab />
           </TabsContent>
 
-          {CollaboratorsTab && (
+          {CollaboratorsTabTrigger && CollaboratorsTab && (
             <TabsContent value={CONFIGURATION_TABS.MEMBERS}>
               <CollaboratorsTab />
             </TabsContent>

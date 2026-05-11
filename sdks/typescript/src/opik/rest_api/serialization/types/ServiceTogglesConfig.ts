@@ -29,6 +29,7 @@ export const ServiceTogglesConfig: core.serialization.ObjectSchema<
     bedrockProviderEnabled: core.serialization.boolean(),
     customllmProviderEnabled: core.serialization.boolean(),
     ollamaProviderEnabled: core.serialization.boolean(),
+    collaboratorsTabEnabled: core.serialization.boolean(),
     v2WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     v1WorkspaceAllowlistIds: core.serialization.list(core.serialization.string()),
     forceWorkspaceVersion: core.serialization.string(),
@@ -60,6 +61,7 @@ export declare namespace ServiceTogglesConfig {
         bedrockProviderEnabled: boolean;
         customllmProviderEnabled: boolean;
         ollamaProviderEnabled: boolean;
+        collaboratorsTabEnabled: boolean;
         v2WorkspaceAllowlistIds: string[];
         v1WorkspaceAllowlistIds: string[];
         forceWorkspaceVersion: string;

@@ -3608,6 +3608,7 @@ paths:
               bedrockProviderEnabled: false
               customllmProviderEnabled: true
               ollamaProviderEnabled: false
+              collaboratorsTabEnabled: true
               forceWorkspaceVersion: disabled
   /v1/private/experiments/batch:
     patch:
