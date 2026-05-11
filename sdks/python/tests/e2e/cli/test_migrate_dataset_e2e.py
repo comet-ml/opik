@@ -31,6 +31,7 @@ import pytest
 import opik
 
 from ...conftest import random_chars
+from ._cascade_comparison import compare_cascade
 from .conftest import (
     apply_changes,
     chronological_versions,
@@ -304,3 +305,48 @@ class TestMigrateDatasetVersionReplay:
                 f"trace {new_trace_id}: expected feedback score names "
                 f"{{'correctness', 'latency_p95'}}, got {score_names}"
             )
+
+        # ── Deep-equal source vs. destination ──
+        # Verify field-by-field that experiment + items + traces + spans
+        # round-trip the cascade modulo remapped IDs. Pairing strategy:
+        # both sides sorted by trace ``name`` (assigned by the seed as
+        # "task-0", "task-1", "task-2" and carried verbatim through the
+        # cascade), guaranteeing stable positional correspondence.
+        src_exp = find_destination_experiment(
+            rest,
+            destination_dataset_id=source_id,
+            experiment_name=experiment_name,
+        )
+        src_items_compare = destination_experiment_items(
+            rest,
+            experiment_id=cascade_seed["experiment_id"],
+            dataset_id=source_id,
+        )
+        # Sort both sides by trace name for stable pairing. Build a
+        # trace_id -> name map by reading each trace once.
+        src_trace_names = {
+            it.trace_id: rest.traces.get_trace_by_id(id=it.trace_id).name
+            for it in src_items_compare
+        }
+        dst_trace_names = {
+            it.trace_id: rest.traces.get_trace_by_id(id=it.trace_id).name
+            for it in dest_items
+        }
+        src_items_compare.sort(key=lambda it: src_trace_names[it.trace_id])
+        dest_items_sorted = sorted(
+            dest_items, key=lambda it: dst_trace_names[it.trace_id]
+        )
+        src_trace_ids_sorted = [it.trace_id for it in src_items_compare]
+        dst_trace_ids_sorted = [it.trace_id for it in dest_items_sorted]
+
+        compare_cascade(
+            rest_client=rest,
+            source_experiment=src_exp,
+            destination_experiment=dest_exp,
+            source_item_ids=v1_item_ids,
+            destination_item_ids=[it.dataset_item_id for it in dest_items_sorted],
+            source_trace_ids=src_trace_ids_sorted,
+            destination_trace_ids=dst_trace_ids_sorted,
+            source_items_compare=src_items_compare,
+            destination_items_compare=dest_items_sorted,
+        )

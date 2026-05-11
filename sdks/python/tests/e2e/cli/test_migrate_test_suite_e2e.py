@@ -30,6 +30,7 @@ import pytest
 import opik
 
 from ...conftest import random_chars
+from ._cascade_comparison import compare_cascade
 from .conftest import (
     apply_changes,
     chronological_versions,
@@ -259,20 +260,48 @@ def test_test_suite_full_fidelity_round_trip(
         dataset_version_id=v2_id,
         project_name=source_project_name,
         item_ids=v2_item_ids,
-        experiment_type="trial",
+        # ``type="regular"`` + ``evaluation_method="evaluation_suite"`` is
+        # the canonical shape for a non-optimizer test-suite run, mirroring
+        # what ``opik.evaluate(...)`` produces against a test suite. The
+        # BE only updates ``last_created_experiment_at`` on the dataset for
+        # ``type="regular"`` experiments, so ``with_experiments_only=true``
+        # (the UI's project-page filter) correctly surfaces this one.
+        # Optimizer-driven trials use ``type="trial"`` + ``optimization_id``;
+        # those are Slice 4's cascade scope.
+        experiment_type="regular",
         evaluation_method="evaluation_suite",
         experiment_config={"runner": "e2e-suite-cascade-test"},
         experiment_tags=["e2e", "test-suite", "cascade"],
         spans_per_trace=2,
+        # Per-item runtime assertion results are seeded with the SAME name
+        # as the v2 suite-level evaluator (``v1-judge``). That's what a real
+        # test-suite run produces: for each item, one assertion result per
+        # evaluator that ran against it. Q2 also has a per-item override
+        # evaluator ``q2-item-judge``; we seed a second result there to
+        # mirror what an actual evaluator run would produce.
         per_item_extras=[
             {
                 "assertion_results": [
                     {
-                        "value": f"check-{i}",
+                        "value": "v1-judge",  # matches v2's suite-level evaluator
                         "passed": i % 2 == 0,
-                        "reason": f"assertion-reason-{i}",
+                        "reason": f"v1-judge ran on Q{i + 1}",
                     }
-                ],
+                ]
+                # Q2 has a per-item override evaluator ``q2-item-judge``; a
+                # real run would also produce a result for that. We tack it
+                # on for the second item.
+                + (
+                    [
+                        {
+                            "value": "q2-item-judge",
+                            "passed": True,
+                            "reason": "q2-item-judge ran on Q2",
+                        }
+                    ]
+                    if i == 1
+                    else []
+                ),
             }
             for i in range(len(v2_item_ids))
         ],
@@ -352,8 +381,8 @@ def test_test_suite_full_fidelity_round_trip(
     assert dest_exp.id != cascade_seed["experiment_id"]
     assert dest_exp.dataset_id == target.id
     # Type + evaluation_method preserved (test-suite-specific fields).
-    assert dest_exp.type == "trial", (
-        f"destination experiment type should be 'trial', got {dest_exp.type!r}"
+    assert dest_exp.type == "regular", (
+        f"destination experiment type should be 'regular', got {dest_exp.type!r}"
     )
     assert dest_exp.evaluation_method == "evaluation_suite", (
         f"destination experiment evaluation_method should be 'evaluation_suite', "
@@ -376,25 +405,28 @@ def test_test_suite_full_fidelity_round_trip(
     dest_trace_ids = {it.trace_id for it in dest_items}
     assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"]))
 
-    expected_names = {f"check-{i}" for i in range(len(v2_item_ids))}
-    seen_names: set = set()
+    # Each destination item has at least one assertion result named
+    # ``v1-judge`` (the v2 suite-level evaluator's name), matching what a
+    # real test-suite run would produce. The Q2 item additionally has a
+    # ``q2-item-judge`` result because of the per-item evaluator override.
+    items_with_q2_override = 0
     for dest_item in dest_items:
         ars = dest_item.assertion_results
-        assert ars and len(ars) == 1, (
-            "destination experiment item should carry exactly one "
-            f"assertion_result; got {ars}"
+        assert ars, "destination experiment item should have assertion_results"
+        names = {a.value for a in ars}
+        assert "v1-judge" in names, (
+            f"destination item should carry a 'v1-judge' assertion result "
+            f"(matches the v2 suite-level evaluator); got names={names}"
         )
-        ar = ars[0]
-        # Compare view shape: value / passed / reason all populated
-        # because the source wrote them via store_assertions_batch (with
-        # AssertionResultBatchItem.name landing on the read side as
-        # AssertionResultCompare.value).
-        assert ar.value is not None
-        assert ar.passed in {True, False}
-        assert (ar.reason or "").startswith("assertion-reason-")
-        seen_names.add(ar.value)
-    assert seen_names == expected_names, (
-        f"expected assertion names {expected_names}, got {seen_names}"
+        if "q2-item-judge" in names:
+            items_with_q2_override += 1
+            # Find the q2-item-judge result and verify its reason text.
+            q2_ar = next(a for a in ars if a.value == "q2-item-judge")
+            assert q2_ar.passed is True
+            assert "Q2" in (q2_ar.reason or "")
+    assert items_with_q2_override == 1, (
+        "exactly one item (Q2) should carry the per-item q2-item-judge "
+        f"assertion result; got {items_with_q2_override}"
     )
 
     # Each destination trace exists under the target project with the
@@ -410,3 +442,44 @@ def test_test_suite_full_fidelity_round_trip(
         assert len(roots) == 1
         children = [s for s in dest_spans if s.parent_span_id is not None]
         assert all(c.parent_span_id == roots[0].id for c in children)
+
+    # ── Deep-equal source vs. destination ──
+    # Pair source/destination items by trace ``name`` (assigned by the
+    # seed as "task-0", "task-1", "task-2" and carried verbatim through
+    # the cascade), then run a field-by-field comparison of experiment +
+    # items (assertion_results + feedback_scores) + traces + spans
+    # modulo remapped IDs.
+    src_exp = find_destination_experiment(
+        rest,
+        destination_dataset_id=suite_id,
+        experiment_name=experiment_name,
+    )
+    src_items_compare = destination_experiment_items(
+        rest,
+        experiment_id=cascade_seed["experiment_id"],
+        dataset_id=suite_id,
+    )
+    src_trace_names = {
+        it.trace_id: rest.traces.get_trace_by_id(id=it.trace_id).name
+        for it in src_items_compare
+    }
+    dst_trace_names = {
+        it.trace_id: rest.traces.get_trace_by_id(id=it.trace_id).name
+        for it in dest_items
+    }
+    src_items_compare.sort(key=lambda it: src_trace_names[it.trace_id])
+    dest_items_sorted = sorted(dest_items, key=lambda it: dst_trace_names[it.trace_id])
+    src_trace_ids_sorted = [it.trace_id for it in src_items_compare]
+    dst_trace_ids_sorted = [it.trace_id for it in dest_items_sorted]
+
+    compare_cascade(
+        rest_client=rest,
+        source_experiment=src_exp,
+        destination_experiment=dest_exp,
+        source_item_ids=v2_item_ids,
+        destination_item_ids=[it.dataset_item_id for it in dest_items_sorted],
+        source_trace_ids=src_trace_ids_sorted,
+        destination_trace_ids=dst_trace_ids_sorted,
+        source_items_compare=src_items_compare,
+        destination_items_compare=dest_items_sorted,
+    )
