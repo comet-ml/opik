@@ -38,6 +38,20 @@ class ProjectNotFoundError(MigrationError):
     """
 
 
+class ReplayError(MigrationError):
+    """Raised when version-history replay hits an unexpected BE response.
+
+    Used by ``cli/migrate/datasets/version_replay.py`` when the BE returns
+    a response shape the replay loop can't continue from — typically a
+    successful 2xx with a missing ``id`` or empty ``content`` field. These
+    are catastrophic but rare and don't fit any of the user-input error
+    types above; routing them through ``MigrationError`` (rather than a
+    plain ``RuntimeError``) ensures ``migrate_dataset_command`` surfaces
+    them via the user-facing ``MigrationError`` branch rather than the
+    generic ``except Exception`` path.
+    """
+
+
 class UnsupportedDatasetTypeError(MigrationError):
     """Raised when the source dataset has an unrecognised ``type``.
 

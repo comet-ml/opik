@@ -635,6 +635,178 @@ class TestVersionReplayUnit:
         # Delete ID is the target id (TGT-B), not the source id (src-b).
         assert v2_request["deleted_ids"] == ["TGT-B"]
 
+    def test_replay__clears_version_level_execution_policy_when_dropped(
+        self,
+    ) -> None:
+        # PR review #3 (baz-reviewer, version_replay.py:706): when v_n had a
+        # suite-level execution_policy and v_{n+1} drops it (set to None), the
+        # BE inherits the previous policy on omission. Forward the dedicated
+        # clear_execution_policy=true flag at the version level so the target
+        # mirrors the source's drop.
+        #
+        # Shape: v1 is config-only (test-suite-style) carrying the policy;
+        # v2 has items and drops the policy. v1 routes through the
+        # config-only path (one apply call); v2 routes through the standard
+        # apply path with clear_execution_policy=true.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        pol = MagicMock()
+        pol.runs_per_item = 3
+        pol.pass_threshold = 2
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1", execution_policy=pol),
+                # v2 drops the suite-level policy.
+                _SourceVersion(id="src-v2", version_hash="hv2", execution_policy=None),
+            ],
+            items_per_version={
+                "hv1": [],  # v1 config-only, carries the policy only.
+                "hv2": [_ds_item("a", x=1)],
+                "tgt-h2": [_ds_item("tgt-a", x=1)],
+            },
+            applied_versions=[
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
+            ],
+        )
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # v1 = config-only apply (carries policy); v2 = standard apply with
+        # clear flag. apply_dataset_item_changes called twice; v2 is the
+        # second entry.
+        calls = rest_client.datasets.apply_dataset_item_changes.call_args_list
+        assert len(calls) == 2
+        v2_request = calls[1].kwargs["request"]
+        # v2: omit execution_policy AND send clear flag — that's what gets
+        # the BE to drop the inherited policy instead of carrying it forward.
+        assert "execution_policy" not in v2_request
+        assert v2_request["clear_execution_policy"] is True
+
+    def test_replay__forwards_empty_user_tags_and_metadata_explicitly(
+        self,
+    ) -> None:
+        # PR review #4 (baz-reviewer, version_replay.py:710): explicit clears
+        # (``tags=[]`` or ``metadata={}`` on the source) must round-trip as
+        # explicit empty values on the apply payload — truthiness gating would
+        # silently collapse them to omission and the BE would inherit prior
+        # values. ``_user_version_tags`` already returns None for "all tags
+        # were the system 'latest' marker," so this test exercises metadata
+        # specifically (where the helper layer doesn't intervene).
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(
+                    id="src-v1", version_hash="hv1", metadata={"author": "ada"}
+                ),
+                # v2 clears metadata explicitly.
+                _SourceVersion(id="src-v2", version_hash="hv2", metadata={}),
+            ],
+            items_per_version={
+                "hv1": [_ds_item("a", x=1)],
+                "hv2": [_ds_item("a", x=1), _ds_item("b", y=2)],
+                "tgt-h1": [_ds_item("tgt-a", x=1)],
+                "tgt-h1b": [_ds_item("tgt-a", x=1)],
+                "tgt-h2": [_ds_item("tgt-a", x=1), _ds_item("tgt-b", y=2)],
+            },
+            applied_versions=[
+                # v1: post-create read-back + version-field follow-up apply
+                # (items + metadata both present on v1 forces an extra apply
+                # call; that's expected and warned about in _create_first_version_with_items).
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+                _AppliedVersion(id="tgt-v1b", version_hash="tgt-h1b"),
+                # v2 apply.
+                _AppliedVersion(id="tgt-v2", version_hash="tgt-h2"),
+            ],
+        )
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # v2 apply is the second (last) apply call. metadata={} must be
+        # forwarded explicitly so the BE drops the inherited {"author": "ada"}.
+        v2_request = rest_client.datasets.apply_dataset_item_changes.call_args.kwargs[
+            "request"
+        ]
+        assert v2_request["metadata"] == {}
+
+    def test_replay__duplicate_content_items_remap_to_distinct_target_ids(
+        self,
+    ) -> None:
+        # PR review #5 (baz-reviewer, version_replay.py:766): when source v1
+        # has two items with identical content (e.g. user inserted duplicates),
+        # they get different stable ids on the source but identical content
+        # hashes. Earlier implementation collapsed both into one entry of
+        # target_items_by_hash, so both source ids remapped to the same target
+        # id — corrupting any later edit/delete that referenced one of them.
+        # Fix: per-hash FIFO queue so each source-add pairs with a distinct
+        # target row.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1"),
+            ],
+            items_per_version={
+                "hv1": [
+                    _ds_item("src-dupe-1", q="DUP"),
+                    _ds_item("src-dupe-2", q="DUP"),
+                ],
+                # Target has two distinct ids for the same hash — same shape
+                # the BE produces when you insert duplicate-content items.
+                "tgt-h1": [
+                    _ds_item("tgt-dupe-1", q="DUP"),
+                    _ds_item("tgt-dupe-2", q="DUP"),
+                ],
+            },
+            applied_versions=[
+                _AppliedVersion(id="tgt-v1", version_hash="tgt-h1"),
+            ],
+        )
+
+        result = replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # Both source ids must remap to DIFFERENT target ids — not collapse
+        # onto the same one.
+        assert "src-dupe-1" in result.item_id_remap
+        assert "src-dupe-2" in result.item_id_remap
+        assert result.item_id_remap["src-dupe-1"] != result.item_id_remap["src-dupe-2"]
+        assert {
+            result.item_id_remap["src-dupe-1"],
+            result.item_id_remap["src-dupe-2"],
+        } == {
+            "tgt-dupe-1",
+            "tgt-dupe-2",
+        }
+
     def test_replay__forwards_per_version_suite_evaluators_and_execution_policy(
         self,
     ) -> None:

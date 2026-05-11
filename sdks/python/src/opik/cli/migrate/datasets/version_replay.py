@@ -40,6 +40,7 @@ from opik.rest_api.types import (
 )
 
 from ..audit import AuditLog
+from ..errors import ReplayError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -149,6 +150,9 @@ def replay_all_versions(
 
     total = len(versions)
     prev_items_by_id: Dict[str, _SourceItem] = {}
+    prev_suite_execution_policy: Optional[
+        execution_policy_public.ExecutionPolicyPublic
+    ] = None
     base_version_id: Optional[str] = None
 
     for index, source_version in enumerate(versions):
@@ -174,6 +178,13 @@ def replay_all_versions(
         else:
             assert base_version_id is not None  # set after the first iteration
             delta = _compute_delta(prev_items_by_id, curr_items_by_id)
+            # When source drops suite-level execution_policy between versions
+            # (prev had one, curr=None), forward the BE's dedicated clear
+            # flag — omission would otherwise inherit the stale policy.
+            clear_suite_execution_policy = (
+                prev_suite_execution_policy is not None
+                and source_version.execution_policy is None
+            )
             new_version_id, new_item_ids = _apply_delta_and_collect_new_ids(
                 rest_client,
                 dest_dataset_id=dest_dataset_id,
@@ -185,6 +196,7 @@ def replay_all_versions(
                 item_id_remap=result.item_id_remap,
                 suite_evaluators=source_version.evaluators,
                 suite_execution_policy=source_version.execution_policy,
+                clear_suite_execution_policy=clear_suite_execution_policy,
                 user_tags=_user_version_tags(source_version.tags),
                 metadata=source_version.metadata,
             )
@@ -195,14 +207,16 @@ def replay_all_versions(
             result.version_remap[source_version.id] = new_version_id
 
         # Adds get fresh target ids that we recover by content-hash matching
-        # the post-apply target items. We populate item_id_remap with the
-        # source-add → target-add pairings so subsequent versions' edits and
-        # deletions can translate source-side stable ids to the target-side
-        # ids the BE assigned on add.
+        # the post-apply target items. ``new_item_ids`` is keyed by content
+        # hash → ordered queue of target ids; we pop one per source-add so
+        # items with identical content (e.g. duplicate-content inserts) each
+        # remap to a distinct target row instead of collapsing.
         for added in delta.adds:
-            new_target_id = new_item_ids.get(_content_hash_for(added))
-            if new_target_id is not None and added.id is not None:
-                result.item_id_remap[added.id] = new_target_id
+            if added.id is None:
+                continue
+            queue = new_item_ids.get(_content_hash_for(added))
+            if queue:
+                result.item_id_remap[added.id] = queue.pop(0)
 
         result.versions_replayed += 1
 
@@ -221,6 +235,7 @@ def replay_all_versions(
         )
 
         prev_items_by_id = curr_items_by_id
+        prev_suite_execution_policy = source_version.execution_policy
         base_version_id = new_version_id
 
     return result
@@ -234,7 +249,7 @@ def _replay_first_version(
     dest_project_name: str,
     source_items: Dict[str, _SourceItem],
     source_version: dataset_version_public.DatasetVersionPublic,
-) -> tuple[str, Dict[str, str], "VersionDelta"]:
+) -> tuple[str, Dict[str, List[str]], "VersionDelta"]:
     """Create the destination's v1 to match the source's v1 shape.
 
     Two BE-imposed write paths, picked by the source v1's shape:
@@ -307,7 +322,7 @@ def _create_first_version_with_items(
     suite_execution_policy: Optional[execution_policy_public.ExecutionPolicyPublic],
     user_tags: Optional[List[str]],
     metadata: Optional[Dict[str, str]],
-) -> tuple[str, Dict[str, str]]:
+) -> tuple[str, Dict[str, List[str]]]:
     """Create v1 via the ``create_or_update_dataset_items`` path.
 
     The BE rejects content-bearing applies with ``base_version=null``, so
@@ -348,7 +363,7 @@ def _create_first_version_with_items(
         id=dest_dataset_id, page=1, size=1
     )
     if not new_version.content or new_version.content[0].id is None:
-        raise RuntimeError(
+        raise ReplayError(
             f"Failed to read back v1 for destination dataset '{dest_name}': "
             "list_dataset_versions returned empty content."
         )
@@ -394,9 +409,10 @@ def _create_first_version_with_items(
                 "runs_per_item": suite_execution_policy.runs_per_item,
                 "pass_threshold": suite_execution_policy.pass_threshold,
             }
-        if user_tags:
+        # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
+        if user_tags is not None:
             request["tags"] = list(user_tags)
-        if metadata:
+        if metadata is not None:
             request["metadata"] = dict(metadata)
         suite_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda: rest_client.datasets.apply_dataset_item_changes(
@@ -404,7 +420,7 @@ def _create_first_version_with_items(
             )
         )
         if suite_version.id is None:
-            raise RuntimeError(
+            raise ReplayError(
                 "Failed to apply v1 version-level fields to destination "
                 f"dataset '{dest_name}'."
             )
@@ -429,7 +445,7 @@ def _create_first_version_config_only(
     suite_execution_policy: Optional[execution_policy_public.ExecutionPolicyPublic],
     user_tags: Optional[List[str]],
     metadata: Optional[Dict[str, str]],
-) -> tuple[str, Dict[str, str]]:
+) -> tuple[str, Dict[str, List[str]]]:
     """Create v1 via ``apply_dataset_item_changes(base_version=null, override=true)``.
 
     Used when the source's v1 is the BE's canonical "config-only" first
@@ -452,9 +468,10 @@ def _create_first_version_config_only(
             "runs_per_item": suite_execution_policy.runs_per_item,
             "pass_threshold": suite_execution_policy.pass_threshold,
         }
-    if user_tags:
+    # ``is not None`` gating — see _apply_delta_and_collect_new_ids for rationale.
+    if user_tags is not None:
         request["tags"] = list(user_tags)
-    if metadata:
+    if metadata is not None:
         request["metadata"] = dict(metadata)
     new_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
         lambda: rest_client.datasets.apply_dataset_item_changes(
@@ -462,7 +479,7 @@ def _create_first_version_config_only(
         )
     )
     if new_version.id is None:
-        raise RuntimeError("apply_dataset_item_changes returned a v1 without an id.")
+        raise ReplayError("apply_dataset_item_changes returned a v1 without an id.")
     # No items on v1 → empty hash-to-target-id map.
     return new_version.id, {}
 
@@ -633,9 +650,10 @@ def _apply_delta_and_collect_new_ids(
     item_id_remap: Dict[str, str],
     suite_evaluators: Optional[List[evaluator_item_public.EvaluatorItemPublic]],
     suite_execution_policy: Optional[execution_policy_public.ExecutionPolicyPublic],
+    clear_suite_execution_policy: bool,
     user_tags: Optional[List[str]],
     metadata: Optional[Dict[str, str]],
-) -> tuple[str, Dict[str, str]]:
+) -> tuple[str, Dict[str, List[str]]]:
     """Apply one source version's delta to the destination.
 
     Returns ``(new_target_version_id, hash_to_target_item_id)`` where the
@@ -704,9 +722,18 @@ def _apply_delta_and_collect_new_ids(
             "runs_per_item": suite_execution_policy.runs_per_item,
             "pass_threshold": suite_execution_policy.pass_threshold,
         }
-    if user_tags:
+    elif clear_suite_execution_policy:
+        # Source dropped the suite-level policy between versions. BE
+        # omission would inherit the stale value from base_version, so
+        # forward the dedicated clear flag to remove it cleanly.
+        request["clear_execution_policy"] = True
+    # ``is not None`` gating (not truthiness) so explicit clears — empty
+    # tag list / empty metadata dict — round-trip as omission-of-omission.
+    # Truthiness gating would silently collapse ``[]``/`{}` to "don't forward,"
+    # leaving the BE to inherit the previous version's values.
+    if user_tags is not None:
         request["tags"] = list(user_tags)
-    if metadata:
+    if metadata is not None:
         request["metadata"] = dict(metadata)
 
     new_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
@@ -719,7 +746,7 @@ def _apply_delta_and_collect_new_ids(
         # The BE always returns an id on success; treat absence as a transport
         # bug rather than a recoverable case. Failing fast is preferable to
         # stranding the version_remap with None values.
-        raise RuntimeError(
+        raise ReplayError(
             "apply_dataset_item_changes returned a version without an id; "
             "cannot continue replay."
         )
@@ -742,13 +769,21 @@ def _read_back_target_items(
     dest_name: str,
     dest_project_name: str,
     version_hash: Optional[str],
-) -> Dict[str, str]:
+) -> Dict[str, List[str]]:
     """Stream the just-written target version and key target ids by content hash.
 
     Used to populate the source-add → target-id remap. Match by full content
     hash (the same hash used by ``_compute_delta``) because the BE generates
     fresh stable ids for every add and ignores incoming ones. Goes through
     the raw REST stream + wire-type so per-item tags survive the round-trip.
+
+    Returns ``Dict[hash → List[target_id]]`` rather than ``Dict[hash → id]``
+    because the BE permits multiple items with identical content in the same
+    version (``Dataset.insert([dup, dup])`` succeeds and produces two distinct
+    target rows). Collapsing them into a single map entry would remap both
+    source ids to the same target id and corrupt edits/deletes in later
+    versions. The caller pops one entry per source-add in stream order so the
+    pairing matches the source's own duplicate-add ordering.
     """
     raw_stream = rest_client.datasets.stream_dataset_items(
         dataset_name=dest_name,
@@ -759,11 +794,11 @@ def _read_back_target_items(
         stream=raw_stream,
         item_class=dataset_item_public.DatasetItemPublic,
     )
-    target_items_by_hash: Dict[str, str] = {}
+    target_items_by_hash: Dict[str, List[str]] = {}
     for item in items:
         if item.id is None:
             continue
-        target_items_by_hash[_content_hash_for(item)] = item.id
+        target_items_by_hash.setdefault(_content_hash_for(item), []).append(item.id)
     return target_items_by_hash
 
 
