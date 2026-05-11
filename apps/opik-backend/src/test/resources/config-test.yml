@@ -635,7 +635,6 @@ serviceToggles:
 
 # Local Runner configuration
 localRunner:
-  enabled: true
   jobTimeout: 30s
   maxPendingJobsPerRunner: 100
   heartbeatTtl: 15s
