@@ -997,6 +997,169 @@ evaluation = evaluate(
 ```
 </Warning>
 
+### Logging to a specific environment
+
+Environments let you tag traces with a lifecycle stage — for example `development`, `staging`, or `production` — so you can segment and filter your observability data in the Opik UI.
+
+<Tabs>
+    <Tab title="Typescript" value="typescript" language="typescript">
+        #### Setting the environment
+
+        The environment is resolved in this order:
+
+        1. **Explicit argument** — passed directly to `client.trace(environment: ...)`
+        2. **`OPIK_ENVIRONMENT` environment variable**
+
+        Using the low-level SDK:
+
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik({ projectName: "my-project" });
+
+        const trace = client.trace({
+            name: "my_trace",
+            input: { question: "Hello" },
+            environment: "production",
+        });
+
+        trace.end();
+        await client.flush();
+        ```
+
+    </Tab>
+    <Tab title="Python" value="python" language="python">
+        #### Setting the environment
+
+        The environment is resolved in this order:
+
+        1. **Explicit argument** — passed directly to `@track(environment=...)` or `client.trace(environment=...)`
+        2. **`OPIK_ENVIRONMENT` environment variable**
+
+        Using the `@track` decorator:
+
+        ```python
+        import opik
+
+        @opik.track(environment="production")
+        def my_pipeline(input_text: str) -> str:
+            return input_text
+
+        my_pipeline("Hello, world!")
+        ```
+
+        Using the low-level SDK:
+
+        ```python
+        from opik import Opik
+
+        client = Opik(project_name="my_project")
+
+        trace = client.trace(
+            name="my_trace",
+            input={"question": "Hello"},
+            environment="production",
+        )
+        trace.end()
+        ```
+
+        You can also set the environment via the `OPIK_ENVIRONMENT` environment variable instead of passing it explicitly to each call.
+
+    </Tab>
+</Tabs>
+
+#### Managing environments
+
+You can manage the set of named environments in your workspace programmatically:
+
+<Tabs>
+    <Tab title="Typescript" value="typescript" language="typescript">
+        ```typescript
+        import { Opik } from "opik";
+
+        const client = new Opik();
+
+        // Create a new environment
+        const env = await client.createEnvironment("production", {
+            description: "Live production traffic",
+            color: "#FF0000",
+        });
+
+        // List all environments
+        const envs = await client.getEnvironments();
+
+        // Update an environment
+        await client.updateEnvironment("production", { description: "Updated description" });
+
+        // Delete an environment
+        await client.deleteEnvironment("production");
+        ```
+    </Tab>
+    <Tab title="Python" value="python" language="python">
+        ```python
+        from opik import Opik
+
+        client = Opik()
+
+        # Create a new environment
+        env = client.create_environment(
+            name="production",
+            description="Live production traffic",
+            color="#FF0000",
+        )
+
+        # List all environments
+        envs = client.get_environments()
+
+        # Update an environment
+        client.update_environment("production", description="Updated description")
+
+        # Delete an environment
+        client.delete_environment("production")
+        ```
+    </Tab>
+</Tabs>
+
+#### Filtering by environment
+
+Once traces are tagged, you can filter them programmatically using the `environment` field in `filter_string`. It supports `=`, `!=`, `in`, and `not_in`:
+
+```python
+from opik import Opik
+
+client = Opik()
+
+# Only production traces
+traces = client.search_traces(
+    project_name="my_project",
+    filter_string='environment = "production"'
+)
+
+# Multiple environments
+traces = client.search_traces(
+    project_name="my_project",
+    filter_string='environment in ("production", "staging")'
+)
+
+# Same filtering applies to spans
+spans = client.search_spans(
+    project_name="my_project",
+    filter_string='environment = "production"'
+)
+
+# And to conversation threads
+threads = client.search_threads(
+    project_name="my_project",
+    filter_string='environment = "production"'
+)
+
+# Combine with other thread filters
+active_prod_threads = client.search_threads(
+    project_name="my_project",
+    filter_string='environment = "production" AND status = "active"'
+)
+```
+
 ### Flushing traces and spans
 
 This process is optional and is only needed if you are running a short-lived script or if you are

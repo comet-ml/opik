@@ -244,6 +244,65 @@ describe("Opik client custom config", () => {
   });
 });
 
+describe("Opik client environment config", () => {
+  const originalEnvironmentVariables = { ...process.env };
+
+  beforeEach(() => {
+    process.env.OPIK_URL_OVERRIDE = "https://www.comet.com/api";
+    process.env.OPIK_API_KEY = "test";
+    process.env.OPIK_WORKSPACE = "test";
+  });
+
+  afterEach(() => {
+    process.env = { ...originalEnvironmentVariables };
+  });
+
+  it("should load environment from OPIK_ENVIRONMENT env var", () => {
+    process.env.OPIK_ENVIRONMENT = "production";
+    const opik = new Opik();
+    expect(opik.config.environment).toBe("production");
+  });
+
+  it("should have undefined environment when OPIK_ENVIRONMENT is not set", () => {
+    delete process.env.OPIK_ENVIRONMENT;
+    const opik = new Opik();
+    expect(opik.config.environment).toBeUndefined();
+  });
+
+  it("should apply config-level environment to trace when not overridden", async () => {
+    process.env.OPIK_ENVIRONMENT = "production";
+    const opik = new Opik();
+    const createTracesSpy = vi
+      .spyOn(opik.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction);
+
+    const trace = opik.trace({ name: "test-trace" });
+    trace.end();
+    await opik.flush();
+
+    const traceData = createTracesSpy.mock.calls[0][0].traces?.[0];
+    expect(traceData?.environment).toBe("production");
+    createTracesSpy.mockRestore();
+  });
+
+  it("should let per-call environment override config-level environment", async () => {
+    process.env.OPIK_ENVIRONMENT = "production";
+    const opik = new Opik();
+    const createTracesSpy = vi
+      .spyOn(opik.api.traces, "createTraces")
+      .mockImplementation(mockAPIFunction);
+
+    const trace = opik.trace({ name: "test-trace", environment: "staging" });
+    trace.end();
+    await opik.flush();
+
+    const traceData = createTracesSpy.mock.calls[0][0].traces?.[0];
+    expect(traceData?.environment).toBe("staging");
+    createTracesSpy.mockRestore();
+  });
+
+});
+
 describe("Opik client apiKey propagation", () => {
   const originalFetch = global.fetch;
   let capturedHeaders: Headers | null = null;

@@ -27,6 +27,7 @@ export const OPERATOR_SETS = {
     "is_not_empty",
   ],
   DICT_OPS: ["=", "contains", ">", "<"],
+  ENUM_OPS: ["=", "!=", "in", "not_in"],
   LIMITED_STRING_OPS: ["=", "contains", "not_contains"],
   FEEDBACK_SCORES_OPS: [
     "=",
@@ -44,3 +45,8 @@ export const OPERATOR_SETS = {
  * Operators that don't require a value
  */
 export const OPERATORS_WITHOUT_VALUES = ["is_empty", "is_not_empty"] as const;
+
+/**
+ * Operators that require an array value (e.g., `name in ["a", "b"]`)
+ */
+export const ARRAY_VALUE_OPERATORS = ["in", "not_in"] as const;

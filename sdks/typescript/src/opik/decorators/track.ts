@@ -44,18 +44,21 @@ function logSpan({
   projectName,
   trace,
   type = "llm",
+  environment,
 }: {
   name: string;
   parentSpan?: Span;
   projectName?: string;
   trace?: Trace;
   type?: SpanType;
+  environment?: string;
 }) {
   logger.debug("Creating new span:", {
     name,
     parentSpan: parentSpan?.data.id,
     projectName,
     type,
+    environment,
   });
   let spanTrace = trace;
 
@@ -64,8 +67,16 @@ function logSpan({
     spanTrace = getTrackOpikClient().trace({
       name,
       projectName,
+      ...(environment !== undefined ? { environment } : {}),
       ...(presetTraceId ? { id: presetTraceId } : {}),
     });
+  } else if (
+    environment !== undefined &&
+    environment !== spanTrace.data.environment
+  ) {
+    logger.warn(
+      `Nested @track requested environment "${environment}", but the enclosing trace already uses "${spanTrace.data.environment ?? "(none)"}". The outer environment will be used.`
+    );
   }
 
   const span = spanTrace.span({
@@ -191,11 +202,13 @@ function executeTrack<T extends (...args: any[]) => any>(
     projectName,
     type,
     enrichSpan,
+    environment,
   }: {
     name?: string;
     projectName?: string;
     type?: SpanType;
     enrichSpan?: (result: any) => Record<string, unknown>;
+    environment?: string;
   } = {},
   originalFn: T
 ): T {
@@ -207,6 +220,7 @@ function executeTrack<T extends (...args: any[]) => any>(
       projectName,
       trace: context?.trace,
       type,
+      environment,
     });
     const isRootSpan = !context;
     const fnThis = this as any;
@@ -267,6 +281,13 @@ type TrackOptions = {
   name?: string;
   projectName?: string;
   type?: SpanType;
+  /**
+   * Environment to tag the trace with. When the root @track creates the
+   * trace, the value is persisted on the trace and inherited by all child
+   * spans. Per-call values on nested @track calls are ignored — the
+   * trace's environment always wins.
+   */
+  environment?: string;
   /**
    * Optional function to enrich the span with additional data extracted from the result.
    * Called before the span is finalized with the success result.

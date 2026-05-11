@@ -22,6 +22,7 @@ class Trace:
         url_override: str,
         source: TraceSource,
         config: opik_config.OpikConfig,
+        environment: Optional[str] = None,
     ):
         """
         A Trace object. This object should not be created directly, instead use :meth:`opik.Opik.trace` to create a new trace.
@@ -32,6 +33,7 @@ class Trace:
         self._url_override = url_override
         self.source = source
         self._config = config
+        self._environment = environment
 
     def end(
         self,
@@ -229,6 +231,7 @@ class Trace:
             attachments=attachments,
             source=self.source,
             config=self._config,
+            environment=self._environment,
         )
 
     def log_feedback_score(

@@ -87,6 +87,7 @@ class CreateTraceMessage(BaseMessage):
     thread_id: Optional[str]
     last_updated_at: Optional[datetime.datetime]
     source: TraceSource
+    environment: Optional[str] = None
 
     message_type = "CreateTraceMessage"
 
@@ -122,6 +123,7 @@ class UpdateTraceMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     thread_id: Optional[str]
     source: str
+    environment: Optional[str] = None
 
     message_type = "UpdateTraceMessage"
 
@@ -162,6 +164,7 @@ class CreateSpanMessage(BaseMessage):
     total_cost: Optional[float]
     last_updated_at: Optional[datetime.datetime]
     source: TraceSource
+    environment: Optional[str] = None
 
     message_type = "CreateSpanMessage"
 
@@ -201,6 +204,7 @@ class UpdateSpanMessage(BaseMessage):
     error_info: Optional[ErrorInfoDict]
     total_cost: Optional[float]
     source: str
+    environment: Optional[str] = None
 
     message_type = "UpdateSpanMessage"
 
