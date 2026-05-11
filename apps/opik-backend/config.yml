@@ -1046,10 +1046,10 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Ollie AI assistant integration is enabled.
   ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
-  # Default: true
+  # Default: false
   # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
   #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
-  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"true"}
+  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
