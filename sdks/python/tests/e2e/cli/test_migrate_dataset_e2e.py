@@ -35,9 +35,14 @@ from .conftest import (
     apply_changes,
     chronological_versions,
     create_dataset_shell,
+    destination_experiment_items,
+    destination_feedback_scores_for_trace,
+    destination_spans_for_trace,
     display_order,
+    find_destination_experiment,
     item_hashes,
     run_migrate_cli,
+    seed_experiment_with_trace_tree,
     stream_items_wire,
 )
 
@@ -139,6 +144,34 @@ class TestMigrateDatasetVersionReplay:
             expected_hashes.append(item_hashes(items))
             expected_orders.append(display_order(items))
 
+        # ── Seed an experiment on v1 items so the cascade has something to
+        # round-trip. Regular-dataset experiments carry per-trace feedback
+        # scores (test suites carry assertion_results -- covered in
+        # test_migrate_test_suite_e2e.py). Each item gets one trace with a
+        # root + 1 LLM child span and a feedback score on the trace. ──
+        experiment_name = f"e2e-exp-{random_chars()}"
+        v1_item_ids = [by_q["Q1"].id, by_q["Q2"].id, by_q["Q3"].id]
+        cascade_seed = seed_experiment_with_trace_tree(
+            rest,
+            experiment_name=experiment_name,
+            dataset_name=dataset_name,
+            dataset_id=source_id,
+            dataset_version_id=v1.id,
+            project_name=source_project_name,
+            item_ids=v1_item_ids,
+            experiment_config={"runner": "e2e-cascade-test"},
+            experiment_tags=["e2e", "cascade"],
+            spans_per_trace=2,  # root + 1 LLM child -> exercises parent_span_id remap
+            feedback_scores_per_trace=[
+                {"name": "correctness", "value": 0.9, "reason": "matches reference"},
+                {"name": "latency_p95", "value": 230.5},
+            ],
+            per_item_extras=[
+                {"input": {"q": f"input-{i}"}, "output": {"a": f"output-{i}"}}
+                for i in range(len(v1_item_ids))
+            ],
+        )
+
         # Run the migration.
         audit_path = tmp_path / "audit.json"
         result = run_migrate_cli(
@@ -208,3 +241,65 @@ class TestMigrateDatasetVersionReplay:
             per_version_records[2]["items_modified"],
             per_version_records[2]["items_deleted"],
         ) == (1, 1, 1)
+
+        # ── Cascade fidelity ──
+        # The destination project should now have a copy of the source
+        # experiment with: a remapped dataset_version_id, fresh item ids
+        # carrying remapped trace ids, traces+spans landing under the
+        # destination project, feedback scores re-emitted on the destination
+        # traces, and per-item write-side fidelity (input/output) preserved.
+        dest_exp = find_destination_experiment(
+            rest,
+            destination_dataset_id=target.id,
+            experiment_name=experiment_name,
+        )
+        # FKs remapped.
+        assert dest_exp.id != cascade_seed["experiment_id"]
+        assert dest_exp.dataset_id == target.id
+        # The destination experiment must reference one of the target
+        # versions (the cascade picks the remap of v1).
+        target_version_ids = {v.id for v in tgt_versions}
+        assert dest_exp.dataset_version_id in target_version_ids
+
+        # Items: one per source item, with FRESH trace ids (disjoint from
+        # source), per-item input/output preserved.
+        dest_items = destination_experiment_items(rest, experiment_name=experiment_name)
+        assert len(dest_items) == len(v1_item_ids)
+        dest_trace_ids = {it.trace_id for it in dest_items}
+        assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"])), (
+            "destination experiment items should reference new trace ids, "
+            "not the source's"
+        )
+        # Per-item input/output round-trips via ``model_extra``.
+        for it in dest_items:
+            extra = getattr(it, "model_extra", None) or {}
+            assert extra.get("input") is not None
+            assert extra.get("output") is not None
+
+        # Each destination trace exists under the target project and has the
+        # same span shape as the source (root + 1 child = 2 spans).
+        for new_trace_id in dest_trace_ids:
+            dest_spans = destination_spans_for_trace(rest, trace_id=new_trace_id)
+            assert len(dest_spans) == 2, (
+                f"trace {new_trace_id} should have 2 spans (root + child), "
+                f"got {len(dest_spans)}"
+            )
+            # Topological remap: exactly one root (parent_span_id=None),
+            # the other span points at the root via parent_span_id.
+            roots = [s for s in dest_spans if s.parent_span_id is None]
+            assert len(roots) == 1, f"trace {new_trace_id} should have one root span"
+            children = [s for s in dest_spans if s.parent_span_id is not None]
+            assert all(c.parent_span_id == roots[0].id for c in children), (
+                f"trace {new_trace_id} child spans should remap parent_span_id "
+                "to the new root id"
+            )
+
+            # Trace-level feedback scores re-emitted on the destination trace.
+            dest_scores = destination_feedback_scores_for_trace(
+                rest, trace_id=new_trace_id
+            )
+            score_names = {s.name for s in dest_scores}
+            assert score_names == {"correctness", "latency_p95"}, (
+                f"trace {new_trace_id}: expected feedback score names "
+                f"{{'correctness', 'latency_p95'}}, got {score_names}"
+            )

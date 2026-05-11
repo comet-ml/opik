@@ -34,11 +34,15 @@ from .conftest import (
     apply_changes,
     chronological_versions,
     create_dataset_shell,
+    destination_experiment_items,
+    destination_spans_for_trace,
     display_order,
+    find_destination_experiment,
     item_hashes,
     normalize_evaluators,
     normalize_policy,
     run_migrate_cli,
+    seed_experiment_with_trace_tree,
     strip_be_managed_version_tags,
     stream_items_wire,
 )
@@ -237,6 +241,48 @@ def test_test_suite_full_fidelity_round_trip(
             }
         )
 
+    # ── Seed a suite-driven experiment on v2 items so the cascade has
+    # something to round-trip. Test-suite experiments carry per-item
+    # assertion_results + execution_policy (regular-dataset experiments
+    # carry feedback_scores instead -- covered in test_migrate_dataset_e2e.py).
+    # Each item gets one trace, one span, and per-item assertion_results
+    # + execution_policy that should round-trip verbatim. ──
+    experiment_name = f"e2e-suite-exp-{random_chars()}"
+    v2_item_ids = [by_q["Q1"].id, by_q["Q2"].id, by_q["Q3"].id]
+    cascade_seed = seed_experiment_with_trace_tree(
+        rest,
+        experiment_name=experiment_name,
+        dataset_name=suite_name,
+        dataset_id=suite_id,
+        dataset_version_id=v2_id,
+        project_name=source_project_name,
+        item_ids=v2_item_ids,
+        experiment_type="trial",
+        evaluation_method="evaluation_suite",
+        experiment_config={"runner": "e2e-suite-cascade-test"},
+        experiment_tags=["e2e", "test-suite", "cascade"],
+        spans_per_trace=2,
+        per_item_extras=[
+            {
+                "input": {"q": f"input-{i}"},
+                "output": {"a": f"output-{i}"},
+                "assertion_results": [
+                    {
+                        "value": "passed" if i % 2 == 0 else "failed",
+                        "passed": i % 2 == 0,
+                        "reason": f"assertion-reason-{i}",
+                    }
+                ],
+                "execution_policy": {
+                    "runs_per_item": 3,
+                    "pass_threshold": 2,
+                },
+                "status": "passed" if i % 2 == 0 else "failed",
+            }
+            for i in range(len(v2_item_ids))
+        ],
+    )
+
     # ── Run the migration ──
     audit_path = tmp_path / "audit.json"
     result = run_migrate_cli(
@@ -297,3 +343,67 @@ def test_test_suite_full_fidelity_round_trip(
         assert strip_be_managed_version_tags(tgt_v.tags) == exp["user_tags"], (
             f"{tgt_v.version_name}: user version tags diverged"
         )
+
+    # ── Cascade fidelity (test-suite-specific) ──
+    # The destination project should now have a copy of the source
+    # suite-driven experiment: type + evaluation_method preserved,
+    # per-item assertion_results + execution_policy round-trip, FKs
+    # remapped, traces+spans land under the destination project.
+    dest_exp = find_destination_experiment(
+        rest,
+        destination_dataset_id=target.id,
+        experiment_name=experiment_name,
+    )
+    assert dest_exp.id != cascade_seed["experiment_id"]
+    assert dest_exp.dataset_id == target.id
+    # Type + evaluation_method preserved (test-suite-specific fields).
+    assert dest_exp.type == "trial", (
+        f"destination experiment type should be 'trial', got {dest_exp.type!r}"
+    )
+    assert dest_exp.evaluation_method == "evaluation_suite", (
+        f"destination experiment evaluation_method should be 'evaluation_suite', "
+        f"got {dest_exp.evaluation_method!r}"
+    )
+    target_version_ids = {v.id for v in tgt_versions}
+    assert dest_exp.dataset_version_id in target_version_ids
+
+    # Per-item assertion_results + execution_policy + status survive via
+    # the model_extra surface (the typed ExperimentItemPublic schema drops
+    # these fields, but the BE returns them under extra='allow').
+    dest_items = destination_experiment_items(rest, experiment_name=experiment_name)
+    assert len(dest_items) == len(v2_item_ids)
+    dest_trace_ids = {it.trace_id for it in dest_items}
+    assert dest_trace_ids.isdisjoint(set(cascade_seed["trace_ids"]))
+
+    for dest_item in dest_items:
+        extras = getattr(dest_item, "model_extra", None) or {}
+        ars = extras.get("assertion_results")
+        assert ars and len(ars) == 1, (
+            "destination experiment item should carry exactly one "
+            "assertion_result (sourced verbatim from the source item)"
+        )
+        # Each assertion_result must round-trip the value/passed/reason
+        # the source seeded.
+        ar = ars[0]
+        assert ar.get("value") in {"passed", "failed"}
+        assert ar.get("passed") in {True, False}
+        assert ar.get("reason", "").startswith("assertion-reason-")
+
+        # execution_policy preserved.
+        ep = extras.get("execution_policy")
+        assert ep is not None
+        assert ep.get("runs_per_item") == 3
+        assert ep.get("pass_threshold") == 2
+
+        # status preserved.
+        assert extras.get("status") in {"passed", "failed"}
+
+    # Each destination trace exists under the target project with the
+    # span tree shape preserved (root + 1 child, parent_span_id remapped).
+    for new_trace_id in dest_trace_ids:
+        dest_spans = destination_spans_for_trace(rest, trace_id=new_trace_id)
+        assert len(dest_spans) == 2
+        roots = [s for s in dest_spans if s.parent_span_id is None]
+        assert len(roots) == 1
+        children = [s for s in dest_spans if s.parent_span_id is not None]
+        assert all(c.parent_span_id == roots[0].id for c in children)

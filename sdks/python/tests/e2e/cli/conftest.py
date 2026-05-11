@@ -337,6 +337,7 @@ def seed_experiment_with_trace_tree(
     experiment_tags: Optional[List[str]] = None,
     spans_per_trace: int = 2,
     feedback_scores_per_trace: Optional[List[Dict[str, Any]]] = None,
+    per_item_extras: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Create a source experiment + one trace per ``item_id`` + a small span
     tree per trace, then attach everything via ``create_experiment_items``.
@@ -474,16 +475,28 @@ def seed_experiment_with_trace_tree(
         project_name=project_name,
     )
 
+    extras_list = per_item_extras or [{} for _ in item_ids]
+    if len(extras_list) != len(item_ids):
+        raise ValueError("per_item_extras must have the same length as item_ids")
+
+    experiment_items_to_create: List[ExperimentItem] = []
+    for item_id, trace_id, extras in zip(item_ids, trace_ids, extras_list):
+        item_kwargs: Dict[str, Any] = {
+            "id": _id_helpers.generate_id(),
+            "experiment_id": new_experiment_id,
+            "dataset_item_id": item_id,
+            "trace_id": trace_id,
+        }
+        # ``extras`` lets callers seed per-item fidelity fields the
+        # cascade should round-trip: input, output, feedback_scores,
+        # assertion_results, execution_policy, description, status,
+        # usage, total_estimated_cost, duration. Pydantic v2 ``ExperimentItem``
+        # has ``extra='allow'`` so unknown keys also pass through.
+        item_kwargs.update(extras)
+        experiment_items_to_create.append(ExperimentItem(**item_kwargs))
+
     rest_client.experiments.create_experiment_items(
-        experiment_items=[
-            ExperimentItem(
-                id=_id_helpers.generate_id(),
-                experiment_id=new_experiment_id,
-                dataset_item_id=item_id,
-                trace_id=trace_id,
-            )
-            for item_id, trace_id in zip(item_ids, trace_ids)
-        ]
+        experiment_items=experiment_items_to_create
     )
 
     return {
@@ -523,13 +536,25 @@ def find_destination_experiment(
 
 
 def destination_experiment_items(
-    rest_client: OpikApi, *, experiment_id: str
+    rest_client: OpikApi, *, experiment_name: str
 ) -> List[Any]:
-    """Materialise the destination experiment's items (one per source item)."""
-    return list(
-        rest_client.experiments.stream_experiment_items(
-            experiment_id=experiment_id, limit=500
-        )
+    """Materialise the destination experiment's items (one per source item).
+
+    The ``stream_experiment_items`` endpoint takes ``experiment_name``
+    (not id) and returns raw NDJSON bytes that we parse through
+    ``rest_stream_parser`` -- ``extra='allow'`` on ``ExperimentItemPublic``
+    surfaces BE-returned fields outside the typed schema on ``model_extra``,
+    which is how the tests assert on assertion_results / feedback_scores /
+    etc. at the destination.
+    """
+    from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
+
+    raw_stream = rest_client.experiments.stream_experiment_items(
+        experiment_name=experiment_name, limit=500
+    )
+    return rest_stream_parser.read_and_parse_stream(
+        stream=raw_stream,
+        item_class=ExperimentItemPublic,
     )
 
 
