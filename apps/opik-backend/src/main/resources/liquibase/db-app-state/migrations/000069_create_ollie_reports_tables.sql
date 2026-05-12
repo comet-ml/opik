@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS ollie_reports (
     created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
     last_updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
     CONSTRAINT ollie_reports_pk PRIMARY KEY (id),
-    INDEX idx_ollie_reports_project_created (project_id, created_at DESC),
+    INDEX idx_ollie_reports_workspace_project_created (workspace_id, project_id, created_at DESC),
     INDEX idx_ollie_reports_status_created (status, created_at)
 );
 
