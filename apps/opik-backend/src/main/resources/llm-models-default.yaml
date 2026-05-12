@@ -345,6 +345,8 @@ openrouter:
     label: "arcee-ai/trinity-large-preview:free"
   - id: "arcee-ai/trinity-large-thinking"
     label: "arcee-ai/trinity-large-thinking"
+  - id: "arcee-ai/trinity-large-thinking:free"
+    label: "arcee-ai/trinity-large-thinking:free"
   - id: "arcee-ai/trinity-mini"
     label: "arcee-ai/trinity-mini"
   - id: "arcee-ai/trinity-mini:free"
