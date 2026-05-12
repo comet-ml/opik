@@ -452,24 +452,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                         .id(existingItem.id()) // Preserve the original row ID
                                         .build();
 
-                                // OPIK-6390: size the unchanged-UUID pool from a live ClickHouse count
-                                // (exclude the patched item from that count since it will be reinserted as an edit).
-                                Set<UUID> excludedFromCopy = Set.of(datasetItemId);
-                                return versionDao
-                                        .countRowsInVersion(datasetId, baseVersionId, excludedFromCopy, null,
-                                                workspaceId)
-                                        .flatMap(unchangedCount -> {
-                                            List<UUID> unchangedUuids = generateUnchangedUuidsReversed(
-                                                    unchangedCount.intValue());
-
-                                            // Apply delta with only the edited item
-                                            return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                                                    List.of(), // No added items
-                                                    List.of(patchedItemWithId), // Single edited item
-                                                    Set.of(), // No deleted items
-                                                    unchangedUuids,
-                                                    Set.of());
-                                        })
+                                return applyEditDeleteWithLiveCount(datasetId, baseVersionId, newVersionId,
+                                        List.of(patchedItemWithId), Set.of(), workspaceId)
                                         .flatMap(itemsTotal -> {
                                             log.info("Applied patch delta to dataset '{}': itemsTotal '{}'",
                                                     datasetId, itemsTotal);
@@ -611,28 +595,15 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                                     "Batch updated '{}' items by IDs for dataset '{}', baseVersion='{}'",
                                                     updatedCount, datasetId, baseVersionId);
 
-                                            // OPIK-6390: size the unchanged-UUID pool from a live ClickHouse
-                                            // count (exclude the IDs we just updated).
-                                            return versionDao
-                                                    .countRowsInVersion(datasetId, baseVersionId,
-                                                            batchUpdate.ids(), null, workspaceId)
-                                                    .flatMap(unchangedSourceCount -> {
-                                                        List<UUID> unchangedUuids = generateUnchangedUuidsReversed(
-                                                                unchangedSourceCount.intValue());
-
-                                                        // Copy unchanged items using applyDelta (exclude updated IDs)
-                                                        return versionDao
-                                                                .applyDelta(datasetId, baseVersionId, newVersionId,
-                                                                        List.of(), // No added items
-                                                                        List.of(), // No edited items (already done via batch update)
-                                                                        batchUpdate.ids(), // Exclude updated items from copy
-                                                                        unchangedUuids,
-                                                                        Set.of())
-                                                                .flatMap(unchangedCount -> createVersionMetadata(
-                                                                        datasetId, newVersionId, baseVersionId,
-                                                                        updatedCount, unchangedCount, false,
-                                                                        workspaceId, userName));
-                                                    });
+                                            // OPIK-6390: pass the just-updated IDs as the "deleted" slot of
+                                            // applyDelta so they're excluded from the unchanged-items copy.
+                                            // The helper sizes the UUID pool from a live ClickHouse count.
+                                            return applyEditDeleteWithLiveCount(datasetId, baseVersionId,
+                                                    newVersionId, List.of(), batchUpdate.ids(), workspaceId)
+                                                    .flatMap(unchangedCount -> createVersionMetadata(
+                                                            datasetId, newVersionId, baseVersionId,
+                                                            updatedCount, unchangedCount, false,
+                                                            workspaceId, userName));
                                         });
                             });
                 }))
@@ -1180,20 +1151,8 @@ class DatasetItemServiceImpl implements DatasetItemService {
             Set<UUID> deletedIds, UUID batchGroupId,
             String workspaceId, String userName) {
 
-        // OPIK-6390: derive the unchanged-UUID pool size from a live ClickHouse count (excluding
-        // the IDs being deleted) instead of items_total ± deletedIds.size().
-        return versionDao.countRowsInVersion(datasetId, baseVersionId, deletedIds, null, workspaceId)
-                .flatMap(unchangedCount -> {
-                    List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedCount.intValue());
-
-                    // Apply delta with only deletions (no adds or edits)
-                    return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
-                            List.of(), // No added items
-                            List.of(), // No edited items
-                            deletedIds,
-                            unchangedUuids,
-                            Set.of());
-                })
+        return applyEditDeleteWithLiveCount(datasetId, baseVersionId, newVersionId,
+                List.of(), deletedIds, workspaceId)
                 .flatMap(itemsTotal -> {
                     log.info("Applied deletion delta to dataset '{}': itemsTotal '{}'", datasetId, itemsTotal);
 
@@ -2008,6 +1967,45 @@ class DatasetItemServiceImpl implements DatasetItemService {
         List<UUID> reversed = new ArrayList<>(uuids);
         Collections.reverse(reversed);
         return reversed;
+    }
+
+    /**
+     * OPIK-6390 helper: applies a delta that only edits and/or deletes items, sizing the
+     * unchanged-UUID pool from a live ClickHouse count of the base version (excluding the
+     * stable IDs being edited or deleted). Replaces the previous use of
+     * {@code DatasetVersion.itemsTotal()}, which can drift below the actual row count.
+     *
+     * <p>Callers that also INSERT new items (the full add/edit/delete flow in
+     * {@code applyDeltaChanges}) keep their inline orchestration because they need to run
+     * {@code editItemsViaSelectInsert} separately and combine its row count with the
+     * {@code applyDelta} result.
+     *
+     * @param editedItems items to re-insert in the new version with the same stable id
+     * @param deletedIds stable IDs to drop from the new version (callers that did an upstream
+     *        batch update pass the updated IDs here so they're excluded from the copy)
+     * @return total row count in the new version (passed through from applyDelta)
+     */
+    private Mono<Long> applyEditDeleteWithLiveCount(
+            UUID datasetId, UUID baseVersionId, UUID newVersionId,
+            List<DatasetItem> editedItems, Set<UUID> deletedIds,
+            String workspaceId) {
+
+        Set<UUID> excludedFromCopy = new HashSet<>(deletedIds);
+        editedItems.stream()
+                .map(DatasetItem::datasetItemId)
+                .filter(Objects::nonNull)
+                .forEach(excludedFromCopy::add);
+
+        return versionDao.countRowsInVersion(datasetId, baseVersionId, excludedFromCopy, null, workspaceId)
+                .flatMap(unchangedCount -> {
+                    List<UUID> unchangedUuids = generateUnchangedUuidsReversed(unchangedCount.intValue());
+                    return versionDao.applyDelta(datasetId, baseVersionId, newVersionId,
+                            List.of(), // no added items in this flow
+                            editedItems,
+                            deletedIds,
+                            unchangedUuids,
+                            Set.of());
+                });
     }
 
     /**

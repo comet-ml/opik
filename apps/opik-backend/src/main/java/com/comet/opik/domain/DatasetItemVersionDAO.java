@@ -1814,6 +1814,11 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     //   - LIMIT 1 BY dataset_item_id (not id) so that any duplicate physical rows for the same
     //     stable item within a version collapse to one, matching the dedup pattern used by every
     //     other read path in this file.
+    //   - row_number() OVER (ORDER BY id DESC) AS rn is computed on the *post-dedup* result
+    //     (inner `deduped` subquery wraps the WHERE + LIMIT 1 BY). Numbering before LIMIT 1 BY
+    //     would leave sparse ranks (e.g. 1,3,5) on unmerged ReplacingMergeTree duplicates and
+    //     the `rn <= length(:uuids)` predicate would push valid rows onto the generateUUIDv7
+    //     fallback even when the pool size is correct, breaking the sort-order invariant.
     //   - if(rn <= length(:uuids), arrayElement(...), generateUUIDv7()) guarantees each copied row
     //     receives a unique id even when the Java-supplied pool is shorter than the source row
     //     count. Previously, out-of-range arrayElement returned an empty string which was padded
@@ -1875,18 +1880,21 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 SELECT
                     *,
                     row_number() OVER (ORDER BY id DESC) AS rn
-                FROM dataset_item_versions
-                WHERE dataset_id = :datasetId
-                AND dataset_version_id = :sourceVersionId
-                AND workspace_id = :workspace_id
-                <if(exclude_filters)>
-                AND NOT (<exclude_filters>)
-                <endif>
-                <if(exclude_ids)>
-                AND dataset_item_id NOT IN :excludedIds
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY dataset_item_id
+                FROM (
+                    SELECT *
+                    FROM dataset_item_versions
+                    WHERE dataset_id = :datasetId
+                    AND dataset_version_id = :sourceVersionId
+                    AND workspace_id = :workspace_id
+                    <if(exclude_filters)>
+                    AND NOT (<exclude_filters>)
+                    <endif>
+                    <if(exclude_ids)>
+                    AND dataset_item_id NOT IN :excludedIds
+                    <endif>
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY dataset_item_id
+                ) AS deduped
             ) AS src
             ORDER BY src.id DESC
             """;
