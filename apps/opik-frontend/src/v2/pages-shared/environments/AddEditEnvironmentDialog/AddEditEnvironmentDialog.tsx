@@ -25,7 +25,7 @@ import {
   ENVIRONMENT_NAME_REGEX,
   Environment,
 } from "@/types/environments";
-import { extractErrorMessage } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type EnvironmentDialogMode = "create" | "edit" | "clone";
 

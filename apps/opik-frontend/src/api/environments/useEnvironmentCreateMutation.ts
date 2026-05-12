@@ -4,7 +4,7 @@ import api, { ENVIRONMENTS_KEY, ENVIRONMENTS_REST_ENDPOINT } from "@/api/api";
 import { Environment } from "@/types/environments";
 import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
-import { extractErrorMessage } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type EnvironmentCreatePayload = Pick<Environment, "name"> &
   Partial<Pick<Environment, "description" | "color" | "position">>;

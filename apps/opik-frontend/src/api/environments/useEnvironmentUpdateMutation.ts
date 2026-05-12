@@ -7,7 +7,7 @@ import api, {
 } from "@/api/api";
 import { Environment } from "@/types/environments";
 import { useToast } from "@/ui/use-toast";
-import { extractErrorMessage } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 type EnvironmentUpdatePayload = Partial<
   Pick<Environment, "name" | "description" | "color" | "position">
