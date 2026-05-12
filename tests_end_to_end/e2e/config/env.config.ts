@@ -15,8 +15,6 @@ export interface EnvConfig {
     ollie: boolean;
     opikConnect: boolean;
     llmJudges: boolean;
-    testSuites: boolean;
-    agentConfig: boolean;
   };
 
   runId: string;
@@ -109,8 +107,6 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
       ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),
       opikConnect: boolFromEnv(env.OPIK_CONNECT_ENABLED, defaults.opikConnect),
       llmJudges: hasAnthropicKey && !skipLlmJudges,
-      testSuites: true,
-      agentConfig: true,
     },
     runId,
     cujPrefix: `cuj-${runId}`,
