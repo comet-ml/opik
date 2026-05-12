@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import opik
+from opik.api_objects import rest_helpers
 from opik.api_objects.dataset import dataset_item as dataset_item_module  # noqa: F401
 import opik.id_helpers as id_helpers_module  # type: ignore
 from opik.rest_api.types.experiment_item import ExperimentItem
@@ -621,9 +622,14 @@ def recreate_experiment(
                 debug,
             )
             try:
-                # Use REST API directly instead of streamer
-                client._rest_client.experiments.create_experiment_items(
-                    experiment_items=rest_experiment_items
+                # Use REST API directly instead of streamer. Wrapped with the
+                # 429-aware retry helper so a transient rate limit during a
+                # large experiment-items insert doesn't abort the migrate or
+                # import flow mid-way.
+                rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                    lambda: client._rest_client.experiments.create_experiment_items(
+                        experiment_items=rest_experiment_items
+                    )
                 )
                 console.print(
                     f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"

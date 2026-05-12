@@ -247,6 +247,86 @@ class TestVersionReplayUnit:
             {"input": "hello"},
         ]
 
+    def test_replay__items_built_from_traces__source_and_trace_id_round_trip(
+        self,
+    ) -> None:
+        # Datasets built from traces (Opik's "Add to dataset" trace flow)
+        # produce items with ``source="trace"`` and a non-null ``trace_id``
+        # pointing at the originating trace. Both fields must round-trip
+        # to the destination so the migrated dataset still surfaces the
+        # trace-origin link in the UI. ``trace_id`` references stay valid
+        # without remap because traces are workspace-globally addressable
+        # by id; the migration runs within a single workspace.
+        from opik.cli.migrate.datasets.version_replay import replay_all_versions
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1", version_name="v1"),
+            ],
+            items_per_version={
+                "hv1": [
+                    _ds_item(
+                        "item-a",
+                        input="hello",
+                        trace_id="trace-from-prod-X",
+                        source="trace",
+                    ),
+                    _ds_item(
+                        "item-b",
+                        input="world",
+                        trace_id="trace-from-prod-Y",
+                        span_id="span-from-prod-Y",
+                        source="span",
+                    ),
+                    _ds_item("item-c", input="manual", source="manual"),
+                ],
+                "tgt-h1": [
+                    _ds_item(
+                        "tgt-a",
+                        input="hello",
+                        trace_id="trace-from-prod-X",
+                        source="trace",
+                    ),
+                    _ds_item(
+                        "tgt-b",
+                        input="world",
+                        trace_id="trace-from-prod-Y",
+                        span_id="span-from-prod-Y",
+                        source="span",
+                    ),
+                    _ds_item("tgt-c", input="manual", source="manual"),
+                ],
+            },
+            applied_versions=[_AppliedVersion(id="tgt-v1", version_hash="tgt-h1")],
+        )
+
+        replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # Inspect what got sent on the v1 create_or_update call: source +
+        # trace_id + span_id all preserved per item, untouched by the remap.
+        create_kwargs = (
+            rest_client.datasets.create_or_update_dataset_items.call_args.kwargs
+        )
+        sent_by_input = {it.data["input"]: it for it in create_kwargs["items"]}
+        assert sent_by_input["hello"].trace_id == "trace-from-prod-X"
+        assert sent_by_input["hello"].source == "trace"
+        assert sent_by_input["hello"].span_id is None
+        assert sent_by_input["world"].trace_id == "trace-from-prod-Y"
+        assert sent_by_input["world"].span_id == "span-from-prod-Y"
+        assert sent_by_input["world"].source == "span"
+        assert sent_by_input["manual"].trace_id is None
+        assert sent_by_input["manual"].span_id is None
+        assert sent_by_input["manual"].source == "manual"
+
     def test_replay__adds_only_v2__second_apply_carries_only_new_items(self) -> None:
         # v1 = [a, b]; v2 = [a, b, c]. Delta on v2 = [c] add, no mods, no dels.
         from opik.cli.migrate.datasets.version_replay import replay_all_versions

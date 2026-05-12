@@ -344,6 +344,45 @@ class TestCascadeExperiments:
         rest_client.traces.create_traces.assert_not_called()
         rest_client.spans.create_spans.assert_not_called()
 
+    def test_experiment_with_zero_items__recreates_empty_shell(self) -> None:
+        # A source experiment whose items list is empty is a degenerate but
+        # legitimate case (Opik writes the experiment row before any items
+        # arrive; if the run never completed, the row stands alone). The
+        # cascade should NOT crash, and SHOULD recreate the empty experiment
+        # at the destination so users see the row -- with zero traces / spans
+        # / assertion writes attempted on an empty payload.
+        experiment = _Experiment(id="src-exp-empty", dataset_version_id="src-v-1")
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": []},  # zero items
+            traces_by_id={},
+        )
+        client = _client_with_recreate_capture()
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={},
+            audit=_audit(),
+        )
+
+        # Experiment row recreated (counted as migrated). No trace / span /
+        # assertion writes attempted because there was nothing to copy.
+        assert result.experiments_migrated == 1
+        assert result.experiments_skipped == 0
+        assert result.traces_migrated == 0
+        assert result.spans_migrated == 0
+        client.create_experiment.assert_called_once()
+        rest_client.traces.create_traces.assert_not_called()
+        rest_client.spans.create_spans.assert_not_called()
+        rest_client.traces.score_batch_of_traces.assert_not_called()
+        rest_client.spans.score_batch_of_spans.assert_not_called()
+        rest_client.assertion_results.store_assertions_batch.assert_not_called()
+
     def test_full_fidelity_copy__forwards_name_tags_type_eval_method_metadata(
         self,
     ) -> None:
