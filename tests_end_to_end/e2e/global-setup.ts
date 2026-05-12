@@ -50,6 +50,10 @@ async function sweepOrphans(apiKey: string | null): Promise<void> {
 
 async function globalSetup() {
   const env = loadEnvConfig();
+  // Propagate the runId to worker processes so every loadEnvConfig() call
+  // across the run agrees on cujPrefix — otherwise each worker would re-stamp
+  // its own timestamp and teardown would sweep the wrong prefix.
+  process.env.OPIK_RUN_ID = env.runId;
   printEnvBanner(env);
 
   await fs.writeFile(RUN_ID_MARKER, env.runId, 'utf-8');

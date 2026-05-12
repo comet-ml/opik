@@ -37,6 +37,17 @@ function stampRunId(): string {
   return `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1, 2)}${pad(now.getUTCDate(), 2)}-${pad(now.getUTCHours(), 2)}${pad(now.getUTCMinutes(), 2)}${pad(now.getUTCSeconds(), 2)}-${pad(now.getUTCMilliseconds(), 3)}`;
 }
 
+function resolveRunId(envOverride: string | undefined): string {
+  // Honour an explicit OPIK_RUN_ID first (lets globalSetup propagate the same id to
+  // worker processes via env). Otherwise cache a single per-process stamp so the
+  // setup → tests → teardown chain inside one node process agrees on cujPrefix.
+  if (envOverride) return envOverride;
+  if (processRunId === null) processRunId = stampRunId();
+  return processRunId;
+}
+
+let processRunId: string | null = null;
+
 function boolFromEnv(v: string | undefined, fallback: boolean): boolean {
   if (v === undefined) return fallback;
   return v.toLowerCase() === 'true' || v === '1';
@@ -71,17 +82,19 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     throw new Error('cloud deployment requires OPIK_TEST_USER_EMAIL and OPIK_TEST_USER_PASSWORD');
   }
 
-  const baseUrl = env.OPIK_BASE_URL ?? defaults.baseUrl;
-  if (!baseUrl) {
+  const rawBaseUrl = env.OPIK_BASE_URL ?? defaults.baseUrl;
+  if (!rawBaseUrl) {
     throw new Error(`OPIK_BASE_URL is required for deployment=${deployment}`);
   }
+  const trimmed = rawBaseUrl.replace(/\/+$/, '');
+  const baseUrl = trimmed.endsWith('/api') ? trimmed.slice(0, -'/api'.length) : trimmed;
 
   const workspace = env.OPIK_WORKSPACE ?? (deployment === 'oss' ? 'default' : (userName ?? ''));
 
   const skipLlmJudges = boolFromEnv(env.SKIP_LLM_JUDGES, false);
   const hasAnthropicKey = !!env.ANTHROPIC_API_KEY;
 
-  const runId = stampRunId();
+  const runId = resolveRunId(env.OPIK_RUN_ID);
 
   return {
     deployment,
