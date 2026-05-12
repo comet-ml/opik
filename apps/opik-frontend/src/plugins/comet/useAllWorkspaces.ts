@@ -8,12 +8,9 @@ import useAdminOrganizationWorkspaces from "@/plugins/comet/useAdminOrganization
 
 export default function useAllWorkspaces(options?: QueryConfig<Workspace[]>) {
   const enabled = Boolean(options?.enabled);
-  const { data: liteResult } = useUserWorkspacesLite({ enabled });
+  const lite = useUserWorkspacesLite({ enabled });
 
-  const isUnsupported = liteResult?.kind === "unsupported";
-  const liteData = liteResult?.kind === "data" ? liteResult.data : undefined;
-
-  const fallbackEnabled = enabled && isUnsupported;
+  const fallbackEnabled = enabled && lite.isError;
 
   const { data: userInvitedWorkspaces } = useUserInvitedWorkspaces({
     enabled: fallbackEnabled,
@@ -22,14 +19,14 @@ export default function useAllWorkspaces(options?: QueryConfig<Workspace[]>) {
     enabled: fallbackEnabled,
   });
 
-  const hasLite = liteData !== undefined;
+  const hasLite = lite.data !== undefined;
   const hasFallback =
-    isUnsupported && !!userInvitedWorkspaces && !!adminOrgWorkspaces;
+    lite.isError && !!userInvitedWorkspaces && !!adminOrgWorkspaces;
 
   return useQuery({
     queryKey: ["all-user-workspaces", { enabled: true }],
     queryFn: async () => {
-      if (hasLite) return liteData;
+      if (hasLite) return lite.data;
       if (hasFallback) {
         return uniqBy(
           [...adminOrgWorkspaces, ...userInvitedWorkspaces],

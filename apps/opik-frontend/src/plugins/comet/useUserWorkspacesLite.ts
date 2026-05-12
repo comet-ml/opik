@@ -1,32 +1,23 @@
 import { QueryFunctionContext, useQuery } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import api, { QueryConfig } from "./api";
 import { Workspace } from "./types";
 
-export type LiteWorkspacesResult =
-  | { kind: "data"; data: Workspace[] }
-  | { kind: "unsupported" };
-
-const getUserWorkspacesLite = async ({
-  signal,
-}: QueryFunctionContext): Promise<LiteWorkspacesResult> => {
-  try {
-    const response = await api.get<Workspace[]>(`/workspaces/lite`, { signal });
-    return { kind: "data", data: response.data };
-  } catch (error) {
-    if ((error as AxiosError)?.response?.status === 404) {
-      return { kind: "unsupported" };
-    }
-    throw error;
-  }
+const getUserWorkspacesLite = async ({ signal }: QueryFunctionContext) => {
+  const { data } = await api.get<Workspace[]>(`/workspaces/lite`, { signal });
+  return data;
 };
 
 export default function useUserWorkspacesLite(
-  options?: QueryConfig<LiteWorkspacesResult>,
+  options?: QueryConfig<Workspace[]>,
 ) {
   return useQuery({
     queryKey: ["user-workspaces-lite", { enabled: true }],
     queryFn: getUserWorkspacesLite,
+    // Any failure (404, 405, 5xx, network, etc.) falls back to legacy
+    // /api/workspaces hooks via the orchestrator in useAllWorkspaces.
+    // Disable retries so the fallback kicks in immediately instead of
+    // burning ~10s on exponential-backoff retries.
+    retry: false,
     staleTime: Infinity,
     ...options,
     enabled: Boolean(options?.enabled),
