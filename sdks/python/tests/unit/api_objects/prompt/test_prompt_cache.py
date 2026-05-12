@@ -42,14 +42,14 @@ class TestPromptCache:
     def test_get__missing_key__returns_none(self, cache):
         assert cache.get(("p", None, None, "text")) is None
 
-    def test_get_or_fetch__caches_and_returns(self, cache):
+    def test_get_or_fetch__cache_miss__fetches_and_caches(self, cache):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
         result = cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
         assert result is p
         fetch_fn.assert_called_once()
 
-    def test_get_or_fetch__hit_does_not_call_fetch_fn(self, cache):
+    def test_get_or_fetch__cache_hit__does_not_call_fetch_fn(self, cache):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
         cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
@@ -65,7 +65,7 @@ class TestPromptCache:
         )
         assert result is None
 
-    def test_clear__empties_cache(self, cache):
+    def test_clear__populated_cache__removes_all_entries(self, cache):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("p", None, None, "text"), mock.Mock(return_value=p), pinned=True
@@ -73,7 +73,7 @@ class TestPromptCache:
         cache.clear()
         assert cache.get(("p", None, None, "text")) is None
 
-    def test_clear__stops_thread(self, cache):
+    def test_clear__running_refresh_thread__stops_thread(self, cache):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
@@ -82,7 +82,7 @@ class TestPromptCache:
         cache.clear()
         assert cache._thread is None
 
-    def test_refresh_thread__started_for_unpinned(self, cache):
+    def test_refresh_thread__unpinned_entry__starts_thread(self, cache):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
@@ -90,14 +90,14 @@ class TestPromptCache:
         assert cache._thread is not None
         assert cache._thread.is_alive()
 
-    def test_refresh_thread__not_started_for_pinned(self, cache):
+    def test_refresh_thread__pinned_entry__does_not_start_thread(self, cache):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("p", None, None, "text"), mock.Mock(return_value=p), pinned=True
         )
         assert cache._thread is None
 
-    def test_different_keys__different_entries(self, cache):
+    def test_get_or_fetch__different_keys__returns_separate_entries(self, cache):
         p1 = _make_mock_prompt(commit="c1")
         p2 = _make_mock_prompt(commit="c2")
         cache.get_or_fetch(
@@ -111,7 +111,7 @@ class TestPromptCache:
 
 
 class TestBackgroundRefresh:
-    def test_refresh_updates_stale_entry(self, cache):
+    def test_refresh__stale_entry__updates_prompt(self, cache):
         new_prompt = _make_mock_prompt(commit="refreshed")
         callback = mock.Mock(return_value=new_prompt)
 
@@ -125,7 +125,7 @@ class TestBackgroundRefresh:
             assert callback.call_count >= 1
             assert cache.get(("p", None, None, "text")) is new_prompt
 
-    def test_refresh_skips_non_stale_entry(self, cache):
+    def test_refresh__non_stale_entry__skips_callback(self, cache):
         p = _make_mock_prompt()
         callback = mock.Mock(return_value=p)
         cache.get_or_fetch(("p", None, None, "text"), callback, pinned=False)
@@ -133,7 +133,7 @@ class TestBackgroundRefresh:
         time.sleep(0.2)
         callback.assert_not_called()
 
-    def test_refresh_callback_error_does_not_crash(self, cache):
+    def test_refresh__callback_raises__thread_survives(self, cache):
         p = _make_mock_prompt()
         callback = mock.Mock(side_effect=[p, RuntimeError("boom")])
 
@@ -146,19 +146,19 @@ class TestBackgroundRefresh:
 
 
 class TestGetOrFetch:
-    def test_miss__calls_fetch_fn(self):
+    def test_get_or_fetch__cache_miss__calls_fetch_fn(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
         result = prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
         assert result is p
         fetch_fn.assert_called_once()
 
-    def test_miss__fetch_returns_none__returns_none(self):
+    def test_get_or_fetch__fetch_returns_none__returns_none(self):
         fetch_fn = mock.Mock(return_value=None)
         result = prompt_cache.get_or_fetch("missing", None, None, "text", fetch_fn)
         assert result is None
 
-    def test_hit__does_not_call_fetch_fn(self):
+    def test_get_or_fetch__cache_hit__does_not_call_fetch_fn(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
@@ -168,14 +168,14 @@ class TestGetOrFetch:
         assert result is p
         fetch_fn.assert_not_called()
 
-    def test_pinned_commit__no_refresh_thread(self):
+    def test_get_or_fetch__pinned_commit__no_refresh_thread(self):
         p = _make_mock_prompt(commit="abc")
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", "abc", None, "text", fetch_fn)
         cache = get_global_cache()
         assert cache._thread is None
 
-    def test_unpinned__starts_refresh_thread(self):
+    def test_get_or_fetch__unpinned_commit__starts_refresh_thread(self):
         p = _make_mock_prompt(commit=None)
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
@@ -183,7 +183,7 @@ class TestGetOrFetch:
         assert cache._thread is not None
         assert cache._thread.is_alive()
 
-    def test_cache_hit__same_object_returned(self):
+    def test_get_or_fetch__cache_hit__returns_same_object(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", None, "proj", "text", fetch_fn)
@@ -191,7 +191,7 @@ class TestGetOrFetch:
         second = prompt_cache.get_or_fetch("p", None, "proj", "text", fetch_fn)
         assert first is second is p
 
-    def test_different_keys__different_entries(self):
+    def test_get_or_fetch__different_keys__returns_separate_entries(self):
         p1 = _make_mock_prompt(commit="c1")
         p2 = _make_mock_prompt(commit="c2")
         prompt_cache.get_or_fetch("p", "c1", None, "text", mock.Mock(return_value=p1))
@@ -203,7 +203,9 @@ class TestGetOrFetch:
 
 
 class TestPromptCacheEdgeCases:
-    def test_multiple_unpinned_inserts__single_refresh_thread(self, cache):
+    def test_get_or_fetch__multiple_unpinned_inserts__reuses_single_refresh_thread(
+        self, cache
+    ):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("a", None, None, "text"), mock.Mock(return_value=p), pinned=False
@@ -218,7 +220,7 @@ class TestPromptCacheEdgeCases:
         cache.clear()
         assert cache.get(("any", None, None, "text")) is None
 
-    def test_pinned_entry__not_refreshed_even_after_ttl(self, cache):
+    def test_refresh__pinned_entry__not_refreshed_even_after_ttl(self, cache):
         p = _make_mock_prompt()
         callback = mock.Mock(return_value=p)
         with mock.patch(
@@ -230,12 +232,12 @@ class TestPromptCacheEdgeCases:
             callback.assert_not_called()
         assert cache.get(("p", "v1", None, "text")) is p
 
-    def test_fetch_returns_none__not_cached(self, cache):
+    def test_get_or_fetch__fetch_returns_none__not_cached(self, cache):
         fetch_fn = mock.Mock(return_value=None)
         cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
         assert cache.get(("p", None, None, "text")) is None
 
-    def test_refresh_returning_none__preserves_original_prompt(self, cache):
+    def test_refresh__callback_returns_none__preserves_original_prompt(self, cache):
         original = _make_mock_prompt(commit="original")
         callback = mock.Mock(side_effect=[original, None])
 
@@ -289,7 +291,7 @@ class TestPromptCacheEdgeCases:
         assert cache.get(("p3", "c3", None, "text")) is p3
         cache.clear()
 
-    def test_clear_after_clear__is_safe(self, cache):
+    def test_clear__called_twice__is_safe(self, cache):
         p = _make_mock_prompt()
         cache.get_or_fetch(
             ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
