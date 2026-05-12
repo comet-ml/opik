@@ -8,24 +8,22 @@ import pytest
 
 from opik.api_objects.prompt import prompt_cache
 from opik.api_objects.prompt.prompt_cache import (
-    PromptCacheEntry,
-    PromptCacheRefreshThread,
-    PromptCacheRegistry,
-    get_global_registry,
+    PromptCache,
+    get_global_cache,
 )
 
 
 @pytest.fixture(autouse=True)
 def clear_caches_after_test():
     yield
-    get_global_registry().clear()
+    get_global_cache().clear()
 
 
 @pytest.fixture
-def registry():
-    r = PromptCacheRegistry()
-    yield r
-    r.clear()
+def cache():
+    c = PromptCache()
+    yield c
+    c.clear()
 
 
 def _make_mock_prompt(
@@ -40,116 +38,111 @@ def _make_mock_prompt(
     return p
 
 
-class TestPromptCacheRegistry:
-    def test_get__missing_key__returns_none(self, registry):
-        assert registry.get(("p", None, None)) is None
+class TestPromptCache:
+    def test_get__missing_key__returns_none(self, cache):
+        assert cache.get(("p", None, None, "text")) is None
 
-    def test_set_then_get__returns_entry(self, registry):
-        entry = PromptCacheEntry(prompt=_make_mock_prompt(), pinned=False)
-        registry.set(("p", None, None), entry)
-        assert registry.get(("p", None, None)) is entry
+    def test_get_or_fetch__caches_and_returns(self, cache):
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+        result = cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
+        assert result is p
+        fetch_fn.assert_called_once()
 
-    def test_clear__empties_registry(self, registry):
-        entry = PromptCacheEntry(prompt=_make_mock_prompt(), pinned=False)
-        registry.set(("p", None, None), entry)
-        registry.clear()
-        assert registry.get(("p", None, None)) is None
+    def test_get_or_fetch__hit_does_not_call_fetch_fn(self, cache):
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+        cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
+        fetch_fn.reset_mock()
+        result = cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
+        assert result is p
+        fetch_fn.assert_not_called()
 
-    def test_clear__stops_thread(self, registry):
-        registry.ensure_refresh_thread_started()
-        assert registry._thread is not None and registry._thread.is_alive()
-        registry.clear()
-        assert registry._thread is None
-
-    def test_ensure_refresh_thread_started__starts_thread(self, registry):
-        assert registry._thread is None
-        registry.ensure_refresh_thread_started()
-        assert registry._thread is not None
-        assert registry._thread.is_alive()
-
-    def test_ensure_refresh_thread_started__second_call_noop(self, registry):
-        registry.ensure_refresh_thread_started()
-        first = registry._thread
-        registry.ensure_refresh_thread_started()
-        assert registry._thread is first
-
-    def test_stop_refresh_thread__stops_and_nulls(self, registry):
-        registry.ensure_refresh_thread_started()
-        thread = registry._thread
-        registry.stop_refresh_thread()
-        thread.join(timeout=2)
-        assert not thread.is_alive()
-        assert registry._thread is None
-
-
-class TestPromptCacheEntry:
-    def test_pinned__never_stale(self):
-        entry = PromptCacheEntry(prompt=_make_mock_prompt(), pinned=True, ttl_seconds=0)
-        assert not entry.is_stale()
-
-    def test_unpinned__stale_after_ttl(self):
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=0
+    def test_get_or_fetch__fetch_returns_none__returns_none(self, cache):
+        fetch_fn = mock.Mock(return_value=None)
+        result = cache.get_or_fetch(
+            ("missing", None, None, "text"), fetch_fn, pinned=False
         )
-        time.sleep(0.01)
-        assert entry.is_stale()
+        assert result is None
 
-    def test_unpinned__not_stale_within_ttl(self):
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=300
+    def test_clear__empties_cache(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("p", None, None, "text"), mock.Mock(return_value=p), pinned=True
         )
-        assert not entry.is_stale()
+        cache.clear()
+        assert cache.get(("p", None, None, "text")) is None
 
-    def test_update__replaces_prompt_and_resets_freshness(self):
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=1
+    def test_clear__stops_thread(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
         )
-        # Force staleness by backdating the last fetch
-        entry._last_fetch -= 2
-        assert entry.is_stale()
+        assert cache._thread is not None and cache._thread.is_alive()
+        cache.clear()
+        assert cache._thread is None
 
-        new_prompt = _make_mock_prompt(commit="newcommit")
-        entry.update(new_prompt)
-        assert entry.prompt is new_prompt
-        assert not entry.is_stale()
+    def test_refresh_thread__started_for_unpinned(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
+        )
+        assert cache._thread is not None
+        assert cache._thread.is_alive()
 
-    def test_try_background_refresh__no_callback__noop(self):
-        entry = PromptCacheEntry(prompt=_make_mock_prompt(), pinned=False)
-        entry.try_background_refresh()
-        assert entry.prompt.commit == "abc123"
+    def test_refresh_thread__not_started_for_pinned(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("p", None, None, "text"), mock.Mock(return_value=p), pinned=True
+        )
+        assert cache._thread is None
 
-    def test_try_background_refresh__updates_prompt(self):
+    def test_different_keys__different_entries(self, cache):
+        p1 = _make_mock_prompt(commit="c1")
+        p2 = _make_mock_prompt(commit="c2")
+        cache.get_or_fetch(
+            ("p", "c1", None, "text"), mock.Mock(return_value=p1), pinned=True
+        )
+        cache.get_or_fetch(
+            ("p", "c2", None, "text"), mock.Mock(return_value=p2), pinned=True
+        )
+        assert cache.get(("p", "c1", None, "text")) is p1
+        assert cache.get(("p", "c2", None, "text")) is p2
+
+
+class TestBackgroundRefresh:
+    def test_refresh_updates_stale_entry(self, cache):
         new_prompt = _make_mock_prompt(commit="refreshed")
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=0
-        )
-        entry.set_refresh_callback(lambda: new_prompt)
-        entry.try_background_refresh()
-        assert entry.prompt is new_prompt
+        callback = mock.Mock(return_value=new_prompt)
 
-    def test_try_background_refresh__callback_returns_none__no_change(self):
-        original = _make_mock_prompt()
-        entry = PromptCacheEntry(prompt=original, pinned=False, ttl_seconds=0)
-        entry.set_refresh_callback(lambda: None)
-        entry.try_background_refresh()
-        assert entry.prompt is original
+        with mock.patch(
+            "opik.api_objects.prompt.prompt_cache._PROMPT_CACHE_TTL_SECONDS", 0
+        ):
+            cache.get_or_fetch(("p", None, None, "text"), callback, pinned=False)
+            callback.reset_mock()
+            callback.return_value = new_prompt
+            time.sleep(0.3)
+            assert callback.call_count >= 1
+            assert cache.get(("p", None, None, "text")) is new_prompt
 
-    def test_try_background_refresh__callback_raises__no_crash(self):
-        entry = PromptCacheEntry(prompt=_make_mock_prompt(), pinned=False)
-        entry.set_refresh_callback(mock.Mock(side_effect=RuntimeError("boom")))
-        entry.try_background_refresh()
+    def test_refresh_skips_non_stale_entry(self, cache):
+        p = _make_mock_prompt()
+        callback = mock.Mock(return_value=p)
+        cache.get_or_fetch(("p", None, None, "text"), callback, pinned=False)
+        callback.reset_mock()
+        time.sleep(0.2)
+        callback.assert_not_called()
 
-    def test_set_refresh_callback__first_wins(self):
-        cb1 = mock.Mock(return_value=_make_mock_prompt(commit="cb1"))
-        cb2 = mock.Mock(return_value=_make_mock_prompt(commit="cb2"))
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=0
-        )
-        entry.set_refresh_callback(cb1)
-        entry.set_refresh_callback(cb2)
-        entry.try_background_refresh()
-        cb1.assert_called_once()
-        cb2.assert_not_called()
+    def test_refresh_callback_error_does_not_crash(self, cache):
+        p = _make_mock_prompt()
+        callback = mock.Mock(side_effect=[p, RuntimeError("boom")])
+
+        with mock.patch(
+            "opik.api_objects.prompt.prompt_cache._PROMPT_CACHE_TTL_SECONDS", 0
+        ):
+            cache.get_or_fetch(("p", None, None, "text"), callback, pinned=False)
+            time.sleep(0.3)
+            assert cache._thread.is_alive()
 
 
 class TestGetOrFetch:
@@ -175,23 +168,20 @@ class TestGetOrFetch:
         assert result is p
         fetch_fn.assert_not_called()
 
-    def test_pinned_commit__no_refresh_callback(self):
+    def test_pinned_commit__no_refresh_thread(self):
         p = _make_mock_prompt(commit="abc")
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", "abc", None, "text", fetch_fn)
-        key = ("p", "abc", None, "text")
-        entry = get_global_registry().get(key)
-        assert entry is not None
-        assert entry._refresh_callback is None
+        cache = get_global_cache()
+        assert cache._thread is None
 
-    def test_unpinned__refresh_callback_registered(self):
+    def test_unpinned__starts_refresh_thread(self):
         p = _make_mock_prompt(commit=None)
         fetch_fn = mock.Mock(return_value=p)
         prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
-        key = ("p", None, None, "text")
-        entry = get_global_registry().get(key)
-        assert entry is not None
-        assert entry._refresh_callback is fetch_fn
+        cache = get_global_cache()
+        assert cache._thread is not None
+        assert cache._thread.is_alive()
 
     def test_cache_hit__same_object_returned(self):
         p = _make_mock_prompt()
@@ -210,6 +200,103 @@ class TestGetOrFetch:
         r2 = prompt_cache.get_or_fetch("p", "c2", None, "text", mock.Mock())
         assert r1 is p1
         assert r2 is p2
+
+
+class TestPromptCacheEdgeCases:
+    def test_multiple_unpinned_inserts__single_refresh_thread(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("a", None, None, "text"), mock.Mock(return_value=p), pinned=False
+        )
+        thread1 = cache._thread
+        cache.get_or_fetch(
+            ("b", None, None, "text"), mock.Mock(return_value=p), pinned=False
+        )
+        assert cache._thread is thread1
+
+    def test_clear__on_empty_cache__is_noop(self, cache):
+        cache.clear()
+        assert cache.get(("any", None, None, "text")) is None
+
+    def test_pinned_entry__not_refreshed_even_after_ttl(self, cache):
+        p = _make_mock_prompt()
+        callback = mock.Mock(return_value=p)
+        with mock.patch(
+            "opik.api_objects.prompt.prompt_cache._PROMPT_CACHE_TTL_SECONDS", 0
+        ):
+            cache.get_or_fetch(("p", "v1", None, "text"), callback, pinned=True)
+            callback.reset_mock()
+            time.sleep(0.2)
+            callback.assert_not_called()
+        assert cache.get(("p", "v1", None, "text")) is p
+
+    def test_fetch_returns_none__not_cached(self, cache):
+        fetch_fn = mock.Mock(return_value=None)
+        cache.get_or_fetch(("p", None, None, "text"), fetch_fn, pinned=False)
+        assert cache.get(("p", None, None, "text")) is None
+
+    def test_refresh_returning_none__preserves_original_prompt(self, cache):
+        original = _make_mock_prompt(commit="original")
+        callback = mock.Mock(side_effect=[original, None])
+
+        with mock.patch(
+            "opik.api_objects.prompt.prompt_cache._PROMPT_CACHE_TTL_SECONDS", 0
+        ):
+            cache.get_or_fetch(("p", None, None, "text"), callback, pinned=False)
+            time.sleep(0.3)
+            assert cache.get(("p", None, None, "text")) is original
+
+    def test_lru_eviction__oldest_entry_removed_when_max_size_exceeded(self):
+        cache = PromptCache(max_size=3)
+        prompts = [_make_mock_prompt(commit=f"c{i}") for i in range(4)]
+        for i, p in enumerate(prompts):
+            cache.get_or_fetch(
+                (f"p{i}", f"c{i}", None, "text"),
+                mock.Mock(return_value=p),
+                pinned=True,
+            )
+
+        assert cache.get(("p0", "c0", None, "text")) is None
+        assert cache.get(("p1", "c1", None, "text")) is prompts[1]
+        assert cache.get(("p2", "c2", None, "text")) is prompts[2]
+        assert cache.get(("p3", "c3", None, "text")) is prompts[3]
+        cache.clear()
+
+    def test_lru_eviction__access_refreshes_position(self):
+        cache = PromptCache(max_size=3)
+        prompts = [_make_mock_prompt(commit=f"c{i}") for i in range(3)]
+        for i, p in enumerate(prompts):
+            cache.get_or_fetch(
+                (f"p{i}", f"c{i}", None, "text"),
+                mock.Mock(return_value=p),
+                pinned=True,
+            )
+
+        # Access p0 so it becomes most-recently-used
+        cache.get(("p0", "c0", None, "text"))
+
+        # Insert a 4th entry — p1 (the actual LRU) should be evicted, not p0
+        p3 = _make_mock_prompt(commit="c3")
+        cache.get_or_fetch(
+            ("p3", "c3", None, "text"),
+            mock.Mock(return_value=p3),
+            pinned=True,
+        )
+
+        assert cache.get(("p0", "c0", None, "text")) is prompts[0]
+        assert cache.get(("p1", "c1", None, "text")) is None
+        assert cache.get(("p2", "c2", None, "text")) is prompts[2]
+        assert cache.get(("p3", "c3", None, "text")) is p3
+        cache.clear()
+
+    def test_clear_after_clear__is_safe(self, cache):
+        p = _make_mock_prompt()
+        cache.get_or_fetch(
+            ("p", None, None, "text"), mock.Mock(return_value=p), pinned=False
+        )
+        cache.clear()
+        cache.clear()
+        assert cache._thread is None
 
 
 class TestPromptReferences:
@@ -338,56 +425,3 @@ class TestPromptReferences:
 
         mock_trace_update.assert_not_called()
         mock_span_update.assert_not_called()
-
-
-class TestPromptCacheRefreshThread:
-    def test_stops_on_close(self):
-        thread = PromptCacheRefreshThread(get_entries=list, interval_seconds=0.01)
-        thread.start()
-        assert thread.is_alive()
-        thread.close()
-        thread.join(timeout=2)
-        assert not thread.is_alive()
-
-    def test_refreshes_stale_entry(self, registry):
-        new_prompt = _make_mock_prompt(commit="refreshed")
-        callback = mock.Mock(return_value=new_prompt)
-
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=0
-        )
-        entry.set_refresh_callback(callback)
-        registry.set(("p", None, None), entry)
-
-        thread = PromptCacheRefreshThread(
-            get_entries=registry.get_entries,
-            interval_seconds=0.05,
-        )
-        thread.start()
-        try:
-            time.sleep(0.3)
-            assert callback.call_count >= 1
-            assert entry.prompt is new_prompt
-        finally:
-            thread.close()
-            thread.join(timeout=2)
-
-    def test_skips_non_stale_entry(self, registry):
-        entry = PromptCacheEntry(
-            prompt=_make_mock_prompt(), pinned=False, ttl_seconds=300
-        )
-        callback = mock.Mock()
-        entry.set_refresh_callback(callback)
-        registry.set(("p", None, None), entry)
-
-        thread = PromptCacheRefreshThread(
-            get_entries=registry.get_entries,
-            interval_seconds=0.05,
-        )
-        thread.start()
-        try:
-            time.sleep(0.2)
-            callback.assert_not_called()
-        finally:
-            thread.close()
-            thread.join(timeout=2)
