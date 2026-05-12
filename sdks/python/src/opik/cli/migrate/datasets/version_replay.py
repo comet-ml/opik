@@ -508,6 +508,39 @@ def _iter_source_versions_chronological(
     return collected
 
 
+def _stream_version_items_raw(
+    rest_client: OpikApi,
+    *,
+    dataset_name: str,
+    project_name: Optional[str],
+    version_hash: Optional[str],
+) -> Any:
+    """Rate-limit-wrapped streaming + parsing of one dataset version's items.
+
+    Returns an iterable of ``DatasetItemPublic`` (the raw wire type).
+    Shared by ``_load_version_items`` (source side, keyed by id) and
+    ``_read_back_target_items`` (target side, keyed by content hash);
+    callers handle their own post-processing.
+
+    Goes through the raw REST stream (yielding ``DatasetItemPublic``)
+    instead of the SDK-level helper (``rest_operations.stream_dataset_items``)
+    because the SDK helper drops ``tags`` during dataclass reconstruction.
+    Going direct to the wire type preserves every persisted field for the
+    diff and the write payload.
+    """
+    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.stream_dataset_items(
+            dataset_name=dataset_name,
+            project_name=project_name,
+            dataset_version=version_hash,
+        )
+    )
+    return rest_stream_parser.read_and_parse_stream(
+        stream=raw_stream,
+        item_class=dataset_item_public.DatasetItemPublic,
+    )
+
+
 def _load_version_items(
     rest_client: OpikApi,
     *,
@@ -515,24 +548,12 @@ def _load_version_items(
     source_project_name: Optional[str],
     version_hash: Optional[str],
 ) -> Dict[str, _SourceItem]:
-    """Stream every item at ``version_hash`` and key by stable id.
-
-    Uses the raw REST stream (yielding ``DatasetItemPublic``) instead of
-    the SDK-level helper (``rest_operations.stream_dataset_items``) because
-    the SDK helper drops ``tags`` during dataclass reconstruction. Going
-    direct to the wire type preserves every persisted field for the diff
-    and the write payload.
-    """
-    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.datasets.stream_dataset_items(
-            dataset_name=source_name_after_rename,
-            project_name=source_project_name,
-            dataset_version=version_hash,
-        )
-    )
-    items = rest_stream_parser.read_and_parse_stream(
-        stream=raw_stream,
-        item_class=dataset_item_public.DatasetItemPublic,
+    """Stream every item at ``version_hash`` and key by stable id."""
+    items = _stream_version_items_raw(
+        rest_client,
+        dataset_name=source_name_after_rename,
+        project_name=source_project_name,
+        version_hash=version_hash,
     )
     by_id: Dict[str, _SourceItem] = {}
     for item in items:
@@ -819,16 +840,11 @@ def _read_back_target_items(
     versions. The caller pops one entry per source-add in stream order so the
     pairing matches the source's own duplicate-add ordering.
     """
-    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.datasets.stream_dataset_items(
-            dataset_name=dest_name,
-            project_name=dest_project_name,
-            dataset_version=version_hash,
-        )
-    )
-    items = rest_stream_parser.read_and_parse_stream(
-        stream=raw_stream,
-        item_class=dataset_item_public.DatasetItemPublic,
+    items = _stream_version_items_raw(
+        rest_client,
+        dataset_name=dest_name,
+        project_name=dest_project_name,
+        version_hash=version_hash,
     )
     target_items_by_hash: Dict[str, List[str]] = {}
     for item in items:

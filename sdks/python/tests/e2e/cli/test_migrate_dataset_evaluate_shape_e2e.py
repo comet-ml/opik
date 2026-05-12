@@ -6,18 +6,19 @@ coverage via REST seeding) by exercising the realistic shape that real
 users produce:
 
   1. Create a dataset, ``dataset.insert(...)`` a first batch of items
-  2. Run ``opik.evaluate(...)`` (experiment E1) -- traces under PROJECT_NAME
+  2. Run ``opik.evaluate(...)`` (experiment E1) under the dataset's project
   3. Insert more items
-  4. Run ``opik.evaluate(...)`` (experiment E2) under a DIFFERENT project so
-     E2's traces land in a separate project from E1's
+  4. Run ``opik.evaluate(...)`` (experiment E2) -- E1 saw 2 items, E2 sees 3
   5. ``opik migrate dataset ... --to-project=<dest>``
-  6. Verify everything round-trips: both experiments, all traces (from
-     both source projects), all spans, feedback scores
+  6. Verify both experiments + items + traces + spans + feedback scores
+     round-trip with fresh destination ids
 
-This pins the cross-project cascade behavior: cross-project experiments
-referencing the same source dataset cascade to ``--to-project``
-regardless of which project they were originally in, and per-trace
-project_id scoping pulls each trace's spans from the right place.
+In Opik V2 ``opik.evaluate(...)`` always lands its traces in the dataset's
+project (the per-evaluate ``project_name`` override is deprecated). The
+per-trace project_id scoping that ``_copy_traces_and_spans`` does is
+defense-in-depth for BE shapes the SDK doesn't produce today; that
+contract is covered by the unit test
+``test_span_read_uses_trace_project_not_experiment_project``.
 """
 
 from __future__ import annotations
@@ -31,11 +32,10 @@ import pytest
 import opik
 from opik.evaluation.metrics import score_result
 
-from ...conftest import random_chars
 from ...testlib import generate_project_name
+from .. import verifiers
 from .conftest import (
     destination_experiment_items,
-    destination_feedback_scores_for_trace,
     find_destination_experiment,
     run_migrate_cli,
 )
@@ -43,38 +43,15 @@ from .conftest import (
 PROJECT_NAME = generate_project_name("e2e", __name__)
 
 
-@pytest.fixture
-def dataset_name() -> Iterator[str]:
-    yield f"e2e-migrate-eval-{random_chars()}"
+# ``dataset_name`` and ``experiment_name`` fixtures come from
+# ``tests/e2e/conftest.py`` (shared per AGENTS.md). For the second
+# experiment we derive a sibling name off the standard fixture rather
+# than introducing a parallel per-test fixture.
 
 
 @pytest.fixture
-def experiment_name_one() -> Iterator[str]:
-    yield f"e2e-migrate-eval-exp1-{random_chars()}"
-
-
-@pytest.fixture
-def experiment_name_two() -> Iterator[str]:
-    yield f"e2e-migrate-eval-exp2-{random_chars()}"
-
-
-@pytest.fixture
-def trace_project_name_two(opik_client: opik.Opik) -> Iterator[str]:
-    """Second source project for experiment 2's traces.
-
-    Created so experiment 2's traces land in a DIFFERENT project from
-    experiment 1's. The dataset itself lives in ``source_project_name``
-    (the standard fixture); only E2's evaluator writes its traces here.
-    Best-effort cleanup at teardown.
-    """
-    name = f"e2e-migrate-eval-trace-proj-{random_chars()}"
-    opik_client.rest_client.projects.create_project(name=name)
-    yield name
-    try:
-        project_id = opik_client.rest_client.projects.retrieve_project(name=name).id
-        opik_client.rest_client.projects.delete_project_by_id(project_id)
-    except Exception:
-        pass
+def experiment_name_two(experiment_name: str) -> Iterator[str]:
+    yield f"{experiment_name}-second"
 
 
 def _llm_task(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -122,21 +99,20 @@ def _wait_until(
     return last
 
 
-def test_migrate_dataset__evaluate_shape_with_cross_project_traces__round_trips(
+def test_migrate_dataset__evaluate_shape__round_trips(
     opik_client: opik.Opik,
     source_project_name: str,
     target_project_name: str,
-    trace_project_name_two: str,
     dataset_name: str,
-    experiment_name_one: str,
+    experiment_name: str,
     experiment_name_two: str,
     tmp_path: Path,
 ) -> None:
     # ── Seed via the natural opik.evaluate(...) flow ──
-    # Dataset lives in source_project_name. Two evaluate() runs:
-    # E1's traces land in source_project_name, E2's in trace_project_name_two.
-    # Both experiments reference the same source dataset, so the cascade
-    # has to follow them both to --to-project regardless of original project.
+    # Dataset and both evaluate() runs land in source_project_name. We
+    # add items between runs so E1 sees 2 items and E2 sees 3 -- this
+    # exercises the "experiments reference different dataset version
+    # snapshots" case during migration.
     dataset = opik_client.create_dataset(dataset_name, project_name=source_project_name)
     dataset.insert(
         [
@@ -151,18 +127,16 @@ def test_migrate_dataset__evaluate_shape_with_cross_project_traces__round_trips(
         ]
     )
 
-    # Experiment 1 — traces under source_project_name (same as the dataset).
+    # Experiment 1 -- 2 items.
     eval1 = opik.evaluate(
         dataset=dataset,
         task=_llm_task,
         scoring_functions=[_equals_score],
-        experiment_name=experiment_name_one,
+        experiment_name=experiment_name,
         experiment_config={"phase": "first-eval"},
-        project_name=source_project_name,
     )
 
-    # Add more items to the dataset between runs to exercise the "experiments
-    # reference different snapshots" case — E1 saw 2 items, E2 sees 3.
+    # Add a third item between runs.
     dataset.insert(
         [
             {
@@ -172,15 +146,13 @@ def test_migrate_dataset__evaluate_shape_with_cross_project_traces__round_trips(
         ]
     )
 
-    # Experiment 2 — traces under trace_project_name_two (DIFFERENT project
-    # from the dataset's and from E1's traces).
+    # Experiment 2 -- 3 items.
     eval2 = opik.evaluate(
         dataset=dataset,
         task=_llm_task,
         scoring_functions=[_equals_score],
         experiment_name=experiment_name_two,
         experiment_config={"phase": "second-eval"},
-        project_name=trace_project_name_two,
     )
 
     # Flush the SDK streamer so all traces / spans / feedback scores land
@@ -216,26 +188,34 @@ def test_migrate_dataset__evaluate_shape_with_cross_project_traces__round_trips(
     )
     assert result.returncode == 0, result.stdout + result.stderr
 
-    # ── Verify the destination ──
-    # Look up the new destination dataset id (cascade keeps the same name
-    # at the destination; source was renamed to <name>_v1 by the migrate).
+    # ── Verify the destination via the shared verifier layer ─────────────
+    # ``verifiers.verify_experiment`` / ``verify_trace`` have built-in
+    # ``synchronization.until`` retry loops for the BE's eventual-consistency
+    # window right after the migrate completes -- spurious failures from
+    # not-yet-readable rows are eliminated.
+    #
+    # Two name->id lookups remain: the destination dataset id (cascade keeps
+    # the source name at the destination after the rename) and each
+    # destination experiment id (cascade is name-preserving on experiments,
+    # so we resolve by name). Everything else routes through verifiers.
     dest_dataset = rest.datasets.get_dataset_by_identifier(
         dataset_name=dataset_name, project_name=target_project_name
     )
     dest_dataset_id = dest_dataset.id
 
-    # Both experiments must have been recreated under target_project_name,
-    # carrying their original names.
     dest_e1 = find_destination_experiment(
         rest,
         destination_dataset_id=dest_dataset_id,
-        experiment_name=experiment_name_one,
+        experiment_name=experiment_name,
     )
     dest_e2 = find_destination_experiment(
         rest,
         destination_dataset_id=dest_dataset_id,
         experiment_name=experiment_name_two,
     )
+
+    # Fresh destination ids -- migrate is copy-not-move; new experiments
+    # must have new ids.
     assert dest_e1.id != eval1.experiment_id, (
         "destination experiment 1 must have a fresh id, not the source's"
     )
@@ -243,45 +223,49 @@ def test_migrate_dataset__evaluate_shape_with_cross_project_traces__round_trips(
         "destination experiment 2 must have a fresh id, not the source's"
     )
 
-    # Each experiment's items round-trip with the right item count. E1 saw
-    # the dataset at 2 items; E2 saw it at 3.
+    # Experiment-level shape via the shared verifier (with eventual-
+    # consistency retry baked in).
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=dest_e1.id,
+        experiment_name=experiment_name,
+        experiment_metadata={"phase": "first-eval"},
+        feedback_scores_amount=1,  # the equals scorer emits one aggregate
+        traces_amount=2,
+        project_name=target_project_name,
+    )
+    verifiers.verify_experiment(
+        opik_client=opik_client,
+        id=dest_e2.id,
+        experiment_name=experiment_name_two,
+        experiment_metadata={"phase": "second-eval"},
+        feedback_scores_amount=1,
+        traces_amount=3,
+        project_name=target_project_name,
+    )
+
+    # Per-trace assertions: feedback scores survive the cascade. Still
+    # need destination trace ids (which we get via the Compare-view
+    # lookup), then route the actual assertion through ``verify_trace``
+    # so its retry covers the eventual-consistency window for
+    # feedback_scores on the destination trace.
     dest_e1_items = destination_experiment_items(
         rest, experiment_id=dest_e1.id, dataset_id=dest_dataset_id
     )
     dest_e2_items = destination_experiment_items(
         rest, experiment_id=dest_e2.id, dataset_id=dest_dataset_id
     )
-    assert len(dest_e1_items) == 2, (
-        f"E1 should have 2 items (dataset had 2 at first evaluate); "
-        f"got {len(dest_e1_items)}"
-    )
-    assert len(dest_e2_items) == 3, (
-        f"E2 should have 3 items (dataset had 3 at second evaluate); "
-        f"got {len(dest_e2_items)}"
-    )
-
-    # Each item has a fresh destination trace_id (not equal to any source id).
+    expected_score = [
+        {"name": "equals_scoring_function", "value": 0.0, "reason": "mismatch"},
+    ]
     for it in dest_e1_items + dest_e2_items:
         assert it.trace_id is not None, "destination experiment item missing trace_id"
         assert it.dataset_item_id is not None, (
             "destination item missing dataset_item_id"
         )
-
-    # Per-trace feedback scores survive the cascade. The equals scorer
-    # emits exactly one score per trace; the cascade must re-emit it on
-    # the destination trace via score_batch_of_traces.
-    for it in dest_e1_items:
-        scores = destination_feedback_scores_for_trace(rest, trace_id=it.trace_id)
-        score_names = {s.name for s in scores}
-        assert "equals_scoring_function" in score_names, (
-            f"E1 trace {it.trace_id} missing the equals_scoring_function "
-            f"feedback score; saw {score_names}"
-        )
-    for it in dest_e2_items:
-        scores = destination_feedback_scores_for_trace(rest, trace_id=it.trace_id)
-        score_names = {s.name for s in scores}
-        assert "equals_scoring_function" in score_names, (
-            f"E2 trace {it.trace_id} (originally in {trace_project_name_two}) "
-            f"missing the equals_scoring_function feedback score; "
-            f"saw {score_names}"
+        verifiers.verify_trace(
+            opik_client=opik_client,
+            trace_id=it.trace_id,
+            feedback_scores=expected_score,
+            project_name=target_project_name,
         )
