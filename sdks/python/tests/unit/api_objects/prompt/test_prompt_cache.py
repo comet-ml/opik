@@ -252,7 +252,7 @@ class TestPromptCacheRefreshThread:
         registry.set(("p", None, None), entry)
 
         thread = PromptCacheRefreshThread(
-            get_entries=lambda: list(registry._entries.values()),
+            get_entries=registry.get_entries,
             interval_seconds=0.05,
         )
         thread.start()
@@ -273,7 +273,7 @@ class TestPromptCacheRefreshThread:
         registry.set(("p", None, None), entry)
 
         thread = PromptCacheRefreshThread(
-            get_entries=lambda: list(registry._entries.values()),
+            get_entries=registry.get_entries,
             interval_seconds=0.05,
         )
         thread.start()

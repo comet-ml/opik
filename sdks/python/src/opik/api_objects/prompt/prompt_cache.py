@@ -120,6 +120,10 @@ class PromptCacheRegistry:
         with self._lock:
             self._entries[key] = entry
 
+    def get_entries(self) -> typing.List[PromptCacheEntry]:
+        with self._lock:
+            return list(self._entries.values())
+
     def clear(self) -> None:
         self.stop_refresh_thread()
         with self._lock:
@@ -129,9 +133,7 @@ class PromptCacheRegistry:
         with self._thread_lock:
             if self._thread is not None and self._thread.is_alive():
                 return
-            self._thread = PromptCacheRefreshThread(
-                get_entries=lambda: list(self._entries.values())
-            )
+            self._thread = PromptCacheRefreshThread(get_entries=self.get_entries)
             self._thread.start()
             atexit.register(self.stop_refresh_thread)
 

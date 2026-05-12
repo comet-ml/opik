@@ -106,14 +106,11 @@ QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 def _maybe_inject_prompt_metadata(p: "prompt_module.base_prompt.BasePrompt") -> None:
     from opik import opik_context
 
-    if (
-        opik_context.get_current_trace_data() is None
-        and opik_context.get_current_span_data() is None
-    ):
-        return
     payload = {"prompt_reference": {"name": p.name, "commit": p.commit}}
-    opik_context.update_current_trace(metadata=payload)
-    opik_context.update_current_span(metadata=payload)
+    if opik_context.get_current_trace_data() is not None:
+        opik_context.update_current_trace(metadata=payload)
+    if opik_context.get_current_span_data() is not None:
+        opik_context.update_current_span(metadata=payload)
 
 
 def _fetch_prompt_for_cache(
