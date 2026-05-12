@@ -49,8 +49,13 @@ from opentelemetry.sdk.resources import Resource
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 def in_memory_reader():
+    """Install an InMemoryMetricReader-backed MeterProvider as the global one
+    and return the reader. Lazily fires on first use (no `autouse`) so other
+    test files in the same session can install their own provider if needed —
+    OTel Python's `set_meter_provider` is set-once and we should not preempt
+    other consumers."""
     reader = InMemoryMetricReader()
     provider = MeterProvider(
         resource=Resource.create({"service.name": "opik-python-backend-test"}),
@@ -223,6 +228,46 @@ class TestExecuteJobEmitsFromParent:
         assert "ValueError" in error_types
         # No spurious success
         assert _datapoints(reader, "rq_worker.jobs.succeeded", func) == []
+        # processed counter still increments for failed jobs
+        assert sum(
+            dp.value for dp in _datapoints(reader, "rq_worker.jobs.processed", func)
+        ) == 1
+        # concurrent counter still balances back to zero on the failure path
+        concurrent = _datapoints(reader, "rq_worker.jobs.concurrent", func)
+        assert sum(dp.value for dp in concurrent) == 0
+
+    def test_failed_job_with_multiline_exception_message(
+        self, reader, metrics_worker_module
+    ):
+        """Multi-line exception messages used to be misparsed because the old
+        parser took the last non-empty line. The hardened parser scans from
+        the end and skips indented continuation lines.
+        """
+        func = "test_failed_job_with_multiline_exception_message"
+        job = _make_job(
+            func,
+            created_at=_utc(0),
+            started_at=_utc(1),
+            ended_at=_utc(2),
+            is_failed=True,
+            exc_info=(
+                "Traceback (most recent call last):\n"
+                "  File \"x.py\", line 1, in <module>\n"
+                "requests.exceptions.ConnectionError: timeout reading body:\n"
+                "    Connection reset by peer at offset 1024\n"
+                "    while reading chunk 3"
+            ),
+        )
+        queue = _make_queue("q-multiline")
+        worker = _make_worker(metrics_worker_module)
+
+        with patch("rq.Worker.execute_job", return_value=False):
+            worker.execute_job(job, queue)
+
+        failed = _datapoints(reader, "rq_worker.jobs.failed", func)
+        error_types = {dp.attributes.get("error_type") for dp in failed}
+        # Dotted module prefix stripped to the leaf class name.
+        assert error_types == {"ConnectionError"}, error_types
 
     def test_hard_execute_job_exception_records_failed_with_exception_class(
         self, reader, metrics_worker_module
@@ -247,6 +292,13 @@ class TestExecuteJobEmitsFromParent:
         failed = _datapoints(reader, "rq_worker.jobs.failed", func)
         error_types = {dp.attributes.get("error_type") for dp in failed}
         assert "BoomError" in error_types
+        # finally-block still records processed and decrements the concurrent
+        # counter when super().execute_job raises.
+        assert sum(
+            dp.value for dp in _datapoints(reader, "rq_worker.jobs.processed", func)
+        ) == 1
+        concurrent = _datapoints(reader, "rq_worker.jobs.concurrent", func)
+        assert sum(dp.value for dp in concurrent) == 0
 
     def test_concurrent_counter_balances_to_zero_after_a_single_job(
         self, reader, metrics_worker_module

@@ -1,5 +1,6 @@
 import logging
-from datetime import datetime, timezone
+import re
+from typing import Mapping
 
 from rq import Worker
 from rq.job import Job
@@ -141,58 +142,49 @@ class MetricsWorker(Worker):
         `perform_job` (child) so the pod has exactly one MeterProvider+Reader
         chain. Sequence:
 
-          1. Record queue wait time (`now - job.created_at`) before forking.
-          2. Bump `concurrent_jobs_counter`.
-          3. Call `super().execute_job` which forks and waits for the child.
-          4. Refresh the job from Redis to read the final timestamps and
+          1. Bump `concurrent_jobs_counter`.
+          2. Call `super().execute_job` which forks and waits for the child.
+          3. Refresh the job from Redis to read the final timestamps and
              status the child wrote.
-          5. Record `jobs_processed`, `jobs_succeeded`/`jobs_failed`,
-             `processing_time`, `total_time`.
+          4. Record `jobs_processed`, `jobs_succeeded`/`jobs_failed`,
+             `processing_time`, `total_time`, and `queue_wait_time` (from
+             `job.started_at - job.created_at` after refresh, preserving the
+             pre-refactor SLI definition).
         """
         func_name = getattr(job, "func_name", None) or "unknown"
         queue_name = queue.name
         metric_attributes = {"queue": queue_name, "function": func_name}
 
-        queue_wait_ms = None
-        if job.created_at:
-            now = datetime.now(tz=timezone.utc)
+        result: bool = False
+        execute_exc: "BaseException | None" = None
+
+        # Pair concurrent_jobs_counter +1/-1 via a try/finally that brackets
+        # everything below — if the inner block raises (including a metric
+        # call), the matching decrement still runs.
+        concurrent_jobs_counter.add(1, metric_attributes)
+        try:
             try:
-                queue_wait_ms = (now - job.created_at).total_seconds() * 1000
-                queue_wait_time_histogram.record(queue_wait_ms, metric_attributes)
-            except (TypeError, ValueError):
-                logger.debug(
-                    "Could not compute queue wait time for job %s",
-                    job.id,
+                logger.debug(f"execute_job called for job {job.id}, status: {job.get_status()}")
+                result = super().execute_job(job, queue)
+                logger.debug(f"execute_job completed for job {job.id}")
+            except Exception as e:
+                execute_exc = e
+                logger.error(
+                    f"execute_job FAILED for job {job.id}: {type(e).__name__}: {e}",
                     exc_info=True,
                 )
-
-        concurrent_jobs_counter.add(1, metric_attributes)
-
-        result: bool = False
-        execute_exc: BaseException | None = None
-        try:
-            logger.debug(f"execute_job called for job {job.id}, status: {job.get_status()}")
-            result = super().execute_job(job, queue)
-            logger.debug(f"execute_job completed for job {job.id}")
-        except Exception as e:
-            execute_exc = e
-            logger.error(
-                f"execute_job FAILED for job {job.id}: {type(e).__name__}: {e}",
-                exc_info=True,
-            )
-            raise
-        finally:
-            try:
-                self._record_job_completion_metrics(job, metric_attributes, execute_exc)
+                raise
             finally:
-                concurrent_jobs_counter.add(-1, metric_attributes)
+                self._record_job_completion_metrics(job, metric_attributes, execute_exc)
+        finally:
+            concurrent_jobs_counter.add(-1, metric_attributes)
 
         return result
 
     @staticmethod
     def _record_job_completion_metrics(
         job: Job,
-        metric_attributes: dict,
+        metric_attributes: "Mapping[str, str]",
         execute_exc: "BaseException | None",
     ) -> None:
         """Read the final job state from Redis and emit the per-job metrics.
@@ -200,7 +192,7 @@ class MetricsWorker(Worker):
         Runs from the parent process after the forked child has exited. The
         child writes `started_at`, `ended_at`, status, and `exc_info` to Redis
         before exiting; `job.refresh()` here pulls those values into the local
-        Job object so we can record processing/total time and success/failure
+        Job object so we can record durations, queue wait, and success/failure
         counters from the parent.
         """
         try:
@@ -230,6 +222,13 @@ class MetricsWorker(Worker):
         started_at = getattr(job, "started_at", None)
         ended_at = getattr(job, "ended_at", None)
         created_at = getattr(job, "created_at", None)
+
+        # queue_wait_time: time the job spent in Redis before the child started
+        # executing. Preserved from the pre-refactor SLI definition so existing
+        # dashboards/alerts keyed on this histogram see no semantic change.
+        if started_at and created_at:
+            queue_wait_ms = (started_at - created_at).total_seconds() * 1000
+            queue_wait_time_histogram.record(queue_wait_ms, metric_attributes)
 
         if started_at and ended_at:
             processing_time_ms = (ended_at - started_at).total_seconds() * 1000
@@ -265,20 +264,30 @@ class MetricsWorker(Worker):
             raise
 
 
+_EXCEPTION_LINE = re.compile(r"^([A-Za-z_][A-Za-z0-9_.]*)\s*:")
+
+
 def _error_type_from_job(job: Job) -> str:
     """Best-effort extraction of the exception class name from `job.exc_info`.
 
-    RQ stores the child's traceback as a string; we read the last non-empty
-    line ("ExceptionClass: message") and take the part before the colon. Falls
-    back to "UnknownError" if the format isn't what we expect.
+    RQ stores the child's traceback as a string. Python's traceback format
+    places the exception line at column 0 ("ExceptionClass: message"), with
+    any continuation of a multi-line message and stack frames indented. We
+    scan lines from the end, skip indented continuations, and match the first
+    unindented `Name:` line — that's the outermost exception that propagated
+    out (correct under chained-exception traceback printing too).
+
+    Falls back to "UnknownError" if no such line is found.
     """
     exc_info = getattr(job, "exc_info", None)
     if not exc_info:
         return "UnknownError"
-    lines = [line for line in exc_info.strip().splitlines() if line.strip()]
-    if not lines:
-        return "UnknownError"
-    last = lines[-1].strip()
-    head = last.split(":", 1)[0].strip()
-    # Strip dotted module prefix: `module.Klass` -> `Klass`
-    return head.rsplit(".", 1)[-1] or "UnknownError"
+    for line in reversed(exc_info.splitlines()):
+        if not line or line[0].isspace():
+            continue
+        m = _EXCEPTION_LINE.match(line)
+        if m:
+            # Strip dotted module prefix: `requests.exceptions.ConnectionError`
+            # -> `ConnectionError`.
+            return m.group(1).rsplit(".", 1)[-1] or "UnknownError"
+    return "UnknownError"
