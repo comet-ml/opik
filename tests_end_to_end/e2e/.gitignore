@@ -1,0 +1,20 @@
+# Build artifacts
+node_modules/
+core/backend/generated/
+
+# Runtime state
+.auth/
+.test-scratch/
+.runners/
+.e2e-run-id
+
+# Reports
+allure-results/
+playwright-report/
+test-results/
+
+# Python
+services/opik-sdk-driver/.venv/
+services/opik-sdk-driver/__pycache__/
+services/opik-sdk-driver/**/__pycache__/
+services/opik-sdk-driver/*.egg-info/
