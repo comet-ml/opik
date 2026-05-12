@@ -5095,12 +5095,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/pairing/sessions:
     post:
       tags:
@@ -5141,12 +5135,6 @@ paths:
                 $ref: "#/components/schemas/ErrorMessage"
         "429":
           description: Too many requests
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
-        "501":
-          description: Feature disabled
           content:
             application/json:
               schema:
@@ -18746,8 +18734,6 @@ components:
           type: boolean
         collaboratorsTabEnabled:
           type: boolean
-          deprecated: true
-          description: "Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend. Field retained for response-shape compatibility with older SDK clients; will be removed in a future release."
         v2WorkspaceAllowlistIds:
           uniqueItems: true
           type: array
