@@ -26,8 +26,9 @@ interface ReportPreferenceDAO {
             @Bind("enabled") boolean enabled,
             @Bind("scheduleTimeUtc") String scheduleTimeUtc);
 
-    @SqlQuery("SELECT * FROM report_preferences WHERE project_id = :projectId")
-    Optional<ReportPreference> findByProjectId(@Bind("projectId") UUID projectId);
+    @SqlQuery("SELECT * FROM report_preferences WHERE workspace_id = :workspaceId AND project_id = :projectId")
+    Optional<ReportPreference> findByProjectId(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
 
     @SqlQuery("SELECT * FROM report_preferences WHERE enabled = true")
     List<ReportPreference> findAllEnabled();

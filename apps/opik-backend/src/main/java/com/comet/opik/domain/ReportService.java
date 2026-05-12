@@ -55,31 +55,33 @@ public class ReportService {
 
         orchestratorClient.triggerReportGeneration(
                 reportId.toString(), projectId.toString(), projectName,
-                workspaceName);
+                workspaceName,
+                () -> markReportFailed(reportId, workspaceId, projectId));
 
         return reportId;
     }
 
-    public Mono<Void> updateReport(@NonNull UUID reportId, @NonNull ReportStatus status,
-            String content, String sessionId) {
+    public Mono<Void> updateReport(@NonNull UUID projectId, @NonNull UUID reportId,
+            @NonNull ReportStatus status, String content, String sessionId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(WRITE, handle -> {
             int updated = handle.attach(OllieReportDAO.class)
-                    .update(reportId, workspaceId, content, sessionId, status.getValue());
+                    .update(reportId, workspaceId, projectId, content, sessionId, status.getValue());
             if (updated == 0) {
-                throw new NotFoundException("Report not found: " + reportId);
+                throw new NotFoundException("Report not found or already processed: " + reportId);
             }
             return null;
         })).subscribeOn(Schedulers.boundedElastic()).then();
     }
 
     public Mono<OllieReportPage> getReports(@NonNull UUID projectId, int page, int size) {
+        String workspaceId = requestContext.get().getWorkspaceId();
         return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY, handle -> {
             var dao = handle.attach(OllieReportDAO.class);
             int offset = (page - 1) * size;
-            var reports = dao.findByProjectId(projectId, size, offset);
-            long total = dao.countByProjectId(projectId);
+            var reports = dao.findByProjectId(workspaceId, projectId, size, offset);
+            long total = dao.countByProjectId(workspaceId, projectId);
             return OllieReportPage.builder()
                     .page(page)
                     .size(size)
@@ -90,9 +92,11 @@ public class ReportService {
     }
 
     public Mono<ReportPreference> getPreference(@NonNull UUID projectId) {
+        String workspaceId = requestContext.get().getWorkspaceId();
         return Mono
                 .fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
-                        handle -> handle.attach(ReportPreferenceDAO.class).findByProjectId(projectId)
+                        handle -> handle.attach(ReportPreferenceDAO.class)
+                                .findByProjectId(workspaceId, projectId)
                                 .orElse(ReportPreference.defaultForProject(projectId))))
                 .subscribeOn(Schedulers.boundedElastic());
     }
@@ -104,13 +108,26 @@ public class ReportService {
             var dao = handle.attach(ReportPreferenceDAO.class);
             dao.upsert(ctx.getWorkspaceId(), ctx.getWorkspaceName(), projectId, enabled,
                     ReportPreference.DEFAULT_SCHEDULE_TIME_UTC);
-            return dao.findByProjectId(projectId).orElseThrow();
+            return dao.findByProjectId(ctx.getWorkspaceId(), projectId).orElseThrow();
         })).subscribeOn(Schedulers.boundedElastic());
     }
 
     public List<ReportPreference> findAllEnabledPreferences() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(ReportPreferenceDAO.class).findAllEnabled());
+    }
+
+    private void markReportFailed(UUID reportId, String workspaceId, UUID projectId) {
+        try {
+            transactionTemplate.inTransaction(WRITE, handle -> {
+                handle.attach(OllieReportDAO.class)
+                        .update(reportId, workspaceId, projectId, null, null, ReportStatus.FAILED.getValue());
+                return null;
+            });
+            log.info("Marked report '{}' as failed", reportId);
+        } catch (Exception e) {
+            log.error("Failed to mark report '{}' as failed", reportId, e);
+        }
     }
 
     public void failStaleReports() {

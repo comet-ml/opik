@@ -1,11 +1,13 @@
 package com.comet.opik.api;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonValue;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NonNull;
@@ -37,6 +39,7 @@ public record OllieReport(
         @JsonValue
         private final String value;
 
+        @JsonCreator
         public static ReportStatus fromString(String value) {
             for (ReportStatus status : values()) {
                 if (status.value.equals(value)) {
@@ -65,7 +68,7 @@ public record OllieReport(
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReportCompleteRequest(
             @JsonView(View.Write.class) String content,
-            @JsonView(View.Write.class) @NonNull ReportStatus status,
+            @JsonView(View.Write.class) @NotNull ReportStatus status,
             @JsonView(View.Write.class) String sessionId) {
     }
 

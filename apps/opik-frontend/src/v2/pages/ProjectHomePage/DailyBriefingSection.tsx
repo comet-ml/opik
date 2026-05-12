@@ -359,7 +359,7 @@ export default function DailyBriefingSection() {
   const { data: preference, isPending: isPreferencePending } =
     useReportPreference({ projectId });
   const isEnabled = preference?.enabled ?? false;
-  const scheduleTimeLocalLocal = preference?.schedule_time_utc
+  const scheduleTimeLocal = preference?.schedule_time_utc
     ? formatUtcTimeAsLocal(preference.schedule_time_utc)
     : "";
 
@@ -459,7 +459,7 @@ export default function DailyBriefingSection() {
         <EmptyState
           icon={briefingBubbleIcon}
           title="No briefings yet"
-          description={`Next briefing is scheduled for tomorrow at ${scheduleTimeLocalLocal}.`}
+          description={`Next briefing is scheduled for tomorrow at ${scheduleTimeLocal}.`}
           actionLabel="Run now"
           onAction={handleRunNow}
         />
@@ -475,7 +475,7 @@ export default function DailyBriefingSection() {
 
           {isEnabled && !hasRunning && !hasFailed && (
             <ScheduledRow
-              scheduleTimeLocal={scheduleTimeLocalLocal}
+              scheduleTimeLocal={scheduleTimeLocal}
               onRunNow={handleRunNow}
             />
           )}
@@ -503,7 +503,7 @@ export default function DailyBriefingSection() {
         open={showTurnOnDialog}
         onOpenChange={setShowTurnOnDialog}
         onConfirm={handleTurnOn}
-        scheduleTimeLocal={scheduleTimeLocalLocal}
+        scheduleTimeLocal={scheduleTimeLocal}
       />
 
       {preference != null && (
@@ -512,7 +512,7 @@ export default function DailyBriefingSection() {
           onOpenChange={setShowSettingsDialog}
           enabled={preference.enabled}
           onSave={handleSaveSettings}
-          scheduleTimeLocal={scheduleTimeLocalLocal}
+          scheduleTimeLocal={scheduleTimeLocal}
         />
       )}
 

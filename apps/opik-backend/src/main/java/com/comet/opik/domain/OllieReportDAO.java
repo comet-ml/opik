@@ -23,21 +23,27 @@ interface OllieReportDAO {
             @Bind("status") String status);
 
     @SqlUpdate("UPDATE ollie_reports SET content = :content, session_id = :sessionId, " +
-            "status = :status WHERE id = :id AND workspace_id = :workspaceId")
+            "status = :status WHERE id = :id AND workspace_id = :workspaceId " +
+            "AND project_id = :projectId AND status = 'pending'")
     int update(@Bind("id") UUID id,
             @Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
             @Bind("content") String content,
             @Bind("sessionId") String sessionId,
             @Bind("status") String status);
 
-    @SqlQuery("SELECT * FROM ollie_reports WHERE project_id = :projectId " +
+    @SqlQuery("SELECT * FROM ollie_reports WHERE workspace_id = :workspaceId " +
+            "AND project_id = :projectId " +
             "ORDER BY created_at DESC LIMIT :limit OFFSET :offset")
-    List<OllieReport> findByProjectId(@Bind("projectId") UUID projectId,
+    List<OllieReport> findByProjectId(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId,
             @Bind("limit") int limit,
             @Bind("offset") int offset);
 
-    @SqlQuery("SELECT COUNT(*) FROM ollie_reports WHERE project_id = :projectId")
-    long countByProjectId(@Bind("projectId") UUID projectId);
+    @SqlQuery("SELECT COUNT(*) FROM ollie_reports WHERE workspace_id = :workspaceId " +
+            "AND project_id = :projectId")
+    long countByProjectId(@Bind("workspaceId") String workspaceId,
+            @Bind("projectId") UUID projectId);
 
     @SqlUpdate("UPDATE ollie_reports SET status = 'failed' " +
             "WHERE status = 'pending' AND created_at < DATE_SUB(NOW(), INTERVAL 10 MINUTE)")

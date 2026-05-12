@@ -30,9 +30,11 @@ public class OrchestratorClient {
     }
 
     public void triggerReportGeneration(@NonNull String reportId, @NonNull String projectId,
-            @NonNull String projectName, @NonNull String workspaceName) {
+            @NonNull String projectName, @NonNull String workspaceName,
+            @NonNull Runnable onFailure) {
         if (StringUtils.isBlank(config.getUrl())) {
             log.warn("Report generation URL not configured, skipping report '{}'", reportId);
+            onFailure.run();
             return;
         }
 
@@ -52,6 +54,7 @@ public class OrchestratorClient {
                         if (response.getStatus() >= 300) {
                             log.error("Report generation trigger returned {} for report '{}'",
                                     response.getStatus(), reportId);
+                            onFailure.run();
                         } else {
                             log.info("Report generation accepted for report '{}'", reportId);
                         }
@@ -61,6 +64,7 @@ public class OrchestratorClient {
                     @Override
                     public void failed(Throwable throwable) {
                         log.error("Failed to trigger report generation for report '{}'", reportId, throwable);
+                        onFailure.run();
                     }
                 });
     }
