@@ -1,5 +1,5 @@
 import createClient from 'openapi-fetch';
-import type { paths } from './generated/schema';
+import type { paths } from './schema';
 import { loadEnvConfig } from '../../config/env.config';
 
 export type BackendClient = ReturnType<typeof makeBackendClient>;
