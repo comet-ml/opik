@@ -49,7 +49,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import opik
 import opik.id_helpers as id_helpers_module
@@ -483,7 +483,24 @@ def _copy_traces_and_spans(
             target_project_name=target_project_name,
         )
 
-    spans_copied = 0
+    # Span phase split into two sub-phases so writes batch across ALL
+    # traces in this experiment, not per-trace. With per-trace batching the
+    # cascade issued one ``create_spans`` call per source trace (~4 spans
+    # each); accumulating across traces collapses that into ~_SPAN_BATCH_SIZE
+    # batches total, which dramatically reduces REST call count and the
+    # rate-limit pressure that comes with it.
+    #
+    # The per-trace topological sort + span_id remap stays per-trace
+    # (parents must precede children WITHIN a trace), but spans across
+    # different traces are independent and can land in any order in a
+    # batched create_spans call.
+    from opik.rest_api.types.feedback_score_batch_item import (
+        FeedbackScoreBatchItem,
+    )
+
+    span_writes: List[SpanWrite] = []
+    span_feedback_batch: List[FeedbackScoreBatchItem] = []
+
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         # Per-trace span scoping: spans live in the same project as their
         # parent trace, which may differ from the experiment's project_id
@@ -497,15 +514,30 @@ def _copy_traces_and_spans(
         # in practice).
         source_trace = source_traces_by_id[source_trace_id]
         trace_project_id = source_trace.project_id or source_project_id
-        spans_copied += _copy_spans_for_trace(
+        per_trace_writes, per_trace_feedback = _prepare_spans_for_trace(
             rest_client,
             source_trace_id=source_trace_id,
             source_project_id=trace_project_id,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
         )
+        span_writes.extend(per_trace_writes)
+        span_feedback_batch.extend(per_trace_feedback)
 
-    return traces_copied, spans_copied
+    # Batch-write spans across ALL traces in this experiment.
+    for batch in _chunks(span_writes, _SPAN_BATCH_SIZE):
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda b=batch: rest_client.spans.create_spans(spans=b)
+        )
+
+    # Batch-write span feedback scores across ALL traces in this experiment.
+    if span_feedback_batch:
+        for chunk in _chunks(span_feedback_batch, _FEEDBACK_BATCH_SIZE):
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda c=chunk: rest_client.spans.score_batch_of_spans(scores=c)
+            )
+
+    return traces_copied, len(span_writes)
 
 
 def _copy_trace_feedback_scores(
@@ -644,21 +676,30 @@ def _copy_trace_assertion_results(
         )
 
 
-def _copy_spans_for_trace(
+def _prepare_spans_for_trace(
     rest_client: OpikApi,
     *,
     source_trace_id: str,
     source_project_id: str,
     new_trace_id: str,
     target_project_name: str,
-) -> int:
-    """Read source spans for one trace, mint new ids preserving the parent
-    tree, and batch-create at the destination.
+) -> Tuple[List[SpanWrite], List[Any]]:
+    """Fetch source spans for one trace, mint new ids preserving the parent
+    tree, and return the per-trace contributions to the cascade's
+    cross-trace batches.
 
-    After the span batch create, re-emit per-span feedback scores against
-    the new span ids so span-level scores (cost, quality, etc.) survive
-    the cascade. ``score_batch_of_spans`` is the write surface; spans
-    don't accept feedback scores on the create payload directly.
+    Returns ``(span_writes, span_feedback_batch)`` for the caller to
+    extend onto experiment-level lists; the caller batches the actual
+    ``create_spans`` / ``score_batch_of_spans`` writes across all
+    traces in the experiment, which keeps REST call count proportional
+    to ``total_spans / _SPAN_BATCH_SIZE`` rather than ``num_traces``.
+
+    Span_id remap stays per-trace -- parents must precede children
+    WITHIN a trace, and span ids only collide within a trace tree --
+    but spans across different traces are independent and can land in
+    any order in the cross-trace ``create_spans`` batch.
+
+    Returns empty lists if the source trace has no spans.
     """
     from opik.rest_api.types.feedback_score_batch_item import (
         FeedbackScoreBatchItem,
@@ -672,7 +713,7 @@ def _copy_spans_for_trace(
         )
     )
     if not source_spans:
-        return 0
+        return [], []
 
     # Topological order: parents before children, so the parent_span_id
     # remap entry for every child is always populated by the time we
@@ -704,7 +745,7 @@ def _copy_spans_for_trace(
         )
 
         # Collect per-span feedback scores keyed by the new span id so
-        # we can batch-emit them after the spans land.
+        # the caller can batch-emit them across all traces.
         for score in span_dict.get("feedback_scores") or []:
             span_feedback_batch.append(
                 FeedbackScoreBatchItem(
@@ -718,18 +759,7 @@ def _copy_spans_for_trace(
                 )
             )
 
-    for batch in _chunks(span_writes, _SPAN_BATCH_SIZE):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda b=batch: rest_client.spans.create_spans(spans=b)
-        )
-
-    if span_feedback_batch:
-        for chunk in _chunks(span_feedback_batch, _FEEDBACK_BATCH_SIZE):
-            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                lambda c=chunk: rest_client.spans.score_batch_of_spans(scores=c)
-            )
-
-    return len(span_writes)
+    return span_writes, span_feedback_batch
 
 
 def _fetch_spans_for_trace(
