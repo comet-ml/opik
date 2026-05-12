@@ -116,9 +116,9 @@ def prompt_reference(p: "BasePrompt") -> None:
         existing_refs = (existing_metadata or {}).get("_prompt_references", [])
         return {"_prompt_references": existing_refs + [ref]}
 
-    if opik_context.get_current_trace_data() is not None:
-        trace_metadata = opik_context.get_current_trace_data().metadata
-        opik_context.update_current_trace(metadata=_build_payload(trace_metadata))
-    if opik_context.get_current_span_data() is not None:
-        span_metadata = opik_context.get_current_span_data().metadata
-        opik_context.update_current_span(metadata=_build_payload(span_metadata))
+    trace_data = opik_context.get_current_trace_data()
+    if trace_data is not None:
+        opik_context.update_current_trace(metadata=_build_payload(trace_data.metadata))
+    span_data = opik_context.get_current_span_data()
+    if span_data is not None:
+        opik_context.update_current_span(metadata=_build_payload(span_data.metadata))
