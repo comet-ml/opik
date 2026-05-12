@@ -18,7 +18,13 @@ type UseEnvironmentUpdateMutationParams = {
   environment: EnvironmentUpdatePayload;
 };
 
-const useEnvironmentUpdateMutation = () => {
+type UseEnvironmentUpdateMutationOptions = {
+  showErrorToast?: boolean;
+};
+
+const useEnvironmentUpdateMutation = ({
+  showErrorToast = true,
+}: UseEnvironmentUpdateMutationOptions = {}) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -34,11 +40,13 @@ const useEnvironmentUpdateMutation = () => {
       return data;
     },
     onError: (error: AxiosError) => {
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      if (!showErrorToast) return;
+
+      const errors = get(error, ["response", "data", "errors"]);
+      const message =
+        (Array.isArray(errors) && errors[0]) ||
+        get(error, ["response", "data", "message"]) ||
+        error.message;
 
       toast({
         title: "Error",

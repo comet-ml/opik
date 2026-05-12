@@ -36,11 +36,11 @@ const useEnvironmentCreateMutation = ({
     onError: (error: AxiosError) => {
       if (!showErrorToast) return;
 
-      const message = get(
-        error,
-        ["response", "data", "message"],
-        error.message,
-      );
+      const errors = get(error, ["response", "data", "errors"]);
+      const message =
+        (Array.isArray(errors) && errors[0]) ||
+        get(error, ["response", "data", "message"]) ||
+        error.message;
 
       toast({
         title: "Error",

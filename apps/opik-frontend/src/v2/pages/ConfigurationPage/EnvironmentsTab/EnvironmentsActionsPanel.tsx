@@ -32,7 +32,7 @@ const EnvironmentsActionsPanel: React.FunctionComponent<
         setOpen={setOpen}
         onConfirm={deleteEnvironmentsHandler}
         title="Delete environments"
-        description="This action can’t be undone. Existing traces and spans will keep their environment values and surface under “Unrecognized environments”. Are you sure you want to continue?"
+        description="This action can’t be undone. Existing traces and spans will keep their environment values. Are you sure you want to continue?"
         confirmText="Delete environments"
         confirmButtonVariant="destructive"
       />
