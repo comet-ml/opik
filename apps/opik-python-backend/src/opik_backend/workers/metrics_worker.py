@@ -1,9 +1,12 @@
 import logging
+import uuid
 
 from rq import Worker
 from rq.job import Job
 from rq.queue import Queue
+from opentelemetry import metrics, trace
 from opentelemetry.metrics import get_meter
+from opentelemetry.sdk.resources import Resource
 
 from .death_penalty import NoOpDeathPenalty
 from opik_backend.utils.env_utils import get_env_int
@@ -76,6 +79,51 @@ class MetricsWorker(Worker):
         super().__init__(*args, **kwargs)
         self._failure_ttl = RQ_FAILURE_TTL
         logger.info(f"MetricsWorker initialized with failure_ttl={self._failure_ttl}s")
+
+    def main_work_horse(self, job: Job, queue: Queue):
+        """RQ post-fork entry point (runs in the forked child process).
+
+        Stamps a fresh `service.instance.id` onto the OTel Resource of the
+        already-installed MeterProvider and TracerProvider before any metrics
+        fire in the child. Without this, every forked optimizer child inherits
+        the parent's identical resource attributes and emits per-process
+        runtime metrics (`system_cpu_time_seconds_total`, `system_memory_*`,
+        ...) under the same label set as the parent and its siblings.
+        Prometheus rejects those batches with HTTP 400
+        `duplicate sample for timestamp ... overrides not allowed` the moment
+        two children's emit timestamps land in the same millisecond.
+
+        Mutating `_sdk_config.resource` (metrics) and `_resource` (traces) in
+        place is deliberately surgical: existing observable instruments
+        registered before fork — including `SystemMetricsInstrumentor`'s
+        `system.cpu.time`, registered by `opentelemetry-instrument` at process
+        start — start emitting under the new resource on the next export tick,
+        because the SDK reads the resource at export time rather than at
+        instrument-creation time.
+        """
+        self._stamp_unique_otel_instance_id(job)
+        return super().main_work_horse(job, queue)
+
+    @staticmethod
+    def _stamp_unique_otel_instance_id(job: Job) -> None:
+        instance_id = str(uuid.uuid4())
+        addition = Resource.create({"service.instance.id": instance_id})
+
+        meter_provider = metrics.get_meter_provider()
+        sdk_cfg = getattr(meter_provider, "_sdk_config", None)
+        if sdk_cfg is not None and getattr(sdk_cfg, "resource", None) is not None:
+            sdk_cfg.resource = sdk_cfg.resource.merge(addition)
+
+        tracer_provider = trace.get_tracer_provider()
+        existing_trace_resource = getattr(tracer_provider, "_resource", None)
+        if existing_trace_resource is not None:
+            tracer_provider._resource = existing_trace_resource.merge(addition)
+
+        logger.info(
+            "Stamped service.instance.id=%s on forked RQ child for job %s",
+            instance_id,
+            getattr(job, "id", "unknown"),
+        )
 
     def handle_job_failure(self, job: Job, queue: Queue, started_job_registry=None, exc_string=''):
         """Handle job failure with custom failure TTL.
