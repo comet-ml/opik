@@ -96,7 +96,7 @@ public class ExperimentProjectMigrationJob extends Job implements InterruptableJ
                 }),
                 config.lockTimeout().toJavaDuration(),
                 config.lockWaitTime().toJavaDuration(),
-                true)
+                false)
                 // Resume on errors so the recurring job stays alive
                 .onErrorResume(throwable -> {
                     cycleDuration.record(System.currentTimeMillis() - startMillis, RESULT_ERROR);
