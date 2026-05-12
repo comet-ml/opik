@@ -36,13 +36,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean alertsEnabled;
     @JsonProperty
     @NotNull boolean welcomeWizardEnabled;
-    // Deprecated: CSV upload is always enabled (OPIK-6434).
-    // Field kept to preserve the /v1/private/feature-toggles response shape for older
-    // Python/TypeScript SDK clients that declare it as a required boolean. Safe to delete
-    // once those SDK versions are out of support.
-    @Deprecated
-    @JsonProperty
-    @NotNull boolean csvUploadEnabled;
     @JsonProperty
     @NotNull boolean exportEnabled;
     @JsonProperty
@@ -68,13 +61,6 @@ public class ServiceTogglesConfig {
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty
     @NotNull boolean ollamaProviderEnabled;
-    // Deprecated: the Collaborators tab is always enabled on the frontend (OPIK-6434).
-    // Field kept to preserve the /v1/private/feature-toggles response shape for older
-    // Python/TypeScript SDK clients that declare it as a required boolean. Safe to delete
-    // once those SDK versions are out of support.
-    @Deprecated
-    @JsonProperty
-    @NotNull boolean collaboratorsTabEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
