@@ -105,7 +105,7 @@ class BasePrompt(ABC):
         pass
 
 
-def _prompt_references(p: "BasePrompt") -> None:
+def prompt_reference(p: "BasePrompt") -> None:
     from opik import opik_context
 
     ref: Dict[str, Any] = {"name": p.name, "commit": p.commit}

@@ -2367,7 +2367,7 @@ class Opik:
             fetch_fn=_fetch,
         )
         if result is not None:
-            base_prompt_module._prompt_references(result)
+            base_prompt_module.prompt_reference(result)
         return result
 
     def get_prompt_history(
