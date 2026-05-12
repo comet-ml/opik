@@ -28,6 +28,8 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 import org.mapstruct.factory.Mappers;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +37,12 @@ import java.util.Objects;
 @Mapper
 interface LlmProviderAnthropicMapper {
     LlmProviderAnthropicMapper INSTANCE = Mappers.getMapper(LlmProviderAnthropicMapper.class);
+
+    Logger LOG = LoggerFactory.getLogger(LlmProviderAnthropicMapper.class);
+
+    // Anthropic requires max_tokens; default applied when callers don't set it (Playground default
+    // config, SDK without an explicit cap). 4096 mirrors langchain4j's default on the judge path.
+    int DEFAULT_MAX_COMPLETION_TOKENS = 4096;
 
     @Mapping(source = "response", target = "choices", qualifiedByName = "mapToChoices")
     @Mapping(source = "usage", target = "usage", qualifiedByName = "mapToUsage")
@@ -52,10 +60,20 @@ interface LlmProviderAnthropicMapper {
     @Mapping(expression = "java(request.temperature())", target = "temperature")
     @Mapping(expression = "java(request.temperature() != null ? null : request.topP())", target = "topP")
     @Mapping(expression = "java(request.stop())", target = "stopSequences")
-    @Mapping(expression = "java(request.maxCompletionTokens())", target = "maxTokens")
+    @Mapping(source = "request", target = "maxTokens", qualifiedByName = "resolveMaxTokens")
     @Mapping(source = "request", target = "messages", qualifiedByName = "mapToMessages")
     @Mapping(source = "request", target = "system", qualifiedByName = "mapToSystemMessages")
     AnthropicCreateMessageRequest toCreateMessageRequest(@NonNull ChatCompletionRequest request);
+
+    @Named("resolveMaxTokens")
+    default Integer resolveMaxTokens(@NonNull ChatCompletionRequest request) {
+        if (request.maxCompletionTokens() != null) {
+            return request.maxCompletionTokens();
+        }
+        LOG.info("Anthropic request for model '{}' has no maxCompletionTokens; defaulting to {}",
+                request.model(), DEFAULT_MAX_COMPLETION_TOKENS);
+        return DEFAULT_MAX_COMPLETION_TOKENS;
+    }
 
     @Named("mapToChoices")
     default List<ChatCompletionChoice> mapToChoices(@NonNull AnthropicCreateMessageResponse response) {

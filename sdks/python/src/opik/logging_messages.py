@@ -56,6 +56,11 @@ NESTED_SPAN_PROJECT_NAME_MISMATCH_WARNING_MESSAGE = (
     'However, the project name "{}" from parent span will be used instead.'
 )
 
+NESTED_SPAN_ENVIRONMENT_MISMATCH_WARNING_MESSAGE = (
+    'You are attempting to log data into a nested span under the environment "{}". '
+    'However, the environment "{}" from the parent trace will be used instead.'
+)
+
 PARSE_API_KEY_EMPTY_KEY = "Can not parse empty Opik API key"
 
 PARSE_API_KEY_EMPTY_EXPECTED_ATTRIBUTES = (

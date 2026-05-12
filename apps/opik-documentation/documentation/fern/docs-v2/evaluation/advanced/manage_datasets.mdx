@@ -123,6 +123,45 @@ From this view you can:
   No history is lost or overwritten.
 </Note>
 
+### Managing dataset and version tags from the SDK
+
+The `Dataset` object exposes `get_tags()` to read the current tags, but does not yet provide a dedicated setter. To write tags programmatically — for example to drive an `env:prod` / `env:stage` promotion workflow — use the REST client exposed on the Opik client.
+
+There are two tag surfaces, depending on what you want to scope the tag to:
+
+- **Dataset-level tags** apply to the dataset as a whole and persist across versions. Use `update_dataset` — this **replaces** the existing tag list.
+- **Version-level tags** apply to a specific dataset version. Use `update_dataset_version` — this is **additive** (it adds to the version's existing tags).
+
+```python {pytest_codeblocks_skip=true}
+import opik
+
+client = opik.Opik()
+dataset = client.get_or_create_dataset(name="my-eval", project_name="my-project")
+
+# Read current dataset-level tags
+print(dataset.get_tags())
+
+# Set dataset-level tags (replaces the existing list)
+client.rest_client.datasets.update_dataset(
+    id=dataset.id,
+    name=dataset.name,
+    tags=["env:prod"],
+)
+
+# Add tags to a specific version (additive)
+client.rest_client.datasets.update_dataset_version(
+    id=dataset.id,
+    version_hash=dataset.version_hash,
+    tags_to_add=["env:prod"],
+)
+```
+
+<Note>
+  `client.rest_client` is a thin wrapper around the public REST API. The underlying endpoints are stable, but the Python wrapper itself is not guaranteed to be backward-compatible across SDK versions. A first-class `Dataset.set_tags()` / `Dataset.add_version_tags()` helper is on the roadmap — this snippet is the supported interim path.
+</Note>
+
+You can then filter dataset items by these tags via [`get_items(filter_string=...)`](#querying-dataset-items) using the `tags contains` operator.
+
 ## Adding traces to a dataset
 
 One of the most powerful ways to build evaluation datasets is by converting production traces into dataset items. This allows you to leverage real-world interactions from your LLM application to create test cases for evaluation.

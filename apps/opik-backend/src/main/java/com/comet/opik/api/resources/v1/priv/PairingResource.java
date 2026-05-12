@@ -6,7 +6,6 @@ import com.comet.opik.api.connect.CreateSessionRequest;
 import com.comet.opik.api.connect.CreateSessionResponse;
 import com.comet.opik.api.error.ErrorMessage;
 import com.comet.opik.domain.pairing.PairingService;
-import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.ratelimit.RateLimited;
@@ -26,7 +25,6 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
@@ -37,7 +35,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -52,7 +49,6 @@ public class PairingResource {
 
     private final @NonNull Provider<RequestContext> requestContext;
     private final @NonNull PairingService pairingService;
-    private final @NonNull LocalRunnerConfig runnerConfig;
     private final @NonNull AnalyticsService analyticsService;
 
     @POST
@@ -63,11 +59,9 @@ public class PairingResource {
             @ApiResponse(responseCode = "400", description = "Bad request", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "404", description = "Project not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable entity", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "501", description = "Feature disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response createSession(
             @RequestBody(content = @Content(schema = @Schema(implementation = CreateSessionRequest.class))) @NotNull @Valid CreateSessionRequest request) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
         CreateSessionResponse response = pairingService.create(workspaceId, userName, request);
@@ -91,13 +85,11 @@ public class PairingResource {
             @ApiResponse(responseCode = "404", description = "Session not found", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "409", description = "Session already activated", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
             @ApiResponse(responseCode = "422", description = "Unprocessable entity", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class))),
-            @ApiResponse(responseCode = "501", description = "Feature disabled", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
+            @ApiResponse(responseCode = "429", description = "Too many requests", content = @Content(schema = @Schema(implementation = ErrorMessage.class)))})
     public Response activate(
             @PathParam("sessionId") @NotNull UUID sessionId,
             @RequestBody(content = @Content(schema = @Schema(implementation = ActivateRequest.class))) @NotNull @Valid ActivateRequest request,
             @Context UriInfo uriInfo) {
-        ensureEnabled();
         String workspaceId = requestContext.get().getWorkspaceId();
         String userName = requestContext.get().getUserName();
 
@@ -122,16 +114,6 @@ public class PairingResource {
                     "error", e.getClass().getSimpleName(),
                     "date", Instant.now().toString()));
             throw e;
-        }
-    }
-
-    private void ensureEnabled() {
-        if (!runnerConfig.isEnabled()) {
-            throw new WebApplicationException(
-                    Response.status(Response.Status.NOT_IMPLEMENTED)
-                            .type(MediaType.APPLICATION_JSON)
-                            .entity(new ErrorMessage(List.of("pairing is not enabled on this deployment")))
-                            .build());
         }
     }
 }

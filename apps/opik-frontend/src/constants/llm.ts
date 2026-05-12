@@ -13,6 +13,7 @@ import {
 import {
   AnthropicThinkingEffort,
   PROVIDER_MODEL_TYPE,
+  ReasoningEffort,
 } from "@/types/providers";
 
 export const PLAYGROUND_LAST_PICKED_MODEL = "playground-last-picked-model";
@@ -115,6 +116,93 @@ export const ANTHROPIC_MODEL_CAPABILITIES: Partial<
   },
   [PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4_6]: {
     thinkingEffortOptions: ["adaptive", "low", "medium", "high", "max"],
+  },
+};
+
+// Per-model OpenAI quirks. Add a row when a model deviates from defaults
+// (sampling params allowed, no reasoning-effort UI). Reasoning models must
+// specify the exact set of effort values they accept — OpenAI families
+// differ: o-series → low/medium/high; gpt-5 → minimal/low/medium/high;
+// gpt-5.1+ → none/low/medium/high. Sending an unsupported value 400s.
+export const OPENAI_MODEL_CAPABILITIES: Partial<
+  Record<
+    PROVIDER_MODEL_TYPE,
+    {
+      reasoning?: boolean;
+      reasoningEffortOptions?: ReasoningEffort[];
+    }
+  >
+> = {
+  // o-series — no minimal, no xhigh
+  [PROVIDER_MODEL_TYPE.GPT_O1]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  // o1-mini API rejects reasoning_effort entirely; reasoning model with no dropdown.
+  [PROVIDER_MODEL_TYPE.GPT_O1_MINI]: { reasoning: true },
+  [PROVIDER_MODEL_TYPE.GPT_O3]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_O3_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_O4_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["low", "medium", "high"],
+  },
+
+  // Original gpt-5 family — minimal added
+  [PROVIDER_MODEL_TYPE.GPT_5]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_NANO]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["minimal", "low", "medium", "high"],
+  },
+
+  // gpt-5.1+ — none replaces minimal
+  [PROVIDER_MODEL_TYPE.GPT_5_1]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_2_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_3_CHAT_LATEST]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_MINI]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_4_NANO]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high"],
+  },
+  [PROVIDER_MODEL_TYPE.GPT_5_5]: {
+    reasoning: true,
+    reasoningEffortOptions: ["none", "low", "medium", "high", "xhigh"],
   },
 };
 

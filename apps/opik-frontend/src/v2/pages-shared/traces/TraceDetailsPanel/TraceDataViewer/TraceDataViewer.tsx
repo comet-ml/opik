@@ -28,6 +28,7 @@ import AgentConfigurationTab, {
 import { AGENT_CONFIGURATION_METADATA_KEY } from "@/utils/agent-configurations";
 import { formatDate } from "@/lib/date";
 import TraceStatsDisplay from "@/v2/pages-shared/traces/TraceStatsDisplay/TraceStatsDisplay";
+import EnvironmentLabel from "@/shared/EnvironmentLabel/EnvironmentLabel";
 import { usePermissions } from "@/contexts/PermissionsContext";
 import UserCommentHoverList from "@/shared/UserComment/UserCommentHoverList";
 import {
@@ -245,6 +246,12 @@ const TraceDataViewer: React.FunctionComponent<TraceDataViewerProps> = ({
                   </div>
                 </div>
               </TooltipWrapper>
+            )}
+            {data.environment && (
+              <EnvironmentLabel
+                name={data.environment}
+                className="comet-body-s text-foreground"
+              />
             )}
           </div>
           <TagList

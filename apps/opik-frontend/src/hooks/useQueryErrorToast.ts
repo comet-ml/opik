@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import axios, { AxiosError } from "axios";
 
 import { useToast } from "@/ui/use-toast";
-import { extractErrorMessage } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 interface UseQueryErrorToastParams {
   isError: boolean;

@@ -5,7 +5,7 @@ import api, { DATASETS_REST_ENDPOINT } from "@/api/api";
 import { DatasetItem, Evaluator } from "@/types/datasets";
 import { ExecutionPolicy } from "@/types/test-suites";
 import { useToast } from "@/ui/use-toast";
-import { extractErrorMessage } from "@/lib/tags";
+import { extractErrorMessage } from "@/lib/errors";
 
 interface DatasetItemChangesPayload {
   added_items: DatasetItem[];

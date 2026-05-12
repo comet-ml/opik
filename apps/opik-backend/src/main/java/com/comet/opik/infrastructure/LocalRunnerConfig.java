@@ -13,9 +13,6 @@ import java.util.concurrent.TimeUnit;
 @Data
 public class LocalRunnerConfig {
 
-    @Valid @JsonProperty
-    private boolean enabled;
-
     @Valid @NotNull @JsonProperty
     @MinDuration(value = 1, unit = TimeUnit.SECONDS)
     private Duration jobTimeout = Duration.seconds(1800);

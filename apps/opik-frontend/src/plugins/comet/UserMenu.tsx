@@ -33,8 +33,6 @@ import { useToast } from "@/ui/use-toast";
 import { useThemeOptions } from "@/hooks/useThemeOptions";
 import { APP_VERSION } from "@/constants/app";
 import { ADMIN_DASHBOARD_LABEL } from "@/constants/labels";
-import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
-import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { cn, maskAPIKey } from "@/lib/utils";
 import useAppStore, { useDetectedWorkspaceVersion } from "@/store/AppStore";
 import {
@@ -51,7 +49,6 @@ import useUserPermissions from "./useUserPermissions";
 import { buildUrl } from "./utils";
 
 import useAllWorkspaces from "@/plugins/comet/useAllWorkspaces";
-import useInviteMembersURL from "@/plugins/comet/useInviteMembersURL";
 import InviteUsersPopover from "@/plugins/comet/InviteUsersPopover";
 import useUserPermission from "@/plugins/comet/useUserPermission";
 
@@ -87,13 +84,8 @@ const UserMenu = () => {
   );
 
   const { canInviteMembers } = useUserPermission();
-  const inviteMembersURL = useInviteMembersURL();
   const [inviteSearchQuery, setInviteSearchQuery] = useState("");
   const [isInviteSubmenuOpen, setIsInviteSubmenuOpen] = useState(false);
-
-  const isCollaboratorsTabEnabled = useIsFeatureEnabled(
-    FeatureToggleKeys.COLLABORATORS_TAB_ENABLED,
-  );
 
   const handleInviteClose = () => {
     setIsInviteSubmenuOpen(false);
@@ -139,49 +131,34 @@ const UserMenu = () => {
   };
 
   const renderInviteMembers = () => {
-    if (isCollaboratorsTabEnabled) {
-      if (!canInviteMembers) {
-        return null;
-      }
-
-      return (
-        <DropdownMenuSub
-          open={isInviteSubmenuOpen}
-          onOpenChange={(open) => {
-            setIsInviteSubmenuOpen(open);
-            if (!open) {
-              setInviteSearchQuery("");
-            }
-          }}
-        >
-          <DropdownMenuSubTrigger className="cursor-pointer">
-            <UserPlus className="mr-2 size-4" />
-            <span>Invite members</span>
-          </DropdownMenuSubTrigger>
-          <DropdownMenuPortal>
-            <InviteUsersPopover
-              searchQuery={inviteSearchQuery}
-              setSearchQuery={setInviteSearchQuery}
-              onClose={handleInviteClose}
-              asSubContent
-            />
-          </DropdownMenuPortal>
-        </DropdownMenuSub>
-      );
+    if (!canInviteMembers) {
+      return null;
     }
 
-    if (inviteMembersURL) {
-      return (
-        <a href={inviteMembersURL}>
-          <DropdownMenuItem className="cursor-pointer">
-            <UserPlus className="mr-2 size-4" />
-            <span>Invite members</span>
-          </DropdownMenuItem>
-        </a>
-      );
-    }
-
-    return null;
+    return (
+      <DropdownMenuSub
+        open={isInviteSubmenuOpen}
+        onOpenChange={(open) => {
+          setIsInviteSubmenuOpen(open);
+          if (!open) {
+            setInviteSearchQuery("");
+          }
+        }}
+      >
+        <DropdownMenuSubTrigger className="cursor-pointer">
+          <UserPlus className="mr-2 size-4" />
+          <span>Invite members</span>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuPortal>
+          <InviteUsersPopover
+            searchQuery={inviteSearchQuery}
+            setSearchQuery={setInviteSearchQuery}
+            onClose={handleInviteClose}
+            asSubContent
+          />
+        </DropdownMenuPortal>
+      </DropdownMenuSub>
+    );
   };
 
   const renderUserMenu = () => {

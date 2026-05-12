@@ -200,3 +200,102 @@ def test_distributed_headers__source_set__span_gets_that_source():
 
     assert result.trace_data is None
     assert result.span_data.source == "optimization"
+
+
+# ---------------------------------------------------------------------------
+# Environment inheritance — a span always inherits its parent trace's env when
+# the trace has one, ignoring the per-call ``environment`` argument.
+# ---------------------------------------------------------------------------
+
+
+def _start_span_params_with_env(env):
+    return arguments_helpers.StartSpanParameters(
+        type="general", name="child", environment=env
+    )
+
+
+def test_existing_trace_with_env__child_span_inherits_trace_env_and_ignores_per_call_env():
+    storage = OpikContextStorage()
+    storage.set_trace_data(trace_module.TraceData(id="t", environment="production"))
+
+    result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=_start_span_params_with_env("staging"),
+        distributed_trace_headers=None,
+        opik_context_storage=storage,
+        source=None,
+    )
+
+    assert result.span_data.environment == "production"
+
+
+def test_existing_parent_span_with_env__child_span_inherits_parent_env_and_ignores_per_call_env():
+    storage = OpikContextStorage()
+    parent = span_module.SpanData(
+        trace_id="t", id="parent", source="sdk", environment="production"
+    )
+    storage.add_span_data(parent)
+
+    result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=_start_span_params_with_env("staging"),
+        distributed_trace_headers=None,
+        opik_context_storage=storage,
+        source=None,
+    )
+
+    assert result.span_data.environment == "production"
+
+
+def test_existing_trace_without_env__child_span_inherits_none_and_warns_on_per_call_env():
+    storage = OpikContextStorage()
+    storage.set_trace_data(trace_module.TraceData(id="t", environment=None))
+
+    result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=_start_span_params_with_env("staging"),
+        distributed_trace_headers=None,
+        opik_context_storage=storage,
+        source=None,
+    )
+
+    # The trace has no environment — the per-call value is dropped, just like
+    # when the trace's environment is set to a different value.
+    assert result.span_data.environment is None
+
+
+def test_distributed_headers__no_local_context__per_call_env_passes_through():
+    """Mirrors project_name: with no local parent, caller-supplied environment is accepted."""
+    storage = OpikContextStorage()
+    headers = {
+        "opik_trace_id": "remote-trace-id",
+        "opik_parent_span_id": "remote-span-id",
+    }
+
+    result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=_start_span_params_with_env("staging"),
+        distributed_trace_headers=headers,
+        opik_context_storage=storage,
+        source=None,
+    )
+
+    assert result.span_data.environment == "staging"
+
+
+def test_distributed_headers__local_parent_span_present__parent_env_wins():
+    """When a local parent span exists, its environment overrides the per-call value."""
+    storage = OpikContextStorage()
+    parent = span_module.SpanData(
+        trace_id="t", id="parent", source="sdk", environment="production"
+    )
+    storage.add_span_data(parent)
+    headers = {
+        "opik_trace_id": "remote-trace-id",
+        "opik_parent_span_id": "remote-span-id",
+    }
+
+    result = span_creation_handler.create_span_respecting_context(
+        start_span_arguments=_start_span_params_with_env("staging"),
+        distributed_trace_headers=headers,
+        opik_context_storage=storage,
+        source=None,
+    )
+
+    assert result.span_data.environment == "production"

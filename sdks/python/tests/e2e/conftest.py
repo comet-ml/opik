@@ -86,6 +86,21 @@ def prompt_name():
 
 
 @pytest.fixture
+def environment_name(opik_client: opik.Opik):
+    """A unique environment name for the test; the environment is deleted on teardown.
+
+    Environments are workspace-capped (default 20), so leaking them across runs
+    quickly fills the cap. Cleanup is best-effort — ``delete_environment`` is a
+    no-op if the test never created it."""
+    name = f"e2e-tests-environment-{random_chars()}"
+    yield name
+    try:
+        opik_client.delete_environment(name)
+    except rest_api_core.ApiError:
+        pass
+
+
+@pytest.fixture
 def temporary_project_name(opik_client: opik.Opik):
     """A unique project name for the test; the project is deleted on teardown.
 

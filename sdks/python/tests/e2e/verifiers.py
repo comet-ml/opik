@@ -103,6 +103,7 @@ def verify_trace(
     thread_id: Optional[str] = mock.ANY,  # type: ignore
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
+    environment: Optional[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         trace = opik_client.get_trace_content(id=trace_id)
@@ -113,6 +114,9 @@ def verify_trace(
         testlib.assert_equal(output, trace.output)
         testlib.assert_equal(metadata, trace.metadata)
         testlib.assert_equal(source, trace.source)
+
+        if environment is not mock.ANY:
+            testlib.assert_equal(environment, trace.environment)
 
         if tags is not mock.ANY:
             testlib.assert_equal(_try_build_set(tags), _try_build_set(trace.tags))
@@ -186,6 +190,7 @@ def verify_span(
     error_info: Optional[ErrorInfoDict] = mock.ANY,  # type: ignore
     total_cost: Optional[float] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
+    environment: Optional[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         span = opik_client.get_span_content(id=span_id)
@@ -209,6 +214,9 @@ def verify_span(
         testlib.assert_equal(output, span.output)
         testlib.assert_equal(metadata, span.metadata)
         testlib.assert_equal(source, span.source)
+
+        if environment is not mock.ANY:
+            testlib.assert_equal(environment, span.environment)
 
         if tags is not mock.ANY:
             testlib.assert_equal(_try_build_set(tags), _try_build_set(span.tags))

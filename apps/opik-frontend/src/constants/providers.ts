@@ -46,7 +46,7 @@ export const PROVIDERS: PROVIDERS_TYPE = {
     icon: OpenAIIcon,
     apiKeyName: "OPENAI_API_KEY",
     apiKeyURL: "https://platform.openai.com/account/api-keys",
-    defaultModel: PROVIDER_MODEL_TYPE.GPT_5_2,
+    defaultModel: PROVIDER_MODEL_TYPE.GPT_5_5,
   },
   [PROVIDER_TYPE.ANTHROPIC]: {
     label: "Anthropic",

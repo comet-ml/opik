@@ -34,7 +34,6 @@ import static jakarta.ws.rs.core.Response.Status.Family.familyOf;
 public class ChatCompletionService {
     public static final String UNEXPECTED_ERROR_CALLING_LLM_PROVIDER = "Unexpected error calling LLM provider";
     public static final String ERROR_EMPTY_MESSAGES = "messages cannot be empty";
-    public static final String ERROR_NO_COMPLETION_TOKENS = "maxCompletionTokens cannot be null";
 
     private final LlmProviderClientConfig llmProviderClientConfig;
     private final LlmProviderFactory llmProviderFactory;
