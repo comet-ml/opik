@@ -326,6 +326,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "arcee-ai/trinity-large-thinking",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_LARGE_THINKING_FREE,
+      label: "arcee-ai/trinity-large-thinking:free",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ARCEE_AI_TRINITY_MINI,
       label: "arcee-ai/trinity-mini",
     },
