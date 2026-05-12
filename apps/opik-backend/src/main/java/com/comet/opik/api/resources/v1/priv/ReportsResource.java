@@ -44,7 +44,7 @@ import static com.comet.opik.utils.AsyncUtils.setRequestContext;
 @Slf4j
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 @Tag(name = "Reports", description = "Ollie daily report management")
-public class ReportResource {
+public class ReportsResource {
 
     private final @NonNull ReportService reportService;
     private final @NonNull Provider<RequestContext> requestContext;
@@ -52,7 +52,7 @@ public class ReportResource {
     @POST
     @Path("/generate")
     @Operation(operationId = "generateReport", summary = "Trigger report generation", description = "Creates a pending report and triggers asynchronous generation via the orchestrator.", responses = {
-            @ApiResponse(responseCode = "200", description = "Report generation triggered", content = @Content(schema = @Schema(implementation = GenerateReportResponse.class))),
+            @ApiResponse(responseCode = "202", description = "Report generation triggered", content = @Content(schema = @Schema(implementation = GenerateReportResponse.class))),
             @ApiResponse(responseCode = "401", description = "Unauthorized"),
             @ApiResponse(responseCode = "403", description = "Forbidden")
     })
@@ -62,7 +62,7 @@ public class ReportResource {
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
-        return Response.ok(new GenerateReportResponse(reportId)).build();
+        return Response.accepted(new GenerateReportResponse(reportId)).build();
     }
 
     @POST
@@ -77,7 +77,7 @@ public class ReportResource {
             @PathParam("reportId") UUID reportId,
             @Valid ReportCompleteRequest request) {
 
-        reportService.updateReport(reportId, request.status(), request.content(), request.sessionId())
+        reportService.updateReport(projectId, reportId, request.status(), request.content(), request.sessionId())
                 .contextWrite(ctx -> setRequestContext(ctx, requestContext))
                 .block();
 
