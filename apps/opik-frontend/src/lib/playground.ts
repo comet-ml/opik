@@ -10,11 +10,11 @@ import {
 } from "@/constants/llm";
 import {
   getDefaultTemperatureForModel,
-  isReasoningModel,
-  supportsGeminiThinkingLevel,
-  supportsVertexAIThinkingLevel,
   supportsAnthropicThinkingEffort,
+  supportsGeminiThinkingLevel,
+  supportsOpenAIReasoningEffort,
   supportsSamplingParams,
+  supportsVertexAIThinkingLevel,
 } from "@/lib/modelUtils";
 import {
   LLMAnthropicConfigsType,
@@ -53,9 +53,8 @@ export const getDefaultConfigByProvider = (
       maxConcurrentRequests: DEFAULT_OPEN_AI_CONFIGS.MAX_CONCURRENT_REQUESTS,
     };
 
-    // Add reasoningEffort default for reasoning models
-    if (isReasoningModel(model)) {
-      config.reasoningEffort = "medium";
+    if (supportsOpenAIReasoningEffort(model)) {
+      config.reasoningEffort = "high";
     }
 
     return config;
