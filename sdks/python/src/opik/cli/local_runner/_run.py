@@ -1,6 +1,7 @@
 """Shared CLI session runner for connect and endpoint commands."""
 
 import logging
+import sys
 from typing import List, Optional
 
 import click
@@ -8,9 +9,11 @@ import httpx
 import sentry_sdk
 
 from opik import Opik
+from opik.api_objects.rest_helpers import resolve_project_id_by_name
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.tui import RunnerTUI
 
+from .error_view import build_config_error_block
 from .pairing import (
     RunnerType,
     generate_runner_name,
@@ -20,6 +23,49 @@ from .pairing import (
 )
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _raise_runtime_error(header: str, reason: str, client: Opik) -> None:
+    """Translate a runtime CLI failure into the shared config-error block.
+
+    Lives here (not in error_view) because the data-collection side is _run's
+    job: it reads from the client config and decides what reason text to show.
+    """
+    raise build_config_error_block(
+        header,
+        reason=reason,
+        workspace=client.config.workspace,
+        base_url=client.config.url_override,
+        config_file_exists=client.config.config_file_exists,
+    )
+
+
+def _should_create_project(
+    api: object, project_name: str, workspace: Optional[str], headless: bool
+) -> bool:
+    """Decide whether to auto-create the project if pairing finds it missing.
+
+    Headless callers (e.g. Ollie spawning `opik endpoint --headless`) cannot
+    answer a prompt, so we create silently. Interactive callers see a
+    confirmation prompt only when the project is confirmed-missing (404).
+    Any other lookup error falls through so the downstream resolver can
+    surface the formatted error.
+    """
+    if headless:
+        return True
+    try:
+        resolve_project_id_by_name(api, project_name)
+        return False
+    except ApiError as e:
+        if e.status_code != 404:
+            return False
+    if not sys.stdin.isatty():
+        return False
+    workspace_label = f" in workspace '{workspace}'" if workspace else ""
+    return click.confirm(
+        f"Project '{project_name}'{workspace_label} does not exist. Create it?",
+        default=True,
+    )
 
 
 def _capture_cli_error(
@@ -54,16 +100,27 @@ def run_cli_session(
         _show_misconfiguration_message=False,
     )
     api = client.rest_client
-    tui = RunnerTUI()
 
-    # Global scope so background threads (heartbeat, bridge-poll) inherit the tag.
-    # Safe because the CLI process runs one command and exits.
+    # Sentry tag is set globally so background threads (heartbeat, bridge-poll)
+    # inherit it. Safe because the CLI process runs one command and exits.
     sentry_sdk.set_tag("cli_command", f"opik-{runner_type.value}")
+
+    # Prompt before the Live TUI takes over the terminal — click.confirm and
+    # Rich Live can't safely share stdout.
+    create_if_missing = _should_create_project(
+        api, project_name, client.config.workspace, headless
+    )
+
+    tui = RunnerTUI()
 
     try:
         runner_name = generate_runner_name(name)
         tui.start()
-        tui.print_banner(project_name, url=client.config.url_override)
+        tui.print_banner(
+            project_name,
+            url=client.config.url_override,
+            workspace=client.config.workspace,
+        )
 
         if headless:
             result = run_headless(
@@ -71,6 +128,10 @@ def run_cli_session(
                 project_name=project_name,
                 runner_name=runner_name,
                 runner_type=runner_type,
+                create_if_missing=create_if_missing,
+                workspace=client.config.workspace,
+                base_url=client.config.url_override,
+                config_file_exists=client.config.config_file_exists,
             )
         else:
             result = run_pairing(
@@ -81,6 +142,8 @@ def run_cli_session(
                 base_url=client.config.url_override,
                 workspace=client.config.workspace,
                 tui=tui,
+                create_if_missing=create_if_missing,
+                config_file_exists=client.config.config_file_exists,
             )
 
         if not client.config.config_file_exists:
@@ -104,8 +167,8 @@ def run_cli_session(
             message=str(e.body) if e.body else None,
             status_code=e.status_code,
         )
-        click.echo(f"Error: {e.body}" if e.body else f"Error: {e.status_code}")
-        raise SystemExit(1)
+        reason = str(e.body) if e.body else f"HTTP {e.status_code}"
+        _raise_runtime_error("Opik API request failed", reason, client)
     except httpx.ConnectError as e:
         _capture_cli_error(
             e,
@@ -113,11 +176,11 @@ def run_cli_session(
             message=str(e),
             url=client.config.url_override,
         )
-        click.echo(
-            f"Error: Could not connect to Opik at {client.config.url_override}. "
-            "Check that the backend is running."
+        _raise_runtime_error(
+            "Could not connect to Opik backend",
+            "check that the backend is running",
+            client,
         )
-        raise SystemExit(1)
     except OSError as e:
         _capture_cli_error(e, error_type="OSError", message=str(e))
         cmd_name = command[0] if command else "unknown"
