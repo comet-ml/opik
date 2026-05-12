@@ -16,17 +16,23 @@ logger = logging.getLogger(__name__)
 DEFAULT_TTL_SECONDS = 300
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
+
+def _int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+# Resolved once at import time. Override via OPIK_PROMPT_CACHE_TTL_SECONDS (integer seconds, >= 1).
+_PROMPT_CACHE_TTL_SECONDS: int = _int_env(
+    "OPIK_PROMPT_CACHE_TTL_SECONDS", DEFAULT_TTL_SECONDS
+)
+
 _CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
-
-
-def _get_ttl_seconds() -> int:
-    raw = os.environ.get("OPIK_PROMPT_CACHE_TTL_SECONDS")
-    if raw is not None:
-        try:
-            return int(raw)
-        except ValueError:
-            pass
-    return DEFAULT_TTL_SECONDS
 
 
 class PromptCacheEntry:
@@ -95,7 +101,7 @@ class PromptCacheRefreshThread(threading.Thread):
     def run(self) -> None:
         while not self._stop_event.is_set():
             self._refresh_all_stale()
-            interval = self._interval or float(_get_ttl_seconds())
+            interval = self._interval or float(_PROMPT_CACHE_TTL_SECONDS)
             self._stop_event.wait(max(interval, _MIN_REFRESH_INTERVAL_SECONDS))
 
     def _refresh_all_stale(self) -> None:
@@ -195,7 +201,7 @@ def get_or_fetch(
 
     pinned = commit is not None
     entry = PromptCacheEntry(
-        prompt=prompt, pinned=pinned, ttl_seconds=_get_ttl_seconds()
+        prompt=prompt, pinned=pinned, ttl_seconds=_PROMPT_CACHE_TTL_SECONDS
     )
     _registry.set(key, entry)
 
