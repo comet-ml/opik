@@ -2363,6 +2363,7 @@ class Opik:
             name=name,
             commit=commit,
             project_name=project_name,
+            template_structure=template_structure,
             fetch_fn=_fetch,
         )
         if result is not None:

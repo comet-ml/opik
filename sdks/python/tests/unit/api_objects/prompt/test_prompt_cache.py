@@ -156,30 +156,30 @@ class TestGetOrFetch:
     def test_miss__calls_fetch_fn(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
-        result = prompt_cache.get_or_fetch("p", None, None, fetch_fn)
+        result = prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
         assert result is p
         fetch_fn.assert_called_once()
 
     def test_miss__fetch_returns_none__returns_none(self):
         fetch_fn = mock.Mock(return_value=None)
-        result = prompt_cache.get_or_fetch("missing", None, None, fetch_fn)
+        result = prompt_cache.get_or_fetch("missing", None, None, "text", fetch_fn)
         assert result is None
 
     def test_hit__does_not_call_fetch_fn(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
-        prompt_cache.get_or_fetch("p", None, None, fetch_fn)
+        prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
         fetch_fn.reset_mock()
 
-        result = prompt_cache.get_or_fetch("p", None, None, fetch_fn)
+        result = prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
         assert result is p
         fetch_fn.assert_not_called()
 
     def test_pinned_commit__no_refresh_callback(self):
         p = _make_mock_prompt(commit="abc")
         fetch_fn = mock.Mock(return_value=p)
-        prompt_cache.get_or_fetch("p", "abc", None, fetch_fn)
-        key = ("p", "abc", None)
+        prompt_cache.get_or_fetch("p", "abc", None, "text", fetch_fn)
+        key = ("p", "abc", None, "text")
         entry = get_global_registry().get(key)
         assert entry is not None
         assert entry._refresh_callback is None
@@ -187,8 +187,8 @@ class TestGetOrFetch:
     def test_unpinned__refresh_callback_registered(self):
         p = _make_mock_prompt(commit=None)
         fetch_fn = mock.Mock(return_value=p)
-        prompt_cache.get_or_fetch("p", None, None, fetch_fn)
-        key = ("p", None, None)
+        prompt_cache.get_or_fetch("p", None, None, "text", fetch_fn)
+        key = ("p", None, None, "text")
         entry = get_global_registry().get(key)
         assert entry is not None
         assert entry._refresh_callback is fetch_fn
@@ -196,18 +196,18 @@ class TestGetOrFetch:
     def test_cache_hit__same_object_returned(self):
         p = _make_mock_prompt()
         fetch_fn = mock.Mock(return_value=p)
-        prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
-        first = prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
-        second = prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
+        prompt_cache.get_or_fetch("p", None, "proj", "text", fetch_fn)
+        first = prompt_cache.get_or_fetch("p", None, "proj", "text", fetch_fn)
+        second = prompt_cache.get_or_fetch("p", None, "proj", "text", fetch_fn)
         assert first is second is p
 
     def test_different_keys__different_entries(self):
         p1 = _make_mock_prompt(commit="c1")
         p2 = _make_mock_prompt(commit="c2")
-        prompt_cache.get_or_fetch("p", "c1", None, mock.Mock(return_value=p1))
-        prompt_cache.get_or_fetch("p", "c2", None, mock.Mock(return_value=p2))
-        r1 = prompt_cache.get_or_fetch("p", "c1", None, mock.Mock())
-        r2 = prompt_cache.get_or_fetch("p", "c2", None, mock.Mock())
+        prompt_cache.get_or_fetch("p", "c1", None, "text", mock.Mock(return_value=p1))
+        prompt_cache.get_or_fetch("p", "c2", None, "text", mock.Mock(return_value=p2))
+        r1 = prompt_cache.get_or_fetch("p", "c1", None, "text", mock.Mock())
+        r2 = prompt_cache.get_or_fetch("p", "c2", None, "text", mock.Mock())
         assert r1 is p1
         assert r2 is p2
 

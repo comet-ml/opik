@@ -17,14 +17,15 @@ DEFAULT_TTL_SECONDS = 300
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
 
 
-def _int_env(name: str, default: int) -> int:
+def _int_env(name: str, default: int, minimum: int = 1) -> int:
     raw = os.environ.get(name)
     if raw is None:
         return default
     try:
-        return int(raw)
+        value = int(raw)
     except ValueError:
         return default
+    return max(value, minimum)
 
 
 # Resolved once at import time. Override via OPIK_PROMPT_CACHE_TTL_SECONDS (integer seconds, >= 1).
@@ -32,7 +33,7 @@ _PROMPT_CACHE_TTL_SECONDS: int = _int_env(
     "OPIK_PROMPT_CACHE_TTL_SECONDS", DEFAULT_TTL_SECONDS
 )
 
-_CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str]]
+_CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str], str]
 
 
 class PromptCacheEntry:
@@ -179,6 +180,7 @@ def get_or_fetch(
     name: str,
     commit: typing.Optional[str],
     project_name: typing.Optional[str],
+    template_structure: str,
     fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
 ) -> typing.Optional[_PromptT]:
     """Return a cached prompt or fetch, cache, and return it.
@@ -190,7 +192,7 @@ def get_or_fetch(
     For unpinned prompts (commit is None), *fetch_fn* is also registered as
     the background-refresh callback so the cache stays fresh.
     """
-    key: _CacheKey = (name, commit, project_name)
+    key: _CacheKey = (name, commit, project_name, template_structure)
     entry = _registry.get(key)
     if entry is not None:
         return typing.cast(_PromptT, entry.prompt)
