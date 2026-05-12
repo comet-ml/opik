@@ -53,7 +53,9 @@ def opik_tracer_with_otel(otel_exporter: InMemorySpanExporter):
     yield tracer
 
 
-def test_adk_otel_patching__wrapper_attached_to_singleton(opik_tracer_with_otel):
+def test_adk_otel_patching__wrapper_attached_to_singleton__happyflow(
+    opik_tracer_with_otel,
+):
     wrapper = getattr(adk_telemetry.tracer, "_opik_wrapper", None)
     assert isinstance(wrapper, OpikADKOtelTracer)
 

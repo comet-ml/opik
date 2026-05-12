@@ -36,14 +36,7 @@ class OpikADKOtelTracer:
     - Provides special logic for handling LLM spans and their lifecycle. In particular:
         * LLM spans are created by OpikTracer.before_model_callback
         * No other Opik spans are created inside LLM spans (ADK creates tool spans inside LLM spans)
-    - Supports the flows in which Opik spans are being created, updated or finalized outside of this class.
-
-    Args:
-        inner_start_as_current_span: The original ADK tracer's start_as_current_span
-            (bound method captured before patching). Called to create the real OTel
-            span that gets yielded to ADK.
-        inner_start_span: The original ADK tracer's start_span.
-        distributed_headers: Optional distributed trace headers for trace continuation.
+    - Supports the flows in which Opik spans are being created, updated, or finalized outside of this class.
 
     Attributes:
         _ADK_INTERNAL_SPAN_NAME_SKIP_LIST: List of span names that should be skipped
@@ -63,6 +56,18 @@ class OpikADKOtelTracer:
         inner_start_span: Callable[..., "opentelemetry.trace.Span"],
         distributed_headers: Optional[DistributedTraceHeadersDict],
     ) -> None:
+        """
+        Initializes an instance of the class with specified callbacks and distributed trace headers.
+
+        Args:
+            inner_start_as_current_span: A callable that creates a context manager for starting
+                a span as the current span. The callable is expected to return a context manager
+                containing a span of type "opentelemetry.trace.Span".
+            inner_start_span: A callable that starts and returns a new span of type
+                "opentelemetry.trace.Span".
+            distributed_headers: An optional dictionary-like object containing the distributed
+                tracing headers used for propagating context across services.
+        """
         self._inner_start_as_current_span = inner_start_as_current_span
         self._inner_start_span = inner_start_span
         self._distributed_headers = distributed_headers
