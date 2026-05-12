@@ -42,6 +42,7 @@ const useAutoCompleteAgentOnboarding = ({
       projectId: projectId ?? "",
       page: 1,
       size: 1,
+      stripAttachments: true,
     },
     {
       enabled: enabled && !!projectId,

@@ -46,19 +46,7 @@ class LocalRunnerReaperJobTest {
     }
 
     @Test
-    void skipsWhenDisabled() {
-        when(runnerConfig.isEnabled()).thenReturn(false);
-
-        reaperJob.doJob(null);
-
-        verify(runnerService, never()).reapDeadRunners();
-        verify(lockService, never()).bestEffortLock(any(), any(), any(), any(), any());
-    }
-
-    @Test
     void callsReapWhenEnabled() {
-        when(runnerConfig.isEnabled()).thenReturn(true);
-
         reaperJob.doJob(null);
 
         verify(lockService).bestEffortLock(any(Lock.class), any(Mono.class), any(Mono.class),
@@ -68,7 +56,6 @@ class LocalRunnerReaperJobTest {
 
     @Test
     void usesConfigForLockDurations() {
-        when(runnerConfig.isEnabled()).thenReturn(true);
         when(runnerConfig.getReaperLockDuration()).thenReturn(Duration.seconds(120));
         when(runnerConfig.getReaperLockWait()).thenReturn(Duration.seconds(10));
 

@@ -333,6 +333,7 @@ export const SMEFlowProvider: React.FunctionComponent<SMEFlowProviderProps> = ({
       filters: annotationQueueFilter,
       search: "",
       truncate: true,
+      stripAttachments: true,
     },
     {
       enabled:

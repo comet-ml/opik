@@ -53,6 +53,7 @@ export const FilterSchema = z.object({
     z.literal("ends_with"),
     z.literal("is_empty"),
     z.literal("is_not_empty"),
+    z.literal("not_in"),
     z.literal("="),
     z.literal(">"),
     z.literal(">="),

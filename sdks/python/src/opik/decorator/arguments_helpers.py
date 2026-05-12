@@ -54,6 +54,7 @@ class StartSpanParameters(BaseArguments):
     model: Optional[str] = None
     provider: Optional[str] = None
     thread_id: Optional[str] = None  # used for traces only
+    environment: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -74,6 +75,7 @@ class TrackOptions(BaseArguments):
     project_name: Optional[str]
     create_duplicate_root_span: bool
     source: Optional[TraceSource]
+    environment: Optional[str] = None
 
 
 def create_span_data(
@@ -96,6 +98,7 @@ def create_span_data(
         model=start_span_arguments.model,
         provider=start_span_arguments.provider,
         source=source if source is not None else "sdk",
+        environment=start_span_arguments.environment,
     )
     return span_data
 

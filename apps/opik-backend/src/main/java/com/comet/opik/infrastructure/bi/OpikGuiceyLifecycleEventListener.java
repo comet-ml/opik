@@ -134,11 +134,6 @@ public class OpikGuiceyLifecycleEventListener implements GuiceyLifecycleListener
     private void setLocalRunnerReaperJob() {
         LocalRunnerConfig localRunnerConfig = injector.get().getInstance(OpikConfiguration.class).getLocalRunner();
 
-        if (!localRunnerConfig.isEnabled()) {
-            log.info("Local runner reaper job is disabled, skipping job setup");
-            return;
-        }
-
         scheduleRepeatingJob(LocalRunnerReaperJob.class,
                 localRunnerConfig.getReaperJobInterval().toJavaDuration(), null);
     }

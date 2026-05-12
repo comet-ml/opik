@@ -6,7 +6,6 @@ export enum FeatureToggleKeys {
   PYTHON_EVALUATOR_ENABLED = "python_evaluator_enabled",
   GUARDRAILS_ENABLED = "guardrails_enabled",
   TOGGLE_OPIK_AI_ENABLED = "opik_aienabled",
-  TOGGLE_ALERTS_ENABLED = "alerts_enabled",
   WELCOME_WIZARD_ENABLED = "welcome_wizard_enabled",
   CSV_UPLOAD_ENABLED = "csv_upload_enabled",
   EXPORT_ENABLED = "export_enabled",
@@ -23,6 +22,4 @@ export enum FeatureToggleKeys {
   BEDROCK_PROVIDER_ENABLED = "bedrock_provider_enabled",
   CUSTOMLLM_PROVIDER_ENABLED = "customllm_provider_enabled",
   OLLAMA_PROVIDER_ENABLED = "ollama_provider_enabled",
-  COLLABORATORS_TAB_ENABLED = "collaborators_tab_enabled",
-  TOGGLE_RUNNERS_ENABLED = "runners_enabled",
 }

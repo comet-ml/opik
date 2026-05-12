@@ -115,6 +115,10 @@ def matches_trace_filter(trace_dict: dict, filter_string: str) -> bool:
                 result = fv_str.startswith(value)
             elif operator == "ends_with":
                 result = fv_str.endswith(value)
+            elif operator == "in":
+                result = fv_str in value.split(",")
+            elif operator == "not_in":
+                result = fv_str not in value.split(",")
             else:
                 result = _compare_values(fv_str, operator, value)
 

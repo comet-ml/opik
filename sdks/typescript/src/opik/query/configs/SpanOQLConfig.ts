@@ -33,6 +33,7 @@ export class SpanOQLConfig extends OQLConfig {
       error_info: "error_container",
       type: "enum",
       trace_id: "string",
+      environment: "enum",
     };
   }
 
@@ -57,8 +58,9 @@ export class SpanOQLConfig extends OQLConfig {
       model: OPERATOR_SETS.STRING_OPS,
       provider: OPERATOR_SETS.STRING_OPS,
       error_info: ["is_empty", "is_not_empty"],
-      type: ["=", "!="],
+      type: OPERATOR_SETS.ENUM_OPS,
       trace_id: OPERATOR_SETS.STRING_OPS,
+      environment: OPERATOR_SETS.ENUM_OPS,
     };
   }
 
