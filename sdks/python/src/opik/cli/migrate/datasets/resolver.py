@@ -60,11 +60,13 @@ def _iter_dataset_pages(
     """
     page_idx = 1
     while True:
-        page = rest_client.datasets.find_datasets(
-            page=page_idx,
-            size=_FIND_DATASETS_PAGE_SIZE,
-            project_id=project_id,
-            name=name,
+        page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda p=page_idx: rest_client.datasets.find_datasets(
+                page=p,
+                size=_FIND_DATASETS_PAGE_SIZE,
+                project_id=project_id,
+                name=name,
+            )
         )
         if not page.content:
             return
@@ -93,7 +95,9 @@ def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
     if not project_id:
         return None
     try:
-        proj = rest_client.projects.get_project_by_id(id=project_id)
+        proj = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.projects.get_project_by_id(id=project_id)
+        )
         return getattr(proj, "name", None)
     except ApiError:
         # Recoverable: 404 (project gone) or similar; row.id is still usable.
@@ -198,8 +202,10 @@ def _suggest_project_names(rest_client: OpikApi, name: str) -> List[str]:
     but unexpected errors are logged so they're still visible to operators.
     """
     try:
-        page = rest_client.projects.find_projects(
-            page=1, size=_PROJECT_SUGGESTION_PAGE_SIZE
+        page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.projects.find_projects(
+                page=1, size=_PROJECT_SUGGESTION_PAGE_SIZE
+            )
         )
     except ApiError:
         return []

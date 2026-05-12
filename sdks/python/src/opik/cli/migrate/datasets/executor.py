@@ -72,11 +72,11 @@ def _apply_action(
     plan: MigrationPlan,
     audit: AuditLog,
 ) -> None:
-    # Workspace-mutating REST writes are wrapped with the SDK's 429-aware
-    # retry helper so a transient rate limit doesn't abort a half-finished
-    # migration. Reads (find_datasets, find_projects, retrieve_project,
-    # list_dataset_versions) stay unwrapped — failing fast on 429 there is a
-    # better signal than silent retry.
+    # Every REST call in the migrate path -- both writes and reads -- is
+    # wrapped with the SDK's 429-aware retry helper so a transient rate
+    # limit doesn't abort a half-finished migration. Reads are wrapped
+    # too because aborting mid-cascade on a list_dataset_versions /
+    # find_experiments 429 wastes the work done up to that point.
     if isinstance(action, RenameSource):
         # Re-pass description/visibility/tags so the BE doesn't wipe them on
         # the rename PUT (description is silently nulled when omitted).
@@ -129,8 +129,10 @@ def _replay_versions(
     ``apply_dataset_item_changes(base_version=null, override=true)``) so
     target version count == source version count — no leading empty seed.
     """
-    dest = rest_client.datasets.get_dataset_by_identifier(
-        dataset_name=action.dest_name, project_name=action.dest_project_name
+    dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.get_dataset_by_identifier(
+            dataset_name=action.dest_name, project_name=action.dest_project_name
+        )
     )
 
     # Rich Progress bar driven by the per-version callback that

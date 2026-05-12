@@ -359,8 +359,10 @@ def _create_first_version_with_items(
     )
 
     # No structured response — list_dataset_versions to find the new v1.
-    new_version = rest_client.datasets.list_dataset_versions(
-        id=dest_dataset_id, page=1, size=1
+    new_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.list_dataset_versions(
+            id=dest_dataset_id, page=1, size=1
+        )
     )
     if not new_version.content or new_version.content[0].id is None:
         raise ReplayError(
@@ -491,8 +493,10 @@ def _iter_source_versions_chronological(
     collected: List[dataset_version_public.DatasetVersionPublic] = []
     page_idx = 1
     while True:
-        page = rest_client.datasets.list_dataset_versions(
-            id=dataset_id, page=page_idx, size=_VERSIONS_PAGE_SIZE
+        page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda p=page_idx: rest_client.datasets.list_dataset_versions(
+                id=dataset_id, page=p, size=_VERSIONS_PAGE_SIZE
+            )
         )
         if not page.content:
             break
@@ -519,10 +523,12 @@ def _load_version_items(
     direct to the wire type preserves every persisted field for the diff
     and the write payload.
     """
-    raw_stream = rest_client.datasets.stream_dataset_items(
-        dataset_name=source_name_after_rename,
-        project_name=source_project_name,
-        dataset_version=version_hash,
+    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.stream_dataset_items(
+            dataset_name=source_name_after_rename,
+            project_name=source_project_name,
+            dataset_version=version_hash,
+        )
     )
     items = rest_stream_parser.read_and_parse_stream(
         stream=raw_stream,
@@ -813,10 +819,12 @@ def _read_back_target_items(
     versions. The caller pops one entry per source-add in stream order so the
     pairing matches the source's own duplicate-add ordering.
     """
-    raw_stream = rest_client.datasets.stream_dataset_items(
-        dataset_name=dest_name,
-        project_name=dest_project_name,
-        dataset_version=version_hash,
+    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: rest_client.datasets.stream_dataset_items(
+            dataset_name=dest_name,
+            project_name=dest_project_name,
+            dataset_version=version_hash,
+        )
     )
     items = rest_stream_parser.read_and_parse_stream(
         stream=raw_stream,
