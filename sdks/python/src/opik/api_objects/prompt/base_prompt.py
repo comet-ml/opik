@@ -103,3 +103,13 @@ class BasePrompt(ABC):
             Dictionary containing prompt metadata and version information.
         """
         pass
+
+
+def inject_prompt_metadata(p: "BasePrompt") -> None:
+    from opik import opik_context
+
+    payload = {"prompt_reference": {"name": p.name, "commit": p.commit}}
+    if opik_context.get_current_trace_data() is not None:
+        opik_context.update_current_trace(metadata=payload)
+    if opik_context.get_current_span_data() is not None:
+        opik_context.update_current_span(metadata=payload)

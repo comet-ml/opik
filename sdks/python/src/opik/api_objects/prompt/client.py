@@ -101,6 +101,7 @@ class PromptClient:
                 type=type,
                 metadata=metadata,
                 project_name=project_name,
+                is_new=prompt_version is None,
                 template_structure=template_structure,
                 id=id,
                 description=description,
@@ -117,20 +118,16 @@ class PromptClient:
         type: prompt_version_detail.PromptVersionDetailType,
         metadata: Optional[Dict[str, Any]],
         project_name: Optional[str],
+        is_new: bool = True,
         template_structure: str = "text",
         id: Optional[str] = None,
         description: Optional[str] = None,
         change_description: Optional[str] = None,
         tags: Optional[List[str]] = None,
     ) -> prompt_version_detail.PromptVersionDetail:
-        # Check if this is a new prompt (no existing versions)
-        existing_version = self._get_latest_version(name, project_name=project_name)
-
         # If it's a new prompt and container-level params are provided, use create_prompt endpoint
         # which creates both the container and first version in one call
-        if existing_version is None and (
-            id is not None or description is not None or tags is not None
-        ):
+        if is_new and (id is not None or description is not None or tags is not None):
             self._rest_client.prompts.create_prompt(
                 name=name,
                 id=id,

@@ -57,7 +57,6 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with id/description/tags, should call create_prompt endpoint."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_404_error(),
             _make_mock_version(),
         ]
 
@@ -128,7 +127,6 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with only id parameter, should call create_prompt."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_404_error(),
             _make_mock_version(),
         ]
 
@@ -149,7 +147,6 @@ class TestPromptClientEndpointSelection:
         """When creating a new prompt with only description parameter, should call create_prompt."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
             _make_404_error(),
-            _make_404_error(),
             _make_mock_version(),
         ]
 
@@ -169,7 +166,6 @@ class TestPromptClientEndpointSelection:
     ):
         """When creating a new prompt with only tags parameter, should call create_prompt."""
         mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
-            _make_404_error(),
             _make_404_error(),
             _make_mock_version(),
         ]

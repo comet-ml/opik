@@ -146,21 +146,33 @@ class TestPromptCacheEntry:
         cb2.assert_not_called()
 
 
-class TestModuleLevelHelpers:
-    def test_get_cached_prompt__miss__returns_none(self):
-        result = prompt_cache.get_cached_prompt("missing", None, None)
+class TestGetOrFetch:
+    def test_miss__calls_fetch_fn(self):
+        p = _make_mock_prompt()
+        fetch_fn = mock.Mock(return_value=p)
+        result = prompt_cache.get_or_fetch("p", None, None, fetch_fn)
+        assert result is p
+        fetch_fn.assert_called_once()
+
+    def test_miss__fetch_returns_none__returns_none(self):
+        fetch_fn = mock.Mock(return_value=None)
+        result = prompt_cache.get_or_fetch("missing", None, None, fetch_fn)
         assert result is None
 
-    def test_init_and_get__returns_prompt(self):
+    def test_hit__does_not_call_fetch_fn(self):
         p = _make_mock_prompt()
-        prompt_cache.init_cache_entry("p", None, None, p)
-        result = prompt_cache.get_cached_prompt("p", None, None)
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", None, None, fetch_fn)
+        fetch_fn.reset_mock()
+
+        result = prompt_cache.get_or_fetch("p", None, None, fetch_fn)
         assert result is p
+        fetch_fn.assert_not_called()
 
     def test_pinned_commit__no_refresh_callback(self):
         p = _make_mock_prompt(commit="abc")
-        cb = mock.Mock()
-        prompt_cache.init_cache_entry("p", "abc", None, p, fetch_callback=cb)
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", "abc", None, fetch_fn)
         key = ("p", "abc", None)
         entry = get_global_registry().get(key)
         assert entry is not None
@@ -168,32 +180,35 @@ class TestModuleLevelHelpers:
 
     def test_unpinned__refresh_callback_registered(self):
         p = _make_mock_prompt(commit=None)
-        cb = mock.Mock()
-        prompt_cache.init_cache_entry("p", None, None, p, fetch_callback=cb)
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", None, None, fetch_fn)
         key = ("p", None, None)
         entry = get_global_registry().get(key)
         assert entry is not None
-        assert entry._refresh_callback is cb
+        assert entry._refresh_callback is fetch_fn
 
     def test_cache_hit__same_object_returned(self):
         p = _make_mock_prompt()
-        prompt_cache.init_cache_entry("p", None, "proj", p)
-        first = prompt_cache.get_cached_prompt("p", None, "proj")
-        second = prompt_cache.get_cached_prompt("p", None, "proj")
+        fetch_fn = mock.Mock(return_value=p)
+        prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
+        first = prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
+        second = prompt_cache.get_or_fetch("p", None, "proj", fetch_fn)
         assert first is second is p
 
     def test_different_keys__different_entries(self):
         p1 = _make_mock_prompt(commit="c1")
         p2 = _make_mock_prompt(commit="c2")
-        prompt_cache.init_cache_entry("p", "c1", None, p1)
-        prompt_cache.init_cache_entry("p", "c2", None, p2)
-        assert prompt_cache.get_cached_prompt("p", "c1", None) is p1
-        assert prompt_cache.get_cached_prompt("p", "c2", None) is p2
+        prompt_cache.get_or_fetch("p", "c1", None, mock.Mock(return_value=p1))
+        prompt_cache.get_or_fetch("p", "c2", None, mock.Mock(return_value=p2))
+        r1 = prompt_cache.get_or_fetch("p", "c1", None, mock.Mock())
+        r2 = prompt_cache.get_or_fetch("p", "c2", None, mock.Mock())
+        assert r1 is p1
+        assert r2 is p2
 
 
 class TestMetadataInjection:
     def test_injects_into_trace_and_span_when_in_track_context(self):
-        from opik.api_objects import opik_client as client_mod
+        from opik.api_objects.prompt.base_prompt import inject_prompt_metadata
 
         mock_trace_data = mock.Mock()
         mock_span_data = mock.Mock()
@@ -209,7 +224,7 @@ class TestMetadataInjection:
             mock.patch("opik.opik_context.update_current_span") as mock_span_update,
         ):
             p = _make_mock_prompt(name="my-prompt", commit="abc123")
-            client_mod._maybe_inject_prompt_metadata(p)
+            inject_prompt_metadata(p)
 
         expected_payload = {
             "prompt_reference": {"name": "my-prompt", "commit": "abc123"}
@@ -218,7 +233,7 @@ class TestMetadataInjection:
         mock_span_update.assert_called_once_with(metadata=expected_payload)
 
     def test_no_injection_outside_track_context(self):
-        from opik.api_objects import opik_client as client_mod
+        from opik.api_objects.prompt.base_prompt import inject_prompt_metadata
 
         with (
             mock.patch("opik.opik_context.get_current_trace_data", return_value=None),
@@ -226,7 +241,7 @@ class TestMetadataInjection:
             mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
             mock.patch("opik.opik_context.update_current_span") as mock_span_update,
         ):
-            client_mod._maybe_inject_prompt_metadata(_make_mock_prompt())
+            inject_prompt_metadata(_make_mock_prompt())
 
         mock_trace_update.assert_not_called()
         mock_span_update.assert_not_called()

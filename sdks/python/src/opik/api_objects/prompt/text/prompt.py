@@ -253,7 +253,7 @@ class Prompt(base_prompt.BasePrompt):
         return info_dict
 
     @classmethod
-    def from_fern_prompt_version(
+    def from_version_detail(
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,

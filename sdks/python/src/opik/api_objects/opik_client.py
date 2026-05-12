@@ -9,6 +9,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Type,
     TypeVar,
     Union,
     Literal,
@@ -46,7 +47,10 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt import base_prompt as base_prompt_module
 from .prompt import prompt_cache
+from .prompt.text import prompt as text_prompt_module
+from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
 from .agent_config.base import Config
 from .agent_config.config import ConfigManager
@@ -100,53 +104,8 @@ LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 _ConfigT = TypeVar("_ConfigT", bound=Config)
+_PromptT = TypeVar("_PromptT", text_prompt_module.Prompt, chat_prompt_module.ChatPrompt)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
-
-
-def _maybe_inject_prompt_metadata(p: "prompt_module.base_prompt.BasePrompt") -> None:
-    from opik import opik_context
-
-    payload = {"prompt_reference": {"name": p.name, "commit": p.commit}}
-    if opik_context.get_current_trace_data() is not None:
-        opik_context.update_current_trace(metadata=payload)
-    if opik_context.get_current_span_data() is not None:
-        opik_context.update_current_span(metadata=payload)
-
-
-def _fetch_prompt_for_cache(
-    client: "prompt_client.PromptClient",
-    name: str,
-    project_name: Optional[str],
-) -> Optional["prompt_module.Prompt"]:
-    fern_version = client.get_prompt(
-        name=name,
-        commit=None,
-        raise_if_not_template_structure="text",
-        project_name=project_name,
-    )
-    if fern_version is None:
-        return None
-    return prompt_module.Prompt.from_fern_prompt_version(
-        name, fern_version, project_name=project_name
-    )
-
-
-def _fetch_chat_prompt_for_cache(
-    client: "prompt_client.PromptClient",
-    name: str,
-    project_name: Optional[str],
-) -> Optional["prompt_module.ChatPrompt"]:
-    fern_version = client.get_prompt(
-        name=name,
-        commit=None,
-        raise_if_not_template_structure="chat",
-        project_name=project_name,
-    )
-    if fern_version is None:
-        return None
-    return prompt_module.ChatPrompt.from_fern_prompt_version(
-        name, fern_version, project_name=project_name
-    )
 
 
 class Opik:
@@ -2249,7 +2208,7 @@ class Opik:
             tags=tags,
             project_name=project_name,
         )
-        return prompt_module.Prompt.from_fern_prompt_version(
+        return prompt_module.Prompt.from_version_detail(
             name, prompt_version, project_name=project_name
         )
 
@@ -2306,7 +2265,7 @@ class Opik:
             tags=tags,
             project_name=project_name,
         )
-        return prompt_module.ChatPrompt.from_fern_prompt_version(
+        return prompt_module.ChatPrompt.from_version_detail(
             name, prompt_version, project_name=project_name
         )
 
@@ -2335,41 +2294,13 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        project_name = self._resolve_project_name(project_name)
-
-        cached = prompt_cache.get_cached_prompt(name, commit, project_name)
-        if cached is not None and isinstance(cached, prompt_module.Prompt):
-            _maybe_inject_prompt_metadata(cached)
-            return cached
-
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        fern_prompt_version = prompt_client_.get_prompt(
-            name=name,
-            commit=commit,
-            raise_if_not_template_structure="text",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        result = prompt_module.Prompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
-        )
-
-        prompt_cache.init_cache_entry(
+        return self._get_prompt_with_cache(
             name=name,
             commit=commit,
             project_name=project_name,
-            prompt=result,
-            fetch_callback=None
-            if commit is not None
-            else lambda: _fetch_prompt_for_cache(
-                prompt_client.PromptClient(self._rest_client), name, project_name
-            ),
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
         )
-        _maybe_inject_prompt_metadata(result)
-        return result
 
     def get_chat_prompt(
         self,
@@ -2396,40 +2327,46 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
+        return self._get_prompt_with_cache(
+            name=name,
+            commit=commit,
+            project_name=project_name,
+            template_structure="chat",
+            prompt_cls=chat_prompt_module.ChatPrompt,
+        )
+
+    def _get_prompt_with_cache(
+        self,
+        name: str,
+        commit: Optional[str],
+        project_name: Optional[str],
+        template_structure: str,
+        prompt_cls: Type[_PromptT],
+    ) -> Optional[_PromptT]:
         project_name = self._resolve_project_name(project_name)
+        _prompt_client = prompt_client.PromptClient(self._rest_client)
 
-        cached = prompt_cache.get_cached_prompt(name, commit, project_name)
-        if cached is not None and isinstance(cached, prompt_module.ChatPrompt):
-            _maybe_inject_prompt_metadata(cached)
-            return cached
+        def _fetch() -> Optional[_PromptT]:
+            prompt_version = _prompt_client.get_prompt(
+                name=name,
+                commit=commit,
+                raise_if_not_template_structure=template_structure,
+                project_name=project_name,
+            )
+            if prompt_version is None:
+                return None
+            return prompt_cls.from_version_detail(
+                name, prompt_version, project_name=project_name
+            )
 
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
-        fern_prompt_version = prompt_client_.get_prompt(
-            name=name,
-            commit=commit,
-            raise_if_not_template_structure="chat",
-            project_name=project_name,
-        )
-
-        if fern_prompt_version is None:
-            return None
-
-        result = prompt_module.ChatPrompt.from_fern_prompt_version(
-            name, fern_prompt_version, project_name=project_name
-        )
-
-        prompt_cache.init_cache_entry(
+        result = prompt_cache.get_or_fetch(
             name=name,
             commit=commit,
             project_name=project_name,
-            prompt=result,
-            fetch_callback=None
-            if commit is not None
-            else lambda: _fetch_chat_prompt_for_cache(
-                prompt_client.PromptClient(self._rest_client), name, project_name
-            ),
+            fetch_fn=_fetch,
         )
-        _maybe_inject_prompt_metadata(result)
+        if result is not None:
+            base_prompt_module.inject_prompt_metadata(result)
         return result
 
     def get_prompt_history(
@@ -2517,7 +2454,7 @@ class Opik:
         )
 
         result = [
-            prompt_module.Prompt.from_fern_prompt_version(
+            prompt_module.Prompt.from_version_detail(
                 name, version, project_name=project_name
             )
             for version in fern_prompt_versions
@@ -2609,7 +2546,7 @@ class Opik:
         )
 
         result = [
-            prompt_module.ChatPrompt.from_fern_prompt_version(
+            prompt_module.ChatPrompt.from_version_detail(
                 name, version, project_name=project_name
             )
             for version in fern_prompt_versions
@@ -2688,7 +2625,7 @@ class Opik:
         for result in search_results:
             if result.template_structure == "chat":
                 prompts.append(
-                    prompt_module.ChatPrompt.from_fern_prompt_version(
+                    prompt_module.ChatPrompt.from_version_detail(
                         result.name,
                         result.prompt_version_detail,
                         project_name=project_name,
@@ -2696,7 +2633,7 @@ class Opik:
                 )
             else:
                 prompts.append(
-                    prompt_module.Prompt.from_fern_prompt_version(
+                    prompt_module.Prompt.from_version_detail(
                         result.name,
                         result.prompt_version_detail,
                         project_name=project_name,

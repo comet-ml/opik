@@ -1764,7 +1764,7 @@ def test_track__span_usage_updated__openai_format(fake_backend):
 
 def test_track__span_updated_with_prompts__happy_flow(fake_backend):
     prompts = [
-        prompt.Prompt.from_fern_prompt_version(
+        prompt.Prompt.from_version_detail(
             name="system_prompt",
             prompt_version=rest_api.PromptVersionDetail(
                 template="""You are a helpful assistant that helps with research of the specific topic.""",
@@ -1772,7 +1772,7 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
                 type=PromptType.MUSTACHE,
             ),
         ),
-        prompt.Prompt.from_fern_prompt_version(
+        prompt.Prompt.from_version_detail(
             name="user_prompt",
             prompt_version=rest_api.PromptVersionDetail(
                 template="""Research more details about the topic.""",
@@ -1822,7 +1822,7 @@ def test_track__span_updated_with_prompts__happy_flow(fake_backend):
 
 def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
     prompts = [
-        prompt.Prompt.from_fern_prompt_version(
+        prompt.Prompt.from_version_detail(
             name="system_prompt",
             prompt_version=rest_api.PromptVersionDetail(
                 template="""You are a helpful assistant that helps with research of the specific topic.""",
@@ -1830,7 +1830,7 @@ def test_track__trace_updated_with_prompts__happy_flow(fake_backend):
                 type=PromptType.MUSTACHE,
             ),
         ),
-        prompt.Prompt.from_fern_prompt_version(
+        prompt.Prompt.from_version_detail(
             name="user_prompt",
             prompt_version=rest_api.PromptVersionDetail(
                 template="""Research more details about the topic.""",

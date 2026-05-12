@@ -4,8 +4,12 @@ import os
 import threading
 import time
 import typing
+from typing import TYPE_CHECKING
 
 from .base_prompt import BasePrompt
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
 
@@ -162,34 +166,41 @@ def get_global_registry() -> PromptCacheRegistry:
     return _registry
 
 
-def get_cached_prompt(
+_PromptT = typing.TypeVar("_PromptT", bound=BasePrompt)
+
+
+def get_or_fetch(
     name: str,
     commit: typing.Optional[str],
     project_name: typing.Optional[str],
-) -> typing.Optional[BasePrompt]:
+    fetch_fn: typing.Callable[[], typing.Optional[_PromptT]],
+) -> typing.Optional[_PromptT]:
+    """Return a cached prompt or fetch, cache, and return it.
+
+    If the prompt is already cached, returns it immediately.
+    Otherwise calls *fetch_fn* to produce one. If *fetch_fn* returns None
+    (prompt not found), returns None without caching.
+
+    For unpinned prompts (commit is None), *fetch_fn* is also registered as
+    the background-refresh callback so the cache stays fresh.
+    """
     key: _CacheKey = (name, commit, project_name)
     entry = _registry.get(key)
-    if entry is None:
+    if entry is not None:
+        return typing.cast(_PromptT, entry.prompt)
+
+    prompt = fetch_fn()
+    if prompt is None:
         return None
-    return entry.prompt
 
-
-def init_cache_entry(
-    name: str,
-    commit: typing.Optional[str],
-    project_name: typing.Optional[str],
-    prompt: BasePrompt,
-    fetch_callback: typing.Optional[
-        typing.Callable[[], typing.Optional[BasePrompt]]
-    ] = None,
-) -> None:
-    key: _CacheKey = (name, commit, project_name)
     pinned = commit is not None
     entry = PromptCacheEntry(
         prompt=prompt, pinned=pinned, ttl_seconds=_get_ttl_seconds()
     )
     _registry.set(key, entry)
 
-    if fetch_callback is not None and not pinned:
-        entry.set_refresh_callback(fetch_callback)
+    if not pinned:
+        entry.set_refresh_callback(fetch_fn)
         _registry.ensure_refresh_thread_started()
+
+    return prompt
