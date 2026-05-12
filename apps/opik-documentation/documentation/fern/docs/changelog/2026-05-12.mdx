@@ -23,15 +23,9 @@ def my_agent(input: str) -> str:
 
 ## 🧪 Test Suite Assertions Can Now Inspect Sub-Spans
 
-Test suite assertions can now look inside a trace — not just the top-level input/output — to reason about tool calls, intermediate LLM steps, and sub-agent behavior. The evaluator LLM gets access to two on-demand tools (`get_trace_spans`, `get_span_details`) that let it drill into exactly what happened at each step.
+Test suite assertions can now look inside a trace — not just the top-level input/output — to reason about tool calls, intermediate LLM steps, and sub-agent behavior. The evaluator LLM gets access to two on-demand tools: `get_trace_spans` (lists all sub-spans for the trace) and `read` (fetches a specific span by ID) — so it can drill into exactly what happened at each step.
 
 **Why it matters:** Previously, an assertion could only see what went in and came out of the agent. Now it can check whether the right tool was called, which model was used in an intermediate step, or whether a specific span had an error — enabling far more meaningful correctness checks for complex agents.
-
-## 🏠 Recent Activity Feed on Project Home Page
-
-The project home page now shows a **Recent Activity** feed, surfacing the latest experiments, optimization runs, dataset versions, agent config blueprints, and alert events across your project in a single, time-sorted list.
-
-**Why it matters:** Instead of clicking into each sub-section to find out what happened, you get a quick overview of the project's state the moment you land on the home page.
 
 ## ⚡ Dramatically Faster Trace Table Loading
 
@@ -43,15 +37,12 @@ Traces and spans tables no longer download attachment bytes (images, PDFs) when 
 
 The Playground's `reasoning_effort` control now tracks OpenAI's actual per-model capability matrix. Models like `gpt-5.1` that support a `"none"` option show it; models that don't support reasoning effort have the control hidden automatically. Previously, the UI could get out of sync with what the backend supported.
 
-## 🐍 Python SDK Reliability Improvements
+## 🐍 Python SDK Improvements
 
-We fixed two separate bugs that could silently drop traces under load:
+Several reliability fixes and small improvements to the Python (and TypeScript) SDKs:
 
-- **Streamer race condition** — A lock gap between the flushing thread and the message batcher meant 1–22% of traces could be silently dropped under bursty traffic. Fixed by serializing flushes with the batch lock.
-- **Drain-time attachment loss** — When `client.end()` was called, attachment re-enqueue messages were hitting a closed drain gate and being dropped, losing ~5–6% of data. Fixed by letting internal re-enqueues bypass the drain guard.
-
-Additionally:
-- **Auto-retry on rate limits** — `search_traces()` and `search_spans()` now automatically wait and retry on 429 responses instead of raising an error, so large bulk searches complete reliably even under API rate limits
+- **Streamer & drain reliability** — Fixed two edge-case bugs in the background message pipeline that could cause a small percentage of traces to be missed when using attachments or high message throughput
+- **Auto-retry on rate limits** — `search_traces()` and `search_spans()` now automatically wait and retry on 429 responses instead of raising an error, so large bulk searches complete reliably under API rate limits
 - **Evaluation task failures surfaced** — When an evaluation task raises an exception, the failure is now recorded on the experiment item (Python and TypeScript SDKs) instead of being silently discarded
 
 ## 🔧 Bug Fixes
