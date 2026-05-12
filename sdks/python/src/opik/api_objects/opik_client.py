@@ -46,6 +46,7 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
+from .prompt import prompt_cache
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
 from .agent_config.base import Config
 from .agent_config.config import ConfigManager
@@ -100,6 +101,55 @@ LOGGER = logging.getLogger(__name__)
 T = TypeVar("T")
 _ConfigT = TypeVar("_ConfigT", bound=Config)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
+
+
+def _maybe_inject_prompt_metadata(p: "prompt_module.base_prompt.BasePrompt") -> None:
+    from opik import opik_context
+
+    if (
+        opik_context.get_current_trace_data() is None
+        and opik_context.get_current_span_data() is None
+    ):
+        return
+    payload = {"prompt_reference": {"name": p.name, "commit": p.commit}}
+    opik_context.update_current_trace(metadata=payload)
+    opik_context.update_current_span(metadata=payload)
+
+
+def _fetch_prompt_for_cache(
+    client: "prompt_client.PromptClient",
+    name: str,
+    project_name: Optional[str],
+) -> Optional["prompt_module.Prompt"]:
+    fern_version = client.get_prompt(
+        name=name,
+        commit=None,
+        raise_if_not_template_structure="text",
+        project_name=project_name,
+    )
+    if fern_version is None:
+        return None
+    return prompt_module.Prompt.from_fern_prompt_version(
+        name, fern_version, project_name=project_name
+    )
+
+
+def _fetch_chat_prompt_for_cache(
+    client: "prompt_client.PromptClient",
+    name: str,
+    project_name: Optional[str],
+) -> Optional["prompt_module.ChatPrompt"]:
+    fern_version = client.get_prompt(
+        name=name,
+        commit=None,
+        raise_if_not_template_structure="chat",
+        project_name=project_name,
+    )
+    if fern_version is None:
+        return None
+    return prompt_module.ChatPrompt.from_fern_prompt_version(
+        name, fern_version, project_name=project_name
+    )
 
 
 class Opik:
@@ -2272,7 +2322,10 @@ class Opik:
         """
         Retrieve a text prompt by name and optional commit version.
 
-        This method only returns text prompts.
+        This method only returns text prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        Pinned commits are cached indefinitely. When called inside an @track
+        context the prompt reference is injected into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
@@ -2285,8 +2338,14 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
+
+        cached = prompt_cache.get_cached_prompt(name, commit, project_name)
+        if cached is not None and isinstance(cached, prompt_module.Prompt):
+            _maybe_inject_prompt_metadata(cached)
+            return cached
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
             name=name,
             commit=commit,
@@ -2297,9 +2356,23 @@ class Opik:
         if fern_prompt_version is None:
             return None
 
-        return prompt_module.Prompt.from_fern_prompt_version(
+        result = prompt_module.Prompt.from_fern_prompt_version(
             name, fern_prompt_version, project_name=project_name
         )
+
+        prompt_cache.init_cache_entry(
+            name=name,
+            commit=commit,
+            project_name=project_name,
+            prompt=result,
+            fetch_callback=None
+            if commit is not None
+            else lambda: _fetch_prompt_for_cache(
+                prompt_client.PromptClient(self._rest_client), name, project_name
+            ),
+        )
+        _maybe_inject_prompt_metadata(result)
+        return result
 
     def get_chat_prompt(
         self,
@@ -2310,7 +2383,10 @@ class Opik:
         """
         Retrieve a chat prompt by name and optional commit version.
 
-        This method only returns chat prompts.
+        This method only returns chat prompts. Results are cached client-side
+        (TTL configurable via OPIK_PROMPT_CACHE_TTL_SECONDS, default 300 s).
+        Pinned commits are cached indefinitely. When called inside an @track
+        context the prompt reference is injected into the active trace/span metadata.
 
         Parameters:
             name: The name of the prompt.
@@ -2323,8 +2399,14 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
-        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         project_name = self._resolve_project_name(project_name)
+
+        cached = prompt_cache.get_cached_prompt(name, commit, project_name)
+        if cached is not None and isinstance(cached, prompt_module.ChatPrompt):
+            _maybe_inject_prompt_metadata(cached)
+            return cached
+
+        prompt_client_ = prompt_client.PromptClient(self._rest_client)
         fern_prompt_version = prompt_client_.get_prompt(
             name=name,
             commit=commit,
@@ -2335,9 +2417,23 @@ class Opik:
         if fern_prompt_version is None:
             return None
 
-        return prompt_module.ChatPrompt.from_fern_prompt_version(
+        result = prompt_module.ChatPrompt.from_fern_prompt_version(
             name, fern_prompt_version, project_name=project_name
         )
+
+        prompt_cache.init_cache_entry(
+            name=name,
+            commit=commit,
+            project_name=project_name,
+            prompt=result,
+            fetch_callback=None
+            if commit is not None
+            else lambda: _fetch_chat_prompt_for_cache(
+                prompt_client.PromptClient(self._rest_client), name, project_name
+            ),
+        )
+        _maybe_inject_prompt_metadata(result)
+        return result
 
     def get_prompt_history(
         self,
