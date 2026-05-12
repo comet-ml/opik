@@ -1,12 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
 import uniqBy from "lodash/uniqBy";
-import { QueryConfig } from "./api";
-import { Workspace } from "./types";
 import useUserWorkspacesLite from "@/plugins/comet/useUserWorkspacesLite";
 import useUserInvitedWorkspaces from "@/plugins/comet/useUserInvitedWorkspaces";
 import useAdminOrganizationWorkspaces from "@/plugins/comet/useAdminOrganizationWorkspaces";
 
-export default function useAllWorkspaces(options?: QueryConfig<Workspace[]>) {
+type UseAllWorkspacesOptions = {
+  enabled?: boolean;
+};
+
+export default function useAllWorkspaces(options?: UseAllWorkspacesOptions) {
   const enabled = Boolean(options?.enabled);
   const lite = useUserWorkspacesLite({ enabled });
 
