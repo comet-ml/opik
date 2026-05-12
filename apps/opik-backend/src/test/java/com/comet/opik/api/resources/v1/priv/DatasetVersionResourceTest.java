@@ -70,6 +70,7 @@ import org.testcontainers.lifecycle.Startables;
 import org.testcontainers.mysql.MySQLContainer;
 import ru.vyarus.dropwizard.guice.test.ClientSupport;
 import ru.vyarus.dropwizard.guice.test.jupiter.ext.TestDropwizardAppExtension;
+import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 import uk.co.jemos.podam.api.PodamFactory;
 
 import java.util.HashSet;
@@ -84,6 +85,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -135,10 +137,12 @@ class DatasetVersionResourceTest {
     private ExperimentResourceClient experimentResourceClient;
     private TraceResourceClient traceResourceClient;
     private SpanResourceClient spanResourceClient;
+    private TransactionTemplate mySqlTemplate;
 
     @BeforeAll
-    void setUpAll(ClientSupport client) {
+    void setUpAll(ClientSupport client, TransactionTemplate mySqlTemplate) {
         this.baseURI = TestUtils.getBaseUrl(client);
+        this.mySqlTemplate = mySqlTemplate;
 
         ClientSupportUtils.config(client);
 
@@ -1262,6 +1266,71 @@ class DatasetVersionResourceTest {
                     .orElseThrow(() -> new AssertionError("Edited item not found in v2"));
             assertThat(editedInV2.data().get("edited")).isNotNull();
             assertThat(editedInV2.data().get("description")).isNotNull();
+        }
+
+        @Test
+        @DisplayName("OPIK-6390: unchanged items survive when base version items_total has drifted")
+        void applyChanges__whenBaseVersionItemsTotalIsStale__thenUnchangedItemsArePreserved() {
+            // Reproducer for OPIK-6390. In prod, dataset_versions.items_total drifted below the
+            // actual ClickHouse row count for the base version. The next applyDeltaChanges call
+            // sized its unchanged-UUID pool off that stale value, causing the copy step to assign
+            // empty ids to overflowing rows; under ReplacingMergeTree those rows then collapsed
+            // and items disappeared. The fix routes the pool size through a live ClickHouse count
+            // (and the COPY query falls back to generateUUIDv7 for any residual overflow), so the
+            // new version must still contain every item.
+
+            // Given: dataset with 5 items in v1.
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+            var v1 = getLatestVersion(datasetId);
+            assertThat(v1.itemsTotal()).isEqualTo(5);
+
+            // Capture v1 items in full so we can assert v2 preserves the same logical items
+            // with all fields intact, not just by stable id.
+            var v1Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v1Items).hasSize(5);
+
+            // Simulate the drift observed in prod: corrupt items_total directly in MySQL while
+            // leaving the 5 ClickHouse rows intact. Reproduces the exact precondition under which
+            // the silent data loss occurs.
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                int updated = handle.createUpdate(
+                        "UPDATE dataset_versions SET items_total = 1 WHERE id = :version_id AND workspace_id = :workspace_id")
+                        .bind("version_id", v1.id().toString())
+                        .bind("workspace_id", WORKSPACE_ID)
+                        .execute();
+                assertThat(updated).isEqualTo(1);
+                return null;
+            });
+
+            // When: apply a +1 add on top of the (corrupted-total) v1.
+            var addedItem = generateDatasetItems(1).getFirst();
+            var changes = DatasetItemChanges.builder()
+                    .baseVersion(v1.id())
+                    .addedItems(List.of(addedItem))
+                    .build();
+            var v2 = datasetResourceClient.applyDatasetItemChanges(datasetId, changes, false, API_KEY,
+                    TEST_WORKSPACE);
+
+            // Then: all 5 carried-over items plus the new one survive.
+            assertThat(v2.itemsTotal()).isEqualTo(6);
+
+            var v2Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v2Items).hasSize(6);
+
+            // Every v1 item must appear in v2 with the same fields. id changes per version, so
+            // we ignore it via IGNORED_FIELDS_DATA_ITEM and compare the rest of the entity.
+            assertThat(v2Items)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsAll(v1Items);
         }
     }
 
