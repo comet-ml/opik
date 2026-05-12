@@ -300,6 +300,46 @@ class TestExecuteJobEmitsFromParent:
         concurrent = _datapoints(reader, "rq_worker.jobs.concurrent", func)
         assert sum(dp.value for dp in concurrent) == 0
 
+    def test_refresh_failure_emits_explicit_unknown_outcome(
+        self, reader, metrics_worker_module
+    ):
+        """If `job.refresh()` raises (e.g., Redis outage, NoSuchJobError), we
+        still record `rq_worker.jobs.processed` and an explicit failure with
+        `error_type="RefreshFailed"` so the terminal metric isn't silently
+        dropped. We also must NOT consult `job.is_failed` (which in RQ
+        triggers another Redis round-trip and could itself raise).
+        """
+        func = "test_refresh_failure_emits_explicit_unknown_outcome"
+        job = _make_job(func, created_at=_utc(0))
+        # Refresh fails AND any subsequent Redis-dependent read would fail too
+        # — if the worker calls `is_failed`/`get_status` after a failed
+        # refresh, the test will surface that as an unhandled exception.
+        job.refresh.side_effect = RuntimeError("Redis unavailable")
+        type(job).is_failed = property(
+            lambda _: pytest.fail("is_failed must not be consulted after refresh failure")
+        )
+
+        queue = _make_queue("q-refresh-fail")
+        worker = _make_worker(metrics_worker_module)
+
+        with patch("rq.Worker.execute_job", return_value=True):
+            assert worker.execute_job(job, queue) is True
+
+        assert sum(
+            dp.value for dp in _datapoints(reader, "rq_worker.jobs.processed", func)
+        ) == 1
+        failed = _datapoints(reader, "rq_worker.jobs.failed", func)
+        assert {dp.attributes.get("error_type") for dp in failed} == {"RefreshFailed"}
+        # No success was recorded
+        assert _datapoints(reader, "rq_worker.jobs.succeeded", func) == []
+        # No bogus durations recorded with stale/None timestamps
+        assert _datapoints(reader, "rq_worker.job.processing_time", func) == []
+        assert _datapoints(reader, "rq_worker.job.total_time", func) == []
+        assert _datapoints(reader, "rq_worker.job.queue_wait_time", func) == []
+        # Concurrent counter still balances
+        concurrent = _datapoints(reader, "rq_worker.jobs.concurrent", func)
+        assert sum(dp.value for dp in concurrent) == 0
+
     def test_concurrent_counter_balances_to_zero_after_a_single_job(
         self, reader, metrics_worker_module
     ):
@@ -360,4 +400,7 @@ class TestMainWorkHorseSilencesChild:
         with patch("rq.Worker.main_work_horse", return_value=None) as super_main:
             worker.main_work_horse(_make_job("mwh-shutdown-raises"), _make_queue())
 
+        # The shutdown attempt must actually happen — otherwise this test
+        # would still pass if the child skipped shutdown entirely.
+        local_provider.shutdown.assert_called_once()
         super_main.assert_called_once()

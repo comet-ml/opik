@@ -197,27 +197,45 @@ class MetricsWorker(Worker):
         """
         try:
             job.refresh()
+            refresh_ok = True
         except Exception:
             logger.debug(
-                "job.refresh() failed for job %s — per-job metrics may be incomplete",
+                "job.refresh() failed for job %s — terminal state unavailable",
                 getattr(job, "id", "unknown"),
                 exc_info=True,
             )
+            refresh_ok = False
 
         jobs_processed_counter.add(1, metric_attributes)
 
+        # Decide success vs failure. `job.is_failed` in RQ triggers another
+        # Redis round-trip (`get_status()`), so we only consult it when the
+        # earlier refresh succeeded; otherwise we'd risk raising from this
+        # finally-block and surfacing a completed job as a worker error.
         if execute_exc is not None:
-            error_type = type(execute_exc).__name__
+            # Parent-side exception is locally reliable; doesn't need Redis.
             jobs_failed_counter.add(
-                1, {**metric_attributes, "error_type": error_type}
+                1, {**metric_attributes, "error_type": type(execute_exc).__name__}
+            )
+        elif not refresh_ok:
+            # We can't tell whether the child succeeded or failed without
+            # Redis. Emit an explicit outcome with `error_type="RefreshFailed"`
+            # rather than silently dropping the terminal metric.
+            jobs_failed_counter.add(
+                1, {**metric_attributes, "error_type": "RefreshFailed"}
             )
         elif getattr(job, "is_failed", False):
-            error_type = _error_type_from_job(job)
             jobs_failed_counter.add(
-                1, {**metric_attributes, "error_type": error_type}
+                1, {**metric_attributes, "error_type": _error_type_from_job(job)}
             )
         else:
             jobs_succeeded_counter.add(1, metric_attributes)
+
+        # Duration histograms depend on timestamps written by the child to
+        # Redis. After a failed refresh those values are stale or absent, so
+        # skip rather than record bogus durations.
+        if not refresh_ok:
+            return
 
         started_at = getattr(job, "started_at", None)
         ended_at = getattr(job, "ended_at", None)
