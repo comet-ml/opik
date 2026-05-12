@@ -1,10 +1,10 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 import api, { ENVIRONMENTS_KEY, ENVIRONMENTS_REST_ENDPOINT } from "@/api/api";
 import { Environment } from "@/types/environments";
 import { useToast } from "@/ui/use-toast";
 import { extractIdFromLocation } from "@/lib/utils";
+import { extractErrorMessage } from "@/lib/tags";
 
 type EnvironmentCreatePayload = Pick<Environment, "name"> &
   Partial<Pick<Environment, "description" | "color" | "position">>;
@@ -36,15 +36,9 @@ const useEnvironmentCreateMutation = ({
     onError: (error: AxiosError) => {
       if (!showErrorToast) return;
 
-      const errors = get(error, ["response", "data", "errors"]);
-      const message =
-        (Array.isArray(errors) && errors[0]) ||
-        get(error, ["response", "data", "message"]) ||
-        error.message;
-
       toast({
         title: "Error",
-        description: message,
+        description: extractErrorMessage(error),
         variant: "destructive",
       });
     },

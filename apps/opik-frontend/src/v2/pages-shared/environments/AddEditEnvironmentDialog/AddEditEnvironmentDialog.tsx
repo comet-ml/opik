@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { AxiosError } from "axios";
-import get from "lodash/get";
 
 import useEnvironmentCreateMutation from "@/api/environments/useEnvironmentCreateMutation";
 import useEnvironmentUpdateMutation from "@/api/environments/useEnvironmentUpdateMutation";
@@ -26,6 +25,7 @@ import {
   ENVIRONMENT_NAME_REGEX,
   Environment,
 } from "@/types/environments";
+import { extractErrorMessage } from "@/lib/tags";
 
 type EnvironmentDialogMode = "create" | "edit" | "clone";
 
@@ -36,25 +36,9 @@ type AddEditEnvironmentDialogProps = {
   mode?: EnvironmentDialogMode;
 };
 
-const extractBackendErrorMessage = (error: AxiosError): string => {
-  const errors = get(error, ["response", "data", "errors"]);
-  const firstError = Array.isArray(errors) ? errors[0] : undefined;
-  if (typeof firstError === "string" && firstError) return firstError;
-  const message = get(error, ["response", "data", "message"]);
-  if (typeof message === "string" && message) return message;
-  return error.message;
-};
-
 const AddEditEnvironmentDialog: React.FunctionComponent<
   AddEditEnvironmentDialogProps
 > = ({ open, setOpen, environment, mode = "create" }) => {
-  const { mutate: createMutation } = useEnvironmentCreateMutation({
-    showErrorToast: false,
-  });
-  const { mutate: updateMutation } = useEnvironmentUpdateMutation({
-    showErrorToast: false,
-  });
-
   const [name, setName] = useState<string>(
     mode === "clone" && environment
       ? `${environment.name}-copy`
@@ -70,6 +54,13 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   );
   const [submitError, setSubmitError] = useState<string>("");
 
+  const { mutate: createMutation } = useEnvironmentCreateMutation({
+    showErrorToast: false,
+  });
+  const { mutate: updateMutation } = useEnvironmentUpdateMutation({
+    showErrorToast: false,
+  });
+
   const trimmedName = name.trim();
   const nameError = useMemo(() => {
     if (!trimmedName) return "";
@@ -82,11 +73,6 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     return "";
   }, [trimmedName]);
 
-  const handleNameChange = useCallback((value: string) => {
-    setName(value);
-    setSubmitError("");
-  }, []);
-
   const isEdit = mode === "edit";
   const title =
     mode === "clone"
@@ -97,6 +83,21 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
   const submitText = isEdit ? "Update environment" : "Create environment";
 
   const isValid = trimmedName.length > 0 && !nameError;
+
+  const handleNameChange = useCallback((value: string) => {
+    setName(value);
+    setSubmitError("");
+  }, []);
+
+  const handleDescriptionChange = useCallback((value: string) => {
+    setDescription(value);
+    setSubmitError("");
+  }, []);
+
+  const handleColorChange = useCallback((value: string) => {
+    setColor(value);
+    setSubmitError("");
+  }, []);
 
   const submitHandler = useCallback(() => {
     if (!isValid) return;
@@ -110,7 +111,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
     const mutationOptions = {
       onSuccess: () => setOpen(false),
       onError: (error: AxiosError) => {
-        setSubmitError(extractBackendErrorMessage(error));
+        setSubmitError(extractErrorMessage(error));
       },
     };
 
@@ -154,7 +155,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-auto" align="start">
-                  <ColorPicker value={color} onChange={setColor} />
+                  <ColorPicker value={color} onChange={handleColorChange} />
                 </PopoverContent>
               </Popover>
               <Input
@@ -184,7 +185,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
               placeholder="Optional description"
               className="min-h-20"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => handleDescriptionChange(event.target.value)}
               maxLength={ENVIRONMENT_DESCRIPTION_MAX_LENGTH}
             />
           </div>
