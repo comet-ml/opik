@@ -44,6 +44,7 @@ public class OrchestratorClient {
 
         httpClient.target(config.getUrl())
                 .request(MediaType.APPLICATION_JSON)
+                .header("X-Report-Generation-Token", config.getInternalToken())
                 .async()
                 .post(Entity.json(payload), new InvocationCallback<Response>() {
                     @Override
