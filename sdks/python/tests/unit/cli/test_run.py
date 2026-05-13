@@ -37,9 +37,7 @@ class TestShouldCreateProject:
         api.projects.retrieve_project.side_effect = ApiError(
             status_code=404, body={"errors": ["not found"]}
         )
-        result = should_create_project(
-            api, "missing", workspace="ws", headless=False
-        )
+        result = should_create_project(api, "missing", workspace="ws", headless=False)
         assert result is False
 
     @patch("opik.cli.local_runner.preflight.click.confirm", return_value=True)
@@ -52,9 +50,7 @@ class TestShouldCreateProject:
         api.projects.retrieve_project.side_effect = ApiError(
             status_code=404, body={"errors": ["not found"]}
         )
-        result = should_create_project(
-            api, "missing", workspace="ws", headless=False
-        )
+        result = should_create_project(api, "missing", workspace="ws", headless=False)
         assert result is True
         prompt_text = mock_confirm.call_args[0][0]
         assert "missing" in prompt_text
@@ -70,9 +66,7 @@ class TestShouldCreateProject:
         api.projects.retrieve_project.side_effect = ApiError(
             status_code=404, body={"errors": ["not found"]}
         )
-        result = should_create_project(
-            api, "missing", workspace="ws", headless=False
-        )
+        result = should_create_project(api, "missing", workspace="ws", headless=False)
         assert result is False
 
     @patch("opik.cli.local_runner.preflight.click.confirm", return_value=True)
@@ -82,9 +76,7 @@ class TestShouldCreateProject:
     ):
         mock_stdin.isatty.return_value = True
         api = MagicMock()
-        api.projects.retrieve_project.side_effect = ApiError(
-            status_code=404, body={}
-        )
+        api.projects.retrieve_project.side_effect = ApiError(status_code=404, body={})
         should_create_project(api, "missing", workspace=None, headless=False)
         prompt_text = mock_confirm.call_args[0][0]
         assert "in workspace" not in prompt_text
@@ -118,9 +110,7 @@ class TestMaybeAutoConfigure:
     @patch("opik.cli.configure.run_interactive_configure")
     def test__api_key_arg__skips(self, mock_configure, monkeypatch):
         self._patch_env(monkeypatch)
-        maybe_auto_configure(
-            api_key_arg="abc", non_interactive=False, headless=False
-        )
+        maybe_auto_configure(api_key_arg="abc", non_interactive=False, headless=False)
         mock_configure.assert_not_called()
 
     @patch("opik.cli.configure.run_interactive_configure")

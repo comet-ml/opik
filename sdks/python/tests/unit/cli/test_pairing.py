@@ -310,9 +310,7 @@ class TestResolveProjectId:
             created,
         ]
 
-        result = _resolve(
-            api, "new-project", create_if_missing=True
-        )
+        result = _resolve(api, "new-project", create_if_missing=True)
         assert result == "proj-uuid-new"
         api.projects.create_project.assert_called_once_with(name="new-project")
         assert api.projects.retrieve_project.call_count == 2

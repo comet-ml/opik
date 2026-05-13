@@ -41,9 +41,7 @@ class RichClickError(click.ClickException):
     def show(self, file: Optional[IO[str]] = None) -> None:
         # soft_wrap + a generous width prevent Rich from breaking URLs across
         # lines when stderr is piped (CliRunner, CI logs).
-        console = Console(
-            file=file, stderr=file is None, soft_wrap=True, width=200
-        )
+        console = Console(file=file, stderr=file is None, soft_wrap=True, width=200)
         console.print(self._renderable)
 
 
@@ -91,9 +89,7 @@ def _format_config_plain(
     command: str,
 ) -> str:
     label_width = max(len(label) for label, _ in rows)
-    body = "\n".join(
-        f"  {label.ljust(label_width)}  {value}" for label, value in rows
-    )
+    body = "\n".join(f"  {label.ljust(label_width)}  {value}" for label, value in rows)
     return f"{header}\n{body}\n\n  → Run: {command}"
 
 
