@@ -6,6 +6,7 @@ import lombok.Builder;
 import org.jdbi.v3.json.Json;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
@@ -47,6 +48,10 @@ public record TraceThreadUserDefinedMetricPythonAutomationRuleEvaluatorModel(
         return toBuilder().projectId(projectId).projectName(projectName).projects(projects).build();
     }
 
-    public record TraceThreadUserDefinedMetricPythonCode(String metric) {
+    public record TraceThreadUserDefinedMetricPythonCode(String metric, Map<String, String> arguments) {
+
+        public TraceThreadUserDefinedMetricPythonCode(String metric) {
+            this(metric, null);
+        }
     }
 }

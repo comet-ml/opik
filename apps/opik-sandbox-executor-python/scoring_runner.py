@@ -146,9 +146,15 @@ score_result : Union[ScoreResult, List[ScoreResult]] = []
 try:
     metric = metric_class()
     
-    # Handle trace_thread type differently - pass data as first positional argument
     if payload_type == TRACE_THREAD_METRIC_TYPE:
-        score_result = metric.score(data)
+        # Two thread-metric signatures supported:
+        #   - dict data -> `def score(self, messages, spans=None, traces=None)` (kwargs unpack)
+        #   - list data -> `def score(self, messages)` (legacy single-positional)
+        # Java picks the shape based on whether the rule's `arguments` field declared spans / traces.
+        if isinstance(data, dict):
+            score_result = metric.score(**data)
+        else:
+            score_result = metric.score(data)
     else:
         # Regular scoring - unpack data as keyword arguments
         score_result = metric.score(**data)

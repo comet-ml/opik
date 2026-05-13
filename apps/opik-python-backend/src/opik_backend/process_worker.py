@@ -58,10 +58,18 @@ def run_user_code(code: str, data: dict, payload_type: Optional[str] = None) -> 
     score_result: Union[ScoreResult, List[ScoreResult]] = []
     try:
         metric = metric_class()
-        
-        # Handle trace_thread type differently - pass data as first positional argument
+
         if payload_type == PayloadType.TRACE_THREAD.value:
-            score_result = metric.score(data)
+            # Trace-thread metrics accept either:
+            #   - a single positional list of chat messages (legacy / no opt-in args)
+            #   - a kwargs dict (new opt-in shape: messages plus optional spans / traces)
+            # The Java side picks the shape based on whether the rule's `arguments` declares
+            # spans/traces; here we dispatch on isinstance to keep both metric signatures
+            # working: `def score(self, messages)` and `def score(self, messages, spans=None, traces=None)`.
+            if isinstance(data, dict):
+                score_result = metric.score(**data)
+            else:
+                score_result = metric.score(data)
         else:
             # Regular scoring - unpack data as keyword arguments
             score_result = metric.score(**data)

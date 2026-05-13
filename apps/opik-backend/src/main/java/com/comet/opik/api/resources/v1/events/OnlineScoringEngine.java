@@ -169,30 +169,70 @@ public class OnlineScoringEngine {
     public static ChatRequest prepareThreadLlmRequest(
             @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
             @NotNull StructuredOutputStrategy structuredOutputStrategy) {
-        var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
-                Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
+        var renderedMessages = renderThreadMessages(evaluatorCode.messages(), serializeThreadContext(traces));
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
+    /**
+     * Variant of {@link #prepareThreadLlmRequest(TraceThreadLlmAsJudgeCode, List, StructuredOutputStrategy)}
+     * that caps the rendered {@code {{context}}} substitution at {@code maxContextChars} and
+     * appends {@code drillDownHint} when truncation occurs. Used by the agentic-tools path so
+     * a multi-trace thread doesn't pre-load context — the agent can pull the rest via the
+     * {@code read} tool. Also prepends a {@code trace_ids=[...]} header so the model can wire
+     * tool calls to specific traces without having to parse the JSON body first.
+     */
+    public static ChatRequest prepareThreadLlmRequest(
+            @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
+            @NotNull StructuredOutputStrategy structuredOutputStrategy,
+            int maxContextChars, @NotNull String drillDownHint) {
+        String body = StringTruncator.truncate(serializeThreadContext(traces), maxContextChars, drillDownHint);
+        String contextValue = threadIdsHeader(traces) + "\n" + body;
+        var renderedMessages = renderThreadMessages(evaluatorCode.messages(), contextValue);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Builds the {@code trace_ids=[...]} header that prefixes the capped thread context. Trace
+     * ids are listed by id only (no input/output preview) so the header stays small even on
+     * threads with hundreds of traces; the {@code read} / {@code get_trace_spans} tools recover
+     * the per-trace content.
+     */
+    private static String threadIdsHeader(List<Trace> traces) {
+        String ids = traces.stream()
+                .map(t -> t.id().toString())
+                .collect(Collectors.joining(", "));
+        return "trace_ids=[" + ids + "]";
+    }
+
+    private static String serializeThreadContext(List<Trace> traces) {
+        try {
+            return OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces));
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    /**
+     * Legacy three-arg form kept for callers (and tests) that derive the {@code {{context}}}
+     * substitution from a list of traces. Internally just serializes the traces and forwards
+     * to {@link #renderThreadMessages(List, String)}; new call sites should prefer the
+     * two-arg form so they can control the context value (e.g. cap it for the tools path).
+     */
     static List<ChatMessage> renderThreadMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
-        // prepare the map of replacements to use in all messages
-        Map<String, String> replacements = variablesMap.keySet().stream()
-                .map(variableName -> switch (variableName) {
-                    case TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME -> {
-                        try {
-                            yield MessageVariableMapping.builder()
-                                    .variableName(variableName)
-                                    .valueToReplace(OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)))
-                                    .build();
-                        } catch (JsonProcessingException ex) {
-                            throw new UncheckedIOException(ex);
-                        }
-                    }
-                    default -> throw new IllegalArgumentException("Invalid variable name: " + variableName);
-                })
-                .collect(
-                        Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
+        // The variablesMap key was used to select what to render; only the CONTEXT_VARIABLE_NAME
+        // key is supported (matching the original behavior).
+        if (!variablesMap.containsKey(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME)) {
+            throw new IllegalArgumentException("Invalid variable map: only "
+                    + TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME + " is supported");
+        }
+        return renderThreadMessages(templateMessages, serializeThreadContext(traces));
+    }
+
+    static List<ChatMessage> renderThreadMessages(
+            List<LlmAsJudgeMessage> templateMessages, String contextValue) {
+        Map<String, String> replacements = Map.of(
+                TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, contextValue);
 
         // render the message templates from evaluator rule
         return templateMessages.stream()
@@ -676,6 +716,18 @@ public class OnlineScoringEngine {
     public static int estimateTraceContextTokens(@NotNull Trace trace, @NotNull List<Span> spans,
             @NotNull TraceCompressor traceCompressor) {
         return traceCompressor.buildFullJson(trace, spans).toString().length() / 4;
+    }
+
+    /**
+     * Rough character-based token estimate for the rendered thread context — the JSON-serialized
+     * {role, content} message list from {@link #fromTraceToThread}. Mirrors
+     * {@link #estimateTraceContextTokens} (~ 4 chars/token). Drives the agentic-tools routing
+     * gate in {@code OnlineScoringTraceThreadLlmAsJudgeScorer}: above the configured threshold,
+     * the thread context is too big to paste inline and the scorer routes through the read /
+     * jq / search tool loop instead.
+     */
+    public static int estimateThreadContextTokens(@NotNull List<Trace> traces) {
+        return serializeThreadContext(traces).length() / 4;
     }
 
     /**

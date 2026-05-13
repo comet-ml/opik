@@ -19,17 +19,26 @@ import java.util.Set;
  * judge invocation. One instance per {@code handleToolCalls} loop; the loop
  * runs sequentially on a single thread, so a plain {@link HashMap} is safe.
  *
- * <p>The active {@link Trace} and its spans are accessors; once {@code ReadTool}
- * lands (phase 2), they will also be pre-seeded into {@link #fetched} so
- * subsequent {@code jq} / {@code search} calls can target them without an
- * explicit {@code read}. Phase 1 only exposes them as plain accessors —
- * {@link #fetched} stays empty until later phases populate it.
+ * <p>Two construction modes:
+ * <ul>
+ *   <li><strong>Single-trace</strong> ({@code new TraceToolContext(trace, spans, ...)} — the
+ *       original trace-level LLM-as-judge path). {@link #trace} and {@link #spans} are populated;
+ *       {@link #threadTraces} is empty.</li>
+ *   <li><strong>Thread</strong> ({@link #forThread(List, String, String)}) — the trace-thread
+ *       LLM-as-judge path. {@link #threadTraces} holds the thread's sorted-by-id traces;
+ *       {@link #trace} is {@code null} and {@link #spans} is empty (spans for any of those
+ *       traces are fetched on-demand by the {@code get_trace_spans} tool).</li>
+ * </ul>
+ * Tools that only need {@link EntityRef} cache access (read / jq / search) work in both modes
+ * uniformly. {@code get_trace_spans} branches on whether {@link #trace} is present (active-trace
+ * default) versus accepting an explicit {@code trace_id} (thread mode).
  */
 @Getter
 public final class TraceToolContext {
 
     private final Trace trace;
     private final List<Span> spans;
+    private final List<Trace> threadTraces;
     private final String workspaceId;
     private final String userName;
     private final Map<EntityRef, JsonNode> fetched = new HashMap<>();
@@ -49,8 +58,32 @@ public final class TraceToolContext {
             @NonNull String userName) {
         this.trace = trace;
         this.spans = List.copyOf(spans);
+        this.threadTraces = List.of();
         this.workspaceId = workspaceId;
         this.userName = userName;
+    }
+
+    private TraceToolContext(@NonNull List<Trace> threadTraces,
+            @NonNull String workspaceId,
+            @NonNull String userName) {
+        this.trace = null;
+        this.spans = List.of();
+        this.threadTraces = List.copyOf(threadTraces);
+        this.workspaceId = workspaceId;
+        this.userName = userName;
+    }
+
+    /**
+     * Constructs a context for the trace-thread LLM-as-judge path. No "active" trace — the
+     * thread's traces are listed in the system prompt by id, and ReadTool populates the
+     * cache lazily on first hit (no upfront span fetch for every thread trace, which would
+     * be wasteful if the LLM only inspects one). {@code get_trace_spans} requires an explicit
+     * {@code trace_id} argument in this mode.
+     */
+    public static TraceToolContext forThread(@NonNull List<Trace> threadTraces,
+            @NonNull String workspaceId,
+            @NonNull String userName) {
+        return new TraceToolContext(threadTraces, workspaceId, userName);
     }
 
     public Optional<JsonNode> getCached(@NonNull EntityRef ref) {

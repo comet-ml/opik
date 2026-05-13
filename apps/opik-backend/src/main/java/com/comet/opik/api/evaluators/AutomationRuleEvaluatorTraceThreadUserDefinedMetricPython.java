@@ -15,6 +15,7 @@ import lombok.experimental.SuperBuilder;
 import java.beans.ConstructorProperties;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.UUID;
@@ -30,14 +31,37 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
         extends
             AutomationRuleEvaluator<TraceThreadUserDefinedMetricPythonCode, TraceThreadFilter> {
 
+    /**
+     * Reserved metric-argument keys whose presence on a thread rule triggers opt-in pre-fetch
+     * of the corresponding entities by {@code OnlineScoringTraceThreadUserDefinedMetricPythonScorer}:
+     * <ul>
+     *   <li>{@code spans} — flat list of every span across all traces in the thread.</li>
+     *   <li>{@code traces} — list of full trace objects for the thread.</li>
+     * </ul>
+     * Backward-compatible: rules that don't declare these keep the legacy single-positional
+     * messages-list signature (the sandbox runner branches on data shape).
+     */
+    public static final String SPANS_ARG_NAME = "spans";
+    public static final String TRACES_ARG_NAME = "traces";
+
     @Builder(toBuilder = true)
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record TraceThreadUserDefinedMetricPythonCode(
             @JsonView( {
-                    View.Public.class, View.Write.class}) @NotNull String metric){
+                    View.Public.class, View.Write.class}) @NotNull String metric,
+            @JsonView({View.Public.class, View.Write.class}) Map<String, String> arguments){
 
         public static final String CONTEXT_ARG_NAME = "context";
+
+        /**
+         * Convenience constructor for the legacy single-positional-arg shape (no opt-in
+         * spans / traces). Keeps existing call sites and serialized payloads that don't
+         * carry an {@code arguments} field compiling without changes.
+         */
+        public TraceThreadUserDefinedMetricPythonCode(String metric) {
+            this(metric, null);
+        }
     }
 
     @ConstructorProperties({"id", "projectId", "projectName", "projects", "projectIds", "name", "samplingRate",

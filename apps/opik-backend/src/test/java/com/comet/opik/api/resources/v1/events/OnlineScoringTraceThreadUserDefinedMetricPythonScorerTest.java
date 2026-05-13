@@ -7,6 +7,7 @@ import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefin
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceSearchCriteria;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
@@ -80,6 +81,8 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
     @Mock
     private TraceThreadService traceThreadService;
     @Mock
+    private SpanService spanService;
+    @Mock
     private ProjectService projectService;
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
@@ -126,6 +129,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                 pythonEvaluatorService,
                 traceService,
                 traceThreadService,
+                spanService,
                 projectService,
                 automationRuleEvaluatorService);
 
@@ -311,6 +315,88 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     eq(ruleName),
                     eq(loggedMessage));
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+    }
+
+    @Nested
+    class OptInSpansAndTraces {
+
+        @Test
+        void fetchesSpansAndCallsEvaluateThreadWithDataWhenRuleDeclaresSpans() {
+            var trace = sampleTrace();
+            var message = podamFactory.manufacturePojo(TraceThreadToScoreUserDefinedMetricPython.class)
+                    .toBuilder()
+                    .ruleId(ruleId)
+                    .projectId(projectId)
+                    .threadIds(List.of(threadId))
+                    .code(TraceThreadUserDefinedMetricPythonCode.builder()
+                            .metric("def score(self, messages, spans=None): return []")
+                            .arguments(java.util.Map.of(
+                                    AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.SPANS_ARG_NAME,
+                                    "spans"))
+                            .build())
+                    .workspaceId(workspaceId)
+                    .userName(userName)
+                    .build();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("score-with-spans")
+                    .value(BigDecimal.ONE)
+                    .reason("")
+                    .build();
+            var span = podamFactory.manufacturePojo(com.comet.opik.api.Span.class);
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(spanService.getByTraceIds(eq(Set.of(trace.id())))).thenReturn(Flux.just(span));
+            when(pythonEvaluatorService.evaluateThreadWithData(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
+                    .thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            // The kwargs-shaped path was taken: data is a Map containing messages + spans.
+            var dataCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+            verify(pythonEvaluatorService).evaluateThreadWithData(eq(message.code().metric()), dataCaptor.capture());
+            verify(pythonEvaluatorService, never()).evaluateThread(any(), any());
+            assertThat(dataCaptor.getValue())
+                    .containsKey(com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.MESSAGES_KEY)
+                    .containsKey(com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.SPANS_KEY);
+        }
+
+        @Test
+        void keepsLegacyListPathWhenRuleHasNoArguments() {
+            // Regression guard: rules without an `arguments` field should NOT trigger any opt-in
+            // pre-fetch and should keep using the original positional messages-list signature.
+            var trace = sampleTrace();
+            var message = sampleMessage();
+            var project = Project.builder().id(projectId).name("test-project").build();
+            var pythonScore = PythonScoreResult.builder()
+                    .name("score-legacy").value(BigDecimal.ONE).reason("").build();
+
+            when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
+                    .thenReturn(Flux.just(trace), Flux.empty());
+            when(traceThreadService.getThreadModelId(projectId, threadId)).thenReturn(Mono.just(threadModelId));
+            when(automationRuleEvaluatorService.findById(ruleId, Set.of(projectId), workspaceId))
+                    .thenReturn(ruleFor(ruleName));
+            when(projectService.get(projectId, workspaceId)).thenReturn(project);
+            when(pythonEvaluatorService.evaluateThread(eq(message.code().metric()), any()))
+                    .thenReturn(Mono.just(List.of(pythonScore)));
+            when(feedbackScoreService.scoreBatchOfThreads(any())).thenReturn(Mono.empty());
+            when(traceThreadService.setScoredAt(eq(projectId), eq(List.of(threadId)), any()))
+                    .thenReturn(Mono.empty());
+
+            scorer.score(message).block();
+
+            verify(pythonEvaluatorService).evaluateThread(eq(message.code().metric()), any());
+            verify(pythonEvaluatorService, never()).evaluateThreadWithData(any(), any());
+            org.mockito.Mockito.verifyNoInteractions(spanService);
         }
     }
 

@@ -2,16 +2,20 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.SpanService;
 import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
+import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -56,6 +60,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     private final ServiceTogglesConfig serviceTogglesConfig;
     private final PythonEvaluatorService pythonEvaluatorService;
     private final TraceThreadService traceThreadService;
+    private final SpanService spanService;
     private final Logger userFacingLogger;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
@@ -69,6 +74,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             @NonNull PythonEvaluatorService pythonEvaluatorService,
             @NonNull TraceService traceService,
             @NonNull TraceThreadService traceThreadService,
+            @NonNull SpanService spanService,
             @NonNull ProjectService projectService,
             @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_USER_DEFINED_METRIC_PYTHON,
@@ -76,6 +82,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         this.pythonEvaluatorService = pythonEvaluatorService;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.traceThreadService = traceThreadService;
+        this.spanService = spanService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
         this.userFacingLogger = UserFacingLoggingFactory
@@ -205,38 +212,111 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     }
 
     /**
-     * Builds the Python evaluator request (project + chat messages) for the given thread. Caller
-     * guarantees {@code traces} is non-empty.
+     * Builds the Python evaluator payload for the given thread. The data shape depends on
+     * whether the rule declared opt-in {@code spans} / {@code traces} arguments:
+     * <ul>
+     *   <li>No opt-in arguments → legacy {@code List<ChatMessage>} positional shape.</li>
+     *   <li>At least one opt-in argument → kwargs-shaped {@code Map<String, Object>} with
+     *       {@code messages} plus the requested {@code spans} / {@code traces} entries.</li>
+     * </ul>
+     * Caller guarantees {@code traces} is non-empty. Span fetch is opt-in: only fired when
+     * the rule actually declared {@code spans} in {@code arguments}, so most threads avoid
+     * the DB hit.
      */
-    private Pair<Project, List<ChatMessage>> prepareScoring(TraceThreadToScoreUserDefinedMetricPython message,
+    private Pair<Project, Object> prepareScoring(TraceThreadToScoreUserDefinedMetricPython message,
             List<Trace> traces, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
 
             Project project = projectService.get(message.projectId(), message.workspaceId());
 
-            List<ChatMessage> context;
+            Object data;
             try {
-                context = OnlineScoringEngine.fromTraceToThread(traces);
+                List<ChatMessage> messages = OnlineScoringEngine.fromTraceToThread(traces);
+                Map<String, String> arguments = message.code().arguments();
+                boolean wantsSpans = arguments != null
+                        && arguments.containsKey(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.SPANS_ARG_NAME);
+                boolean wantsTraces = arguments != null
+                        && arguments
+                                .containsKey(AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.TRACES_ARG_NAME);
+
+                if (!wantsSpans && !wantsTraces) {
+                    // Legacy path: single-positional messages list. Untouched for rules without
+                    // opt-in arguments, so existing thread metrics keep working as-is.
+                    data = messages;
+                } else {
+                    var dict = new java.util.LinkedHashMap<String, Object>();
+                    dict.put(TraceThreadPythonEvaluatorRequest.MESSAGES_KEY, messages);
+                    if (wantsSpans) {
+                        dict.put(TraceThreadPythonEvaluatorRequest.SPANS_KEY,
+                                fetchSpansForThread(traces, message.workspaceId(), message.userName()));
+                    }
+                    if (wantsTraces) {
+                        dict.put(TraceThreadPythonEvaluatorRequest.TRACES_KEY, traces);
+                    }
+                    data = dict;
+                }
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing Python request for threadId '{}': \n\n{}",
                         threadId, exception.getMessage());
                 throw exception;
             }
 
-            userFacingLogger.info("Sending threadId '{}' to Python evaluator using the following context:\n\n{}",
-                    threadId, context);
+            if (userFacingLogger.isInfoEnabled()) {
+                userFacingLogger.info("Sending threadId '{}' to Python evaluator: {}",
+                        threadId, summarizeData(data));
+            }
 
-            return Pair.of(project, context);
+            return Pair.of(project, data);
         }
     }
 
+    private List<Span> fetchSpansForThread(List<Trace> traces, String workspaceId, String userName) {
+        Set<UUID> traceIds = traces.stream().map(Trace::id).collect(java.util.stream.Collectors.toSet());
+        List<Span> spans = spanService.getByTraceIds(traceIds)
+                .collectList()
+                .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
+                        .put(RequestContext.USER_NAME, userName))
+                .block();
+        return spans == null ? List.of() : spans;
+    }
+
+    /**
+     * Shape-only one-line summary of the rendered Python evaluator input. Same rationale as
+     * {@code OnlineScoringEngine.summarizeEvaluatorInput} — values are rendered user data
+     * (messages, spans, traces); logging them verbatim would land conversation content
+     * downstream of whatever sinks the user-facing log feeds.
+     */
+    @SuppressWarnings("unchecked")
+    private static String summarizeData(Object data) {
+        if (data instanceof List<?> list) {
+            return String.format("messages=list(%d)", list.size());
+        }
+        if (data instanceof Map<?, ?> mapAny) {
+            Map<String, Object> map = (Map<String, Object>) mapAny;
+            var parts = new java.util.ArrayList<String>();
+            map.forEach((k, v) -> {
+                if (v instanceof List<?> list) {
+                    parts.add(String.format("%s=list(%d)", k, list.size()));
+                } else {
+                    parts.add(String.format("%s=%s", k, v == null ? "null" : v.getClass().getSimpleName()));
+                }
+            });
+            return String.join(", ", parts);
+        }
+        return String.format("data=%s", data == null ? "null" : data.getClass().getSimpleName());
+    }
+
+    @SuppressWarnings("unchecked")
     private Mono<Map<String, List<BigDecimal>>> evaluateAndStore(
             TraceThreadToScoreUserDefinedMetricPython message, UUID threadModelId, String threadId,
-            Pair<Project, List<ChatMessage>> context, Map<String, String> mdc) {
+            Pair<Project, Object> context, Map<String, String> mdc) {
         var project = context.getLeft();
-        var chatMessages = context.getRight();
-        return pythonEvaluatorService.evaluateThread(message.code().metric(), chatMessages)
+        var data = context.getRight();
+        Mono<List<com.comet.opik.domain.evaluators.python.PythonScoreResult>> evaluation = (data instanceof List)
+                ? pythonEvaluatorService.evaluateThread(message.code().metric(), (List<ChatMessage>) data)
+                : pythonEvaluatorService.evaluateThreadWithData(message.code().metric(), (Map<String, Object>) data);
+        return evaluation
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for threadId '{}':\n\n{}", threadId, scoreResults)))
                 .flatMap(scoreResults -> {

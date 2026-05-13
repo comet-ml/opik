@@ -50,6 +50,30 @@ public class PythonEvaluatorService {
         return executeWithRetry(Entity.json(request));
     }
 
+    /**
+     * Dict-shaped variant — used when the thread rule declared opt-in {@code spans} and/or
+     * {@code traces} arguments. The sandbox runner sees {@code isinstance(data, dict)} and
+     * unpacks as kwargs, so the user's metric signature is
+     * {@code def score(self, messages, spans=None, traces=None)}. {@code messages} key is
+     * required; {@code spans} and {@code traces} are optional.
+     *
+     * <p>Distinct name (not an {@code evaluateThread} overload) to avoid {@code any()}-based
+     * Mockito stubs becoming ambiguous between {@code List<ChatMessage>} and
+     * {@code Map<String, Object>} at call sites that pre-date this addition.
+     */
+    public Mono<List<PythonScoreResult>> evaluateThreadWithData(@NonNull String code, @NonNull Map<String, Object> data) {
+        Preconditions.checkArgument(MapUtils.isNotEmpty(data), "Argument 'data' must not be empty");
+        Preconditions.checkArgument(data.containsKey(TraceThreadPythonEvaluatorRequest.MESSAGES_KEY),
+                "Argument 'data' must contain a '%s' entry",
+                TraceThreadPythonEvaluatorRequest.MESSAGES_KEY);
+        TraceThreadPythonEvaluatorRequest request = TraceThreadPythonEvaluatorRequest.builder()
+                .code(code)
+                .data(data)
+                .build();
+
+        return executeWithRetry(Entity.json(request));
+    }
+
     private Mono<List<PythonScoreResult>> executeWithRetry(Entity<?> body) {
         var pythonConfig = config.getPythonEvaluator();
         var request = RetriableHttpClient.Request.<List<PythonScoreResult>>builder()

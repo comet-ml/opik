@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceSearchCriteria;
@@ -15,6 +16,7 @@ import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.llm.structuredoutput.ToolCallingStrategy;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -85,6 +87,10 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     private ProjectService projectService;
     @Mock
     private AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    @Mock
+    private ServiceTogglesConfig serviceTogglesConfig;
+    @Mock
+    private ToolRegistry toolRegistry;
 
     private OnlineScoringTraceThreadLlmAsJudgeScorer scorer;
     private MockedStatic<UserFacingLoggingFactory> mockedFactory;
@@ -122,6 +128,7 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
 
         scorer = new OnlineScoringTraceThreadLlmAsJudgeScorer(
                 onlineScoringConfig,
+                serviceTogglesConfig,
                 redissonClient,
                 feedbackScoreService,
                 aiProxyService,
@@ -129,7 +136,8 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                 traceService,
                 traceThreadService,
                 projectService,
-                automationRuleEvaluatorService);
+                automationRuleEvaluatorService,
+                toolRegistry);
 
         projectId = UUID.randomUUID();
         ruleId = UUID.randomUUID();
@@ -291,6 +299,115 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                     eq(loggedMessage));
             verify(aiProxyService, never()).scoreTrace(any(), any(), any());
             verify(feedbackScoreService, never()).scoreBatchOfThreads(any());
+        }
+    }
+
+    @Nested
+    class AgenticToolsGate {
+
+        // Mirrors OnlineScoringLlmAsJudgeScorerTest.gateMatchesTruthTable for the trace-thread
+        // path. Threads have no experimentId branch, so the gate is purely size-driven: toggle
+        // ON + above threshold + provider supports tools.
+        @ParameterizedTest(name = "[{index}] toggle={0} estTok={1} thr={2} provider={3} -> useTools={4}")
+        @org.junit.jupiter.params.provider.CsvSource(value = {
+                // toggle, estimatedTokens, threshold, provider, expected
+                "true,  60000, 50000, OPEN_AI, true",
+                "true,  50000, 50000, OPEN_AI, true",
+                // below threshold → inline
+                "true,  49999, 50000, OPEN_AI, false",
+                // toggle off → inline even on huge contexts
+                "false, 60000, 50000, OPEN_AI, false",
+                // provider doesn't support tool calling → inline
+                "true,  60000, 50000, OLLAMA,  false",
+                // no preconditions met
+                "false, 0,     50000, OPEN_AI, false",
+        })
+        void gateMatchesTruthTable(boolean toggleEnabled, int estimatedTokens, int thresholdTokens,
+                com.comet.opik.api.LlmProvider provider, boolean expectedUseTools) {
+            String modelName = "gpt-test";
+            var message = sampleMessage();
+            when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(toggleEnabled);
+            org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
+                    .thenReturn(thresholdTokens);
+            org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
+                    .thenReturn(provider);
+
+            boolean useTools = scorer.shouldUseAgenticTools(message, threadId, estimatedTokens, modelName);
+
+            assertThat(useTools).isEqualTo(expectedUseTools);
+        }
+    }
+
+    @Nested
+    class HandleToolCallsTests {
+
+        @Test
+        void returnsImmediatelyWhenNoToolRequests() {
+            ChatResponse plainResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("done"))
+                    .build();
+            ChatRequest toolRequest = ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+            ChatRequest structuredRequest = ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            ChatResponse result = scorer.handleToolCalls(
+                    plainResponse, toolRequest, structuredRequest, sampleMessage(), List.of(sampleTrace()));
+
+            assertThat(result).isSameAs(plainResponse);
+            org.mockito.Mockito.verifyNoInteractions(aiProxyService);
+            org.mockito.Mockito.verifyNoInteractions(toolRegistry);
+        }
+
+        @Test
+        void runsOneRoundThenFinalizesWithStructuredShape() {
+            var message = sampleMessage();
+            var trace = sampleTrace();
+
+            // Initial response: model wants to inspect a thread trace's spans.
+            dev.langchain4j.agent.tool.ToolExecutionRequest toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest
+                    .builder()
+                    .id("call-1")
+                    .name("get_trace_spans")
+                    .arguments("{\"trace_id\":\"" + trace.id() + "\"}")
+                    .build();
+            ChatResponse initialResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from(List.of(toolReq)))
+                    .build();
+            // Round-1 response: model finishes — no more tool calls.
+            ChatResponse roundOneResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("ok"))
+                    .build();
+            // Final structured response: post-loop re-issue against structuredRequest shape.
+            ChatResponse finalResponse = ChatResponse.builder()
+                    .aiMessage(AiMessage.from("{\"Relevance\": {\"score\": 1, \"reason\": \"\"}}"))
+                    .build();
+
+            when(aiProxyService.scoreTrace(any(ChatRequest.class), any(), any()))
+                    .thenReturn(roundOneResponse, finalResponse);
+            when(toolRegistry.execute(eq("get_trace_spans"), any(), any())).thenReturn("[spans=...]");
+
+            ChatRequest toolRequest = ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+            ChatRequest structuredRequest = ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            ChatResponse result = scorer.handleToolCalls(
+                    initialResponse, toolRequest, structuredRequest, message, List.of(trace));
+
+            assertThat(result).isSameAs(finalResponse);
+
+            // Two scoreTrace calls: round-1 follow-up + final structured re-issue.
+            verify(aiProxyService, org.mockito.Mockito.times(2))
+                    .scoreTrace(any(ChatRequest.class), any(), any());
+            // Tool was invoked exactly once with the trace_id from the thread.
+            verify(toolRegistry).execute(eq("get_trace_spans"),
+                    eq("{\"trace_id\":\"" + trace.id() + "\"}"),
+                    any());
         }
     }
 
