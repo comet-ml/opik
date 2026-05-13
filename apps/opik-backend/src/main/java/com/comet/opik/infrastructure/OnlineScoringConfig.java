@@ -65,11 +65,15 @@ public class OnlineScoringConfig {
      * the agentic-tools path (read/jq/search tools). Sized for 128 K-token model windows;
      * bump higher on larger windows to keep more rules on the cheaper inline path.
      *
+     * <p>Floor at 1000 tokens — below that any non-trivial trace would flip onto the
+     * tools path, so a typo'd env var (e.g. {@code =1}) would silently put the whole
+     * online-scoring fleet on the agentic path. Dropwizard fails fast on startup instead.
+     *
      * <p>Field initializer (not {@code @Builder.Default}) so the default applies during
      * Dropwizard's YAML deserialization (no-args constructor), not only via the builder.
      */
     @JsonProperty
-    @Min(1) private int agenticToolsThresholdTokens = 50_000;
+    @Min(1000) private int agenticToolsThresholdTokens = 50_000;
 
     /**
      * Characters-per-token ratio used by {@code estimateTraceContextTokens} to translate

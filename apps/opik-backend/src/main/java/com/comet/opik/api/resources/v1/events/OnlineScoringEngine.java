@@ -683,12 +683,6 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Whether the given provider is known to support tool-calling. Used to gate the
-     * agentic-tools path: providers that don't support tools fall back to the inline path
-     * even when the context exceeds the size threshold (which may overflow the model's
-     * window — in that case the operator should pick a different model for those workloads).
-     */
-    /**
      * Shape-only summary of the rendered Python evaluator input for user-facing logs.
      * Values are rendered trace/span content (input/output/metadata/spans); logging them
      * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
@@ -708,6 +702,12 @@ public class OnlineScoringEngine {
         return String.format("arguments=[%s]", parts);
     }
 
+    /**
+     * Whether the given provider is known to support tool-calling. Used to gate the
+     * agentic-tools path: providers that don't support tools fall back to the inline path
+     * even when the context exceeds the size threshold (which may overflow the model's
+     * window — in that case the operator should pick a different model for those workloads).
+     */
     public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
