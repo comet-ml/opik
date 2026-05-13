@@ -50,13 +50,12 @@ public final class ToolArgs {
             return Result.error(errorJson("Unknown type: " + typeStr));
         }
         if (type == EntityType.THREAD) {
-            return Result.error(errorJson(
-                    "type=thread is not supported by the " + toolName + " tool — threads are not"
-                            + " fetched as entities, they ARE the prompt context. Use"
-                            + " read(type=trace, id=<uuid>) on the trace ids listed in the thread"
-                            + " skeleton (system message), or jq(type=trace, id=<uuid>,"
-                            + " expression='<path>') for path-targeted lookups within a specific"
-                            + " trace."));
+            return Result.error(errorJson("""
+                    type=thread is not supported by the %s tool — threads are not fetched as \
+                    entities, they ARE the prompt context. Use read(type=trace, id=<uuid>) on \
+                    the trace ids listed in the thread skeleton (system message), or \
+                    jq(type=trace, id=<uuid>, expression='<path>') for path-targeted lookups \
+                    within a specific trace.""".formatted(toolName)));
         }
         return Result.ok(type);
     }

@@ -486,18 +486,35 @@ public class ReadTool implements ToolExecutor {
             Function<CompressionTier, CompressionResult> recompress) {
         CompressionResult current = initial;
         CompressionTier lastRequested = current.tier();
-        while (current.payload().toString().length() > OUTPUT_SAFETY_CHARS) {
+        // Bounded by the tier ladder (FULL → MEDIUM → SKELETON terminal), but capped explicitly
+        // at CompressionTier.values().length so a future tier change can't accidentally turn
+        // this into an unbounded loop even if downgradeTierOrSame's contract drifts.
+        for (int attempt = 0; attempt < CompressionTier.values().length; attempt++) {
+            if (current.payload().toString().length() <= OUTPUT_SAFETY_CHARS) {
+                return current;
+            }
             CompressionTier next = downgradeTierOrSame(lastRequested);
             if (next == lastRequested) {
+                // Single warn per call: we've exhausted the ladder. Emitted at most once even if
+                // the agent issues many read() calls, since this is the terminal branch.
                 log.warn("Read tool output exceeded '{}' chars at smallest tier '{}' — returning anyway",
                         OUTPUT_SAFETY_CHARS, lastRequested);
-                break;
+                return current;
             }
-            log.info("Read tool output exceeded '{}' chars at tier '{}', downgrading to '{}'",
+            // debug, not info: a many-rounds-per-evaluation agent could trigger one downgrade per
+            // read call, and 2-3 downgrades per guard. Keeping this at info would multiply into
+            // tens of lines per evaluation without operator value — the warn above catches the
+            // case that actually matters.
+            log.debug("Read tool output exceeded '{}' chars at tier '{}', downgrading to '{}'",
                     OUTPUT_SAFETY_CHARS, lastRequested, next);
             current = recompress.apply(next);
             lastRequested = next;
         }
+        // Defensive: the for loop's iteration cap should never be hit in practice because the
+        // tier ladder reaches a terminal state in at most 3 steps. If it does, log loudly and
+        // return what we have rather than spinning.
+        log.warn("Read tool guardOutput exhausted '{}' iterations without reaching a terminal tier",
+                CompressionTier.values().length);
         return current;
     }
 

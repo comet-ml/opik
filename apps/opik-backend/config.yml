@@ -540,6 +540,11 @@ onlineScoring:
   #   agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the threshold the inline
   #   path is used.
   agenticToolsThresholdTokens: ${ONLINE_SCORING_AGENTIC_TOOLS_THRESHOLD_TOKENS:-50000}
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate a trace's token count from its serialized JSON
+  #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
+  #   pessimistic estimate so the agentic-tools path engages earlier.
+  agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only

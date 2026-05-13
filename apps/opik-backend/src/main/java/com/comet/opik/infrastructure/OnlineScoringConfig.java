@@ -71,6 +71,17 @@ public class OnlineScoringConfig {
     @JsonProperty
     @Min(1) private int agenticToolsThresholdTokens = 50_000;
 
+    /**
+     * Characters-per-token ratio used by {@code estimateTraceContextTokens} to translate
+     * the {@code {trace, spans}} serialized JSON length into a token estimate. 4 is the
+     * widely cited natural-language English approximation; random/code content runs closer
+     * to 2, but the agentic-tools threshold itself has slack so this isn't precision-critical.
+     * Configurable so operators can tune for workloads that skew toward code/JSON (lower
+     * ratio = more pessimistic estimate = earlier switch to the agentic-tools path).
+     */
+    @JsonProperty
+    @Min(1) private int agenticToolsCharsPerToken = 4;
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor

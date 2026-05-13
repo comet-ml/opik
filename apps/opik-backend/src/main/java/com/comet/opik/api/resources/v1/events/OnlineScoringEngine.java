@@ -30,9 +30,9 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -89,13 +89,13 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
         return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
     }
 
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
@@ -110,9 +110,9 @@ public class OnlineScoringEngine {
      * full content via the {@code read} tool when it actually needs it.
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType,
-            int maxReplacementChars, @NotNull String drillDownHint) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            int maxReplacementChars, @NonNull String drillDownHint) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
@@ -137,9 +137,9 @@ public class OnlineScoringEngine {
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareSpanLlmRequest(
-            @NotNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
-            @NotNull Span span,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NonNull Span span,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -167,8 +167,8 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
-            @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
                 Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
@@ -369,7 +369,7 @@ public class OnlineScoringEngine {
      * decision so the span fetch is skipped on metrics that don't need it.
      */
     public static Map<String, Object> toReplacements(
-            Map<String, String> variables, Trace trace, @NotNull List<Span> spans) {
+            @NonNull Map<String, String> variables, @NonNull Trace trace, @NonNull List<Span> spans) {
         var base = toReplacements(variables, trace);
         var result = new LinkedHashMap<String, Object>(base);
         result.put(SPANS_VARIABLE_NAME, spans.stream().sorted(BY_SPAN_START_TIME).toList());
@@ -583,7 +583,7 @@ public class OnlineScoringEngine {
                 name, entityType, entityId));
     }
 
-    public static ParsedFeedbackScores toFeedbackScores(@NotNull ChatResponse chatResponse) {
+    public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse) {
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
@@ -666,16 +666,20 @@ public class OnlineScoringEngine {
      * inline-rendered prompt would risk overflowing the model's window — which flips the
      * scorer into the read/jq/search agentic-tools path.
      *
-     * <p>Char-based: ~4 chars/token for natural-language English, accurate enough for tier
-     * selection. Accuracy isn't critical because the threshold itself has slack (default
-     * 50K tokens, models typically have 128K windows). For random/code content the ratio
-     * trends to ~2 chars/token; this estimator under-counts there but the per-call and
-     * cumulative output caps in {@link com.comet.opik.api.resources.v1.events.tools.ReadTool}
-     * pick up the slack.
+     * <p>{@code charsPerToken} is the chars-per-token ratio operators configure via
+     * {@code onlineScoring.agenticToolsCharsPerToken} (default 4 = natural-language English).
+     * Workloads that skew toward code/JSON should lower the ratio (~ 2) to pull the size-based
+     * branch in earlier. Accuracy isn't precision-critical because the threshold itself has
+     * slack (default 50K tokens vs typical 128K windows), and the per-call and cumulative
+     * output caps in {@link com.comet.opik.api.resources.v1.events.tools.ReadTool} pick up
+     * any slack on the agentic-tools side.
      */
-    public static int estimateTraceContextTokens(@NotNull Trace trace, @NotNull List<Span> spans,
-            @NotNull TraceCompressor traceCompressor) {
-        return traceCompressor.buildFullJson(trace, spans).toString().length() / 4;
+    public static int estimateTraceContextTokens(@NonNull Trace trace, @NonNull List<Span> spans,
+            @NonNull TraceCompressor traceCompressor, int charsPerToken) {
+        if (charsPerToken < 1) {
+            throw new IllegalArgumentException("charsPerToken must be >= 1, got " + charsPerToken);
+        }
+        return traceCompressor.buildFullJson(trace, spans).toString().length() / charsPerToken;
     }
 
     /**
@@ -690,7 +694,7 @@ public class OnlineScoringEngine {
      * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
      * so we surface key names and sizes only.
      */
-    public static String summarizeEvaluatorInput(Map<String, Object> data) {
+    public static String summarizeEvaluatorInput(@NonNull Map<String, Object> data) {
         var parts = data.entrySet().stream()
                 .map(e -> {
                     var v = e.getValue();
@@ -704,7 +708,7 @@ public class OnlineScoringEngine {
         return String.format("arguments=[%s]", parts);
     }
 
-    public static boolean supportsToolCalling(LlmProvider provider) {
+    public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;

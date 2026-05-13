@@ -254,7 +254,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // the size-based agentic-tools branch.
             String modelName = message.llmAsJudgeCode().model().name();
             int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(
-                    trace, spans, traceCompressor);
+                    trace, spans, traceCompressor, onlineScoringConfig.getAgenticToolsCharsPerToken());
             boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName);
 
             ChatRequest scoreRequest;
