@@ -1481,6 +1481,66 @@ class DatasetVersionResourceTest {
         }
 
         @Test
+        @DisplayName("OPIK-6390: createVersionWithDeletion preserves items when base items_total has drifted")
+        void deleteItems__whenBaseVersionItemsTotalIsStale__thenUnchangedItemsArePreserved() {
+            // Same root cause as the applyDeltaChanges reproducer, but exercising the
+            // createVersionWithDeletion path (deleteByItemIdsWithVersion → createVersionWithDeletion).
+            // It also routes UUID-pool sizing through versionDao.countRowsInVersion(); if that ever
+            // regressed back to DatasetVersion.itemsTotal(), the 4 carried-over items would collapse
+            // to NUL-id rows under ReplacingMergeTree and disappear.
+
+            // Given: dataset with 5 items in v1.
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            var batch = DatasetItemBatch.builder()
+                    .datasetId(datasetId)
+                    .items(generateDatasetItems(5))
+                    .build();
+            datasetResourceClient.createDatasetItems(batch, TEST_WORKSPACE, API_KEY);
+            var v1 = getLatestVersion(datasetId);
+            assertThat(v1.itemsTotal()).isEqualTo(5);
+
+            var v1Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v1Items).hasSize(5);
+
+            var itemToDelete = v1Items.getFirst();
+            var expectedSurvivors = v1Items.stream()
+                    .filter(item -> !item.datasetItemId().equals(itemToDelete.datasetItemId()))
+                    .toList();
+
+            // Corrupt items_total to reproduce the prod drift precondition.
+            mySqlTemplate.inTransaction(WRITE, handle -> {
+                int updated = handle.createUpdate(
+                        "UPDATE dataset_versions SET items_total = 1 WHERE id = :version_id AND workspace_id = :workspace_id")
+                        .bind("version_id", v1.id().toString())
+                        .bind("workspace_id", WORKSPACE_ID)
+                        .execute();
+                assertThat(updated).isEqualTo(1);
+                return null;
+            });
+
+            // When: delete 1 item with a batchGroupId — triggers createVersionWithDeletion.
+            deleteDatasetItem(itemToDelete.id());
+
+            // Then: v2 carries over the 4 non-deleted items with all fields intact.
+            var v2 = getLatestVersion(datasetId);
+            assertThat(v2.id()).isNotEqualTo(v1.id());
+            assertThat(v2.itemsTotal()).isEqualTo(4);
+
+            var v2Items = datasetResourceClient
+                    .getDatasetItems(datasetId, 1, 20, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE)
+                    .content();
+            assertThat(v2Items).hasSize(4);
+            assertThat(v2Items.stream().map(DatasetItem::datasetItemId))
+                    .doesNotContain(itemToDelete.datasetItemId());
+
+            assertThat(v2Items)
+                    .usingRecursiveFieldByFieldElementComparatorIgnoringFields(IGNORED_FIELDS_DATA_ITEM)
+                    .containsAll(expectedSurvivors);
+        }
+
+        @Test
         @DisplayName("Error: Delete with item IDs from different datasets returns 400")
         void deleteItems__whenItemIdsSpanMultipleDatasets__thenReturn400() {
             var dataset1Id = createDataset(UUID.randomUUID().toString());

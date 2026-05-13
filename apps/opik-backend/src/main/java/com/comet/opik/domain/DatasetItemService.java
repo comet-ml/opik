@@ -1048,9 +1048,7 @@ class DatasetItemServiceImpl implements DatasetItemService {
                                             int deletedCount = baseItemsCount - newVersionItemCount.intValue();
 
                                             log.info(
-                                                    "Creating version metadata: dataset='{}', baseVersion='{}', newVersion='{}', "
-                                                            +
-                                                            "deletedCount='{}', newItemCount='{}'",
+                                                    "Creating version metadata: dataset='{}', baseVersion='{}', newVersion='{}', deletedCount='{}', newItemCount='{}'",
                                                     datasetId, baseVersionId, newVersionId, deletedCount,
                                                     newVersionItemCount);
 
