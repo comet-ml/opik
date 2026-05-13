@@ -89,7 +89,7 @@ class RedissonLockService implements LockService {
         long ttlInMillis = Math.max(duration.toMillis(), defaultLockTTL.toMillis());
 
         return semaphore
-                .setPermits(1)
+                .trySetPermits(1)
                 .then(Mono.defer(() -> semaphore.acquire(duration.toMillis(), TimeUnit.MILLISECONDS)))
                 .flatMap(locked -> expire(Duration.ofMillis(ttlInMillis), locked, semaphore));
     }
@@ -139,7 +139,7 @@ class RedissonLockService implements LockService {
         RPermitExpirableSemaphoreReactive semaphore = getSemaphore(lock);
         log.debug(TRYING_TO_LOCK_WITH, lock);
 
-        return Mono.defer(() -> semaphore.setPermits(1)
+        return Mono.defer(() -> semaphore.trySetPermits(1)
                 //Try to acquire the lock until the lockWaitTime expires if the lock is not available it will return Mono.empty()
                 // If the lock is acquired, it sets the expiration time using the actionTimeout
                 .then(Mono.defer(() -> semaphore.tryAcquire(lockWaitTime.toMillis(), actionTimeout.toMillis(),

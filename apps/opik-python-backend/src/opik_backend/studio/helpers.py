@@ -2,7 +2,7 @@
 
 import logging
 import os
-from typing import Callable, Any
+from typing import Any, Callable, Optional
 
 import opik
 from opik_optimizer import ChatPrompt
@@ -92,7 +92,12 @@ def load_and_validate_dataset(client: opik.Opik, dataset_name: str):
 
 
 def run_optimization(
-    optimizer, optimization_id: str, prompt: ChatPrompt, dataset, metric_fn: Callable
+    optimizer,
+    optimization_id: str,
+    prompt: ChatPrompt,
+    dataset,
+    metric_fn: Callable,
+    project_name: Optional[str] = None,
 ) -> Any:
     """Run the optimization process.
 
@@ -102,6 +107,9 @@ def run_optimization(
         prompt: Chat prompt to optimize
         dataset: Dataset to evaluate against
         metric_fn: Metric function for evaluation
+        project_name: Optional Opik project name. When set, trial experiments
+            and traces produced by the optimizer are attached to this project
+            instead of the optimizer SDK default ("Optimization").
 
     Returns:
         Optimization result object
@@ -111,6 +119,7 @@ def run_optimization(
         prompt=prompt,
         dataset=dataset,
         metric=metric_fn,
+        project_name=project_name,
         **OPTIMIZER_RUNTIME_PARAMS,
     )
 
