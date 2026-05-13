@@ -91,6 +91,21 @@ function getCopy(props: PairingStatusScreenProps): {
   }
 }
 
+// `expectedBaseUrl` is supplied by the CLI via `?url=` and goes straight
+// into <a href>. Allow only http/https so a crafted pairing link (e.g.
+// `?url=javascript:alert(1)`) can't produce a clickable script URL.
+function safeHttpHref(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === "https:" || parsed.protocol === "http:"
+      ? raw
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export const PairingStatusScreen: React.FC<PairingStatusScreenProps> = (
   props,
 ) => {
@@ -98,7 +113,13 @@ export const PairingStatusScreen: React.FC<PairingStatusScreenProps> = (
   const { themeMode } = useTheme();
 
   const showWorkspaceContext =
-    props.status === "error" && !!props.expectedWorkspace;
+    props.status === "error" &&
+    !!(
+      props.expectedWorkspace ||
+      props.expectedProject ||
+      props.expectedBaseUrl
+    );
+  const safeBaseUrlHref = safeHttpHref(props.expectedBaseUrl);
 
   return (
     <main
@@ -126,19 +147,30 @@ export const PairingStatusScreen: React.FC<PairingStatusScreenProps> = (
                 <>
                   <dt className="text-muted-slate">Opik URL</dt>
                   <dd className="break-all font-medium">
-                    <a
-                      href={props.expectedBaseUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline-offset-2 hover:underline"
-                    >
-                      {props.expectedBaseUrl}
-                    </a>
+                    {safeBaseUrlHref ? (
+                      <a
+                        href={safeBaseUrlHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        {props.expectedBaseUrl}
+                      </a>
+                    ) : (
+                      // Unsafe / non-http(s) scheme — show as plain text so
+                      // the user can still see what the CLI tried, without
+                      // a clickable script URL.
+                      <span>{props.expectedBaseUrl}</span>
+                    )}
                   </dd>
                 </>
               ) : null}
-              <dt className="text-muted-slate">Workspace</dt>
-              <dd className="font-medium">{props.expectedWorkspace}</dd>
+              {props.expectedWorkspace ? (
+                <>
+                  <dt className="text-muted-slate">Workspace</dt>
+                  <dd className="font-medium">{props.expectedWorkspace}</dd>
+                </>
+              ) : null}
               {props.expectedProject ? (
                 <>
                   <dt className="text-muted-slate">Project</dt>

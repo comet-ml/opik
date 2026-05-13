@@ -226,7 +226,10 @@ def build_pairing_link(
         f"project={urllib.parse.quote(project_name, safe='')}",
     ]
     if workspace:
-        query_parts.append(f"workspace={workspace}")
+        # Encode for the same reason as `project` — reserved chars like
+        # `&`/`=` in a workspace name would otherwise split the query and
+        # the FE's URLSearchParams would parse a truncated value.
+        query_parts.append(f"workspace={urllib.parse.quote(workspace, safe='')}")
     query = "?" + "&".join(query_parts)
     return f"{domain_root}opik/pair/v1{query}#{fragment}"
 

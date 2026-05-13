@@ -207,6 +207,14 @@ class TestBuildPairingLink:
         # Spaces and `/` must be percent-encoded so the query stays parseable.
         assert "project=My%20Project%20%2F%20Demo" in link
 
+    def test_build_pairing_link__workspace_with_special_chars__url_encoded(
+        self,
+    ):
+        # `&` and `=` in a workspace name would otherwise split the query and
+        # the FE's URLSearchParams would read a truncated value.
+        link = _link(workspace="weird&name=oops")
+        assert "workspace=weird%26name%3Doops" in link
+
 
 class TestResolveProjectId:
     def test_resolve_project_id__project_exists__returns_id(self):
