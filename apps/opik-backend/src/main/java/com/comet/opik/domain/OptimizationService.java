@@ -479,8 +479,11 @@ class OptimizationServiceImpl implements OptimizationService {
         }
         try {
             return projectService.get(optimization.projectId(), workspaceId).name();
-        } catch (Exception exception) {
-            log.warn("Failed to resolve project name for projectId '{}' of optimization '{}'",
+        } catch (NotFoundException exception) {
+            // Project may have been deleted between optimization create and job enqueue.
+            // Degrade gracefully: the studio runner will fall back to the SDK default
+            // project. Anything else is unexpected and is allowed to propagate.
+            log.warn("Project '{}' not found while resolving project name for optimization '{}'",
                     optimization.projectId(), optimization.id(), exception);
             return null;
         }
