@@ -533,7 +533,7 @@ def _discover_trace_projects(
     project. This matches the per-trace fallback's old behavior from
     commit ``7e0f9a8bb``: ``trace.project_id or source_project_id``.
     """
-    project_ids_by_trace: Dict[str, Set[str]] = {}
+    trace_ids_by_project: Dict[str, Set[str]] = {}
 
     def _fetch_page(batch_size: int, last_retrieved_id: Optional[str]) -> Any:
         return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
@@ -559,9 +559,9 @@ def _discover_trace_projects(
         if not trace_id:
             continue
         project_id = item.project_id or fallback_project_id
-        project_ids_by_trace.setdefault(project_id, set()).add(trace_id)
+        trace_ids_by_project.setdefault(project_id, set()).add(trace_id)
 
-    return project_ids_by_trace
+    return trace_ids_by_project
 
 
 def _copy_traces_and_spans(
