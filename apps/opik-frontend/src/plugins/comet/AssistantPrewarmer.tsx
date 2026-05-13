@@ -11,7 +11,13 @@ const AssistantPrewarmer: React.FC = () => {
   const setPhase = useAssistantPhaseStore((s) => s.setPhase);
 
   useEffect(() => {
-    if (!computeResult) return;
+    // Reset to "idle" while data is undefined (initial fetch, workspace
+    // switch, refetch) so a previous workspace's "disabled" phase doesn't
+    // keep the wrapper hidden in a workspace where it should be shown.
+    if (!computeResult) {
+      setPhase("idle");
+      return;
+    }
     setPhase(computeResult.enabled ? "idle" : "disabled");
   }, [computeResult, setPhase]);
 
