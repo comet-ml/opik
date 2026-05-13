@@ -325,6 +325,8 @@ openrouter:
   - id: "anthropic/claude-opus-4.7"
     label: "anthropic/claude-opus-4.7"
     structuredOutput: true
+  - id: "anthropic/claude-opus-4.7-fast"
+    label: "anthropic/claude-opus-4.7-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -1041,6 +1043,8 @@ openrouter:
     label: "openrouter/owl-alpha"
   - id: "openrouter/pareto-code"
     label: "openrouter/pareto-code"
+  - id: "perceptron/perceptron-mk1"
+    label: "perceptron/perceptron-mk1"
   - id: "perplexity/sonar"
     label: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"

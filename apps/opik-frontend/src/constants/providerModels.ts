@@ -286,6 +286,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "anthropic/claude-opus-4.7",
     },
     {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
+      label: "anthropic/claude-opus-4.7-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
       label: "anthropic/claude-sonnet-4",
     },
@@ -1550,6 +1554,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
+      label: "perceptron/perceptron-mk1",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,
