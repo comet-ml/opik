@@ -323,6 +323,24 @@ class TestResolveProjectId:
         api.projects.create_project.assert_called_once_with(name="new-project")
         assert api.projects.retrieve_project.call_count == 2
 
+    def test_resolve_project_id__known_missing__skips_initial_lookup(self):
+        api = MagicMock()
+        created = MagicMock()
+        created.id = "proj-uuid-new"
+        api.projects.retrieve_project.return_value = created
+
+        result = _resolve(
+            api,
+            "new-project",
+            create_if_missing=True,
+            project_known_missing=True,
+        )
+        assert result == "proj-uuid-new"
+        api.projects.create_project.assert_called_once_with(name="new-project")
+        # Interactive preflight already saw the 404 — only the post-create
+        # lookup should run.
+        assert api.projects.retrieve_project.call_count == 1
+
     def test_resolve_project_id__missing_no_flag__does_not_create(self):
         from opik.rest_api.core.api_error import ApiError
 

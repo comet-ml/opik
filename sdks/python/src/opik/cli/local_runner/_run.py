@@ -84,7 +84,7 @@ def run_cli_session(
 
     # Prompt before the Live TUI takes over the terminal — click.confirm and
     # Rich Live can't safely share stdout.
-    create_if_missing = should_create_project(
+    create_if_missing, project_known_missing = should_create_project(
         api, project_name, client.config.workspace, headless
     )
 
@@ -106,6 +106,7 @@ def run_cli_session(
                 runner_name=runner_name,
                 runner_type=runner_type,
                 create_if_missing=create_if_missing,
+                project_known_missing=project_known_missing,
                 workspace=client.config.workspace,
                 base_url=client.config.url_override,
                 config_file_exists=client.config.config_file_exists,
@@ -120,6 +121,7 @@ def run_cli_session(
                 workspace=client.config.workspace,
                 tui=tui,
                 create_if_missing=create_if_missing,
+                project_known_missing=project_known_missing,
                 config_file_exists=client.config.config_file_exists,
             )
 

@@ -61,10 +61,23 @@ def resolve_project_id(
     project_name: str,
     *,
     create_if_missing: bool,
+    project_known_missing: bool = False,
     workspace: Optional[str],
     base_url: Optional[str],
     config_file_exists: bool,
 ) -> str:
+    if project_known_missing and create_if_missing:
+        # Interactive preflight already observed the 404 and the user confirmed
+        # creation — skip the duplicate lookup.
+        _create_project(
+            api,
+            project_name,
+            workspace=workspace,
+            base_url=base_url,
+            config_file_exists=config_file_exists,
+        )
+        return resolve_project_id_by_name(api, project_name)
+
     try:
         return resolve_project_id_by_name(api, project_name)
     except ApiError as e:
@@ -346,6 +359,7 @@ def _create_session(
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     *,
     create_if_missing: bool,
+    project_known_missing: bool = False,
     workspace: Optional[str],
     base_url: Optional[str],
     config_file_exists: bool,
@@ -355,6 +369,7 @@ def _create_session(
         api,
         project_name,
         create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
         workspace=workspace,
         base_url=base_url,
         config_file_exists=config_file_exists,
@@ -388,6 +403,7 @@ def run_headless(
     runner_type: RunnerType,
     *,
     create_if_missing: bool,
+    project_known_missing: bool = False,
     workspace: Optional[str],
     base_url: Optional[str],
     config_file_exists: bool,
@@ -410,6 +426,7 @@ def run_headless(
         runner_name,
         runner_type,
         create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
         workspace=workspace,
         base_url=base_url,
         config_file_exists=config_file_exists,
@@ -440,6 +457,7 @@ def run_pairing(
     tui: Optional["RunnerTUI"],
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
     create_if_missing: bool,
+    project_known_missing: bool = False,
     config_file_exists: bool,
 ) -> PairingResult:
     session = _create_session(
@@ -449,6 +467,7 @@ def run_pairing(
         runner_type,
         ttl_seconds,
         create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
         workspace=workspace,
         base_url=base_url,
         config_file_exists=config_file_exists,

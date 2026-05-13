@@ -10,39 +10,41 @@ from opik.rest_api.core.api_error import ApiError
 
 
 class TestShouldCreateProject:
-    def test__headless__returns_true_without_lookup(self):
+    def test__headless__returns_create_without_lookup(self):
         api = MagicMock()
         result = should_create_project(api, "any", workspace=None, headless=True)
-        assert result is True
+        # Headless skips preflight, so we want to create but don't yet know
+        # whether the project is actually missing — the resolver must look up.
+        assert result == (True, False)
         api.projects.retrieve_project.assert_not_called()
 
-    def test__project_exists__returns_false(self):
+    def test__project_exists__returns_no_create(self):
         api = MagicMock()
         api.projects.retrieve_project.return_value = MagicMock(id="proj-1")
         result = should_create_project(api, "exists", workspace="ws", headless=False)
-        assert result is False
+        assert result == (False, False)
 
-    def test__non_404_error__returns_false_to_let_downstream_format(self):
+    def test__non_404_error__returns_no_create_to_let_downstream_format(self):
         api = MagicMock()
         api.projects.retrieve_project.side_effect = ApiError(
             status_code=401, body={"message": "unauthorized"}
         )
         result = should_create_project(api, "x", workspace="ws", headless=False)
-        assert result is False
+        assert result == (False, False)
 
     @patch("opik.cli.local_runner.preflight.sys.stdin")
-    def test__missing_and_not_tty__returns_false(self, mock_stdin):
+    def test__missing_and_not_tty__returns_no_create(self, mock_stdin):
         mock_stdin.isatty.return_value = False
         api = MagicMock()
         api.projects.retrieve_project.side_effect = ApiError(
             status_code=404, body={"errors": ["not found"]}
         )
         result = should_create_project(api, "missing", workspace="ws", headless=False)
-        assert result is False
+        assert result == (False, False)
 
     @patch("opik.cli.local_runner.preflight.click.confirm", return_value=True)
     @patch("opik.cli.local_runner.preflight.sys.stdin")
-    def test__missing_and_tty_user_confirms__returns_true(
+    def test__missing_and_tty_user_confirms__returns_create_and_known_missing(
         self, mock_stdin, mock_confirm
     ):
         mock_stdin.isatty.return_value = True
@@ -51,14 +53,16 @@ class TestShouldCreateProject:
             status_code=404, body={"errors": ["not found"]}
         )
         result = should_create_project(api, "missing", workspace="ws", headless=False)
-        assert result is True
+        # Interactive preflight saw 404 and user confirmed — downstream can
+        # skip the redundant lookup.
+        assert result == (True, True)
         prompt_text = mock_confirm.call_args[0][0]
         assert "missing" in prompt_text
         assert "ws" in prompt_text
 
     @patch("opik.cli.local_runner.preflight.click.confirm", return_value=False)
     @patch("opik.cli.local_runner.preflight.sys.stdin")
-    def test__missing_and_tty_user_declines__returns_false(
+    def test__missing_and_tty_user_declines__returns_no_create(
         self, mock_stdin, mock_confirm
     ):
         mock_stdin.isatty.return_value = True
@@ -67,7 +71,7 @@ class TestShouldCreateProject:
             status_code=404, body={"errors": ["not found"]}
         )
         result = should_create_project(api, "missing", workspace="ws", headless=False)
-        assert result is False
+        assert result == (False, False)
 
     @patch("opik.cli.local_runner.preflight.click.confirm", return_value=True)
     @patch("opik.cli.local_runner.preflight.sys.stdin")

@@ -15,7 +15,7 @@ implementation module.
 import logging
 import os
 import sys
-from typing import Optional
+from typing import Optional, Tuple
 
 import click
 
@@ -28,7 +28,7 @@ LOGGER = logging.getLogger(__name__)
 
 def should_create_project(
     api: object, project_name: str, workspace: Optional[str], headless: bool
-) -> bool:
+) -> Tuple[bool, bool]:
     """Decide whether to auto-create the project if pairing finds it missing.
 
     Headless callers (e.g. Ollie spawning `opik endpoint --headless`) cannot
@@ -36,22 +36,29 @@ def should_create_project(
     confirmation prompt only when the project is confirmed-missing (404).
     Any other lookup error falls through so the downstream resolver can
     surface the formatted error.
+
+    Returns ``(create_if_missing, known_missing)`` so the downstream resolver
+    can skip a redundant lookup when interactive preflight already observed
+    the 404. Headless skips the lookup here, so ``known_missing`` is False
+    even when we want to create — the resolver has to look up first to stay
+    idempotent across re-runs.
     """
     if headless:
-        return True
+        return True, False
     try:
         resolve_project_id_by_name(api, project_name)
-        return False
+        return False, False
     except ApiError as e:
         if e.status_code != 404:
-            return False
+            return False, False
     if not sys.stdin.isatty():
-        return False
+        return False, False
     workspace_label = f" in workspace '{workspace}'" if workspace else ""
-    return click.confirm(
+    confirmed = click.confirm(
         f"Project '{project_name}'{workspace_label} does not exist. Create it?",
         default=True,
     )
+    return confirmed, confirmed
 
 
 def maybe_auto_configure(
