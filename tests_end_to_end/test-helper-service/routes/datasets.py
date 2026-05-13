@@ -29,6 +29,30 @@ def create_dataset():
     return jsonify({"id": dataset.id, "name": dataset.name})
 
 
+@datasets_bp.route("/create-for-project", methods=["POST"])
+def create_dataset_for_project():
+    data = request.json
+    dataset_name = data.get("name")
+    project_name = data.get("project_name")
+
+    client = get_opik_client()
+    dataset = client.create_dataset(name=dataset_name, project_name=project_name)
+
+    return jsonify({"id": dataset.id, "name": dataset.name})
+
+
+@datasets_bp.route("/create-test-suite", methods=["POST"])
+def create_test_suite_dataset():
+    data = request.json
+    dataset_name = data.get("name")
+    project_name = data.get("project_name")
+
+    client = get_opik_client()
+    test_suite = client.create_test_suite(name=dataset_name, project_name=project_name)
+
+    return jsonify({"id": test_suite.id, "name": test_suite.name})
+
+
 @datasets_bp.route("/find", methods=["POST"])
 def find_dataset():
     data = request.json

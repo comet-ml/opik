@@ -1,0 +1,23 @@
+{
+  "name": "opik-visual-tests",
+  "version": "1.0.0",
+  "description": "Visual comparison tests for Opik UI using Playwright",
+  "scripts": {
+    "test:baseline": "SKIP_TEARDOWN=1 playwright test --update-snapshots",
+    "test:compare": "playwright test",
+    "test:full": "npm run test:baseline && npm run test:compare && npm run test:report",
+    "test:report": "lsof -ti:9323 | xargs kill -9 2>/dev/null; playwright show-report visual-report",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.0",
+    "@types/node": "^22.0.0",
+    "allure-playwright": "^3.0.0",
+    "typescript": "^5.6.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "dotenv": "^16.4.0"
+  }
+}

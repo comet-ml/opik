@@ -66,6 +66,69 @@ def create_experiment():
     )
 
 
+@experiments_bp.route("/create-experiment-for-project", methods=["POST"])
+def create_experiment_for_project():
+    data = request.get_json()
+    validate_required_fields(data, ["experiment_name", "dataset_name", "project_name"])
+
+    experiment_name = data["experiment_name"]
+    dataset_name = data["dataset_name"]
+    project_name = data["project_name"]
+    client = get_opik_client()
+
+    dataset = client.get_dataset(name=dataset_name)
+
+    if not dataset:
+        abort(404, f"Dataset not found: {dataset_name}")
+
+    evaluation = evaluate(
+        experiment_name=experiment_name,
+        dataset=dataset,
+        task=eval_task,
+        scoring_metrics=[Contains()],
+        project_name=project_name,
+    )
+
+    return success_response(
+        {
+            "id": evaluation.experiment_id,
+            "name": experiment_name,
+            "dataset_name": dataset_name,
+        }
+    )
+
+
+@experiments_bp.route("/create-test-suite-experiment", methods=["POST"])
+def create_test_suite_experiment():
+    data = request.get_json()
+    validate_required_fields(data, ["experiment_name", "dataset_name", "project_name"])
+
+    experiment_name = data["experiment_name"]
+    dataset_name = data["dataset_name"]
+    project_name = data["project_name"]
+    client = get_opik_client()
+
+    dataset = client.get_dataset(name=dataset_name)
+
+    if not dataset:
+        abort(404, f"Dataset not found: {dataset_name}")
+
+    experiment = client.create_experiment(
+        name=experiment_name,
+        dataset_name=dataset_name,
+        evaluation_method="evaluation_suite",
+        project_name=project_name,
+    )
+
+    return success_response(
+        {
+            "id": experiment.id,
+            "name": experiment_name,
+            "dataset_name": dataset_name,
+        }
+    )
+
+
 @experiments_bp.route("/get-experiment", methods=["GET"])
 def get_experiment():
     experiment_id = request.args.get("experiment_id")
