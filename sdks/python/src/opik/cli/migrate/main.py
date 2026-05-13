@@ -8,9 +8,11 @@ deliberately keeps it minimal.
 
 from __future__ import annotations
 
+import contextlib
+import logging
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 import click
 from rich.console import Console
@@ -33,6 +35,32 @@ from .errors import MigrationError, safe_error_string
 console = Console()
 
 MIGRATE_CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
+
+
+@contextlib.contextmanager
+def _quiet_streamer_rate_limit_logs() -> Iterator[None]:
+    """Suppress the streamer's per-message INFO log on ingestion 429s.
+
+    The streamer's queue_consumer logs every ingestion rate-limit retry
+    at INFO level, including the full HTTP response headers dict (cookies,
+    AWS load-balancer markers, rate-limit telemetry). During a cascade
+    that writes thousands of traces/spans, the message bus can hit dozens
+    of 429s and each one dumps a long line that drowns out the Rich
+    progress bars.
+
+    The streamer's retry logic still functions identically -- we only
+    raise the *log threshold* for that one logger during the migrate
+    command. Other SDK consumers (and the SDK's own behaviour) are
+    untouched. ``WARNING`` keeps real ingestion errors visible while
+    silencing the routine retries.
+    """
+    queue_consumer_logger = logging.getLogger("opik.message_processing.queue_consumer")
+    previous_level = queue_consumer_logger.level
+    queue_consumer_logger.setLevel(logging.WARNING)
+    try:
+        yield
+    finally:
+        queue_consumer_logger.setLevel(previous_level)
 
 
 @click.group(name="migrate", context_settings=MIGRATE_CONTEXT_SETTINGS)
@@ -202,7 +230,8 @@ def migrate_dataset_command(
             )
             return
 
-        execute_plan(client, plan, audit)
+        with _quiet_streamer_rate_limit_logs():
+            execute_plan(client, plan, audit)
     except MigrationError as exc:
         _finalize_and_fail(audit, audit_path, exc, user_facing=True)
     except Exception as exc:

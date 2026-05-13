@@ -17,6 +17,7 @@ import opik
 from opik.api_objects import rest_helpers
 from opik.api_objects.dataset import dataset_item as dataset_item_module  # noqa: F401
 import opik.id_helpers as id_helpers_module  # type: ignore
+from opik.message_processing.batching import sequence_splitter
 from opik.rest_api.types.experiment_item import ExperimentItem
 
 # Note: dataset_item_module is imported for test compatibility.
@@ -41,6 +42,15 @@ from .prompt import import_prompts_from_directory
 from .dataset import import_datasets_from_directory
 
 console = Console()
+
+# BE-side cap on a single ``create_experiment_items`` POST: the
+# ``ExperimentItemsBatch`` request type is annotated ``@Size(min=1, max=1000)``
+# (see ``apps/opik-backend/.../ExperimentItemsBatch.java``). For experiments
+# with more than 1000 items we have to chunk client-side, otherwise the BE
+# rejects the whole batch with 400. Migrate-dataset hit this on a 10k-item
+# experiment (cascade aborted at the recreate_experiment step). Chunking
+# here also fixes the matching bug in ``opik import experiment``.
+_EXPERIMENT_ITEMS_INSERT_BATCH_SIZE = 1000
 
 
 @dataclass
@@ -626,11 +636,27 @@ def recreate_experiment(
                 # 429-aware retry helper so a transient rate limit during a
                 # large experiment-items insert doesn't abort the migrate or
                 # import flow mid-way.
-                rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                    lambda: client._rest_client.experiments.create_experiment_items(
-                        experiment_items=rest_experiment_items
-                    )
+                #
+                # Chunk into batches of ``_EXPERIMENT_ITEMS_INSERT_BATCH_SIZE``
+                # because the BE rejects single calls with more than
+                # ``@Size(max=1000)`` items in ``ExperimentItemsBatch``. The
+                # rate-limit wrapper applies per chunk; on a transient 429
+                # we retry just that chunk and continue.
+                item_batches = sequence_splitter.split_into_batches(
+                    rest_experiment_items,
+                    max_length=_EXPERIMENT_ITEMS_INSERT_BATCH_SIZE,
                 )
+                for batch_index, batch in enumerate(item_batches, start=1):
+                    debug_print(
+                        f"  inserting batch {batch_index}/{len(item_batches)} "
+                        f"({len(batch)} items)",
+                        debug,
+                    )
+                    rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                        lambda b=batch: client._rest_client.experiments.create_experiment_items(
+                            experiment_items=b
+                        )
+                    )
                 console.print(
                     f"[green]Created experiment '{experiment_name}' with {successful_items} items[/green]"
                 )

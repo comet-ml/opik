@@ -9,6 +9,7 @@ audit-log payload shape per action type (``_action_details``).
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any, Dict, Optional
 
 import opik
@@ -215,9 +216,14 @@ def _cascade_experiments(
         # its 0-100% sweep represents ONE experiment's work. ``Rich`` allows
         # changing a task's total mid-flight via ``progress.update``.
         inner_task_id: Optional[int] = None
+        # Wall-clock anchor for the next milestone's "(took N.Ns)" tag.
+        # Reset at the start of each experiment so per-phase timings are
+        # measured relative to the previous milestone of THIS experiment,
+        # not the previous experiment's last milestone.
+        last_milestone_at: float = time.monotonic()
 
         def _on_experiment_start(completed: int, total: int, label: str) -> None:
-            nonlocal outer_task_id, inner_task_id
+            nonlocal outer_task_id, inner_task_id, last_milestone_at
             # ``label == "done"`` signals the cascade's final tick (completed=total).
             # In that frame we drop the ``(N/total)`` suffix so the bar doesn't
             # render ``(total+1/total)`` from the +1 offset that helps mid-loop
@@ -242,11 +248,15 @@ def _cascade_experiments(
                 progress.update(
                     inner_task_id, completed=0, total=1, description="starting…"
                 )
+            # Reset the milestone clock so the first milestone of this
+            # experiment is timed from its actual start, not from the
+            # previous experiment's recreate.
+            last_milestone_at = time.monotonic()
 
         def _on_inner_step(
             inner_completed: int, inner_total: int, inner_label: str
         ) -> None:
-            nonlocal inner_task_id
+            nonlocal inner_task_id, last_milestone_at
             # First inner tick of the first experiment: lazily add the
             # second task so the outer bar isn't visually orphaned when an
             # experiment has zero traces and no inner ticks would fire.
@@ -259,6 +269,25 @@ def _cascade_experiments(
                 total=inner_total,
                 description=description,
             )
+            # Print milestone lines to scrollback (the inner Rich bar
+            # overwrites itself, so per-phase history is otherwise lost).
+            # Per-trace ticks -- "trace 47/1000" / "spans for trace
+            # 47/1000" -- only update the bar; they fire thousands of
+            # times per experiment and would flood the terminal. Every
+            # other label is a milestone (bulk reads, flushes, log-
+            # scores, log-assertions, recreate/skipped) and gets one
+            # persistent line with the wall-clock delta from the
+            # previous milestone of THIS experiment.
+            if not (
+                inner_label.startswith("trace ")
+                or inner_label.startswith("spans for trace ")
+            ):
+                now = time.monotonic()
+                _console.print(
+                    f"   [green]✓[/green] {inner_label} "
+                    f"[dim](took {now - last_milestone_at:.1f}s)[/dim]"
+                )
+                last_milestone_at = now
 
         result = cascade_experiments(
             client,
