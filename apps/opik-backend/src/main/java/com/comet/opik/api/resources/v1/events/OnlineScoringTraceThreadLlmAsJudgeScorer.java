@@ -6,6 +6,8 @@ import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
+import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import com.comet.opik.domain.FeedbackScoreService;
 import com.comet.opik.domain.ProjectService;
 import com.comet.opik.domain.TraceService;
@@ -15,9 +17,18 @@ import com.comet.opik.domain.llm.ChatCompletionService;
 import com.comet.opik.domain.llm.LlmProviderFactory;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
+import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import dev.langchain4j.agent.tool.ToolExecutionRequest;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.data.message.ChatMessage;
+import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.ToolChoice;
+import dev.langchain4j.model.chat.response.ChatResponse;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.NotFoundException;
 import lombok.NonNull;
@@ -31,6 +42,7 @@ import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -49,15 +61,32 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @Slf4j
 public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceThreadToScoreLlmAsJudge> {
 
+    private static final int MAX_TOOL_CALL_ROUNDS = 10;
+
+    /**
+     * Cumulative cap on tool-result string length across the whole tool-call loop. Same
+     * shape and sizing as the trace-level scorer's cap — see that class for the budget
+     * math. Pairs with {@link com.comet.opik.api.resources.v1.events.tools.ReadTool#OUTPUT_SAFETY_CHARS}.
+     */
+    static final long CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS = 150_000L;
+
+    private static final String BUDGET_EXHAUSTED_MESSAGE = "{\"error\": \"Cumulative tool-output"
+            + " budget (%d chars) exhausted for this judgment; further tool calls return this"
+            + " error. Respond now with your best assessment from the data already gathered.\"}";
+
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
     private final LlmProviderFactory llmProviderFactory;
     private final TraceThreadService traceThreadService;
     private final ProjectService projectService;
     private final AutomationRuleEvaluatorService automationRuleEvaluatorService;
+    private final ToolRegistry toolRegistry;
+    private final OnlineScoringConfig onlineScoringConfig;
+    private final ServiceTogglesConfig serviceTogglesConfig;
 
     @Inject
     public OnlineScoringTraceThreadLlmAsJudgeScorer(@NonNull @Config("onlineScoring") OnlineScoringConfig config,
+            @NonNull @Config("serviceToggles") ServiceTogglesConfig serviceTogglesConfig,
             @NonNull RedissonReactiveClient redisson,
             @NonNull FeedbackScoreService feedbackScoreService,
             @NonNull ChatCompletionService aiProxyService,
@@ -65,7 +94,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             @NonNull TraceService traceService,
             @NonNull TraceThreadService traceThreadService,
             @NonNull ProjectService projectService,
-            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService) {
+            @NonNull AutomationRuleEvaluatorService automationRuleEvaluatorService,
+            @NonNull ToolRegistry toolRegistry) {
         super(config, redisson, feedbackScoreService, traceService, TRACE_THREAD_LLM_AS_JUDGE,
                 Constants.TRACE_THREAD_LLM_AS_JUDGE);
         this.aiProxyService = aiProxyService;
@@ -73,6 +103,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         this.traceThreadService = traceThreadService;
         this.projectService = projectService;
         this.automationRuleEvaluatorService = automationRuleEvaluatorService;
+        this.toolRegistry = toolRegistry;
+        this.onlineScoringConfig = config;
+        this.serviceTogglesConfig = serviceTogglesConfig;
         this.userFacingLogger = UserFacingLoggingFactory.getLogger(OnlineScoringTraceThreadLlmAsJudgeScorer.class);
     }
 
@@ -184,7 +217,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
      */
     private Mono<Void> scoreThread(TraceThreadToScoreLlmAsJudge message, List<Trace> traces, UUID threadModelId,
             String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
-        return Mono.fromCallable(() -> evaluate(message, traces, threadModelId, threadId, rule, mdc))
+        return evaluate(message, traces, threadModelId, threadId, rule, mdc)
                 .flatMap(scores -> storeThreadScores(scores, threadId, message.userName(), message.workspaceId()))
                 .doOnNext(withMdc(mdc, loggedScores -> userFacingLogger
                         .info("Scores for threadId '{}' stored successfully:\n\n{}", threadId, loggedScores)))
@@ -197,45 +230,252 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     }
 
     /**
-     * Calls the LLM provider for the given thread and returns the resulting feedback scores. Caller
-     * guarantees {@code traces} is non-empty.
+     * Builds and runs the LLM scoring chain for the thread. Routes through the agentic-tools
+     * branch (skeleton + ReadTool/JqTool/SearchTool drill-down) when the inline-rendered thread
+     * would exceed the configured size threshold AND the provider supports tool-calling AND the
+     * toggle is on. Otherwise the inline path runs unchanged — same shape as today.
      */
-    private List<FeedbackScoreBatchItemThread> evaluate(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
-            UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
+    private Mono<List<FeedbackScoreBatchItemThread>> evaluate(TraceThreadToScoreLlmAsJudge message,
+            List<Trace> traces, UUID threadModelId, String threadId, AutomationRuleEvaluator<?, ?> rule,
+            Map<String, String> mdc) {
+        return Mono.fromCallable(() -> prepareEvaluation(message, traces, threadId, rule, mdc))
+                .subscribeOn(Schedulers.parallel())
+                .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
+                        .doOnNext(withMdc(mdc, chatResponse -> userFacingLogger.info(
+                                "Received response for threadId '{}':\n\n{}", threadId, chatResponse)))
+                        .flatMap(initialResponse -> prepared.useTools()
+                                ? handleToolCalls(initialResponse, prepared.scoreRequest(),
+                                        prepared.structuredRequest(), message, mdc)
+                                : Mono.just(initialResponse)))
+                .map(chatResponse -> {
+                    try (var logContext = wrapWithMdc(mdc)) {
+                        Project project = projectService.get(message.projectId(), message.workspaceId());
+                        var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
+                        OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
+                        return parsed.scores().stream()
+                                .map(item -> FeedbackScoresMapper.INSTANCE.map(
+                                        item.toBuilder()
+                                                .id(threadModelId)
+                                                .projectId(message.projectId())
+                                                .projectName(project.name())
+                                                .source(ScoreSource.ONLINE_SCORING)
+                                                .build(),
+                                        threadId))
+                                .toList();
+                    }
+                });
+    }
+
+    /**
+     * Sync preparation step — picks the path (inline vs agentic-tools) and builds the chat
+     * request(s). Wrapped in {@code Mono.fromCallable} on {@code Schedulers.parallel()} by the
+     * caller because the body is CPU-bound (JSON serialization for the size estimate + prompt
+     * rendering); no blocking I/O happens here.
+     */
+    private PreparedEvaluation prepareEvaluation(TraceThreadToScoreLlmAsJudge message, List<Trace> traces,
+            String threadId, AutomationRuleEvaluator<?, ?> rule, Map<String, String> mdc) {
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
 
-            Project project = projectService.get(message.projectId(), message.workspaceId());
+            String modelName = message.code().model().name();
+            int estimatedContextTokens = OnlineScoringEngine.estimateThreadContextTokens(
+                    traces, onlineScoringConfig.getAgenticToolsCharsPerToken());
+            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId);
 
             ChatRequest scoreRequest;
+            ChatRequest structuredRequest;
             try {
-                String modelName = message.code().model().name();
                 var strategy = llmProviderFactory.getStructuredOutputStrategy(modelName);
-                scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
+                if (useTools) {
+                    // Tools path: skeleton + drill-down hint instead of full trace dump. The agent
+                    // drills into specific traces via read(type=trace, id=X) — same lazy pattern
+                    // the trace-level path uses. Spans for any one trace are fetched reactively in
+                    // ReadTool.readTrace only when the model actually asks for that trace.
+                    scoreRequest = OnlineScoringEngine.prepareThreadLlmRequestWithTools(
+                            message.code(), traces, strategy);
+                    // The post-tool-loop wrap-up uses the same structured-output strategy — for
+                    // threads there is no separate InstructionStrategy variant, so the initial and
+                    // wrap-up requests share a shape (modulo tool specs).
+                    structuredRequest = scoreRequest;
+                } else {
+                    scoreRequest = OnlineScoringEngine.prepareThreadLlmRequest(message.code(), traces, strategy);
+                    structuredRequest = scoreRequest;
+                }
             } catch (Exception exception) {
                 userFacingLogger.error("Error preparing LLM request for threadId '{}': \n\n{}",
                         threadId, exception.getMessage());
                 throw exception;
             }
 
+            if (useTools) {
+                // REQUIRED on the first call only — same reasoning as the trace scorer: forces
+                // ≥1 tool call before the model can answer from skeleton alone. Follow-up rounds
+                // switch to AUTO so the wrap-up turn can emit JSON without invoking a tool.
+                scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+            }
+
             userFacingLogger.info("Sending threadId '{}' to LLM using the following input:\n\n{}",
                     threadId, scoreRequest);
-
-            var chatResponse = aiProxyService.scoreTrace(scoreRequest, message.code().model(), message.workspaceId());
-            userFacingLogger.info("Received response for threadId '{}':\n\n{}", threadId, chatResponse);
-
-            var parsed = OnlineScoringEngine.toFeedbackScores(chatResponse);
-            OnlineScoringEngine.logSkippedNullScores(userFacingLogger, parsed, "threadId", threadId);
-            return parsed.scores().stream()
-                    .map(item -> FeedbackScoresMapper.INSTANCE.map(
-                            item.toBuilder()
-                                    .id(threadModelId)
-                                    .projectId(message.projectId())
-                                    .projectName(project.name())
-                                    .source(ScoreSource.ONLINE_SCORING)
-                                    .build(),
-                            threadId))
-                    .toList();
+            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
         }
+    }
+
+    /**
+     * Routing decision for whether to attach tool specs + run the tool-call loop for a thread.
+     * Threads don't have the experimentId-driven branch (no test-suite-assertion equivalent),
+     * so the decision is purely size-based: toggle on + estimated thread context above threshold
+     * + provider supports tool-calling. Falls back to inline + a user-facing warn when toggle
+     * is on and size is over but the provider can't handle tools.
+     */
+    boolean shouldUseAgenticTools(int estimatedContextTokens, String modelName, String threadId) {
+        boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
+                && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
+        // Skip the provider lookup when the toggle is off — most evaluations are toggle-off and
+        // this saves both a service hit and an unnecessary NPE-risk when the model is unknown.
+        if (!overSizeThreshold) {
+            return false;
+        }
+        boolean providerSupportsTools = OnlineScoringEngine.supportsToolCalling(
+                llmProviderFactory.getLlmProvider(modelName));
+        if (!providerSupportsTools) {
+            userFacingLogger.warn(
+                    "Thread context exceeds '{}' tokens but provider for model '{}' does not support tool"
+                            + " calling; falling back to inline path — may overflow context window.",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
+            return false;
+        }
+        userFacingLogger.info(
+                "Thread context exceeds '{}' tokens; switching to agentic-tools mode for threadId '{}'",
+                onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
+        return true;
+    }
+
+    // Package-private for unit tests.
+    ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice) {
+        var parameters = ChatRequestParameters.builder()
+                .overrideWith(request.parameters())
+                .toolSpecifications(toolRegistry.specs())
+                .toolChoice(toolChoice)
+                .build();
+        return request.toBuilder()
+                .parameters(parameters)
+                .build();
+    }
+
+    /**
+     * Wraps the synchronous {@code ChatLanguageModel.chat} call in a Mono and schedules it on
+     * {@link Schedulers#boundedElastic()} so the blocking Jersey-client I/O doesn't pin the
+     * per-stream worker scheduler thread (OPIK-6308). Mirrors the trace scorer.
+     */
+    private Mono<ChatResponse> scoreTraceReactive(ChatRequest request, TraceThreadToScoreLlmAsJudge message) {
+        return Mono.fromCallable(() -> aiProxyService.scoreTrace(
+                request, message.code().model(), message.workspaceId()))
+                .subscribeOn(Schedulers.boundedElastic());
+    }
+
+    // Package-private for unit tests.
+    Mono<ChatResponse> handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
+            ChatRequest structuredRequest, TraceThreadToScoreLlmAsJudge message, Map<String, String> mdc) {
+
+        AiMessage aiMessage = chatResponse.aiMessage();
+        if (!aiMessage.hasToolExecutionRequests()) {
+            return Mono.just(chatResponse);
+        }
+
+        // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
+        // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
+        // returns a redirect error on this context (see GetTraceSpansTool#execute).
+        var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName());
+
+        var followUpParameters = ChatRequestParameters.builder()
+                .overrideWith(toolRequest.parameters())
+                .toolChoice(ToolChoice.AUTO)
+                .build();
+
+        var messages = new ArrayList<ChatMessage>(toolRequest.messages());
+        var budget = new ToolOutputBudget();
+
+        return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
+                .flatMap(loopFinalResponse -> {
+                    messages.add(UserMessage.from(
+                            "You have completed your investigation using the available tools."
+                                    + " Now respond with ONLY the JSON object specified in the original instructions."
+                                    + " Do not call any more tools. Do not include any prose, commentary, or markdown"
+                                    + " fences — emit only the raw JSON object."));
+                    var finalRequest = structuredRequest.toBuilder()
+                            .messages(new ArrayList<>(messages))
+                            .build();
+                    return scoreTraceReactive(finalRequest, message);
+                });
+    }
+
+    private Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse, ChatRequest toolRequest,
+            ChatRequestParameters followUpParameters, TraceThreadToScoreLlmAsJudge message,
+            ArrayList<ChatMessage> messages, TraceToolContext ctx, ToolOutputBudget budget,
+            Map<String, String> mdc) {
+        if (round >= MAX_TOOL_CALL_ROUNDS) {
+            return Mono.just(currentResponse);
+        }
+        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
+            return Mono.just(currentResponse);
+        }
+
+        // Defer side effects (messages.add, tool executions, followUp scoreTrace) until
+        // subscription. Early returns above are pure cold Mono.just and don't need defer.
+        return Mono.defer(() -> {
+            messages.add(currentResponse.aiMessage());
+
+            // concatMap (not flatMap) so tool executions within a round preserve order — same
+            // contract as the trace-level scorer.
+            Flux<ToolExecutionResultMessage> roundResults = Flux
+                    .fromIterable(currentResponse.aiMessage().toolExecutionRequests())
+                    .concatMap(toolExecRequest -> executeToolOrBudgetExhausted(round, toolExecRequest, message,
+                            ctx, budget, mdc));
+
+            return roundResults
+                    .doOnNext(messages::add)
+                    .then(Mono.defer(() -> {
+                        var followUp = toolRequest.toBuilder()
+                                .messages(new ArrayList<>(messages))
+                                .parameters(followUpParameters)
+                                .build();
+                        return scoreTraceReactive(followUp, message);
+                    }))
+                    .flatMap(nextResponse -> toolCallLoop(round + 1, nextResponse, toolRequest, followUpParameters,
+                            message, messages, ctx, budget, mdc));
+        });
+    }
+
+    private Mono<ToolExecutionResultMessage> executeToolOrBudgetExhausted(int round,
+            ToolExecutionRequest toolExecRequest, TraceThreadToScoreLlmAsJudge message,
+            TraceToolContext ctx, ToolOutputBudget budget, Map<String, String> mdc) {
+        try (var logContext = wrapWithMdc(mdc)) {
+            log.debug("Tool call round '{}' for ruleId '{}': tool '{}'",
+                    round, message.ruleId(), toolExecRequest.name());
+            if (budget.cumulative >= CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS) {
+                if (!budget.exhaustedLogged) {
+                    log.warn("Tool-output budget '{}' chars exhausted for ruleId '{}';"
+                            + " subsequent tool calls return budget-exhausted sentinel",
+                            CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS, message.ruleId());
+                    budget.exhaustedLogged = true;
+                }
+                return Mono.just(ToolExecutionResultMessage.from(toolExecRequest,
+                        BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS)));
+            }
+        }
+        return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
+                .map(result -> {
+                    budget.cumulative += result.length();
+                    return ToolExecutionResultMessage.from(toolExecRequest, result);
+                });
+    }
+
+    /** Shared per-evaluation tool-output budget state. Mutated sequentially via concatMap. */
+    private static final class ToolOutputBudget {
+        long cumulative = 0L;
+        boolean exhaustedLogged = false;
+    }
+
+    private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools) {
     }
 }

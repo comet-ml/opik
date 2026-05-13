@@ -43,6 +43,7 @@ import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -53,6 +54,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -175,6 +177,100 @@ public class OnlineScoringEngine {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
                 Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Variant for the agentic-tools branch: renders only a compact per-trace
+     * <em>skeleton</em> for the thread (ids, names, durations, span counts) plus a
+     * drill-down hint pointing at {@code read(type=trace, id=X)}. The model fetches
+     * any specific trace's full content (and its spans) on demand via ReadTool —
+     * the same lazy mechanism the trace-level path uses. Keeps the inline prompt
+     * bounded even on threads with thousands of traces.
+     *
+     * <p>The {@code context} variable is replaced with the skeleton + drill-down
+     * guidance so user-supplied prompt templates referencing {@code {{context}}}
+     * keep working without modification.
+     */
+    public static ChatRequest prepareThreadLlmRequestWithTools(
+            @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
+        String skeleton;
+        try {
+            skeleton = OBJECT_MAPPER.writeValueAsString(toThreadSkeleton(traces));
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
+        String drillDownHint = "Call read(type=trace, id=<uuid>) on any trace id from the"
+                + " thread skeleton above to inspect its full input/output + spans, or"
+                + " jq(type=trace, id=<uuid>, expression='<path>') for path-targeted lookups.";
+        String contextValue = "Thread skeleton (compact per-trace summary; use tools to drill in):\n"
+                + skeleton + "\n\n" + drillDownHint;
+
+        var renderedMessages = renderThreadMessagesWithReplacement(evaluatorCode.messages(),
+                TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, contextValue);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Compact per-trace summary the agentic-tools branch renders into the prompt
+     * instead of the full trace list. ~100 chars per trace — so a 10K-trace thread
+     * is ~1 MB, well under the model's window even without further compression. The
+     * model picks ids from this list and drills in via ReadTool.
+     */
+    static List<ThreadTraceSkeleton> toThreadSkeleton(List<Trace> traces) {
+        return traces.stream()
+                .map(trace -> new ThreadTraceSkeleton(
+                        trace.id(),
+                        trace.name(),
+                        trace.startTime(),
+                        trace.endTime(),
+                        trace.duration(),
+                        trace.spanCount(),
+                        trace.llmSpanCount()))
+                .toList();
+    }
+
+    /**
+     * Compact per-trace summary shipped to the model as part of the thread skeleton.
+     * Field set is small on purpose — anything beyond this is a {@code read} away.
+     */
+    public record ThreadTraceSkeleton(
+            UUID id,
+            String name,
+            Instant startTime,
+            Instant endTime,
+            Double durationMs,
+            int spanCount,
+            int llmSpanCount) {
+    }
+
+    /**
+     * Light-weight twin of {@link #renderThreadMessages} that substitutes the
+     * already-rendered {@code context} string directly, skipping the
+     * Jackson-serialize-the-traces step. Used by the tools path where the variable
+     * value (the skeleton + drill-down hint) is computed by the caller.
+     */
+    private static List<ChatMessage> renderThreadMessagesWithReplacement(
+            List<LlmAsJudgeMessage> templateMessages, String variableName, String contextValue) {
+        Map<String, String> replacements = Map.of(variableName, contextValue);
+        return templateMessages.stream()
+                .map(templateMessage -> {
+                    if (templateMessage.isStringContent()) {
+                        var renderedMessage = TemplateParseUtils.render(
+                                templateMessage.asString(), replacements, PromptType.MUSTACHE);
+                        return switch (templateMessage.role()) {
+                            case USER -> (ChatMessage) UserMessage.from(renderedMessage);
+                            case SYSTEM -> (ChatMessage) SystemMessage.from(renderedMessage);
+                            default -> {
+                                log.info("No mapping for message role type {}", templateMessage.role());
+                                yield (ChatMessage) UserMessage.from(renderedMessage);
+                            }
+                        };
+                    }
+                    throw new UnsupportedOperationException(
+                            "Multimodal thread message content is not supported on the agentic-tools path");
+                })
+                .toList();
     }
 
     static List<ChatMessage> renderThreadMessages(
@@ -692,6 +788,27 @@ public class OnlineScoringEngine {
     public static int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
         Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
         return fullJson.toString().length() / charsPerToken;
+    }
+
+    /**
+     * Rough character-based token estimate for the thread context as it would be
+     * rendered on the inline path (full trace-list JSON, no spans). Used by
+     * {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether a thread is
+     * big enough to switch to the agentic-tools path (skeleton + drill-down via
+     * ReadTool). The estimate is on the trace bodies only — spans aren't part of
+     * the inline thread render today, so factoring them in would over-trigger the
+     * tools branch.
+     *
+     * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}:
+     * configurable via {@code onlineScoring.agenticToolsCharsPerToken}.
+     */
+    public static int estimateThreadContextTokens(@NonNull List<Trace> traces, int charsPerToken) {
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
+        try {
+            return OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)).length() / charsPerToken;
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
     }
 
     /**
