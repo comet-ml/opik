@@ -24,6 +24,14 @@ BACKEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-backend.pid"
 FRONTEND_PID_FILE="/tmp/${RESOURCE_PREFIX}-frontend.pid"
 BACKEND_LOG_FILE="/tmp/${RESOURCE_PREFIX}-backend.log"
 FRONTEND_LOG_FILE="/tmp/${RESOURCE_PREFIX}-frontend.log"
+OLLIE_PID_FILE="/tmp/${RESOURCE_PREFIX}-ollie.pid"
+OLLIE_LOG_FILE="/tmp/${RESOURCE_PREFIX}-ollie.log"
+# Sidecar so --stop can find the ollie repo even without OLLIE_REPO_PATH in scope.
+OLLIE_REPO_PATH_FILE="/tmp/${RESOURCE_PREFIX}-ollie.repo"
+
+# Ollie local dev integration (Opik team only — set OLLIE_REPO_PATH to enable)
+OLLIE_API_PORT="${OLLIE_API_PORT:-9080}"
+OLLIE_CONSOLE_PORT="${OLLIE_CONSOLE_PORT:-3333}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -333,6 +341,252 @@ wait_for_backend_ready() {
     fi
 }
 
+# --- Ollie local dev (gated on OLLIE_REPO_PATH) ---------------------------
+# When OLLIE_REPO_PATH is exported, dev-runner spawns `make dev` in that
+# checkout (docker-compose API on 9080 + console JS dev server on 3333) and
+# wires the frontend to it via VITE_ASSISTANT_SIDEBAR_BASE_URL. Unset means
+# no-op — OSS contributors and Opik devs not testing the assistant are
+# unaffected.
+
+# Has the user opted into the local ollie integration?
+ollie_enabled() {
+    [ -n "${OLLIE_REPO_PATH:-}" ]
+}
+
+# Is the ollie process currently alive? Used by start_frontend to decide
+# whether it's safe to point the sidebar at the local service.
+ollie_running() {
+    [ -f "$OLLIE_PID_FILE" ] && kill -0 "$(cat "$OLLIE_PID_FILE")" 2>/dev/null
+}
+
+# Is ollie's API actually serving requests? Detects an already-running
+# instance (e.g. started outside this dev-runner) so we can reuse it
+# instead of trying to spawn a duplicate on the same ports.
+ollie_healthy() {
+    command -v curl >/dev/null 2>&1 || return 1
+    curl -sf --max-time 2 "http://localhost:${OLLIE_API_PORT}/healthz" >/dev/null 2>&1
+}
+
+# BFS-walk every descendant of $1. `make dev` fans into npm → node and shells
+# out to docker-compose; one level of pgrep -P misses grandchildren. Docker
+# containers are NOT descendants of `make`, so this does NOT touch them —
+# `make dev-stop` is the only correct way to stop those.
+#
+# Returns the descendant PIDs on stdout, one per line. The caller is
+# expected to snapshot BEFORE killing the parent: once the parent exits,
+# children reparent to init/launchd and pgrep -P loses the trail.
+get_descendants() {
+    local root="$1"
+    local frontier="$root"
+    local all=""
+    while [ -n "$frontier" ]; do
+        local next=""
+        for p in $frontier; do
+            local kids
+            kids=$(pgrep -P "$p" 2>/dev/null || true)
+            if [ -n "$kids" ]; then
+                next="$next $kids"
+                all="$all $kids"
+            fi
+        done
+        frontier=$(echo "$next" | xargs -n1 2>/dev/null | sort -u | xargs 2>/dev/null || true)
+    done
+    echo "$all" | xargs -n1 2>/dev/null | sort -u | xargs 2>/dev/null || true
+}
+
+wait_for_ollie_ready() {
+    require_command curl
+    local pid="${1:-}"
+    log_info "Waiting for ollie to be ready on port ${OLLIE_API_PORT}..."
+    local max_wait=120
+    local count=0
+    local ollie_ready=false
+
+    while [ $count -lt $max_wait ]; do
+        if curl -sf "http://localhost:${OLLIE_API_PORT}/healthz" >/dev/null 2>&1; then
+            ollie_ready=true
+            break
+        fi
+        sleep 1
+        count=$((count + 1))
+
+        if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
+            log_error "Ollie process died while waiting for it to be ready"
+            log_error "Check logs: tail -f $OLLIE_LOG_FILE"
+            rm -f "$OLLIE_PID_FILE"
+            return 1
+        fi
+    done
+
+    if [ "$ollie_ready" = true ]; then
+        log_success "Ollie is ready and accepting connections"
+        log_info "Ollie API: ${GREEN}http://localhost:${OLLIE_API_PORT}${NC}"
+        log_info "Ollie console: ${GREEN}http://localhost:${OLLIE_CONSOLE_PORT}${NC}"
+        return 0
+    else
+        log_error "Ollie failed to become ready after ${max_wait}s"
+        log_error "Check logs: tail -f $OLLIE_LOG_FILE"
+        return 1
+    fi
+}
+
+start_ollie_local() {
+    if ! ollie_enabled; then
+        return 0
+    fi
+    require_command make
+
+    if [ ! -d "$OLLIE_REPO_PATH" ]; then
+        log_warning "OLLIE_REPO_PATH points to a non-existent directory: $OLLIE_REPO_PATH"
+        log_warning "Skipping ollie-assist startup; sidebar will be disabled"
+        return 1
+    fi
+    if [ ! -f "$OLLIE_REPO_PATH/Makefile" ]; then
+        log_warning "OLLIE_REPO_PATH has no Makefile: $OLLIE_REPO_PATH"
+        log_warning "Skipping ollie-assist startup; sidebar will be disabled"
+        return 1
+    fi
+
+    log_info "Starting ollie-assist (make dev) from $OLLIE_REPO_PATH..."
+
+    # Reuse a healthy ollie started outside this dev-runner (e.g. by a manual
+    # `make dev`). Avoids port conflicts on 3333/9080 and lets devs share a
+    # single ollie instance across opik worktrees.
+    if ollie_healthy; then
+        log_success "Ollie is already healthy on port ${OLLIE_API_PORT} — reusing existing instance"
+        log_info "Skipping 'make dev'; stop_ollie_local will not be called for this instance"
+        # Defensively clear any stale state files from a prior crashed session.
+        # Without this, a later --stop would see the leftover PID/sidecar and
+        # run `make dev-stop`, killing the external ollie we just chose to reuse.
+        rm -f "$OLLIE_PID_FILE" "$OLLIE_REPO_PATH_FILE"
+        return 0
+    fi
+
+    if [ -f "$OLLIE_PID_FILE" ]; then
+        OLLIE_PID=$(cat "$OLLIE_PID_FILE")
+        if kill -0 "$OLLIE_PID" 2>/dev/null; then
+            log_warning "Ollie is already running (PID: $OLLIE_PID)"
+            return 0
+        else
+            log_warning "Removing stale ollie PID file (process $OLLIE_PID no longer exists)"
+            rm -f "$OLLIE_PID_FILE"
+        fi
+    fi
+
+    (
+        cd "$OLLIE_REPO_PATH" || exit 1
+        nohup make dev > "$OLLIE_LOG_FILE" 2>&1 &
+        echo $! > "$OLLIE_PID_FILE"
+    )
+    printf '%s\n' "$OLLIE_REPO_PATH" > "$OLLIE_REPO_PATH_FILE"
+
+    OLLIE_PID=$(cat "$OLLIE_PID_FILE")
+    log_debug "Ollie process started with PID: $OLLIE_PID"
+
+    sleep 3
+    if ! kill -0 "$OLLIE_PID" 2>/dev/null; then
+        log_warning "Ollie failed to start. Check logs: cat $OLLIE_LOG_FILE"
+        log_warning "Continuing without sidebar; opik FE+BE will still come up"
+        rm -f "$OLLIE_PID_FILE" "$OLLIE_REPO_PATH_FILE"
+        return 1
+    fi
+
+    log_success "Ollie process started (PID: $OLLIE_PID)"
+    log_info "Ollie logs: tail -f $OLLIE_LOG_FILE"
+    if ! wait_for_ollie_ready "$OLLIE_PID"; then
+        log_warning "Ollie did not become ready in time; continuing without sidebar"
+        # Tear down what we spawned so frontend doesn't point at a half-up service.
+        stop_ollie_local >/dev/null 2>&1 || true
+        return 1
+    fi
+    return 0
+}
+
+stop_ollie_local() {
+    if [ ! -f "$OLLIE_PID_FILE" ] && [ ! -f "$OLLIE_REPO_PATH_FILE" ]; then
+        # Nothing to do — quiet skip so OSS / non-ollie runs don't see noise.
+        return 0
+    fi
+
+    # Recover the repo path from the sidecar if the caller didn't export it.
+    local ollie_repo="${OLLIE_REPO_PATH:-}"
+    if [ -z "$ollie_repo" ] && [ -f "$OLLIE_REPO_PATH_FILE" ]; then
+        ollie_repo=$(cat "$OLLIE_REPO_PATH_FILE")
+    fi
+
+    if [ -f "$OLLIE_PID_FILE" ]; then
+        local ollie_pid
+        ollie_pid=$(cat "$OLLIE_PID_FILE")
+        if kill -0 "$ollie_pid" 2>/dev/null; then
+            log_info "Stopping ollie (PID: $ollie_pid)..."
+
+            # Snapshot the descendant tree while parent is alive: once make
+            # exits, npm/node children reparent to init and pgrep -P loses
+            # the trail. We need the snapshot to chase them down later.
+            local descendants
+            descendants=$(get_descendants "$ollie_pid")
+
+            kill -TERM "$ollie_pid" 2>/dev/null || true
+            if [ -n "$descendants" ]; then
+                for p in $descendants; do
+                    kill -TERM "$p" 2>/dev/null || true
+                done
+            fi
+
+            for _ in {1..10}; do
+                if ! kill -0 "$ollie_pid" 2>/dev/null; then
+                    break
+                fi
+                sleep 1
+            done
+
+            # Force-kill any survivors from the snapshot, even if the root
+            # is already gone (orphans reparent to init/launchd and persist).
+            if kill -0 "$ollie_pid" 2>/dev/null; then
+                log_warning "Force killing ollie tree..."
+                kill -9 "$ollie_pid" 2>/dev/null || true
+            fi
+            if [ -n "$descendants" ]; then
+                for p in $descendants; do
+                    kill -9 "$p" 2>/dev/null || true
+                done
+            fi
+        else
+            log_warning "Ollie PID file exists but process is not running (cleaning up stale PID file)"
+        fi
+    fi
+
+    # Bring docker-compose stack down so subsequent runs get a clean slate.
+    # nohup'd make dev is detached from docker-compose's daemonized containers,
+    # so SIGTERM above can't reach them — make dev-stop is the real cleanup.
+    if [ -n "$ollie_repo" ] && [ -d "$ollie_repo" ]; then
+        log_info "Stopping ollie docker-compose stack..."
+        ( cd "$ollie_repo" && make dev-stop > /dev/null 2>&1 ) || \
+            log_warning "make dev-stop failed; container may still be running"
+    elif [ -n "$ollie_repo" ]; then
+        log_warning "Recorded OLLIE_REPO_PATH no longer exists: $ollie_repo"
+        log_warning "Skipping make dev-stop; docker-compose containers may need manual cleanup"
+    fi
+
+    rm -f "$OLLIE_PID_FILE" "$OLLIE_REPO_PATH_FILE"
+    log_success "Ollie stopped"
+}
+
+display_ollie_process_status() {
+    if [ -f "$OLLIE_PID_FILE" ] && kill -0 "$(cat "$OLLIE_PID_FILE")" 2>/dev/null; then
+        echo -e "Ollie:   ${GREEN}RUNNING${NC} (PID: $(cat "$OLLIE_PID_FILE"))"
+        return 0
+    fi
+    # Detect reused instance: ollie is healthy but we didn't spawn it,
+    # so there's no PID file to point at.
+    if ollie_healthy; then
+        echo -e "Ollie:   ${GREEN}RUNNING${NC} (reused external instance on port ${OLLIE_API_PORT})"
+        return 0
+    fi
+    echo -e "Ollie:   ${RED}STOPPED${NC}"
+    return 1
+}
+
 # Function to start backend
 start_backend() {
     require_command java
@@ -456,6 +710,20 @@ start_frontend() {
         log_debug "Frontend API base URL (VITE_BASE_API_URL) not set, will use default from frontend code: /api"
     else
         log_info "Frontend API base URL (VITE_BASE_API_URL) set to: $VITE_BASE_API_URL"
+    fi
+
+    # Enable assistant sidebar only when ollie is actually serving requests.
+    # ollie_healthy covers both ollie-we-spawned and ollie-already-running
+    # (reused instances). ollie_running alone would miss the reuse case.
+    # Always unset first so a stale value from the parent shell / CI / a
+    # previous dev-runner invocation cannot leak into the FE process and
+    # silently re-enable the sidebar gate.
+    unset VITE_ASSISTANT_SIDEBAR_BASE_URL
+    if ollie_enabled && ollie_healthy; then
+        export VITE_ASSISTANT_SIDEBAR_BASE_URL="http://localhost:${OLLIE_CONSOLE_PORT}"
+        log_debug "  VITE_ASSISTANT_SIDEBAR_BASE_URL=$VITE_ASSISTANT_SIDEBAR_BASE_URL"
+    elif ollie_enabled; then
+        log_warning "OLLIE_REPO_PATH is set but ollie healthz is not responding; sidebar disabled"
     fi
 
     log_debug "Starting frontend with: npm run start"
@@ -696,6 +964,17 @@ verify_services() {
         echo -e "Frontend Process: ${RED}STOPPED${NC}"
     fi
 
+    # Ollie local-dev status — surface it only when the user opted in (env
+    # var) or a previous run left a tracked PID file. NOTE: we deliberately
+    # do NOT probe ollie_healthy here because that adds a 2s curl timeout
+    # on every --verify/--restart for OSS contributors who never touch ollie.
+    # `|| true` keeps a STOPPED return from aborting verify_services under
+    # set -e (mirrors how display_backend_process_status is called in an
+    # `if` condition).
+    if ollie_enabled || [ -f "$OLLIE_PID_FILE" ]; then
+        display_ollie_process_status || true
+    fi
+
     # Show access information if all services are running
     if [ "$docker_services_running" = true ] && [ "$backend_running" = true ] && [ "$frontend_running" = true ]; then
         show_access_information "http://localhost:${FRONTEND_PORT}" true
@@ -705,6 +984,9 @@ verify_services() {
     echo "Logs:"
     echo "  Backend Process:  tail -f $BACKEND_LOG_FILE"
     echo "  Frontend Process: tail -f $FRONTEND_LOG_FILE"
+    if ollie_enabled || [ -f "$OLLIE_LOG_FILE" ]; then
+        echo "  Ollie Process:    tail -f $OLLIE_LOG_FILE"
+    fi
 }
 
 # Function to verify BE-only services
@@ -747,15 +1029,17 @@ start_services() {
         exit 1
     fi
 
-    log_info "Step 1/5: Starting Docker services..."
+    log_info "Step 1/6: Starting Docker services..."
     start_local_be_fe
-    log_info "Step 2/5: Running DB migrations..."
+    log_info "Step 2/6: Running DB migrations..."
     run_db_migrations
-    log_info "Step 3/5: Starting backend process..."
+    log_info "Step 3/6: Starting backend process..."
     start_backend
-    log_info "Step 4/5: Starting frontend process..."
+    log_info "Step 4/6: Starting ollie-assist (optional)..."
+    start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
+    log_info "Step 5/6: Starting frontend process..."
     start_frontend
-    log_info "Step 5/5: Creating demo data..."
+    log_info "Step 6/6: Creating demo data..."
     create_demo_data "--local-be-fe"
     log_success "=== Start Complete ==="
     verify_services
@@ -764,11 +1048,13 @@ start_services() {
 # Function to stop services
 stop_services() {
     log_info "=== Stopping Opik Development Environment ==="
-    log_info "Step 1/3: Stopping frontend..."
+    log_info "Step 1/4: Stopping frontend..."
     stop_frontend
-    log_info "Step 2/3: Stopping backend..."
+    log_info "Step 2/4: Stopping ollie-assist (if running)..."
+    stop_ollie_local
+    log_info "Step 3/4: Stopping backend..."
     stop_backend
-    log_info "Step 3/3: Stopping Docker services..."
+    log_info "Step 4/4: Stopping Docker services..."
     stop_local_be_fe
     log_success "=== Stop Complete ==="
 }
@@ -788,25 +1074,29 @@ migrate_services() {
 # Function to restart services (stop, build, start)
 restart_services() {
     log_info "=== Restarting Opik Development Environment (Worktree: ${WORKTREE_ID}) ==="
-    log_info "Step 1/10: Stopping frontend process..."
+    log_info "Step 1/12: Stopping frontend process..."
     stop_frontend
-    log_info "Step 2/10: Stopping backend process..."
+    log_info "Step 2/12: Stopping ollie-assist (if running)..."
+    stop_ollie_local
+    log_info "Step 3/12: Stopping backend process..."
     stop_backend
-    log_info "Step 3/10: Stopping Docker services..."
+    log_info "Step 4/12: Stopping Docker services..."
     stop_local_be_fe
-    log_info "Step 4/10: Starting Docker services..."
+    log_info "Step 5/12: Starting Docker services..."
     start_local_be_fe
-    log_info "Step 5/10: Building backend..."
+    log_info "Step 6/12: Building backend..."
     build_backend
-    log_info "Step 6/10: Building frontend..."
+    log_info "Step 7/12: Building frontend..."
     build_frontend
-    log_info "Step 7/10: Running DB migrations..."
+    log_info "Step 8/12: Running DB migrations..."
     run_db_migrations
-    log_info "Step 8/10: Starting backend process..."
+    log_info "Step 9/12: Starting backend process..."
     start_backend
-    log_info "Step 9/10: Starting frontend process..."
+    log_info "Step 10/12: Starting ollie-assist (optional)..."
+    start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
+    log_info "Step 11/12: Starting frontend process..."
     start_frontend
-    log_info "Step 10/10: Creating demo data..."
+    log_info "Step 12/12: Creating demo data..."
     create_demo_data "--local-be-fe"
     log_success "=== Restart Complete ==="
     verify_services
@@ -827,17 +1117,26 @@ quick_restart_services() {
         run_db_migrations
     fi
     
-    log_info "Step 2/7: Stopping frontend..."
+    log_info "Step 2/8: Stopping frontend..."
     stop_frontend
-    log_info "Step 3/7: Stopping backend..."
+    log_info "Step 3/8: Stopping backend..."
     stop_backend
-    log_info "Step 4/7: Building backend..."
+    log_info "Step 4/8: Building backend..."
     build_backend
-    log_info "Step 5/7: Starting backend..."
+    log_info "Step 5/8: Starting backend..."
     start_backend
-    
+
+    log_info "Step 6/8: Ensuring ollie-assist is running (optional)..."
+    if ollie_enabled && ollie_running; then
+        log_success "ollie-assist is already running (PID: $(cat "$OLLIE_PID_FILE"))"
+    elif ollie_enabled && ollie_healthy; then
+        log_success "ollie-assist is healthy on port ${OLLIE_API_PORT} (reused external instance)"
+    else
+        start_ollie_local || log_warning "ollie-assist startup failed; continuing without sidebar"
+    fi
+
     # Check if package.json has changed since last npm install
-    log_info "Step 6/7: Checking frontend dependencies..."
+    log_info "Step 7/8: Checking frontend dependencies..."
     local package_json="$FRONTEND_DIR/package.json"
     local package_lock="$FRONTEND_DIR/package-lock.json"
     local node_modules="$FRONTEND_DIR/node_modules"
@@ -860,8 +1159,8 @@ quick_restart_services() {
     if [ "$needs_install" = true ]; then
         build_frontend
     fi
-    
-    log_info "Step 7/7: Starting frontend..."
+
+    log_info "Step 8/8: Starting frontend..."
     start_frontend
     log_success "=== Quick Restart Complete ==="
     verify_services
@@ -954,6 +1253,11 @@ show_usage() {
     echo "Environment Variables:"
     echo "  DEBUG_MODE=true       - Enable debug mode"
     echo "  OPIK_PORT_OFFSET=<n>  - Override automatic port offset (0-99)"
+    echo "  OLLIE_REPO_PATH=<p>   - Opik-team only: path to a local ollie-assist checkout."
+    echo "                          When set, dev-runner runs 'make dev' in that repo and"
+    echo "                          enables the assistant sidebar in the frontend."
+    echo "  OLLIE_API_PORT=<n>    - Override ollie healthcheck/API port (default: 9080)"
+    echo "  OLLIE_CONSOLE_PORT=<n>- Override ollie console port (default: 3333)"
 }
 
 # Function to handle unknown options
