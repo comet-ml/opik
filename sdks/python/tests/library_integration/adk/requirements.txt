@@ -1,2 +1,4 @@
 google-adk
 python-multipart; python_version < "3.10"
+opentelemetry-api
+opentelemetry-sdk
