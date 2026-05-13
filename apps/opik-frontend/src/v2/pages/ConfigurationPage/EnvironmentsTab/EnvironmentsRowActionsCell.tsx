@@ -60,7 +60,7 @@ const EnvironmentsRowActionsCell: React.FunctionComponent<
         setOpen={handleClose}
         onConfirm={deleteHandler}
         title="Delete environment"
-        description="This action can’t be undone. Existing traces and spans will keep their environment value and surface under “Unrecognized environments”. Are you sure you want to continue?"
+        description="This action can’t be undone. Existing traces and spans will keep their environment value. Are you sure you want to continue?"
         confirmText="Delete environment"
         confirmButtonVariant="destructive"
       />

@@ -158,6 +158,7 @@ class Trace:
             error_info=error_info,
             thread_id=thread_id,
             source=self.source,
+            environment=self._environment,
         )
 
     def span(
@@ -282,6 +283,7 @@ def update_trace(
     tags: Optional[List[Any]] = None,
     error_info: Optional[ErrorInfoDict] = None,
     thread_id: Optional[str] = None,
+    environment: Optional[str] = None,
 ) -> None:
     """
     Update an existing trace with new information.
@@ -319,5 +321,6 @@ def update_trace(
         error_info=error_info,
         thread_id=thread_id,
         source=source,
+        environment=environment,
     )
     message_streamer.put(update_trace_message)

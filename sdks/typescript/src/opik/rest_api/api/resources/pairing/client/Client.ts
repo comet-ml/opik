@@ -38,7 +38,6 @@ export class PairingClient {
      * @throws {@link OpikApi.ConflictError}
      * @throws {@link OpikApi.UnprocessableEntityError}
      * @throws {@link OpikApi.TooManyRequestsError}
-     * @throws {@link OpikApi.NotImplementedError}
      *
      * @example
      *     await client.pairing.activatePairingSession("sessionId", {
@@ -123,8 +122,6 @@ export class PairingClient {
                         }),
                         _response.rawResponse,
                     );
-                case 501:
-                    throw new OpikApi.NotImplementedError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,
@@ -152,7 +149,6 @@ export class PairingClient {
      * @throws {@link OpikApi.NotFoundError}
      * @throws {@link OpikApi.UnprocessableEntityError}
      * @throws {@link OpikApi.TooManyRequestsError}
-     * @throws {@link OpikApi.NotImplementedError}
      *
      * @example
      *     await client.pairing.createPairingSession({
@@ -234,8 +230,6 @@ export class PairingClient {
                         }),
                         _response.rawResponse,
                     );
-                case 501:
-                    throw new OpikApi.NotImplementedError(_response.error.body, _response.rawResponse);
                 default:
                     throw new errors.OpikApiError({
                         statusCode: _response.error.statusCode,

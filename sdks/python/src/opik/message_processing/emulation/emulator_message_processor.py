@@ -546,6 +546,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 "tags": message.tags,
                 "input": message.input,
                 "total_cost": message.total_cost,
+                "environment": message.environment,
             }
         )
         span = self._span_observations.get(message.span_id)
@@ -568,6 +569,7 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
                 "tags": message.tags,
                 "input": message.input,
                 "thread_id": message.thread_id,
+                "environment": message.environment,
             }
         )
         current_trace = self._trace_observations.get(message.trace_id)

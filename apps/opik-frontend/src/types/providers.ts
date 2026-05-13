@@ -153,6 +153,7 @@ export enum PROVIDER_MODEL_TYPE {
   ARCEE_AI_TRINITY_LARGE_PREVIEW = "arcee-ai/trinity-large-preview",
   ARCEE_AI_TRINITY_LARGE_PREVIEW_FREE = "arcee-ai/trinity-large-preview:free",
   ARCEE_AI_TRINITY_LARGE_THINKING = "arcee-ai/trinity-large-thinking",
+  ARCEE_AI_TRINITY_LARGE_THINKING_FREE = "arcee-ai/trinity-large-thinking:free",
   ARCEE_AI_TRINITY_MINI = "arcee-ai/trinity-mini",
   ARCEE_AI_TRINITY_MINI_FREE = "arcee-ai/trinity-mini:free",
   ARCEE_AI_VIRTUOSO_LARGE = "arcee-ai/virtuoso-large",
@@ -713,7 +714,13 @@ export type PartialProviderKeyUpdate = Partial<
   headers?: Record<string, string>;
 };
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;
