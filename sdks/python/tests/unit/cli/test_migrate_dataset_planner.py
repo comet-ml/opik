@@ -32,6 +32,37 @@ from ._migrate_helpers import (
 
 
 # ---------------------------------------------------------------------------
+# Elapsed-time formatter
+# ---------------------------------------------------------------------------
+
+
+class TestFormatElapsed:
+    """Pin the wall-clock duration renderer used in the migrate success /
+    failure lines. Sub-minute → one decimal of seconds; past a minute →
+    integer ``Mm Ss`` or ``Hh Mm Ss`` (no fractional seconds).
+    """
+
+    def test_sub_minute__one_decimal_seconds(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(0.0) == "0.0s"
+        assert _format_elapsed(12.34) == "12.3s"
+        assert _format_elapsed(59.99) == "60.0s"
+
+    def test_minute_range__integer_m_s(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(60.0) == "1m 0s"
+        assert _format_elapsed(125.7) == "2m 5s"
+
+    def test_hour_range__integer_h_m_s(self) -> None:
+        from opik.cli.migrate.main import _format_elapsed
+
+        assert _format_elapsed(3600.0) == "1h 0m 0s"
+        assert _format_elapsed(3725.0) == "1h 2m 5s"
+
+
+# ---------------------------------------------------------------------------
 # Help text
 # ---------------------------------------------------------------------------
 

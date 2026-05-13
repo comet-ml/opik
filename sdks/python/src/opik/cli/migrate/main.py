@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import sys
+import time
 from pathlib import Path
 from typing import Iterator, Optional
 
@@ -139,6 +140,7 @@ def _finalize_and_fail(
     exc: BaseException,
     *,
     user_facing: bool,
+    elapsed_seconds: float,
 ) -> None:
     """Shared exception path: write audit log + print sanitized error + exit.
 
@@ -147,13 +149,21 @@ def _finalize_and_fail(
     ``safe_error_string`` so ``ApiError`` response bodies/headers don't leak
     to the terminal). Always finalises the audit log to ``failed`` first so
     the on-disk record matches what the operator saw.
+
+    ``elapsed_seconds`` lets the operator see how long they waited before
+    the failure surfaced -- useful for debugging long-running migrates
+    that die at the cascade tail.
     """
     audit.finalize("failed")
     audit.write(audit_path)
+    elapsed = _format_elapsed(elapsed_seconds)
     if user_facing:
-        console.print(f"[red]{exc}[/red]")
+        console.print(f"[red]{exc}[/red] [dim](after {elapsed})[/dim]")
     else:
-        console.print(f"[red]Migration failed: {safe_error_string(exc)}[/red]")
+        console.print(
+            f"[red]Migration failed: {safe_error_string(exc)}[/red] "
+            f"[dim](after {elapsed})[/dim]"
+        )
     sys.exit(1)
 
 
@@ -208,6 +218,7 @@ def migrate_dataset_command(
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
     audit_path = audit_log or default_audit_path()
+    started_at = time.monotonic()
 
     try:
         client = _build_client(ctx)
@@ -233,16 +244,46 @@ def migrate_dataset_command(
         with _quiet_streamer_rate_limit_logs():
             execute_plan(client, plan, audit)
     except MigrationError as exc:
-        _finalize_and_fail(audit, audit_path, exc, user_facing=True)
+        _finalize_and_fail(
+            audit,
+            audit_path,
+            exc,
+            user_facing=True,
+            elapsed_seconds=time.monotonic() - started_at,
+        )
     except Exception as exc:
-        _finalize_and_fail(audit, audit_path, exc, user_facing=False)
+        _finalize_and_fail(
+            audit,
+            audit_path,
+            exc,
+            user_facing=False,
+            elapsed_seconds=time.monotonic() - started_at,
+        )
 
     audit.finalize("ok")
     audit.write(audit_path)
+    elapsed = _format_elapsed(time.monotonic() - started_at)
     console.print(
         f"[green]Migrated '{name}' into project '{to_project}' as '{plan.target_name}'.[/green] "
-        f"Audit log: {audit_path}"
+        f"Took {elapsed}. Audit log: {audit_path}"
     )
+
+
+def _format_elapsed(seconds: float) -> str:
+    """Render a wall-clock duration as ``Hh Mm Ss`` / ``Mm Ss`` / ``Ss``.
+
+    Sub-minute runs show ``12.3s`` (one decimal). Anything past a minute
+    drops the decimal -- once you're in minutes you don't care about
+    fractional seconds, and ``5m 12s`` reads cleaner than ``5m 12.3s``.
+    """
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    total = int(seconds)
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    return f"{minutes}m {secs}s"
 
 
 def _print_plan(plan: MigrationPlan) -> None:
