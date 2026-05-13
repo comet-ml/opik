@@ -2,6 +2,7 @@ package com.comet.opik.api.resources.v1.events;
 
 import com.comet.opik.api.Project;
 import com.comet.opik.api.ScoreSource;
+import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython;
 import com.comet.opik.api.events.TraceThreadToScoreUserDefinedMetricPython;
@@ -13,6 +14,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
 import com.comet.opik.domain.evaluators.python.PythonScoreResult;
+import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
@@ -43,6 +45,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
@@ -59,6 +62,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -331,7 +335,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .threadIds(List.of(threadId))
                     .code(TraceThreadUserDefinedMetricPythonCode.builder()
                             .metric("def score(self, messages, spans=None): return []")
-                            .arguments(java.util.Map.of(
+                            .arguments(Map.of(
                                     AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython.SPANS_ARG_NAME,
                                     "spans"))
                             .build())
@@ -344,7 +348,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
                     .value(BigDecimal.ONE)
                     .reason("")
                     .build();
-            var span = podamFactory.manufacturePojo(com.comet.opik.api.Span.class);
+            var span = podamFactory.manufacturePojo(Span.class);
 
             when(traceService.search(anyInt(), any(TraceSearchCriteria.class)))
                     .thenReturn(Flux.just(trace), Flux.empty());
@@ -362,12 +366,12 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
             scorer.score(message).block();
 
             // The kwargs-shaped path was taken: data is a Map containing messages + spans.
-            var dataCaptor = ArgumentCaptor.forClass(java.util.Map.class);
+            var dataCaptor = ArgumentCaptor.forClass(Map.class);
             verify(pythonEvaluatorService).evaluateThreadWithData(eq(message.code().metric()), dataCaptor.capture());
             verify(pythonEvaluatorService, never()).evaluateThread(any(), any());
             assertThat(dataCaptor.getValue())
-                    .containsKey(com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.MESSAGES_KEY)
-                    .containsKey(com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest.SPANS_KEY);
+                    .containsKey(TraceThreadPythonEvaluatorRequest.MESSAGES_KEY)
+                    .containsKey(TraceThreadPythonEvaluatorRequest.SPANS_KEY);
         }
 
         @Test
@@ -396,7 +400,7 @@ class OnlineScoringTraceThreadUserDefinedMetricPythonScorerTest {
 
             verify(pythonEvaluatorService).evaluateThread(eq(message.code().metric()), any());
             verify(pythonEvaluatorService, never()).evaluateThreadWithData(any(), any());
-            org.mockito.Mockito.verifyNoInteractions(spanService);
+            verifyNoInteractions(spanService);
         }
     }
 

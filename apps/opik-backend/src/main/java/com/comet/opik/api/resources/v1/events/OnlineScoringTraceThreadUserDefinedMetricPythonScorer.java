@@ -15,6 +15,7 @@ import com.comet.opik.domain.TraceService;
 import com.comet.opik.domain.evaluators.AutomationRuleEvaluatorService;
 import com.comet.opik.domain.evaluators.UserLog;
 import com.comet.opik.domain.evaluators.python.PythonEvaluatorService;
+import com.comet.opik.domain.evaluators.python.PythonScoreResult;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.threads.TraceThreadService;
 import com.comet.opik.infrastructure.OnlineScoringConfig;
@@ -36,13 +37,16 @@ import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.Collectors;
 
 import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItemThread;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
@@ -245,7 +249,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
                     // opt-in arguments, so existing thread metrics keep working as-is.
                     data = messages;
                 } else {
-                    var dict = new java.util.LinkedHashMap<String, Object>();
+                    var dict = new LinkedHashMap<String, Object>();
                     dict.put(TraceThreadPythonEvaluatorRequest.MESSAGES_KEY, messages);
                     if (wantsSpans) {
                         dict.put(TraceThreadPythonEvaluatorRequest.SPANS_KEY,
@@ -272,7 +276,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
     }
 
     private List<Span> fetchSpansForThread(List<Trace> traces, String workspaceId, String userName) {
-        Set<UUID> traceIds = traces.stream().map(Trace::id).collect(java.util.stream.Collectors.toSet());
+        Set<UUID> traceIds = traces.stream().map(Trace::id).collect(Collectors.toSet());
         List<Span> spans = spanService.getByTraceIds(traceIds)
                 .collectList()
                 .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, workspaceId)
@@ -294,7 +298,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
         }
         if (data instanceof Map<?, ?> mapAny) {
             Map<String, Object> map = (Map<String, Object>) mapAny;
-            var parts = new java.util.ArrayList<String>();
+            var parts = new ArrayList<String>();
             map.forEach((k, v) -> {
                 if (v instanceof List<?> list) {
                     parts.add(String.format("%s=list(%d)", k, list.size()));
@@ -313,7 +317,7 @@ public class OnlineScoringTraceThreadUserDefinedMetricPythonScorer
             Pair<Project, Object> context, Map<String, String> mdc) {
         var project = context.getLeft();
         var data = context.getRight();
-        Mono<List<com.comet.opik.domain.evaluators.python.PythonScoreResult>> evaluation = (data instanceof List)
+        Mono<List<PythonScoreResult>> evaluation = (data instanceof List)
                 ? pythonEvaluatorService.evaluateThread(message.code().metric(), (List<ChatMessage>) data)
                 : pythonEvaluatorService.evaluateThreadWithData(message.code().metric(), (Map<String, Object>) data);
         return evaluation

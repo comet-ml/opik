@@ -1,5 +1,6 @@
 package com.comet.opik.domain.evaluators.python;
 
+import com.comet.opik.api.Span;
 import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.PythonEvaluatorConfig;
 import com.comet.opik.infrastructure.RetriableHttpClient;
@@ -419,11 +420,11 @@ class PythonEvaluatorServiceTest {
         void evaluateThreadWithData__whenValidDict__shouldReturnResults() {
             // Given — kwargs-shaped path: data is a map containing messages and an opt-in spans key.
             var code = "def score(messages, spans=None): return 1.0";
-            var data = java.util.Map.<String, Object>of(
+            Map<String, Object> data = Map.of(
                     TraceThreadPythonEvaluatorRequest.MESSAGES_KEY,
                     List.of(podamFactory.manufacturePojo(ChatMessage.class)),
                     TraceThreadPythonEvaluatorRequest.SPANS_KEY,
-                    List.of(podamFactory.manufacturePojo(com.comet.opik.api.Span.class)));
+                    List.of(podamFactory.manufacturePojo(Span.class)));
             var expectedScores = List.of(podamFactory.manufacturePojo(PythonScoreResult.class));
             var pythonResponse = PythonEvaluatorResponse.builder().scores(expectedScores).build();
 
@@ -446,7 +447,7 @@ class PythonEvaluatorServiceTest {
         void evaluateThreadWithData__whenMissingMessagesKey__shouldThrowIllegalArgumentException() {
             // Given — dict without the required messages key.
             var code = "def score(messages): return 1.0";
-            var data = java.util.Map.<String, Object>of("not_messages", List.of("foo"));
+            Map<String, Object> data = Map.of("not_messages", List.of("foo"));
 
             // When & Then
             assertThatThrownBy(() -> pythonEvaluatorService.evaluateThreadWithData(code, data))
