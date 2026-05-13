@@ -83,7 +83,22 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 UserLog.TRACE_ID, trace.id().toString(),
                 UserLog.RULE_ID, message.ruleId().toString());
 
-        return Mono.fromCallable(() -> prepareData(message, mdc))
+        // Opt-in fetch: only call out to the span service when the user's metric actually
+        // declared a `spans` argument. Most trace-level Python metrics use just
+        // input/output/metadata and don't need spans — skipping the fetch for them avoids a
+        // DB query that's dwarfed only by the Python evaluator cost. Fetch reactively in the
+        // chain (no .block()) so the workersScheduler thread isn't pinned waiting on R2DBC
+        // (OPIK-6308).
+        Mono<List<Span>> spansMono = message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)
+                ? spanService.getByTraceIds(Set.of(trace.id()))
+                        .collectList()
+                        .contextWrite(ctx -> ctx
+                                .put(RequestContext.WORKSPACE_ID, message.workspaceId())
+                                .put(RequestContext.USER_NAME, message.userName()))
+                : Mono.just(List.of());
+
+        return spansMono
+                .flatMap(spans -> Mono.fromCallable(() -> prepareData(message, spans, mdc)))
                 .flatMap(data -> pythonEvaluatorService.evaluate(message.code().metric(), data))
                 .doOnNext(withMdc(mdc, scoreResults -> userFacingLogger
                         .info("Received response for traceId '{}':\n\n{}", trace.id(), scoreResults)))
@@ -97,23 +112,15 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                 .then();
     }
 
-    private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+    private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, List<Span> spans,
+            Map<String, String> mdc) {
         var trace = message.trace();
         try (var logContext = wrapWithMdc(mdc)) {
             userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
 
             try {
-                // Opt-in fetch: only call out to the span service when the user's metric
-                // actually declared a `spans` argument. Most trace-level Python metrics use
-                // just input/output/metadata and don't need spans — skipping the fetch for
-                // them avoids a DB query that's dwarfed only by the Python evaluator cost.
                 Map<String, Object> data;
                 if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
-                    List<Span> spans = spanService.getByTraceIds(Set.of(trace.id()))
-                            .collectList()
-                            .contextWrite(ctx -> ctx.put(RequestContext.WORKSPACE_ID, message.workspaceId())
-                                    .put(RequestContext.USER_NAME, message.userName()))
-                            .block();
                     data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
                 } else {
                     data = new LinkedHashMap<>(

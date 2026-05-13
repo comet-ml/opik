@@ -45,6 +45,7 @@ import org.mockito.Mock;
 import org.mockito.MockedStatic;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RedissonReactiveClient;
+import reactor.core.publisher.Mono;
 
 import java.time.Instant;
 import java.util.List;
@@ -228,7 +229,9 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
-        ChatResponse result = scorer.handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of());
+        ChatResponse result = scorer
+                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), Map.of())
+                .block();
 
         assertThat(result).isSameAs(plainResponse);
         verifyNoInteractions(aiProxyService);
@@ -270,7 +273,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
-                List.of());
+                List.of(), Map.of()).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -342,7 +345,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message, List.of()))
+                        initialResponse, toolRequest, structuredRequest, message, List.of(), Map.of()).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -395,7 +398,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message, List.of());
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), Map.of()).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);
@@ -435,9 +438,9 @@ class OnlineScoringLlmAsJudgeScorerTest {
             }
 
             @Override
-            public String execute(String arguments,
+            public Mono<String> execute(String arguments,
                     com.comet.opik.api.resources.v1.events.tools.TraceToolContext ctx) {
-                return result;
+                return Mono.just(result);
             }
         };
     }

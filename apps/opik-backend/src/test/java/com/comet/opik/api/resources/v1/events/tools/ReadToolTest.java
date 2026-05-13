@@ -45,7 +45,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"id\": \"abc\"}", ctx));
+                tool.execute("{\"id\": \"abc\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Missing required argument: type");
     }
@@ -55,7 +55,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"unicorn\", \"id\": \"abc\"}", ctx));
+                tool.execute("{\"type\": \"unicorn\", \"id\": \"abc\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Unknown type");
     }
@@ -67,7 +67,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"trace\", \"id\": \"%s\", \"tier\": \"WHATEVER\"}"
-                        .formatted(trace.id()), ctx));
+                        .formatted(trace.id()), ctx).block());
 
         assertThat(result.get("error").asText()).contains("Unknown tier");
     }
@@ -77,7 +77,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"trace\", \"id\": \"not-a-uuid\"}", ctx));
+                tool.execute("{\"type\": \"trace\", \"id\": \"not-a-uuid\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Invalid id format");
     }
@@ -87,7 +87,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"thread\", \"id\": \"any-string\"}", ctx));
+                tool.execute("{\"type\": \"thread\", \"id\": \"any-string\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("type=thread is not supported");
     }
@@ -98,7 +98,7 @@ class ReadToolTest {
         var trace = ctx.getTrace();
 
         var json = tool.execute(
-                "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(trace.id()), ctx);
+                "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(trace.id()), ctx).block();
         var result = JsonUtils.getJsonNodeFromString(json);
 
         assertThat(result.get("type").asText()).isEqualTo("trace");
@@ -118,7 +118,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"trace\", \"id\": \"%s\", \"tier\": \"SKELETON\"}"
-                        .formatted(trace.id()), ctx));
+                        .formatted(trace.id()), ctx).block());
 
         assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.SKELETON.name());
         assertThat(result.get("data").has("span_count")).isTrue();
@@ -133,7 +133,7 @@ class ReadToolTest {
         ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
 
         assertThat(result.get("type").asText()).isEqualTo("span");
         assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.FULL.name());
@@ -158,7 +158,7 @@ class ReadToolTest {
         ctx.cache(ref, spanJson);
 
         // Trigger the cap path.
-        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block();
 
         assertThat(ctx.isTruncated(ref)).isTrue();
         var cached = ctx.getCached(ref).orElseThrow();
@@ -187,7 +187,7 @@ class ReadToolTest {
         }
         ctx.cache(ref, spanJson);
 
-        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block();
 
         var cached = ctx.getCached(ref).orElseThrow();
         var sampleField = cached.get("field_0").asText();
@@ -211,7 +211,7 @@ class ReadToolTest {
         ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
 
         // First read after replacing oversized cache: still includes the warning since the
         // cap is checked against the cached node which is the over-cap form.
@@ -235,7 +235,7 @@ class ReadToolTest {
         ctx.cache(ref, oversized);
 
         var first = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
         assertThat(first.has("cache_warning")).isTrue();
         assertThat(ctx.isTruncated(ref))
                 .as("cap must be sticky after first triggering call")
@@ -248,7 +248,7 @@ class ReadToolTest {
                 "{\"id\":\"%s\",\"input\":\"x[TRUNCATED ...]\"}".formatted(spanId)));
 
         var second = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
         assertThat(second.has("cache_warning"))
                 .as("warning must persist on subsequent reads of a truncated cache")
                 .isTrue();
@@ -281,7 +281,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         var inputText = result.get("data").get("input").asText();
         assertThat(inputText)
@@ -318,7 +318,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         var inputText = result.get("data").get("input").asText();
         assertThat(inputText).contains("use jq('.input') to see full");
@@ -342,7 +342,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         assertThat(result.get("tier").asText())
                 .as("tier=FULL must downgrade to MEDIUM when output exceeds safety cap")
@@ -377,7 +377,7 @@ class ReadToolTest {
         // response shape.
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         assertThat(result.has("data")).isTrue();
         // After exhausting tier downgrades, the tier reported back is the smallest
