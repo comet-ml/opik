@@ -67,6 +67,61 @@ from ..errors import ExperimentCascadeError
 
 LOGGER = logging.getLogger(__name__)
 
+# Outer progress: ``(completed, total, label)`` -- fired once before each
+# experiment with ``completed`` = experiments done so far. ``label="done"``
+# signals the final tick (executor uses it to strip the ``(N/total)``
+# suffix and avoid an off-by-one display at completion).
+ProgressCallback = Callable[[int, int, str], None]
+
+# Inner progress: ``(completed, total, label)`` -- ticks within a single
+# experiment so the outer experiment-level bar isn't a frozen one-step-
+# per-experiment readout. ``total`` is the number of inner steps for THIS
+# experiment (recomputed per experiment, since experiments can have wildly
+# different trace counts). ``label`` describes the step that just
+# completed (e.g. ``"trace 47/150"``, ``"spans for trace 47/150"``,
+# ``"flush"``, ``"recreate"``). Executor renders this on a nested Rich
+# bar; tests use it to assert the cascade ticks every read/write phase.
+InnerProgressCallback = Callable[[int, int, str], None]
+
+
+class _InnerProgress:
+    """Small adapter that drives an ``InnerProgressCallback`` across the
+    per-experiment work phases.
+
+    The cascade pre-computes a total step count for THIS experiment
+    (typically ``2N + fixed_overhead`` for ``N`` traces -- one tick per
+    trace read, one per span fetch, plus a handful for read-items / flush
+    / log-scores / log-assertions / recreate). Each call to ``tick(label)``
+    increments the counter and fires the callback with the latest label
+    so the UI updates smoothly even when the algorithmic work hasn't
+    advanced (e.g. the executor's Rich bar repaints on every callback).
+
+    No-op when the callback is None, so passing ``inner_progress_callback=None``
+    from tests keeps the cascade machinery unchanged.
+    """
+
+    def __init__(self, callback: Optional[InnerProgressCallback], total: int) -> None:
+        self._callback = callback
+        self._total = max(total, 1)
+        self._completed = 0
+
+    def tick(self, label: str) -> None:
+        if self._callback is None:
+            return
+        self._completed = min(self._completed + 1, self._total)
+        self._callback(self._completed, self._total, label)
+
+    def finish(self, label: str = "done") -> None:
+        """Force the bar to 100% on completion -- guards against
+        miscounted totals (e.g. some traces were already in the remap
+        from a prior experiment and got skipped, so we ticked fewer
+        times than estimated)."""
+        if self._callback is None:
+            return
+        self._completed = self._total
+        self._callback(self._completed, self._total, label)
+
+
 _EXPERIMENT_PAGE_SIZE = 100
 
 
@@ -103,7 +158,8 @@ def cascade_experiments(
     version_remap: Dict[str, str],
     item_id_remap: Dict[str, str],
     audit: AuditLog,
-    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+    progress_callback: Optional[ProgressCallback] = None,
+    inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> ExperimentCascadeResult:
     """Enumerate source experiments referencing ``source_dataset_id`` and
     recreate each one at the destination, with traces+spans riding along.
@@ -178,6 +234,7 @@ def cascade_experiments(
             version_remap=version_remap,
             item_id_remap=item_id_remap,
             result=result,
+            inner_progress_callback=inner_progress_callback,
         )
 
     if progress_callback is not None:
@@ -196,6 +253,7 @@ def cascade_one_experiment(
     version_remap: Dict[str, str],
     item_id_remap: Dict[str, str],
     result: ExperimentCascadeResult,
+    inner_progress_callback: Optional[InnerProgressCallback] = None,
 ) -> None:
     """Migrate one source experiment: read items -> copy traces + spans ->
     recreate experiment via ``imports.experiment.recreate_experiment``.
@@ -265,6 +323,18 @@ def cascade_one_experiment(
                 item.assertion_results
             )
 
+    # Inner progress total = 1 (read items, just completed) + 2 ticks per
+    # trace (one for the read+emit pass, one for the span fetch+emit pass)
+    # + 5 fixed-overhead ticks (flush-traces / log-trace-feedback / log-
+    # assertions / flush-spans+log-span-feedback / recreate). The trace
+    # count we use is the SET size (deduped) -- not ``len(items)`` -- to
+    # avoid overcounting items that share a trace. The ``_InnerProgress``
+    # adapter clamps overshoots at ``total`` so a stale estimate (e.g.
+    # idempotent-skip removes traces) doesn't push the bar past 100%.
+    inner_total = 1 + 2 * len(source_trace_ids) + 5
+    inner = _InnerProgress(inner_progress_callback, inner_total)
+    inner.tick(label="read items")
+
     traces_copied, spans_copied = _copy_traces_and_spans(
         client,
         rest_client,
@@ -273,6 +343,7 @@ def cascade_one_experiment(
         target_project_name=target_project_name,
         trace_id_remap=result.trace_id_remap,
         assertion_results_by_source_trace=assertion_results_by_source_trace,
+        inner_progress=inner,
     )
     result.traces_migrated += traces_copied
     result.spans_migrated += spans_copied
@@ -297,6 +368,11 @@ def cascade_one_experiment(
         target_dataset_name=target_dataset_name,
         target_dataset_version_id=target_version_id,
     )
+    # Snap the inner bar to 100% so the executor's nested Rich bar
+    # finishes cleanly even when our pre-computed ``inner_total`` ran a
+    # bit hot or cold (e.g. fewer ticks fired because idempotent-skip
+    # removed traces from this experiment).
+    inner.finish(label="recreated" if recreated else "skipped")
 
     if recreated:
         result.experiments_migrated += 1
@@ -411,6 +487,7 @@ def _copy_traces_and_spans(
     target_project_name: str,
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
+    inner_progress: Optional["_InnerProgress"] = None,
 ) -> tuple[int, int]:
     """Re-emit traces + spans under ``target_project_name`` via the high-level
     Opik client's streamer infrastructure.
@@ -465,7 +542,8 @@ def _copy_traces_and_spans(
     # opik.evaluate(...) writes on the source (the public client.trace()
     # would override to source="sdk", which the deep-compare would
     # flag).
-    for source_trace_id in new_source_ids:
+    total_traces = len(new_source_ids)
+    for index, source_trace_id in enumerate(new_source_ids, start=1):
         # ``client.get_trace_content(id)`` is a paper-thin wrapper around
         # ``self._rest_client.traces.get_trace_by_id(id)``; use the
         # high-level surface so this module's reads stay routed through
@@ -491,6 +569,8 @@ def _copy_traces_and_spans(
             project_name=target_project_name,
             source=getattr(source_trace, "source", None) or "experiment",
         )
+        if inner_progress is not None:
+            inner_progress.tick(label=f"trace {index}/{total_traces}")
 
     trace_id_remap.update(source_to_new_trace)
     traces_copied = len(new_source_ids)
@@ -500,6 +580,8 @@ def _copy_traces_and_spans(
     # ordering guarantees within a flush window; assertions referencing a
     # trace can fail if the BE hasn't persisted the trace yet.
     client.flush()
+    if inner_progress is not None:
+        inner_progress.tick(label="flushed traces")
 
     # Re-emit trace-level feedback scores via the high-level batched API.
     _log_trace_feedback_scores(
@@ -508,6 +590,8 @@ def _copy_traces_and_spans(
         source_to_new_trace=source_to_new_trace,
         target_project_name=target_project_name,
     )
+    if inner_progress is not None:
+        inner_progress.tick(label="logged trace feedback scores")
 
     # Re-emit per-trace assertion results. Skipped for callers that
     # didn't read them (regular-dataset path).
@@ -518,6 +602,8 @@ def _copy_traces_and_spans(
             source_to_new_trace=source_to_new_trace,
             target_project_name=target_project_name,
         )
+    if inner_progress is not None:
+        inner_progress.tick(label="logged assertion results")
 
     # Phase 2: spans. Per-trace because span ids only collide within a
     # trace tree (parent_span_id must remap correctly within the tree).
@@ -532,7 +618,10 @@ def _copy_traces_and_spans(
     spans_emitted = 0
     span_feedback_scores: List[Dict[str, Any]] = []
     project_id_to_name_cache: Dict[str, str] = {}
-    for source_trace_id, new_trace_id in source_to_new_trace.items():
+    span_trace_count = len(source_to_new_trace)
+    for index, (source_trace_id, new_trace_id) in enumerate(
+        source_to_new_trace.items(), start=1
+    ):
         # Per-trace span scoping: spans live in the same project as their
         # parent trace, which may differ from the experiment's project_id.
         source_trace = source_traces_by_id[source_trace_id]
@@ -547,6 +636,8 @@ def _copy_traces_and_spans(
         )
         spans_emitted += per_trace_count
         span_feedback_scores.extend(per_trace_fbs)
+        if inner_progress is not None:
+            inner_progress.tick(label=f"spans for trace {index}/{span_trace_count}")
 
     # Flush spans before their feedback scores (the BE rejects a score
     # whose entity id doesn't exist yet).
@@ -556,6 +647,8 @@ def _copy_traces_and_spans(
         client.log_spans_feedback_scores(
             scores=span_feedback_scores, project_name=target_project_name
         )
+    if inner_progress is not None:
+        inner_progress.tick(label="flushed spans + logged span feedback scores")
 
     return traces_copied, spans_emitted
 

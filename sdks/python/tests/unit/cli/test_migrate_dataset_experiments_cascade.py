@@ -1274,6 +1274,75 @@ class TestCascadeExperiments:
             "expected per-trace project resolution, not the experiment's project-X"
         )
 
+    def test_inner_progress_callback__fires_per_trace_and_phase(self) -> None:
+        # The outer progress callback fires once per experiment (which on a
+        # long-running experiment can leave the bar visually frozen for
+        # minutes). The inner callback drives a nested bar with per-trace
+        # granularity so the user always sees motion. Pin the contract:
+        # with N source traces, the inner callback fires
+        #   1 (read items)
+        # + N (trace read+emit, one tick each)
+        # + 1 (flush traces) + 1 (log feedback) + 1 (log assertions)
+        # + N (span fetch+emit per trace)
+        # + 1 (flush spans + log span feedback)
+        # + 1 (finish/recreate) = 2N + 6 ticks.
+        # We assert >= some-of-each rather than exact counts so future
+        # tweaks to phase granularity don't break this guard.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        items = [
+            _ExperimentItem(
+                id=f"src-item-{i}",
+                experiment_id="src-exp-1",
+                trace_id=f"src-trace-{i}",
+                dataset_item_id=f"src-ds-item-{i}",
+            )
+            for i in range(3)
+        ]
+        traces = {f"src-trace-{i}": _Trace(id=f"src-trace-{i}") for i in range(3)}
+        spans = {f"src-trace-{i}": [] for i in range(3)}
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": items},
+            traces_by_id=traces,
+            spans_by_trace=spans,
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        outer_ticks: List[tuple[int, int, str]] = []
+        inner_ticks: List[tuple[int, int, str]] = []
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={f"src-ds-item-{i}": f"dest-ds-item-{i}" for i in range(3)},
+            audit=_audit(),
+            progress_callback=lambda c, t, lbl: outer_ticks.append((c, t, lbl)),
+            inner_progress_callback=lambda c, t, lbl: inner_ticks.append((c, t, lbl)),
+        )
+
+        # Outer: one tick before the experiment + the trailing "done".
+        assert outer_ticks[-1][2] == "done"
+        assert outer_ticks[0][:2] == (0, 1)
+
+        # Inner: must include each phase label so the user sees motion at
+        # every read/write/flush, not just at experiment boundaries.
+        inner_labels = [lbl for (_, _, lbl) in inner_ticks]
+        assert "read items" in inner_labels
+        assert any(lbl.startswith("trace ") for lbl in inner_labels)
+        assert "flushed traces" in inner_labels
+        assert "logged trace feedback scores" in inner_labels
+        assert "logged assertion results" in inner_labels
+        assert any(lbl.startswith("spans for trace ") for lbl in inner_labels)
+        assert "flushed spans + logged span feedback scores" in inner_labels
+        # Final tick snaps the bar to 100% with a terminal label (the
+        # executor's nested Rich bar uses this to mark completion).
+        assert inner_ticks[-1][0] == inner_ticks[-1][1]
+        assert inner_ticks[-1][2] in {"recreated", "skipped"}
+
 
 # ---------------------------------------------------------------------------
 # Planner-level test for cascade action placement in the plan

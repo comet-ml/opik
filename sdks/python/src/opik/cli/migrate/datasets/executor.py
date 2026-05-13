@@ -192,11 +192,14 @@ def _cascade_experiments(
     plan: MigrationPlan,
     audit: AuditLog,
 ) -> None:
-    """Drive the experiment cascade, with a Rich Progress bar matching
-    ``_replay_versions``.
+    """Drive the experiment cascade with nested Rich progress bars.
 
-    ``cascade_experiments`` is console-agnostic; the progress UI lives here
-    so the algorithmic core stays testable without Rich in the loop.
+    Outer bar tracks experiments (one tick per experiment); inner bar
+    tracks the per-experiment work (one tick per read/write/flush so the
+    user sees motion even on a single long-running experiment with
+    hundreds of traces). ``cascade_experiments`` is console-agnostic; the
+    progress UI lives here so the algorithmic core stays testable without
+    Rich in the loop.
     """
     with Progress(
         TextColumn("[bold blue]Cascading experiments"),
@@ -206,10 +209,15 @@ def _cascade_experiments(
         console=_console,
         transient=False,
     ) as progress:
-        task_id: Optional[int] = None
+        outer_task_id: Optional[int] = None
+        # The inner task is created lazily on the first inner tick and
+        # reset (``completed=0``, new ``total``) at every outer tick so
+        # its 0-100% sweep represents ONE experiment's work. ``Rich`` allows
+        # changing a task's total mid-flight via ``progress.update``.
+        inner_task_id: Optional[int] = None
 
         def _on_experiment_start(completed: int, total: int, label: str) -> None:
-            nonlocal task_id
+            nonlocal outer_task_id, inner_task_id
             # ``label == "done"`` signals the cascade's final tick (completed=total).
             # In that frame we drop the ``(N/total)`` suffix so the bar doesn't
             # render ``(total+1/total)`` from the +1 offset that helps mid-loop
@@ -220,10 +228,37 @@ def _cascade_experiments(
                 description = (
                     f"→ {action.dest_project_name} · {label} ({completed + 1}/{total})"
                 )
-            if task_id is None:
-                task_id = progress.add_task(description, total=total)
+            if outer_task_id is None:
+                outer_task_id = progress.add_task(description, total=total)
             else:
-                progress.update(task_id, completed=completed, description=description)
+                progress.update(
+                    outer_task_id, completed=completed, description=description
+                )
+            # Park the inner bar between experiments: snap to 0/0 with a
+            # neutral label so it doesn't show a stale per-experiment
+            # progress from the experiment that just finished while the
+            # next one's items are being read.
+            if inner_task_id is not None and label != "done":
+                progress.update(
+                    inner_task_id, completed=0, total=1, description="starting…"
+                )
+
+        def _on_inner_step(
+            inner_completed: int, inner_total: int, inner_label: str
+        ) -> None:
+            nonlocal inner_task_id
+            # First inner tick of the first experiment: lazily add the
+            # second task so the outer bar isn't visually orphaned when an
+            # experiment has zero traces and no inner ticks would fire.
+            description = f"   ↳ {inner_label}"
+            if inner_task_id is None:
+                inner_task_id = progress.add_task(description, total=inner_total)
+            progress.update(
+                inner_task_id,
+                completed=inner_completed,
+                total=inner_total,
+                description=description,
+            )
 
         result = cascade_experiments(
             client,
@@ -235,6 +270,7 @@ def _cascade_experiments(
             item_id_remap=plan.item_id_remap,
             audit=audit,
             progress_callback=_on_experiment_start,
+            inner_progress_callback=_on_inner_step,
         )
         # No post-cascade ``progress.update`` here: the callback's final
         # ``progress_callback(total, total, "done")`` tick already advanced
