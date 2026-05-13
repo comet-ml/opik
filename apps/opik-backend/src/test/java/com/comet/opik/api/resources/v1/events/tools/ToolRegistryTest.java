@@ -103,7 +103,12 @@ class ToolRegistryTest {
 
         var result = registry.execute("boom", "{}", newContext()).block();
 
-        assertThat(result).contains("\"error\"").contains("boom").contains("kaboom");
+        // Tool name is fine to surface back to the LLM (it picked the name to begin with),
+        // but the raw exception message ("kaboom") is NOT — it could carry ClickHouse query
+        // fragments, internal paths, or other implementation details. The contract is:
+        // error envelope + tool name + correlation id, nothing more.
+        assertThat(result).contains("\"error\"").contains("boom").contains("ref:");
+        assertThat(result).doesNotContain("kaboom");
     }
 
     @Test
@@ -134,7 +139,10 @@ class ToolRegistryTest {
 
         var result = registry.execute("async_boom", "{}", newContext()).block();
 
-        assertThat(result).contains("\"error\"").contains("async_boom").contains("async kaboom");
+        // Same redaction contract as the sync-throw test above: tool name + correlation id,
+        // no raw exception message even when surfaced via Mono.error.
+        assertThat(result).contains("\"error\"").contains("async_boom").contains("ref:");
+        assertThat(result).doesNotContain("async kaboom");
     }
 
     @Test

@@ -11,6 +11,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -56,8 +57,18 @@ public class ToolRegistry {
                     // Keep the judge loop alive when a tool fails unexpectedly. Errors (OOM,
                     // StackOverflowError) intentionally propagate — the JVM is in no shape to
                     // continue scoring after one of those.
-                    log.warn("Tool '{}' threw; returning error JSON to keep judge loop alive", name, e);
-                    return Mono.just(ToolArgs.errorJson("Tool '" + name + "' failed: " + e.getMessage()));
+                    //
+                    // Don't echo the raw exception message to the LLM — it can include ClickHouse
+                    // query fragments, internal paths, secrets in stack-trace-like detail, or any
+                    // other data the unknown tool implementation may have surfaced. Surface a short
+                    // correlation id instead so an operator can grep the warn log to find the cause.
+                    // Mirrors the ReadTool exception path so both surfaces leak the same (minimal)
+                    // info to the model.
+                    String correlationId = UUID.randomUUID().toString();
+                    log.warn("Tool '{}' threw; returning error JSON to keep judge loop alive,"
+                            + " correlationId='{}'", name, correlationId, e);
+                    return Mono.just(ToolArgs.errorJson(
+                            "Tool '" + name + "' failed (ref: " + correlationId + ")"));
                 });
     }
 }
