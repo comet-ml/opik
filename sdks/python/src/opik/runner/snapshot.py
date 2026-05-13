@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set
 
-from ..cli.pairing import RunnerType
+from ..cli.local_runner.pairing import RunnerType
 from .bridge_handlers import CommandError, common
 
 LOGGER = logging.getLogger(__name__)

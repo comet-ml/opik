@@ -21,6 +21,12 @@ from .pairing import RunnerType
     default=None,
     help="Opik API key. Overrides global --api-key and OPIK_API_KEY env var.",
 )
+@click.option(
+    "--non-interactive",
+    is_flag=True,
+    default=False,
+    help="Skip the automatic `opik configure` prompt when no config file exists.",
+)
 @click.pass_context
 def connect(
     ctx: click.Context,
@@ -28,6 +34,7 @@ def connect(
     name: Optional[str],
     workspace: Optional[str],
     api_key: Optional[str],
+    non_interactive: bool,
 ) -> None:
     """Connect a local bridge daemon to Opik."""
     if api_key:
@@ -38,4 +45,5 @@ def connect(
         name=name,
         runner_type=RunnerType.CONNECT,
         workspace=workspace,
+        non_interactive=non_interactive,
     )

@@ -23,6 +23,15 @@ if ($env:DEBUG_MODE -eq "true") {
     $script:DEBUG_MODE = $true
 }
 
+# Force-v2 workspace gate for local dev so a fresh worktree's empty backend
+# doesn't trip the "Workspace upgrade required" pairing screen. Propagated
+# into both the JAR-mode backend and the docker-compose backend (see
+# docker-compose.yaml `TOGGLE_FORCE_WORKSPACE_VERSION`). Override by setting
+# `$env:TOGGLE_FORCE_WORKSPACE_VERSION = "disabled"` before invoking.
+if (-not $env:TOGGLE_FORCE_WORKSPACE_VERSION) {
+    $env:TOGGLE_FORCE_WORKSPACE_VERSION = "version_2"
+}
+
 # Get the main action (first remaining option)
 $Action = if ($options.Count -gt 0) { $options[0] } else { '' }
 
