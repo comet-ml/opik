@@ -24,6 +24,9 @@ describe("Opik prompt operations", () => {
   let deletePromptsBatchSpy: MockInstance<
     typeof client.api.prompts.deletePromptsBatch
   >;
+  let retrieveProjectSpy: MockInstance<
+    typeof client.api.projects.retrieveProject
+  >;
   let loggerErrorSpy: MockInstance<typeof logger.error>;
   let loggerInfoSpy: MockInstance<typeof logger.info>;
   let loggerDebugSpy: MockInstance<typeof logger.debug>;
@@ -36,6 +39,10 @@ describe("Opik prompt operations", () => {
     });
 
     // Mock API methods
+    retrieveProjectSpy = vi
+      .spyOn(client.api.projects, "retrieveProject")
+      .mockRejectedValue(new Error("Project not found"));
+
     retrievePromptVersionSpy = vi
       .spyOn(client.api.prompts, "retrievePromptVersion")
       .mockImplementation(mockAPIFunction);
@@ -63,6 +70,7 @@ describe("Opik prompt operations", () => {
   });
 
   afterEach(() => {
+    retrieveProjectSpy.mockRestore();
     retrievePromptVersionSpy.mockRestore();
     getPromptsSpy.mockRestore();
     getPromptByIdSpy.mockRestore();

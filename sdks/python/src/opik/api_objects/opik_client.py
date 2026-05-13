@@ -2379,8 +2379,12 @@ class Opik:
                         observation_data.update(
                             metadata={"opik_prompts": existing + [prompt_info]}
                         )
-                except Exception:
+                except exceptions.OpikException:
                     pass
+                except Exception:
+                    LOGGER.debug(
+                        "Failed to inject config metadata into trace", exc_info=True
+                    )
 
             _append_prompt(context_storage.get_trace_data())
             _append_prompt(context_storage.top_span_data())
