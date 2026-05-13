@@ -9,6 +9,7 @@ import {
 } from "../../mockUtils";
 import * as OpikApi from "@/rest_api/api";
 import { PromptTemplateStructure } from "@/prompt/types";
+import { getGlobalCache } from "@/prompt/promptCache";
 
 describe("Opik prompt operations", () => {
   let client: Opik;
@@ -28,6 +29,8 @@ describe("Opik prompt operations", () => {
   let loggerDebugSpy: MockInstance<typeof logger.debug>;
 
   beforeEach(() => {
+    getGlobalCache().clear();
+
     client = new Opik({
       projectName: "opik-sdk-typescript",
     });
