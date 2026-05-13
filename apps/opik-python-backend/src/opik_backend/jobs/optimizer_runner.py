@@ -199,6 +199,7 @@ def main():
                 prompt=prompt,
                 dataset=dataset,
                 metric_fn=metric_fn,
+                project_name=context.project_name,
             )
 
             # Build result dict
