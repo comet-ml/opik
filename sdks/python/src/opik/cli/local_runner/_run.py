@@ -1,7 +1,6 @@
 """Shared CLI session runner for connect and endpoint commands."""
 
 import logging
-import sys
 from typing import List, Optional
 
 import click
@@ -9,7 +8,6 @@ import httpx
 import sentry_sdk
 
 from opik import Opik
-from opik.api_objects.rest_helpers import resolve_project_id_by_name
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.tui import RunnerTUI
 
@@ -21,6 +19,7 @@ from .pairing import (
     run_headless,
     run_pairing,
 )
+from .preflight import maybe_auto_configure, should_create_project
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,34 +36,6 @@ def _raise_runtime_error(header: str, reason: str, client: Opik) -> None:
         workspace=client.config.workspace,
         base_url=client.config.url_override,
         config_file_exists=client.config.config_file_exists,
-    )
-
-
-def _should_create_project(
-    api: object, project_name: str, workspace: Optional[str], headless: bool
-) -> bool:
-    """Decide whether to auto-create the project if pairing finds it missing.
-
-    Headless callers (e.g. Ollie spawning `opik endpoint --headless`) cannot
-    answer a prompt, so we create silently. Interactive callers see a
-    confirmation prompt only when the project is confirmed-missing (404).
-    Any other lookup error falls through so the downstream resolver can
-    surface the formatted error.
-    """
-    if headless:
-        return True
-    try:
-        resolve_project_id_by_name(api, project_name)
-        return False
-    except ApiError as e:
-        if e.status_code != 404:
-            return False
-    if not sys.stdin.isatty():
-        return False
-    workspace_label = f" in workspace '{workspace}'" if workspace else ""
-    return click.confirm(
-        f"Project '{project_name}'{workspace_label} does not exist. Create it?",
-        default=True,
     )
 
 
@@ -91,8 +62,14 @@ def run_cli_session(
     watch: Optional[bool] = None,
     headless: bool = False,
     workspace: Optional[str] = None,
+    non_interactive: bool = False,
 ) -> None:
     api_key = ctx.obj.get("api_key") if ctx.obj else None
+
+    # Auto-launch `opik configure` before constructing the client so the
+    # client picks up the freshly-written settings.
+    maybe_auto_configure(api_key, non_interactive, headless)
+
     client = Opik(
         project_name=project_name,
         api_key=api_key,
@@ -107,7 +84,7 @@ def run_cli_session(
 
     # Prompt before the Live TUI takes over the terminal — click.confirm and
     # Rich Live can't safely share stdout.
-    create_if_missing = _should_create_project(
+    create_if_missing = should_create_project(
         api, project_name, client.config.workspace, headless
     )
 

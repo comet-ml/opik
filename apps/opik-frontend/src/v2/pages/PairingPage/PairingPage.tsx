@@ -172,9 +172,11 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const workspaceName = new URLSearchParams(window.location.search).get(
-    "workspace",
-  );
+  const params = new URLSearchParams(window.location.search);
+  const workspaceName = params.get("workspace");
+  // Informational only — passed in by the CLI so the FE can render the
+  // "expected at <url>" context line on error screens.
+  const expectedBaseUrl = params.get("url");
 
   const {
     mutate: runActivation,
@@ -207,6 +209,8 @@ const PairingPage: React.FC = () => {
     screenProps = {
       status: "error",
       errorKind: mapActivationError(activationError),
+      expectedWorkspace: workspaceName,
+      expectedBaseUrl,
     };
   } else if (activationIsSuccess) {
     screenProps = { status: "success", runnerVariant: payload?.runnerType };

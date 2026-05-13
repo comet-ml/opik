@@ -9,6 +9,7 @@ import os
 import platform
 import secrets
 import time
+import urllib.parse
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -214,8 +215,29 @@ def build_pairing_link(
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     domain_root = get_base_url(base_url)
-    query = f"?workspace={workspace}" if workspace else ""
+    # Include the user-facing URL (no `/api/` suffix) so the pairing page
+    # shows the address the user would actually visit in a browser, not the
+    # internal API endpoint. Diagnostic context only — never affects flow.
+    ui_url = _to_ui_base_url(base_url)
+    query_parts: List[str] = [f"url={urllib.parse.quote(ui_url, safe='')}"]
+    if workspace:
+        query_parts.append(f"workspace={workspace}")
+    query = "?" + "&".join(query_parts)
     return f"{domain_root}opik/pair/v1{query}#{fragment}"
+
+
+def _to_ui_base_url(api_url: str) -> str:
+    """Translate the CLI's API URL into the user-facing UI URL.
+
+    >>> _to_ui_base_url("https://www.comet.com/opik/api/")
+    'https://www.comet.com/opik/'
+    >>> _to_ui_base_url("http://localhost:8080/api/")
+    'http://localhost:8080/'
+    """
+    trimmed = api_url.rstrip("/")
+    if trimmed.endswith("/api"):
+        trimmed = trimmed[: -len("/api")]
+    return trimmed + "/" if trimmed else "/"
 
 
 def validate_runner_name(runner_name: str) -> None:

@@ -33,22 +33,6 @@ def _resolve(api, project_name, **overrides):
     return resolve_project_id(api, project_name, **kwargs)
 
 
-def _pair(api, **overrides):
-    kwargs = dict(
-        api=api,
-        project_name="my-proj",
-        runner_name="r-1",
-        runner_type=RunnerType.ENDPOINT,
-        base_url="http://localhost:5173/api/",
-        workspace=None,
-        tui=None,
-        create_if_missing=False,
-        config_file_exists=True,
-    )
-    kwargs.update(overrides)
-    return run_pairing(**kwargs)
-
-
 def _headless(api, **overrides):
     kwargs = dict(
         api=api,
@@ -76,6 +60,22 @@ def _link(**overrides):
     )
     kwargs.update(overrides)
     return build_pairing_link(**kwargs)
+
+
+def _pair(api, **overrides):
+    kwargs = dict(
+        api=api,
+        project_name="my-proj",
+        runner_name="r-1",
+        runner_type=RunnerType.ENDPOINT,
+        base_url="http://localhost:5173/api/",
+        workspace=None,
+        tui=None,
+        create_if_missing=False,
+        config_file_exists=True,
+    )
+    kwargs.update(overrides)
+    return run_pairing(**kwargs)
 
 
 class TestHKDF:
@@ -122,7 +122,7 @@ class TestBuildPairingLink:
             runner_name=runner_name,
         )
 
-        assert link.startswith("https://www.comet.com/opik/pair/v1#")
+        assert link.startswith("https://www.comet.com/opik/pair/v1?")
 
         fragment = link.split("#", 1)[1]
         padding_needed = (4 - len(fragment) % 4) % 4
@@ -170,7 +170,33 @@ class TestBuildPairingLink:
             project_id="660e8400-e29b-41d4-a716-446655440000",
             runner_name="r",
         )
-        assert link.startswith("http://localhost:5173/opik/pair/v1#")
+        assert link.startswith("http://localhost:5173/opik/pair/v1?")
+
+    def test_build_pairing_link__always_includes_url_param(self):
+        link = _link(
+            base_url="http://localhost:5173/api/",
+            workspace=None,
+        )
+        # `/api` is stripped — we send the URL the user would visit in a
+        # browser, not the internal API endpoint.
+        assert "url=http%3A%2F%2Flocalhost%3A5173%2F" in link
+        assert "%2Fapi%2F" not in link
+
+    def test_build_pairing_link__cloud_api_url__strips_api_suffix(self):
+        link = _link(
+            base_url="https://www.comet.com/opik/api/",
+            workspace=None,
+        )
+        assert "url=https%3A%2F%2Fwww.comet.com%2Fopik%2F" in link
+
+    def test_build_pairing_link__url_param_precedes_workspace(self):
+        link = _link(
+            base_url="http://localhost:5173/api/",
+            workspace="team-a",
+        )
+        # Both query params present; order is stable for FE parsing.
+        assert "url=" in link
+        assert "workspace=team-a" in link
 
 
 class TestResolveProjectId:
