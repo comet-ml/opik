@@ -1,0 +1,20 @@
+{
+  "name": "@opik/e2e",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Opik 2.0 E2E test suite",
+  "scripts": {
+    "test": "playwright test --pass-with-no-tests",
+    "test:t1": "playwright test --grep @t1-smoke",
+    "test:t2": "playwright test --grep @t2-cuj",
+    "test:t3": "playwright test --grep @t3-nightly",
+    "test:headed": "playwright test --headed",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.50.0",
+    "@types/node": "^22.0.0",
+    "openapi-fetch": "^0.13.0",
+    "typescript": "^5.6.0"
+  }
+}
