@@ -49,6 +49,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cast
 
 import opik
@@ -128,6 +129,16 @@ class _InnerProgress:
 
 
 _EXPERIMENT_PAGE_SIZE = 100
+
+# Buffer around the experiment's trace start/end times when bulk-fetching
+# spans via ``search_spans(from_time, to_time)``. Late-arriving spans
+# (the streamer is async; a span tied to a trace can land after the trace's
+# own ``end_time``) and clock skew across SDK clients motivate the buffer.
+# 5 minutes covers the common cases without ballooning over-fetch from
+# concurrent activity in the same project. Traces with spans landing more
+# than 5 minutes past the trace window are accepted as a known edge case
+# (logged as zero-bucket warnings at the end of the bulk read).
+_SPAN_BULK_WINDOW_BUFFER = timedelta(minutes=5)
 
 
 @dataclass
@@ -332,15 +343,16 @@ def cascade_one_experiment(
     # + 1 (bulk-read traces via search_traces(filter=experiment_id))
     # + N (per-trace emit ticks; the writes are streamer-batched so each
     #     tick is in-memory but gives the user motion)
-    # + 3 (flush traces / log-trace-feedback / log-assertions)
-    # + N (span fetch+emit per trace)
+    # + 1 (flush traces) + 1 (log trace feedback) + 1 (log assertions)
+    # + 1 (bulk-read spans via search_spans(from_time, to_time))
+    # + N (per-trace span emit ticks from the in-memory bucket)
     # + 1 (flush spans + log span feedback)
     # + 1 (recreate)
-    # = 2N + 7. The trace count we use is the SET size (deduped) -- not
+    # = 2N + 8. The trace count we use is the SET size (deduped) -- not
     # ``len(items)`` -- to avoid overcounting items that share a trace.
     # ``_InnerProgress`` clamps overshoots at ``total`` so a stale estimate
     # (e.g. idempotent-skip removes traces) doesn't push the bar past 100%.
-    inner_total = 1 + 1 + 2 * len(source_trace_ids) + 5
+    inner_total = 1 + 1 + 2 * len(source_trace_ids) + 6
     inner = _InnerProgress(inner_progress_callback, inner_total)
     inner.tick(label="read items")
 
@@ -667,35 +679,42 @@ def _copy_traces_and_spans(
     if inner_progress is not None:
         inner_progress.tick(label="logged assertion results")
 
-    # Phase 2: spans. Per-trace because span ids only collide within a
-    # trace tree (parent_span_id must remap correctly within the tree).
-    # Spans across different traces are independent and ride the
-    # streamer's batching.
+    # Phase 2a: bulk-fetch spans for the experiment in ONE call.
+    # ``_bulk_fetch_spans_for_experiment`` reads via the Fern POST
+    # ``search_spans`` endpoint with a ``[from_time, to_time]`` window
+    # derived from the bulk-read traces' own start/end timestamps. The
+    # destination spans are then emitted per-trace from the resulting
+    # in-memory bucket, keeping the span-id-remap and parent-span-id
+    # rewiring per-trace (span ids only collide within a trace tree).
     #
-    # ``project_id_to_name_cache`` (initialized above for the bulk trace
-    # read) lets ``_fetch_spans_for_trace`` route through
-    # ``client.search_spans`` (which needs ``project_name``) without paying
-    # a ``client.get_project(id=...)`` round-trip per trace. Experiments
-    # typically have one or two distinct trace-project_ids in practice, so
-    # the cache stays small and reuses the source-project lookup we
-    # already did for the bulk trace read.
+    # We drop to the Fern method because the high-level
+    # ``client.search_spans`` wrapper doesn't expose ``from_time`` /
+    # ``to_time``. Tactical Fern use, scoped to this one bulk read.
+    spans_by_trace_id = _bulk_fetch_spans_for_experiment(
+        client,
+        source_project_name=source_project_name,
+        source_traces_by_id=source_traces_by_id,
+        expected_trace_ids=set(source_to_new_trace.keys()),
+    )
+    if inner_progress is not None:
+        total_spans_in_bulk = sum(len(s) for s in spans_by_trace_id.values())
+        inner_progress.tick(label=f"fetched {total_spans_in_bulk} spans in bulk")
+
+    # Phase 2b: emit destination spans per-trace from the in-memory
+    # bucket. Same topological-sort + per-trace span_id_remap logic as
+    # before; the only change is the source of ``source_spans`` shifted
+    # from a per-trace REST call to a dict lookup.
     spans_emitted = 0
     span_feedback_scores: List[BatchFeedbackScoreDict] = []
     span_trace_count = len(source_to_new_trace)
     for index, (source_trace_id, new_trace_id) in enumerate(
         source_to_new_trace.items(), start=1
     ):
-        # Per-trace span scoping: spans live in the same project as their
-        # parent trace, which may differ from the experiment's project_id.
-        source_trace = source_traces_by_id[source_trace_id]
-        trace_project_id = source_trace.project_id or source_project_id
         per_trace_count, per_trace_fbs = _emit_spans_for_trace(
             client,
-            source_trace_id=source_trace_id,
-            source_project_id=trace_project_id,
+            source_spans=spans_by_trace_id.get(source_trace_id, []),
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
-            project_id_to_name_cache=project_id_to_name_cache,
         )
         spans_emitted += per_trace_count
         span_feedback_scores.extend(per_trace_fbs)
@@ -868,6 +887,160 @@ def _resolve_project_name(
     return name
 
 
+def _compute_span_time_window(
+    traces: Dict[str, TracePublic],
+) -> Optional[Tuple[datetime, datetime]]:
+    """Derive a ``(from_time, to_time)`` window from a batch of traces.
+
+    The window spans ``min(start_time) - buffer`` to
+    ``max(end_time, last_updated_at) + buffer`` so a bulk
+    ``search_spans(from_time=…, to_time=…)`` call can fetch every span
+    parented by these traces in one round-trip. ``last_updated_at`` is
+    the fallback when ``end_time`` is missing (the trace never completed
+    cleanly, or the BE has a different shape than expected).
+
+    Returns ``None`` when no trace has any usable timestamp -- the
+    caller should treat that as "no time bound" and pass ``from_time``
+    / ``to_time`` as ``None`` (the BE then returns all matching spans
+    in the project, which the caller already filters client-side by
+    ``trace_id``).
+    """
+    starts: List[datetime] = []
+    ends: List[datetime] = []
+    for trace in traces.values():
+        if trace.start_time is not None:
+            starts.append(_as_aware(trace.start_time))
+        upper = trace.end_time or trace.last_updated_at
+        if upper is not None:
+            ends.append(_as_aware(upper))
+    if not starts and not ends:
+        return None
+    # If only one side is populated, anchor the missing side to it so the
+    # window is still bounded.
+    earliest = min(starts) if starts else min(ends)
+    latest = max(ends) if ends else max(starts)
+    return (earliest - _SPAN_BULK_WINDOW_BUFFER, latest + _SPAN_BULK_WINDOW_BUFFER)
+
+
+def _as_aware(value: datetime) -> datetime:
+    """Coerce a naive datetime to UTC-aware.
+
+    BE timestamps are always UTC; the SDK wire types sometimes deserialize
+    them as naive datetimes depending on the version. ``min`` / ``max``
+    across mixed naive/aware datetimes raises a TypeError, so we normalize
+    once at the boundary.
+    """
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _bulk_fetch_spans_for_experiment(
+    client: opik.Opik,
+    *,
+    source_project_name: str,
+    source_traces_by_id: Dict[str, TracePublic],
+    expected_trace_ids: Set[str],
+) -> Dict[str, List[SpanPublic]]:
+    """Fetch every span parented by ``expected_trace_ids`` in ONE bulk read.
+
+    Routes through the high-level ``client.search_spans`` wrapper with a
+    ``filter_string="start_time >= … AND start_time <= …"`` clause
+    derived from the bulk-read traces' own start/end timestamps. The
+    wrapper doesn't expose dedicated ``from_time`` / ``to_time`` params,
+    but the BE filter grammar accepts the same bounds via the date-time
+    filter operators on ``SpanField.START_TIME``.
+
+    Time-bounded by the traces' own window (see
+    ``_compute_span_time_window``) so we don't paginate through the
+    entire project's span history. Client-side filter by
+    ``span.trace_id in expected_trace_ids`` discards any over-fetch from
+    concurrent activity in the same window (other experiments, ad-hoc
+    traces, online evaluations).
+
+    Returns a dict ``{trace_id: [spans]}`` covering every id in
+    ``expected_trace_ids``. Missing entries are present with empty lists
+    so the caller can detect zero-bucket cases and log them. A trace with
+    no spans is a legitimate case (no LLM call, no child operations), so
+    we don't error on empty buckets -- only log.
+
+    Replaces the prior ``N × search_spans(trace_id=…)`` loop, which on
+    workspaces with a strict ``search_spans:{workspaceId}`` bucket
+    produced a 30-then-pause throttle pattern for large experiments.
+    """
+    window = _compute_span_time_window(source_traces_by_id)
+
+    spans_by_trace: Dict[str, List[SpanPublic]] = {
+        tid: [] for tid in expected_trace_ids
+    }
+
+    filter_string: Optional[str] = None
+    if window is not None:
+        from_time, to_time = window
+        # ISO 8601 with explicit ``Z`` UTC suffix matches the BE filter
+        # grammar's date-time literal format (see the search_spans
+        # docstring on ``client.search_spans``: "use ISO 8601 format,
+        # e.g., '2024-01-01T00:00:00Z'"). We anchor the lower bound on
+        # ``start_time >= from_time`` and the upper bound on
+        # ``start_time <= to_time``; ``SpanField.END_TIME`` is filterable
+        # too but using a single field for both bounds keeps the filter
+        # AST simple and lets the BE's primary-key range scan stay tight.
+        filter_string = (
+            f'start_time >= "{_to_iso_z(from_time)}" '
+            f'AND start_time <= "{_to_iso_z(to_time)}"'
+        )
+
+    all_spans = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        operation_name="search_spans (experiment bulk read)",
+        rest_callable=lambda: client.search_spans(
+            project_name=source_project_name,
+            filter_string=filter_string,
+            max_results=sys.maxsize,
+            truncate=False,
+        ),
+    )
+
+    for span in all_spans:
+        tid = span.trace_id
+        if tid is not None and tid in spans_by_trace:
+            spans_by_trace[tid].append(span)
+
+    # Surface zero-bucket traces. Could be legitimate (genuinely no spans
+    # on the source trace) OR the bulk window missed them. We don't
+    # distinguish today -- the destination trace is still copied, just
+    # without spans -- but we log so an operator can spot mass misses.
+    empty_bucket_ids = [tid for tid, spans in spans_by_trace.items() if not spans]
+    if empty_bucket_ids:
+        LOGGER.warning(
+            "Bulk span read for experiment returned zero spans for %d/%d "
+            "expected trace_ids. Either those traces genuinely have no spans, "
+            "or the [from_time, to_time] window missed late-arriving spans. "
+            "Destination traces are still copied but without their spans. "
+            "Example missing trace_ids: %s",
+            len(empty_bucket_ids),
+            len(expected_trace_ids),
+            empty_bucket_ids[:5],
+        )
+
+    return spans_by_trace
+
+
+def _to_iso_z(value: datetime) -> str:
+    """Format a UTC datetime in the BE's filter-grammar date-time literal.
+
+    The BE expects strings like ``"2024-01-01T00:00:00Z"``. Python's
+    ``isoformat()`` produces ``"2024-01-01T00:00:00+00:00"`` for an
+    aware UTC datetime; we swap the offset for the ``Z`` suffix so the
+    filter parser accepts it without extra coercion. Microseconds are
+    preserved when present.
+    """
+    iso = value.astimezone(timezone.utc).isoformat()
+    # ``.isoformat()`` for an aware UTC datetime ends with ``"+00:00"``.
+    if iso.endswith("+00:00"):
+        iso = iso[: -len("+00:00")] + "Z"
+    return iso
+
+
 def _to_error_info_dict(error_info: Any) -> Optional[ErrorInfoDict]:
     """Convert a wire-shape ``ErrorInfoPublic`` (or already-dict) to the
     ``ErrorInfoDict`` TypedDict shape the streamer / high-level API expects.
@@ -892,16 +1065,19 @@ def _to_error_info_dict(error_info: Any) -> Optional[ErrorInfoDict]:
 def _emit_spans_for_trace(
     client: opik.Opik,
     *,
-    source_trace_id: str,
-    source_project_id: str,
+    source_spans: List[SpanPublic],
     new_trace_id: str,
     target_project_name: str,
-    project_id_to_name_cache: Dict[str, str],
 ) -> Tuple[int, List[BatchFeedbackScoreDict]]:
-    """Fetch source spans for one trace, mint new ids preserving the parent
-    tree, and emit destination spans via direct ``client._streamer.put(
-    CreateSpanMessage(...))`` calls. Returns ``(spans_emitted,
-    span_feedback_scores)``.
+    """Mint new ids preserving the parent tree and emit destination spans
+    via direct ``client._streamer.put(CreateSpanMessage(...))`` calls.
+    Returns ``(spans_emitted, span_feedback_scores)``.
+
+    ``source_spans`` is the pre-fetched bucket for ONE trace, populated
+    by the experiment-level bulk read in
+    ``_bulk_fetch_spans_for_experiment``. Previously fetched per-trace
+    via ``search_spans(trace_id=…)``; the bulk-read refactor moved that
+    out to amortize the rate-limit cost across the whole experiment.
 
     Why bypass ``client.span(...)``: the public method routes through
     ``span_client.create_span()`` which calls
@@ -922,14 +1098,6 @@ def _emit_spans_for_trace(
     from opik import datetime_helpers
     from opik.message_processing import messages
 
-    source_spans = list(
-        _fetch_spans_for_trace(
-            client,
-            source_trace_id=source_trace_id,
-            source_project_id=source_project_id,
-            project_id_to_name_cache=project_id_to_name_cache,
-        )
-    )
     if not source_spans:
         return 0, []
 
@@ -997,42 +1165,6 @@ def _emit_spans_for_trace(
             feedback_scores.append(entry)
 
     return spans_emitted, feedback_scores
-
-
-def _fetch_spans_for_trace(
-    client: opik.Opik,
-    *,
-    source_trace_id: str,
-    source_project_id: str,
-    project_id_to_name_cache: Dict[str, str],
-) -> List[SpanPublic]:
-    """Search source spans by trace_id via ``client.search_spans``.
-
-    ``search_spans`` is the high-level wrapper that takes ``project_name``
-    (the underlying BE endpoint accepts either ``project_id`` or
-    ``project_name`` and 400s without one). Spans live in the same project
-    as their parent trace, which may differ from the experiment's project.
-
-    The caller passes a shared ``project_id_to_name_cache`` populated
-    across all traces of an experiment so we pay at most one
-    ``client.get_project(id=...)`` per distinct trace-project_id (typically
-    1-2 per experiment, often 1 since most evaluations co-locate traces
-    with the dataset's project).
-
-    ``max_results=sys.maxsize`` disables the wrapper's default 1000-span
-    cap so traces with very large span trees aren't silently truncated.
-    """
-    project_name = _resolve_project_name(
-        client, project_id=source_project_id, cache=project_id_to_name_cache
-    )
-
-    return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: client.search_spans(
-            project_name=project_name,
-            trace_id=source_trace_id,
-            max_results=sys.maxsize,
-        )
-    )
 
 
 def _build_experiment_data(

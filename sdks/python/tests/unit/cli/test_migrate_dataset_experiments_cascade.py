@@ -158,19 +158,35 @@ class _Trace:
 
 
 class _Span:
-    """Stand-in matching the ``model_dump()`` shape the cascade consumes.
+    """Stand-in matching the ``SpanPublic`` shape the cascade consumes.
 
-    The cascade calls ``span.model_dump()`` on every source span; we expose
-    a ``model_dump`` method that returns the dict shape directly. Top-level
-    fields the cascade reads from the dict: id, name, type, start_time,
-    end_time, input, output, metadata, model, provider, tags, usage,
-    error_info, last_updated_at, total_estimated_cost,
-    total_estimated_cost_version, ttft, parent_span_id, trace_id, project_id.
+    The cascade reads:
+    * ``span.trace_id`` for bulk-fetch bucketing (after the
+      ``client.search_spans(project_name=, filter_string=...)`` returns
+      the flat union of every span in the time window).
+    * ``span.model_dump()`` for per-span emit -- the topological-sort
+      step operates on dicts; we expose the shape directly.
+
+    Top-level fields the cascade reads from the dict: id, name, type,
+    start_time, end_time, input, output, metadata, model, provider,
+    tags, usage, error_info, last_updated_at, total_estimated_cost,
+    total_estimated_cost_version, ttft, parent_span_id, trace_id,
+    project_id.
     """
 
     def __init__(self, **fields: Any) -> None:
         fields.setdefault("start_time", dt.datetime(2026, 1, 1, 12, 0, 0))
         self._fields = fields
+
+    def __getattr__(self, name: str) -> Any:
+        # ``_fields`` is set in __init__; AttributeError here avoids
+        # recursion during pickling / repr. Otherwise expose every
+        # field as an attribute (and absent fields return None so the
+        # cascade's defensive ``getattr(span, "trace_id", None)`` and
+        # ``span.trace_id`` accesses behave the same).
+        if name == "_fields":
+            raise AttributeError(name)
+        return self._fields.get(name)
 
     def model_dump(self) -> Dict[str, Any]:
         return dict(self._fields)
@@ -287,6 +303,12 @@ def _cascade_rest_client(
 
     rest_client.spans.get_spans_by_project.side_effect = _get_spans_by_project
     rest_client.spans.create_spans = MagicMock()
+    # Stash the per-trace span map on the rest_client mock so
+    # ``_client_with_recreate_capture`` can wire ``client.search_spans``
+    # to return the flattened bulk view (every span across every trace).
+    # The cascade's bulk-fetch helper filters client-side by
+    # ``trace_id ∈ expected_trace_ids``, so flat is fine.
+    rest_client._spans_by_trace_for_cascade_search = spans_by_trace
 
     return rest_client
 
@@ -355,18 +377,39 @@ def _client_with_recreate_capture(
         def _search_spans(
             project_name: Optional[str] = None,
             trace_id: Optional[str] = None,
+            filter_string: Optional[str] = None,
             max_results: Optional[int] = None,
             **_kwargs: Any,
         ) -> Any:
-            # Delegate to the rest_client stub by reading its page-1
-            # content; tests don't exercise multi-page span lists.
-            page = rest_client.spans.get_spans_by_project(
-                trace_id=trace_id,
-                project_name=project_name,
-                page=1,
-                size=1000,
+            # The cascade now bulk-reads spans via
+            # ``client.search_spans(project_name=, filter_string="start_time
+            # >= ... AND start_time <= ...")`` -- one call returning every
+            # span in the project's time window. Return the flat union of
+            # every test trace's spans; the cascade filters client-side by
+            # ``trace_id ∈ expected_trace_ids``. The ``trace_id`` kwarg path
+            # (legacy per-trace shape) still delegates to the rest_client
+            # stub so old call sites continue to work.
+            if trace_id is not None:
+                page = rest_client.spans.get_spans_by_project(
+                    trace_id=trace_id,
+                    project_name=project_name,
+                    page=1,
+                    size=1000,
+                )
+                return list(page.content or [])
+            spans_by_trace = (
+                getattr(rest_client, "_spans_by_trace_for_cascade_search", None) or {}
             )
-            return list(page.content or [])
+            flat: List[Any] = []
+            for trace_id_key, spans in spans_by_trace.items():
+                for span in spans:
+                    # The cascade reads ``span.trace_id`` to bucket the
+                    # flat list. The test ``_Span`` stand-in stores
+                    # fields in ``._fields``; inject the lookup key so
+                    # ``span.trace_id`` (via _Span.__getattr__) returns it.
+                    span._fields.setdefault("trace_id", trace_id_key)
+                    flat.append(span)
+            return flat
 
         client.search_spans = MagicMock(side_effect=_search_spans)
 
@@ -1217,14 +1260,21 @@ class TestCascadeExperiments:
 
         rest_client.assertion_results.store_assertions_batch.assert_not_called()
 
-    def test_span_read_uses_trace_project_not_experiment_project(self) -> None:
-        # Defensive scenario: an experiment lives in project X but its
-        # traces live in different projects (Y, Z) -- which the BE allows
-        # because ExperimentItem.project_id is derived from the trace, not
-        # validated against the experiment. The cascade must scope the
-        # span read by each trace's own project_id, not by the experiment's.
-        # Otherwise spans of traces in Y/Z would be silently dropped when
-        # we query with project_id=X.
+    def test_bulk_span_read_is_scoped_to_experiment_project(self) -> None:
+        # The bulk span fetch is scoped to the EXPERIMENT's project +
+        # time window, not the individual traces' projects. This is a
+        # deliberate trade-off: one bulk read per experiment instead of
+        # N per-trace reads (eliminating the search_spans:{ws} rate-limit
+        # throttle) at the cost of NOT supporting the rare cross-project
+        # case where an experiment's traces live in different projects
+        # from the experiment itself.
+        #
+        # The BE doesn't enforce same-project across an experiment's
+        # traces, but in practice ``opik.evaluate(...)`` always lands
+        # traces in the dataset's project, so the cross-project case is
+        # an anomaly. If it happens, spans for the cross-project traces
+        # are silently missed and the destination trace ends up without
+        # spans -- logged as a zero-bucket warning by the bulk read.
         experiment = _Experiment(
             id="src-exp-1",
             dataset_version_id="src-v-1",
@@ -1232,27 +1282,20 @@ class TestCascadeExperiments:
         )
         items = [
             _ExperimentItem(
-                id="src-item-1",
+                id=f"src-item-{i}",
                 experiment_id="src-exp-1",
-                trace_id="src-trace-in-Y",
-                dataset_item_id="src-ds-item-1",
-            ),
-            _ExperimentItem(
-                id="src-item-2",
-                experiment_id="src-exp-1",
-                trace_id="src-trace-in-Z",
-                dataset_item_id="src-ds-item-2",
-            ),
+                trace_id=f"src-trace-{i}",
+                dataset_item_id=f"src-ds-item-{i}",
+            )
+            for i in range(2)
         ]
-        # Each trace declares its OWN project_id, distinct from the
-        # experiment's.
         traces = {
-            "src-trace-in-Y": _Trace(id="src-trace-in-Y", project_id="project-Y"),
-            "src-trace-in-Z": _Trace(id="src-trace-in-Z", project_id="project-Z"),
+            "src-trace-0": _Trace(id="src-trace-0", project_id="project-X"),
+            "src-trace-1": _Trace(id="src-trace-1", project_id="project-X"),
         }
         spans = {
-            "src-trace-in-Y": [_Span(id="span-Y", parent_span_id=None, name="y-root")],
-            "src-trace-in-Z": [_Span(id="span-Z", parent_span_id=None, name="z-root")],
+            "src-trace-0": [_Span(id="span-0", parent_span_id=None, name="root-0")],
+            "src-trace-1": [_Span(id="span-1", parent_span_id=None, name="root-1")],
         }
         rest_client = _cascade_rest_client(
             experiments_by_dataset={"src-dataset-1": [experiment]},
@@ -1260,16 +1303,9 @@ class TestCascadeExperiments:
             traces_by_id=traces,
             spans_by_trace=spans,
         )
-        # Pin the project-id -> name resolution so the assertion below can
-        # check that the cascade resolved per TRACE project, not the
-        # experiment's nominal project.
         client = _client_with_recreate_capture(
             rest_client,
-            project_names_by_id={
-                "project-X": "project-X-name",
-                "project-Y": "project-Y-name",
-                "project-Z": "project-Z-name",
-            },
+            project_names_by_id={"project-X": "project-X-name"},
         )
 
         cascade_experiments(
@@ -1279,44 +1315,25 @@ class TestCascadeExperiments:
             target_dataset_name="MyDataset",
             target_project_name="DestProject",
             version_remap={"src-v-1": "dest-v-1"},
-            item_id_remap={
-                "src-ds-item-1": "dest-ds-item-1",
-                "src-ds-item-2": "dest-ds-item-2",
-            },
+            item_id_remap={f"src-ds-item-{i}": f"dest-ds-item-{i}" for i in range(2)},
             audit=_audit(),
         )
 
-        # ``search_spans`` should be called once per trace, with the
-        # project NAME resolved from the TRACE's project_id (not the
-        # experiment's). ``get_project`` is the resolution hop: it must
-        # be called for Y and Z but never for X (the experiment's
-        # nominal project, which has no traces).
+        # Exactly one bulk ``search_spans`` call, scoped to the
+        # experiment's project and using ``filter_string`` (not
+        # ``trace_id``) -- the per-trace shape is gone.
         search_calls = client.search_spans.call_args_list
-        scoping_by_trace = {
-            call.kwargs["trace_id"]: call.kwargs["project_name"]
-            for call in search_calls
-        }
-        assert scoping_by_trace["src-trace-in-Y"] == "project-Y-name"
-        assert scoping_by_trace["src-trace-in-Z"] == "project-Z-name"
-        assert "project-X-name" not in scoping_by_trace.values()
-
-        # Project-id resolution now happens for:
-        #   1. The bulk ``search_traces(filter="experiment_id=...")`` read,
-        #      which needs the EXPERIMENT's project (project-X) translated
-        #      to a project_name for the SDK wrapper.
-        #   2. Each per-trace ``search_spans`` call, which needs the
-        #      TRACE's own project (project-Y, project-Z) -- because spans
-        #      live in the trace's project, not the experiment's.
-        # The test's original intent (spans are read per-trace, not from
-        # the experiment's project) is preserved: project-X is resolved
-        # ONLY for the experiment-level trace search, never appears in the
-        # per-trace span scoping above.
-        resolved_project_ids = {
-            call.kwargs["id"] for call in client.get_project.call_args_list
-        }
-        assert resolved_project_ids == {"project-X", "project-Y", "project-Z"}, (
-            "expected project-X for experiment-level trace search PLUS "
-            "project-Y/project-Z for per-trace span reads"
+        assert len(search_calls) == 1, (
+            f"expected one bulk search_spans call, got {len(search_calls)}"
+        )
+        bulk_kwargs = search_calls[0].kwargs
+        assert bulk_kwargs["project_name"] == "project-X-name", (
+            "bulk read must be scoped to the experiment's project, not the "
+            "traces' (which the BE allows to differ but is an anomaly)"
+        )
+        assert "trace_id" not in bulk_kwargs or bulk_kwargs.get("trace_id") is None
+        assert "start_time" in (bulk_kwargs.get("filter_string") or ""), (
+            "bulk read must use a time-bounded filter_string clause"
         )
 
     def test_bulk_trace_read__one_search_traces_call_per_experiment(self) -> None:
