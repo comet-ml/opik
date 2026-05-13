@@ -46,16 +46,16 @@ failures, matching Slice 1/2's ``skipped_items`` semantics.
 
 from __future__ import annotations
 
-import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import opik
 import opik.id_helpers as id_helpers_module
 from opik.api_objects import rest_helpers
+from opik.api_objects.experiment import experiment_item, rest_operations
 from opik.rest_api import OpikApi
-from opik.rest_api.types.experiment_item_compare import ExperimentItemCompare
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
 from opik.rest_api.types.trace_public import TracePublic
@@ -68,8 +68,6 @@ from ..errors import ExperimentCascadeError
 LOGGER = logging.getLogger(__name__)
 
 _EXPERIMENT_PAGE_SIZE = 100
-_EXPERIMENT_ITEM_BATCH = 500
-_SPAN_SEARCH_PAGE_SIZE = 500
 
 
 @dataclass
@@ -359,45 +357,49 @@ def _read_source_experiment_items(
     *,
     source_dataset_id: str,
     source_experiment_id: str,
-) -> List[ExperimentItemCompare]:
+) -> List[experiment_item.ExperimentItemContent]:
     """Read all items for one source experiment via the Compare view.
 
-    Walks ``datasets.find_dataset_items_with_experiment_items`` paginated
-    against the source dataset, filtered to a single experiment id, and
-    flattens the per-dataset-item ``experiment_items`` list into a single
-    list of ``ExperimentItemCompare``. The Compare view is required (vs.
-    the ``stream_experiment_items`` Public view) because only it surfaces
-    ``assertion_results`` -- which the cascade needs in order to re-emit
-    them at the destination scoped to the new trace id via
-    ``store_assertions_batch(entity_type='TRACE', ...)``.
+    Routes through the high-level
+    ``api_objects.experiment.rest_operations.find_experiment_items_for_dataset``
+    helper, which paginates
+    ``datasets.find_dataset_items_with_experiment_items`` internally
+    (PAGE_SIZE=100), flattens each page's per-dataset-item
+    ``experiment_items`` list, and returns ``ExperimentItemContent``
+    dataclasses with ``assertion_results`` already normalized to
+    ``List[AssertionResultDict]``.
 
-    The endpoint takes ``experiment_ids`` as a JSON-array string -- not a
-    comma-separated value or a list -- and 400s on either of the other
-    forms.
+    Compare view (vs. the Public ``stream_experiment_items``) is the
+    correct read shape here because only Compare surfaces
+    ``assertion_results``, which the cascade needs in order to re-emit
+    them at the destination scoped to the new trace id via
+    ``client.log_assertion_results``.
+
+    ``max_results`` is the helper's caller-side "stop at N results" knob,
+    designed for paginated/search-as-you-type UIs that don't want to
+    fetch the long tail. A migration is lossless by contract -- silently
+    truncating any experiment's items would corrupt the destination --
+    so we pass ``sys.maxsize`` to let the helper's underlying pagination
+    walk every page of the source experiment. ``truncate=False`` likewise
+    keeps the per-item Compare payloads at full fidelity (the cascade
+    only consumes ``id`` / ``trace_id`` / ``dataset_item_id`` /
+    ``assertion_results`` today, so the BE-side truncation flag wouldn't
+    affect correctness, but forwarding ``False`` matches the prior call
+    shape and future-proofs against the cascade ever consuming a
+    truncatable field).
+
+    The underlying endpoint takes ``experiment_ids`` as a JSON-array
+    string -- not a comma-separated value or a list -- and 400s on
+    either of the other forms; the helper handles the JSON encoding
+    internally.
     """
-    experiment_ids_filter = json.dumps([source_experiment_id])
-    collected: List[ExperimentItemCompare] = []
-    page = 1
-    while True:
-        response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.datasets.find_dataset_items_with_experiment_items(
-                id=source_dataset_id,
-                experiment_ids=experiment_ids_filter,
-                page=page,
-                size=_EXPERIMENT_ITEM_BATCH,
-            )
-        )
-        page_content = response.content or []
-        if not page_content:
-            break
-        for dataset_item in page_content:
-            for exp_item in dataset_item.experiment_items or []:
-                if exp_item.experiment_id == source_experiment_id:
-                    collected.append(exp_item)
-        if len(page_content) < _EXPERIMENT_ITEM_BATCH:
-            break
-        page += 1
-    return collected
+    return rest_operations.find_experiment_items_for_dataset(
+        rest_client=rest_client,
+        dataset_id=source_dataset_id,
+        experiment_ids=[source_experiment_id],
+        max_results=sys.maxsize,
+        truncate=False,
+    )
 
 
 def _copy_traces_and_spans(
@@ -464,13 +466,12 @@ def _copy_traces_and_spans(
     # would override to source="sdk", which the deep-compare would
     # flag).
     for source_trace_id in new_source_ids:
-        # ``client.get_trace_content(id)`` is literally
-        # ``self._rest_client.traces.get_trace_by_id(id)`` -- same call,
-        # different name. We call rest_client directly to keep the read
-        # path uniform with the other reads in this module that don't
-        # have a meaningful high-level wrapper.
+        # ``client.get_trace_content(id)`` is a paper-thin wrapper around
+        # ``self._rest_client.traces.get_trace_by_id(id)``; use the
+        # high-level surface so this module's reads stay routed through
+        # the Opik client where a wrapper exists.
         source_trace = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda sid=source_trace_id: rest_client.traces.get_trace_by_id(id=sid)
+            lambda sid=source_trace_id: client.get_trace_content(id=sid)
         )
         source_traces_by_id[source_trace_id] = source_trace
         new_trace_id = id_helpers_module.generate_id()
@@ -522,8 +523,15 @@ def _copy_traces_and_spans(
     # trace tree (parent_span_id must remap correctly within the tree).
     # Spans across different traces are independent and ride the
     # streamer's batching.
+    #
+    # ``project_id_to_name_cache`` lets ``_fetch_spans_for_trace`` route
+    # through ``client.search_spans`` (which needs ``project_name``) without
+    # paying a ``client.get_project(id=...)`` round-trip per trace.
+    # Experiments typically have one or two distinct trace-project_ids in
+    # practice, so the cache is small and amortizes the lookup cost.
     spans_emitted = 0
     span_feedback_scores: List[Dict[str, Any]] = []
+    project_id_to_name_cache: Dict[str, str] = {}
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         # Per-trace span scoping: spans live in the same project as their
         # parent trace, which may differ from the experiment's project_id.
@@ -531,11 +539,11 @@ def _copy_traces_and_spans(
         trace_project_id = source_trace.project_id or source_project_id
         per_trace_count, per_trace_fbs = _emit_spans_for_trace(
             client,
-            rest_client,
             source_trace_id=source_trace_id,
             source_project_id=trace_project_id,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
+            project_id_to_name_cache=project_id_to_name_cache,
         )
         spans_emitted += per_trace_count
         span_feedback_scores.extend(per_trace_fbs)
@@ -691,12 +699,12 @@ def _to_error_info_dict(error_info: Any) -> Optional[Dict[str, Any]]:
 
 def _emit_spans_for_trace(
     client: opik.Opik,
-    rest_client: OpikApi,
     *,
     source_trace_id: str,
     source_project_id: str,
     new_trace_id: str,
     target_project_name: str,
+    project_id_to_name_cache: Dict[str, str],
 ) -> Tuple[int, List[Dict[str, Any]]]:
     """Fetch source spans for one trace, mint new ids preserving the parent
     tree, and emit destination spans via direct ``client._streamer.put(
@@ -724,9 +732,10 @@ def _emit_spans_for_trace(
 
     source_spans = list(
         _fetch_spans_for_trace(
-            rest_client,
+            client,
             source_trace_id=source_trace_id,
             source_project_id=source_project_id,
+            project_id_to_name_cache=project_id_to_name_cache,
         )
     )
     if not source_spans:
@@ -799,47 +808,47 @@ def _emit_spans_for_trace(
 
 
 def _fetch_spans_for_trace(
-    rest_client: OpikApi,
+    client: opik.Opik,
     *,
     source_trace_id: str,
     source_project_id: str,
+    project_id_to_name_cache: Dict[str, str],
 ) -> List[SpanPublic]:
-    """Search source spans by trace_id, paginating to exhaustion.
+    """Search source spans by trace_id via ``client.search_spans``.
 
-    ``get_spans_by_project`` requires ``project_id`` (or ``project_name``)
-    on the request -- it 400s without it. We scope by ``project_id``
-    because the caller has the source experiment's project_id directly
-    (every experiment is project-scoped on the BE), avoiding a name
-    lookup round-trip.
+    ``search_spans`` is the high-level wrapper that takes ``project_name``
+    (the underlying BE endpoint accepts either ``project_id`` or
+    ``project_name`` and 400s without one). Spans live in the same project
+    as their parent trace, which may differ from the experiment's project.
 
-    Stays on ``rest_client`` rather than ``client.search_spans``: the
-    high-level wrapper takes ``project_name`` only, which would require
-    a per-trace ``client.get_project(id=...)`` lookup to translate
-    ``project_id`` -> ``project_name``. That's an extra read per trace
-    in the tight inner loop -- net negative on the rate-limit budget for
-    no behavior gain.
+    The caller passes a shared ``project_id_to_name_cache`` populated
+    across all traces of an experiment so we pay at most one
+    ``client.get_project(id=...)`` per distinct trace-project_id (typically
+    1-2 per experiment, often 1 since most evaluations co-locate traces
+    with the dataset's project).
+
+    ``max_results=sys.maxsize`` disables the wrapper's default 1000-span
+    cap so traces with very large span trees aren't silently truncated.
     """
-    collected: List[SpanPublic] = []
-    page = 1
-    while True:
-        response = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.spans.get_spans_by_project(
-                project_id=source_project_id,
-                trace_id=source_trace_id,
-                page=page,
-                size=_SPAN_SEARCH_PAGE_SIZE,
-            )
+    project_name = project_id_to_name_cache.get(source_project_id)
+    if project_name is None:
+        project = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: client.get_project(id=source_project_id)
         )
-        page_content = response.content or []
-        collected.extend(page_content)
-        if len(page_content) < _SPAN_SEARCH_PAGE_SIZE:
-            break
-        page += 1
-    return collected
+        project_name = project.name
+        project_id_to_name_cache[source_project_id] = project_name
+
+    return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: client.search_spans(
+            project_name=project_name,
+            trace_id=source_trace_id,
+            max_results=sys.maxsize,
+        )
+    )
 
 
 def _build_experiment_data(
-    source: ExperimentPublic, items: List[ExperimentItemCompare]
+    source: ExperimentPublic, items: List[experiment_item.ExperimentItemContent]
 ) -> ExperimentData:
     """Adapt the REST ``ExperimentPublic`` + items into the
     ``ExperimentData`` dataclass that ``recreate_experiment`` consumes.

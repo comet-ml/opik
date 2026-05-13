@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
-from opik.rest_api import OpikApi
+import opik
 
 from .._base import BaseMigrationPlan
 from ..errors import ConflictError, UnsupportedDatasetTypeError
@@ -137,7 +137,7 @@ class MigrationPlan(BaseMigrationPlan):
 
 
 def build_dataset_plan(
-    rest_client: OpikApi,
+    client: opik.Opik,
     name: str,
     to_project: str,
     from_project: Optional[str],
@@ -161,9 +161,9 @@ def build_dataset_plan(
     """
     # Fail fast if --to-project doesn't exist. Catches typos before any
     # rename/create/copy work, and prevents auto-creating a stray project.
-    ensure_destination_project_exists(rest_client, to_project)
+    ensure_destination_project_exists(client, to_project)
 
-    source = resolve_source(rest_client, name, from_project)
+    source = resolve_source(client, name, from_project)
 
     if source.type not in SUPPORTED_DATASET_TYPES:
         raise UnsupportedDatasetTypeError(
@@ -178,7 +178,7 @@ def build_dataset_plan(
     # workspace-wide (excluding the source dataset itself, which is about
     # to be renamed). Without this check the rename PUT would 409 mid-flight.
     collision = name_taken_in_workspace(
-        rest_client, name_after_rename, ignore_dataset_id=source.id
+        client, name_after_rename, ignore_dataset_id=source.id
     )
     if collision:
         raise ConflictError(

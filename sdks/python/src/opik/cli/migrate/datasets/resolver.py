@@ -14,8 +14,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Iterable, List, Optional
 
+import opik
 from opik.api_objects import rest_helpers
-from opik.rest_api import OpikApi
 from opik.rest_api.core.api_error import ApiError
 
 from ..errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
@@ -47,7 +47,7 @@ class ResolvedDataset:
 
 
 def _iter_dataset_pages(
-    rest_client: OpikApi,
+    client: opik.Opik,
     *,
     name: Optional[str] = None,
     project_id: Optional[str] = None,
@@ -57,7 +57,13 @@ def _iter_dataset_pages(
     Single source of truth for ``find_datasets`` pagination inside this
     module. Avoids the silent truncation bug where a single
     ``find_datasets(page=1)`` call would miss rows on later pages.
+
+    Stays on ``client.rest_client`` (the low-level Fern surface): the
+    high-level ``client.get_datasets()`` wrapper returns SDK ``Dataset``
+    objects that drop the ``project_id`` and ``dataset_items_count`` fields
+    the planner needs for collision detection and progress reporting.
     """
+    rest_client = client.rest_client
     page_idx = 1
     while True:
         page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
@@ -77,7 +83,7 @@ def _iter_dataset_pages(
         page_idx += 1
 
 
-def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
+def _project_name_for_row(client: opik.Opik, row: Any) -> Optional[str]:
     """Resolve a dataset row's ``project_id`` to a human-readable name.
 
     Returns None when the dataset has no project (workspace-scoped) or when
@@ -96,7 +102,7 @@ def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
         return None
     try:
         proj = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.projects.get_project_by_id(id=project_id)
+            lambda: client.get_project(id=project_id)
         )
         return getattr(proj, "name", None)
     except ApiError:
@@ -112,7 +118,7 @@ def _project_name_for_row(rest_client: OpikApi, row: Any) -> Optional[str]:
 
 
 def resolve_source(
-    rest_client: OpikApi,
+    client: opik.Opik,
     name: str,
     from_project: Optional[str],
 ) -> ResolvedDataset:
@@ -134,18 +140,18 @@ def resolve_source(
     ``delete_dataset`` calls.
     """
     project_id = rest_helpers.resolve_project_id_by_name_optional(
-        rest_client, project_name=from_project
+        client.rest_client, project_name=from_project
     )
 
     matches: List[ResolvedDataset] = []
-    for row in _iter_dataset_pages(rest_client, name=name, project_id=project_id):
+    for row in _iter_dataset_pages(client, name=name, project_id=project_id):
         if row.name != name:
             continue
         matches.append(
             ResolvedDataset(
                 id=row.id,
                 name=row.name,
-                project_name=_project_name_for_row(rest_client, row),
+                project_name=_project_name_for_row(client, row),
                 description=row.description,
                 type=getattr(row, "type", None),
                 visibility=getattr(row, "visibility", None),
@@ -167,7 +173,7 @@ def resolve_source(
 
 
 def ensure_destination_project_exists(
-    rest_client: OpikApi,
+    client: opik.Opik,
     to_project: str,
 ) -> str:
     """Resolve and return the ``to_project`` ID, or raise ``ProjectNotFoundError``.
@@ -180,11 +186,11 @@ def ensure_destination_project_exists(
     """
     try:
         return rest_helpers.resolve_project_id_by_name(
-            rest_client, project_name=to_project
+            client.rest_client, project_name=to_project
         )
     except ApiError as exc:
         if exc.status_code == 404:
-            suggestions = _suggest_project_names(rest_client, to_project)
+            suggestions = _suggest_project_names(client, to_project)
             message = f"Destination project '{to_project}' does not exist."
             if suggestions:
                 message += f" Did you mean: {', '.join(repr(s) for s in suggestions)}?"
@@ -193,7 +199,7 @@ def ensure_destination_project_exists(
         raise
 
 
-def _suggest_project_names(rest_client: OpikApi, name: str) -> List[str]:
+def _suggest_project_names(client: opik.Opik, name: str) -> List[str]:
     """Return up to 3 closest project-name matches for ``name``.
 
     Best-effort with narrow exception handling: an ``ApiError`` during the
@@ -203,7 +209,7 @@ def _suggest_project_names(rest_client: OpikApi, name: str) -> List[str]:
     """
     try:
         page = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: rest_client.projects.find_projects(
+            lambda: client.rest_client.projects.find_projects(
                 page=1, size=_PROJECT_SUGGESTION_PAGE_SIZE
             )
         )
@@ -222,7 +228,7 @@ def _suggest_project_names(rest_client: OpikApi, name: str) -> List[str]:
 
 
 def name_taken_in_workspace(
-    rest_client: OpikApi,
+    client: opik.Opik,
     name: str,
     *,
     ignore_dataset_id: Optional[str] = None,
@@ -242,12 +248,12 @@ def name_taken_in_workspace(
     (its name when resolvable, else ``"another project"``) suitable for
     ``ConflictError`` messages.
     """
-    for row in _iter_dataset_pages(rest_client, name=name, project_id=None):
+    for row in _iter_dataset_pages(client, name=name, project_id=None):
         if row.name != name:
             continue
         if ignore_dataset_id is not None and row.id == ignore_dataset_id:
             continue
-        project_name = _project_name_for_row(rest_client, row)
+        project_name = _project_name_for_row(client, row)
         if project_name:
             return f"project '{project_name}'"
         return "another project"

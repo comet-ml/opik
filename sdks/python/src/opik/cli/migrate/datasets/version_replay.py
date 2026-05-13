@@ -1,5 +1,18 @@
 """Version-history replay for ``opik migrate dataset``.
 
+This module deliberately stays on the low-level ``OpikApi`` (Fern) client
+rather than the high-level ``opik.Opik`` SDK surface: the cascade elsewhere
+(``experiments.py``) routes writes through the high-level streamer, but
+version replay needs the raw BE shapes that the high-level ``Dataset``
+helper hides — ``apply_dataset_item_changes`` with ``base_version`` chaining,
+``override=true`` for the config-only v1 path, ``batch_group_id`` on
+``create_or_update_dataset_items``, ``clear_execution_policy``,
+per-item evaluators / execution_policy, paginated ``list_dataset_versions``,
+and the raw item stream that preserves ``tags`` (the SDK-level
+``stream_dataset_items`` helper silently drops them during dataclass
+reconstruction). Every site is still rate-limit-wrapped via
+``ensure_rest_api_call_respecting_rate_limit``.
+
 Slice 2's algorithmic core: enumerate source dataset versions in chronological
 order and, for each, compute the (adds, modifications, deletions) delta
 against the previous version and apply it via ``apply_dataset_item_changes``

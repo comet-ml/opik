@@ -185,7 +185,7 @@ def migrate_dataset_command(
         client = _build_client(ctx)
         _print_workspace_banner(client)
         plan = build_dataset_plan(
-            rest_client=client.rest_client,
+            client=client,
             name=name,
             to_project=to_project,
             from_project=from_project,

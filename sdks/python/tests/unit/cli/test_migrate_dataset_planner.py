@@ -26,6 +26,7 @@ from opik.cli.migrate.errors import (
 from ._migrate_helpers import (
     _DatasetRow,
     _Page,
+    _planner_client,
     _planner_rest_client,
 )
 
@@ -73,7 +74,7 @@ class TestPlanBuilding:
         )
 
         plan = planner_module.build_dataset_plan(
-            rest_client=rest_client,
+            client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
             from_project=None,
@@ -108,7 +109,7 @@ class TestPlanBuilding:
         )
 
         plan = planner_module.build_dataset_plan(
-            rest_client=rest_client,
+            client=_planner_client(rest_client),
             name="MySuite",
             to_project="B",
             from_project=None,
@@ -139,7 +140,7 @@ class TestPlanBuilding:
 
         with pytest.raises(ConflictError) as exc_info:
             planner_module.build_dataset_plan(
-                rest_client=rest_client,
+                client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="B",
                 from_project=None,
@@ -159,7 +160,7 @@ class TestPlanBuilding:
         )
         # Should NOT raise: the only "match" is the source dataset itself.
         plan = planner_module.build_dataset_plan(
-            rest_client=rest_client,
+            client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
             from_project=None,
@@ -173,7 +174,7 @@ class TestPlanBuilding:
 
         with pytest.raises(DatasetNotFoundError) as exc_info:
             planner_module.build_dataset_plan(
-                rest_client=rest_client,
+                client=_planner_client(rest_client),
                 name="Missing",
                 to_project="B",
                 from_project=None,
@@ -196,7 +197,7 @@ class TestPlanBuilding:
 
         with pytest.raises(AmbiguityError):
             planner_module.build_dataset_plan(
-                rest_client=rest_client,
+                client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="B",
                 from_project=None,
@@ -212,7 +213,7 @@ class TestPlanBuilding:
 
         with pytest.raises(ProjectNotFoundError) as exc_info:
             planner_module.build_dataset_plan(
-                rest_client=rest_client,
+                client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="DoesNotExist",
                 from_project=None,
@@ -230,7 +231,7 @@ class TestPlanBuilding:
 
         with pytest.raises(ProjectNotFoundError) as exc_info:
             planner_module.build_dataset_plan(
-                rest_client=rest_client,
+                client=_planner_client(rest_client),
                 name="MyDataset",
                 to_project="Beta",
                 from_project=None,

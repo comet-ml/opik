@@ -105,7 +105,7 @@ def _apply_action(
             lambda: rest_client.datasets.create_dataset(**kwargs)
         )
     elif isinstance(action, ReplayVersions):
-        _replay_versions(rest_client, action, plan=plan, audit=audit)
+        _replay_versions(client, rest_client, action, plan=plan, audit=audit)
     elif isinstance(action, CascadeExperiments):
         _cascade_experiments(client, rest_client, action, plan=plan, audit=audit)
     else:
@@ -113,6 +113,7 @@ def _apply_action(
 
 
 def _replay_versions(
+    client: opik.Opik,
     rest_client: OpikApi,
     action: ReplayVersions,
     *,
@@ -129,9 +130,11 @@ def _replay_versions(
     ``apply_dataset_item_changes(base_version=null, override=true)``) so
     target version count == source version count — no leading empty seed.
     """
+    # ``client.get_dataset`` wraps ``get_dataset_by_identifier`` and
+    # returns the SDK Dataset object (whose ``.id`` we use downstream).
     dest = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.datasets.get_dataset_by_identifier(
-            dataset_name=action.dest_name, project_name=action.dest_project_name
+        lambda: client.get_dataset(
+            name=action.dest_name, project_name=action.dest_project_name
         )
     )
 

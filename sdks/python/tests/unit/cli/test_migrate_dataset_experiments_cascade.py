@@ -37,7 +37,12 @@ from opik.cli.migrate.datasets.experiments import (
 )
 from opik.cli.migrate.errors import ExperimentCascadeError
 
-from ._migrate_helpers import _DatasetRow, _Page, _planner_rest_client
+from ._migrate_helpers import (
+    _DatasetRow,
+    _Page,
+    _planner_client,
+    _planner_rest_client,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -289,7 +294,10 @@ def _audit() -> Any:
     return MagicMock()
 
 
-def _client_with_recreate_capture() -> Any:
+def _client_with_recreate_capture(
+    rest_client: Optional[Any] = None,
+    project_names_by_id: Optional[Dict[str, str]] = None,
+) -> Any:
     """opik.Opik mock wired for the cascade's high-level surface.
 
     The cascade now routes its writes via:
@@ -299,6 +307,22 @@ def _client_with_recreate_capture() -> Any:
     * ``client.log_traces_feedback_scores`` / ``log_spans_feedback_scores``
     * ``client.log_assertion_results``
     * ``client.flush``
+
+    Reads route via:
+    * ``client.get_trace_content(id)`` (paper-thin wrapper around
+      ``rest_client.traces.get_trace_by_id``)
+    * ``client.search_spans(project_name=, trace_id=)`` (with the
+      cascade resolving ``project_id`` -> ``project_name`` via
+      ``client.get_project(id=)`` once per distinct trace project)
+
+    When a ``rest_client`` is passed in, ``get_trace_content`` and
+    ``search_spans`` are wired to delegate to its ``traces.get_trace_by_id``
+    and ``spans.get_spans_by_project`` side_effects so per-test stubs keep
+    working without restating the wiring. ``get_project`` returns a
+    MagicMock whose ``.name`` defaults to ``f"project-name-for-{id}"`` for
+    convenience; pass ``project_names_by_id`` to control the mapping
+    explicitly when a test asserts on the resolved name (e.g. the
+    per-trace-project-scoping test).
 
     It also calls ``recreate_experiment`` (from imports/experiment.py)
     which uses ``client.get_or_create_dataset`` and
@@ -310,6 +334,37 @@ def _client_with_recreate_capture() -> Any:
     """
     client = MagicMock()
     client.get_or_create_dataset = MagicMock(return_value=MagicMock())
+    if rest_client is not None:
+        client.get_trace_content = MagicMock(
+            side_effect=lambda id: rest_client.traces.get_trace_by_id(id=id)
+        )
+
+        def _search_spans(
+            project_name: Optional[str] = None,
+            trace_id: Optional[str] = None,
+            max_results: Optional[int] = None,
+            **_kwargs: Any,
+        ) -> Any:
+            # Delegate to the rest_client stub by reading its page-1
+            # content; tests don't exercise multi-page span lists.
+            page = rest_client.spans.get_spans_by_project(
+                trace_id=trace_id,
+                project_name=project_name,
+                page=1,
+                size=1000,
+            )
+            return list(page.content or [])
+
+        client.search_spans = MagicMock(side_effect=_search_spans)
+
+    project_names_by_id = project_names_by_id or {}
+
+    def _get_project(id: str) -> Any:
+        project = MagicMock()
+        project.name = project_names_by_id.get(id, f"project-name-for-{id}")
+        return project
+
+    client.get_project = MagicMock(side_effect=_get_project)
 
     created_experiment = MagicMock()
     created_experiment.id = "dest-exp-1"
@@ -347,7 +402,7 @@ class TestCascadeExperiments:
             items_by_experiment={},
             traces_by_id={},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -382,7 +437,7 @@ class TestCascadeExperiments:
             items_by_experiment={"experiment": []},  # zero items
             traces_by_id={},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -442,7 +497,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -488,7 +543,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -527,7 +582,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -567,7 +622,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -644,7 +699,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": spans},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -723,7 +778,7 @@ class TestCascadeExperiments:
             },
             spans_by_trace={"src-trace-1": [], "src-trace-orphan": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         # Pre-populate trace_id_remap so only "good" is mapped; "orphan"
         # is skipped in the inferred-skips count by the cascade.
@@ -777,7 +832,7 @@ class TestCascadeExperiments:
             },
             spans_by_trace={"src-trace-1": [], "src-trace-2": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -825,7 +880,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-shared": _Trace(id="src-trace-shared")},
             spans_by_trace={"src-trace-shared": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -863,7 +918,7 @@ class TestCascadeExperiments:
             items_by_experiment={},
             traces_by_id={},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         with pytest.raises(ExperimentCascadeError):
             cascade_experiments(
@@ -913,7 +968,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -959,7 +1014,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": trace},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -1007,7 +1062,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": spans},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -1065,7 +1120,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         result = cascade_experiments(
             client,
@@ -1114,7 +1169,7 @@ class TestCascadeExperiments:
             traces_by_id={"src-trace-1": _Trace(id="src-trace-1")},
             spans_by_trace={"src-trace-1": []},
         )
-        client = _client_with_recreate_capture()
+        client = _client_with_recreate_capture(rest_client)
 
         cascade_experiments(
             client,
@@ -1172,7 +1227,17 @@ class TestCascadeExperiments:
             traces_by_id=traces,
             spans_by_trace=spans,
         )
-        client = _client_with_recreate_capture()
+        # Pin the project-id -> name resolution so the assertion below can
+        # check that the cascade resolved per TRACE project, not the
+        # experiment's nominal project.
+        client = _client_with_recreate_capture(
+            rest_client,
+            project_names_by_id={
+                "project-X": "project-X-name",
+                "project-Y": "project-Y-name",
+                "project-Z": "project-Z-name",
+            },
+        )
 
         cascade_experiments(
             client,
@@ -1188,18 +1253,26 @@ class TestCascadeExperiments:
             audit=_audit(),
         )
 
-        # The span-list endpoint should have been called once per trace,
-        # each with the TRACE's project_id -- not the experiment's. Build
-        # a (trace_id -> project_id) map from the actual call args and
-        # assert no call used project-X (the experiment's project).
-        span_list_calls = rest_client.spans.get_spans_by_project.call_args_list
+        # ``search_spans`` should be called once per trace, with the
+        # project NAME resolved from the TRACE's project_id (not the
+        # experiment's). ``get_project`` is the resolution hop: it must
+        # be called for Y and Z but never for X (the experiment's
+        # nominal project, which has no traces).
+        search_calls = client.search_spans.call_args_list
         scoping_by_trace = {
-            call.kwargs["trace_id"]: call.kwargs["project_id"]
-            for call in span_list_calls
+            call.kwargs["trace_id"]: call.kwargs["project_name"]
+            for call in search_calls
         }
-        assert scoping_by_trace["src-trace-in-Y"] == "project-Y"
-        assert scoping_by_trace["src-trace-in-Z"] == "project-Z"
-        assert "project-X" not in scoping_by_trace.values()
+        assert scoping_by_trace["src-trace-in-Y"] == "project-Y-name"
+        assert scoping_by_trace["src-trace-in-Z"] == "project-Z-name"
+        assert "project-X-name" not in scoping_by_trace.values()
+
+        resolved_project_ids = {
+            call.kwargs["id"] for call in client.get_project.call_args_list
+        }
+        assert resolved_project_ids == {"project-Y", "project-Z"}, (
+            "expected per-trace project resolution, not the experiment's project-X"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1217,7 +1290,7 @@ class TestPlannerCascadePlacement:
         )
 
         plan = planner_module.build_dataset_plan(
-            rest_client=rest_client,
+            client=_planner_client(rest_client),
             name="MyDataset",
             to_project="B",
             from_project=None,

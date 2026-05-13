@@ -1338,7 +1338,7 @@ class TestVersionReplayE2ECli:
         self, tmp_path: Path
     ) -> None:
         runner = CliRunner()
-        client, _, _ = _build_fake_client(
+        client, _, dest_dataset = _build_fake_client(
             source_rows=[_DatasetRow(id="src-1", name="MyDataset")],
             destination_rows=[],
             items=[],
@@ -1348,11 +1348,10 @@ class TestVersionReplayE2ECli:
         source_version = _SourceVersion(
             id="src-v1", version_hash="hv1", version_name="v1"
         )
-        target_after_create = MagicMock()
-        target_after_create.id = "tgt-dataset-id"
-        client.rest_client.datasets.get_dataset_by_identifier.return_value = (
-            target_after_create
-        )
+        # The executor now resolves the destination via ``client.get_dataset``;
+        # pin the ``.id`` so the stream / list_dataset_versions stubs below can
+        # route off it.
+        dest_dataset.id = "tgt-dataset-id"
         client.rest_client.datasets.create_or_update_dataset_items.return_value = None
 
         # list_dataset_versions is called for both the source (paginated
@@ -1435,7 +1434,7 @@ class TestVersionReplayE2ECli:
         # target version count == source version count, no extra leading
         # empty version.
         runner = CliRunner()
-        client, _, _ = _build_fake_client(
+        client, _, dest_dataset = _build_fake_client(
             source_rows=[
                 _DatasetRow(id="src-1", name="MySuite", type="evaluation_suite")
             ],
@@ -1462,11 +1461,10 @@ class TestVersionReplayE2ECli:
             _Page([source_version]),  # source version list (single page)
             _Page([]),  # pagination terminator
         ]
-        target_after_create = MagicMock()
-        target_after_create.id = "tgt-dataset-id"
-        client.rest_client.datasets.get_dataset_by_identifier.return_value = (
-            target_after_create
-        )
+        # The executor now resolves the destination via ``client.get_dataset``;
+        # pin the ``.id`` so the apply_dataset_item_changes stub below routes
+        # against the same target id the executor passes through.
+        dest_dataset.id = "tgt-dataset-id"
         # Exactly one apply call for v1 (config-only with base_version=null +
         # override=true). The config-only path does not need create_or_update.
         client.rest_client.datasets.apply_dataset_item_changes.side_effect = [

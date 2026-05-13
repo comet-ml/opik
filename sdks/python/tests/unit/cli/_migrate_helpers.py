@@ -73,6 +73,27 @@ def _planner_rest_client(
     return rest_client
 
 
+def _planner_client(rest_client: MagicMock) -> MagicMock:
+    """Wrap a planner rest_client mock as an ``opik.Opik``-shaped client.
+
+    The planner now takes the high-level client (so the resolver can route
+    ``get_project_by_id`` through ``client.get_project`` instead of the
+    Fern surface). Tests still build the low-level rest_client mock and
+    drive its side_effects, then wrap with this helper to satisfy the new
+    planner signature.
+
+    ``client.get_project(id=...)`` delegates to
+    ``rest_client.projects.get_project_by_id(id=...)`` so any per-test
+    stub on the rest_client side still flows through unchanged.
+    """
+    client = MagicMock()
+    client.rest_client = rest_client
+    client.get_project = MagicMock(
+        side_effect=lambda id: rest_client.projects.get_project_by_id(id=id)
+    )
+    return client
+
+
 def _build_fake_client(
     *,
     source_rows: List[_DatasetRow],
@@ -148,15 +169,17 @@ def _build_fake_client(
     insert_mock = MagicMock()
     dest_dataset.__internal_api__insert_items_as_dataclasses__ = insert_mock
 
+    # Source name after the executor's RenameSource step is ``<orig>_v1``;
+    # dest keeps the original. Route by suffix so the executor can resolve the
+    # destination in ``_replay_versions`` BEFORE any source streaming happens
+    # (the prior call-sequence-based heuristic broke once that lookup moved
+    # earlier in the cascade).
+    source_orig_name = source_rows[0].name if source_rows else ""
+    renamed_source = f"{source_orig_name}_v1"
+
     def _get_dataset(name: str, project_name: Optional[str] = None) -> MagicMock:
-        # The executor first reads from the (renamed) source, then the dest.
-        if insert_mock.call_count == 0 and not getattr(
-            _get_dataset, "_dest_handed_out", False
-        ):
-            if stream_mock.call_count == 0:
-                return source_dataset
-            _get_dataset._dest_handed_out = True  # type: ignore[attr-defined]
-            return dest_dataset
+        if name == renamed_source:
+            return source_dataset
         return dest_dataset
 
     client.get_dataset.side_effect = _get_dataset
