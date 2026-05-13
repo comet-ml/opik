@@ -58,9 +58,7 @@ from opik.rest_api import OpikApi
 from opik.rest_api.types.experiment_item_compare import ExperimentItemCompare
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
-from opik.rest_api.types.span_write import SpanWrite
 from opik.rest_api.types.trace_public import TracePublic
-from opik.rest_api.types.trace_write import TraceWrite
 
 from ...imports.experiment import ExperimentData, recreate_experiment
 from ...imports.utils import sort_spans_topologically
@@ -72,9 +70,6 @@ LOGGER = logging.getLogger(__name__)
 _EXPERIMENT_PAGE_SIZE = 100
 _EXPERIMENT_ITEM_BATCH = 500
 _SPAN_SEARCH_PAGE_SIZE = 500
-_TRACE_BATCH_SIZE = 100
-_SPAN_BATCH_SIZE = 100
-_FEEDBACK_BATCH_SIZE = 500
 
 
 @dataclass
@@ -273,6 +268,7 @@ def cascade_one_experiment(
             )
 
     traces_copied, spans_copied = _copy_traces_and_spans(
+        client,
         rest_client,
         source_trace_ids=source_trace_ids,
         source_project_id=source_project_id,
@@ -330,7 +326,16 @@ def cascade_one_experiment(
 def _list_source_experiments(
     rest_client: OpikApi, source_dataset_id: str
 ) -> List[ExperimentPublic]:
-    """Page through ``find_experiments(dataset_id=...)`` to exhaustion."""
+    """Page through ``find_experiments(dataset_id=...)`` to exhaustion.
+
+    Stays on ``rest_client`` rather than ``client.get_dataset_experiments``:
+    the high-level wrapper takes ``dataset_name`` only, which would
+    require a per-call name lookup (the cascade has the source
+    ``dataset_id`` from the plan, but the source dataset is renamed to
+    ``<name>_v1`` by the migrate, so the source name isn't stable across
+    the cascade's runtime). The ``rest_client`` call takes ``dataset_id``
+    directly.
+    """
     collected: List[ExperimentPublic] = []
     page = 1
     while True:
@@ -396,6 +401,7 @@ def _read_source_experiment_items(
 
 
 def _copy_traces_and_spans(
+    client: opik.Opik,
     rest_client: OpikApi,
     *,
     source_trace_ids: Set[str],
@@ -404,22 +410,34 @@ def _copy_traces_and_spans(
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
 ) -> tuple[int, int]:
-    """Re-emit traces + spans under ``target_project_name``.
+    """Re-emit traces + spans under ``target_project_name`` via the high-level
+    Opik client's streamer infrastructure.
+
+    Writes route through ``client.__internal_api__trace__`` (traces),
+    ``client._streamer.put(CreateSpanMessage(...))`` (spans),
+    ``client.log_traces_feedback_scores`` / ``client.log_spans_feedback_scores``
+    (feedback scores), and ``client.log_assertion_results`` (assertions).
+    The streamer batches across messages and handles retry/backpressure
+    internally; no manual ``rest_helpers.ensure_rest_api_call_respecting_rate_limit``
+    wrap on the write path.
+
+    Spans use a direct ``_streamer.put(CreateSpanMessage(...))`` rather
+    than ``client.span(...)`` because the public ``client.span(usage=...)``
+    path invokes ``helpers.add_usage_to_metadata`` which merges ``usage``
+    into ``metadata["usage"]``. That's a user-facing write-side convenience
+    for fresh spans, but it conflicts with this cascade's round-trip
+    metadata-fidelity contract: source spans have ``usage`` in their own
+    field and ``metadata`` distinct, and we need both to round-trip
+    untouched. The streamer's ``CreateSpanMessage`` accepts them as
+    separate fields and serializes verbatim.
+
+    Reads stay on ``rest_client`` because the high-level client doesn't
+    expose every read shape we need (e.g.
+    ``find_dataset_items_with_experiment_items``,
+    ``get_spans_by_project``).
 
     Populates ``trace_id_remap`` in place with one entry per copied trace.
     Returns ``(traces_copied, spans_copied)`` for counter aggregation.
-
-    Feedback scores on each source trace are re-emitted against the new
-    destination trace via ``score_batch_of_traces`` after the trace batch
-    create. Span feedback scores are handled in ``_copy_spans_for_trace``
-    (we have the span id remap there).
-
-    Trace-scoped assertion results (read from the source via the Compare
-    view of ``find_dataset_items_with_experiment_items``) are re-emitted
-    against the new trace ids via ``store_assertions_batch(entity_type=
-    'TRACE', ...)`` after the trace batch create. ``assertion_results_by_
-    source_trace`` is ``None`` for callers that don't read the Compare view
-    (e.g. unit tests that don't exercise the test-suite path).
 
     ``source_project_id`` is only a defensive fallback used when an
     individual source trace has a null ``project_id`` field. Per-trace
@@ -437,194 +455,177 @@ def _copy_traces_and_spans(
     if not new_source_ids:
         return 0, 0
 
-    trace_writes: List[TraceWrite] = []
     source_to_new_trace: Dict[str, str] = {}
     source_traces_by_id: Dict[str, TracePublic] = {}
 
+    # Phase 1: fetch source traces + emit destination via
+    # __internal_api__trace__. ``source="experiment"`` matches what
+    # opik.evaluate(...) writes on the source (the public client.trace()
+    # would override to source="sdk", which the deep-compare would
+    # flag).
     for source_trace_id in new_source_ids:
+        # ``client.get_trace_content(id)`` is literally
+        # ``self._rest_client.traces.get_trace_by_id(id)`` -- same call,
+        # different name. We call rest_client directly to keep the read
+        # path uniform with the other reads in this module that don't
+        # have a meaningful high-level wrapper.
         source_trace = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
             lambda sid=source_trace_id: rest_client.traces.get_trace_by_id(id=sid)
         )
         source_traces_by_id[source_trace_id] = source_trace
         new_trace_id = id_helpers_module.generate_id()
         source_to_new_trace[source_trace_id] = new_trace_id
-        trace_writes.append(
-            _build_trace_write(source_trace, new_trace_id, target_project_name)
-        )
 
-    # Batch-create traces, then batch-create spans (parents must exist
-    # before children at the API level).
-    for batch in _chunks(trace_writes, _TRACE_BATCH_SIZE):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda b=batch: rest_client.traces.create_traces(traces=b)
+        client.__internal_api__trace__(
+            id=new_trace_id,
+            name=source_trace.name,
+            start_time=source_trace.start_time,
+            end_time=source_trace.end_time,
+            input=source_trace.input,
+            output=source_trace.output,
+            metadata=source_trace.metadata,
+            tags=source_trace.tags,
+            error_info=_to_error_info_dict(source_trace.error_info),
+            thread_id=source_trace.thread_id,
+            project_name=target_project_name,
+            source=getattr(source_trace, "source", None) or "experiment",
         )
 
     trace_id_remap.update(source_to_new_trace)
-    traces_copied = len(trace_writes)
+    traces_copied = len(new_source_ids)
 
-    # Re-emit feedback scores on the destination traces. The trace create
-    # path doesn't accept feedback scores -- they live in a separate
-    # per-trace table that score_batch_of_traces writes into.
-    _copy_trace_feedback_scores(
-        rest_client,
+    # Flush traces before writing trace-attached records (feedback scores,
+    # assertion results, spans). The streamer batches writes without
+    # ordering guarantees within a flush window; assertions referencing a
+    # trace can fail if the BE hasn't persisted the trace yet.
+    client.flush()
+
+    # Re-emit trace-level feedback scores via the high-level batched API.
+    _log_trace_feedback_scores(
+        client,
         source_traces_by_id=source_traces_by_id,
         source_to_new_trace=source_to_new_trace,
         target_project_name=target_project_name,
     )
 
-    # Re-emit per-trace assertion results. These come from the caller's
-    # Compare-view read of source experiment items (cascade_one_experiment).
-    # Skipped for callers that didn't read them.
+    # Re-emit per-trace assertion results. Skipped for callers that
+    # didn't read them (regular-dataset path).
     if assertion_results_by_source_trace:
-        _copy_trace_assertion_results(
-            rest_client,
+        _log_trace_assertion_results(
+            client,
             assertion_results_by_source_trace=assertion_results_by_source_trace,
             source_to_new_trace=source_to_new_trace,
             target_project_name=target_project_name,
         )
 
-    # Span phase split into two sub-phases so writes batch across ALL
-    # traces in this experiment, not per-trace. With per-trace batching the
-    # cascade issued one ``create_spans`` call per source trace (~4 spans
-    # each); accumulating across traces collapses that into ~_SPAN_BATCH_SIZE
-    # batches total, which dramatically reduces REST call count and the
-    # rate-limit pressure that comes with it.
-    #
-    # The per-trace topological sort + span_id remap stays per-trace
-    # (parents must precede children WITHIN a trace), but spans across
-    # different traces are independent and can land in any order in a
-    # batched create_spans call.
-    from opik.rest_api.types.feedback_score_batch_item import (
-        FeedbackScoreBatchItem,
-    )
-
-    span_writes: List[SpanWrite] = []
-    span_feedback_batch: List[FeedbackScoreBatchItem] = []
-
+    # Phase 2: spans. Per-trace because span ids only collide within a
+    # trace tree (parent_span_id must remap correctly within the tree).
+    # Spans across different traces are independent and ride the
+    # streamer's batching.
+    spans_emitted = 0
+    span_feedback_scores: List[Dict[str, Any]] = []
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         # Per-trace span scoping: spans live in the same project as their
-        # parent trace, which may differ from the experiment's project_id
-        # (the BE doesn't enforce single-project invariance across an
-        # experiment's traces -- ExperimentItem.project_id is derived from
-        # the trace, not validated against the experiment). Using each
-        # trace's own project_id ensures we read its spans correctly even
-        # when an experiment's traces are scattered across multiple projects.
-        # Falls back to the experiment-level source_project_id only if a
-        # trace's project_id is somehow null (defensive; shouldn't happen
-        # in practice).
+        # parent trace, which may differ from the experiment's project_id.
         source_trace = source_traces_by_id[source_trace_id]
         trace_project_id = source_trace.project_id or source_project_id
-        per_trace_writes, per_trace_feedback = _prepare_spans_for_trace(
+        per_trace_count, per_trace_fbs = _emit_spans_for_trace(
+            client,
             rest_client,
             source_trace_id=source_trace_id,
             source_project_id=trace_project_id,
             new_trace_id=new_trace_id,
             target_project_name=target_project_name,
         )
-        span_writes.extend(per_trace_writes)
-        span_feedback_batch.extend(per_trace_feedback)
+        spans_emitted += per_trace_count
+        span_feedback_scores.extend(per_trace_fbs)
 
-    # Batch-write spans across ALL traces in this experiment.
-    for batch in _chunks(span_writes, _SPAN_BATCH_SIZE):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda b=batch: rest_client.spans.create_spans(spans=b)
+    # Flush spans before their feedback scores (the BE rejects a score
+    # whose entity id doesn't exist yet).
+    client.flush()
+
+    if span_feedback_scores:
+        client.log_spans_feedback_scores(
+            scores=span_feedback_scores, project_name=target_project_name
         )
 
-    # Batch-write span feedback scores across ALL traces in this experiment.
-    if span_feedback_batch:
-        for chunk in _chunks(span_feedback_batch, _FEEDBACK_BATCH_SIZE):
-            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-                lambda c=chunk: rest_client.spans.score_batch_of_spans(scores=c)
-            )
-
-    return traces_copied, len(span_writes)
+    return traces_copied, spans_emitted
 
 
-def _copy_trace_feedback_scores(
-    rest_client: OpikApi,
+def _log_trace_feedback_scores(
+    client: opik.Opik,
     *,
     source_traces_by_id: Dict[str, TracePublic],
     source_to_new_trace: Dict[str, str],
     target_project_name: str,
 ) -> None:
-    """Re-emit per-trace feedback scores under the destination project.
+    """Re-emit per-trace feedback scores under the destination project via
+    ``client.log_traces_feedback_scores``.
 
-    Reads ``feedback_scores`` off each source trace's read payload (already
-    fetched during the trace copy, no extra round-trip) and rewrites them
-    as a single ``score_batch_of_traces`` call keyed by the destination
-    trace id.
+    Reads ``feedback_scores`` off each source trace's read payload
+    (already fetched during the trace copy, no extra round-trip) and
+    rewrites them keyed by the destination trace id. The high-level API
+    handles batching + streamer routing.
 
-    No-op for traces with no feedback scores. The cascade does not copy
-    ``span_feedback_scores`` here -- those are an aggregated view of
-    span-level scores, not separately persisted.
+    No-op for traces with no feedback scores.
     """
-    from opik.rest_api.types.feedback_score_batch_item import (
-        FeedbackScoreBatchItem,
-    )
-
-    batch: List[FeedbackScoreBatchItem] = []
+    batch: List[Dict[str, Any]] = []
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         source = source_traces_by_id.get(source_trace_id)
         if source is None or not source.feedback_scores:
             continue
         for score in source.feedback_scores:
-            batch.append(
-                FeedbackScoreBatchItem(
-                    id=new_trace_id,
-                    project_name=target_project_name,
-                    name=score.name,
-                    category_name=score.category_name,
-                    value=score.value,
-                    reason=score.reason,
-                    source=score.source,
-                )
-            )
+            entry: Dict[str, Any] = {
+                "id": new_trace_id,
+                "project_name": target_project_name,
+                "name": score.name,
+                "value": score.value,
+            }
+            if score.reason is not None:
+                entry["reason"] = score.reason
+            if score.category_name is not None:
+                entry["category_name"] = score.category_name
+            batch.append(entry)
 
     if not batch:
         return
 
-    for chunk in _chunks(batch, _FEEDBACK_BATCH_SIZE):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda c=chunk: rest_client.traces.score_batch_of_traces(scores=c)
-        )
+    client.log_traces_feedback_scores(scores=batch, project_name=target_project_name)
 
 
-def _copy_trace_assertion_results(
-    rest_client: OpikApi,
+def _log_trace_assertion_results(
+    client: opik.Opik,
     *,
     assertion_results_by_source_trace: Dict[str, List[Any]],
     source_to_new_trace: Dict[str, str],
     target_project_name: str,
 ) -> None:
-    """Re-emit per-trace assertion results under the destination project.
+    """Re-emit per-trace assertion results via ``client.log_assertion_results``.
 
     Assertion results aren't a field on ``ExperimentItem`` (the BE drops
     that field on write -- it's READ-ONLY on the Compare view, computed
-    from the underlying assertion-results entity table). They are written
-    via the dedicated ``assertion_results.store_assertions_batch`` endpoint
-    against a ``TRACE`` / ``SPAN`` / ``THREAD`` entity.
+    from the underlying assertion-results entity table). They are
+    written via the dedicated assertion-results ingestion endpoint, which
+    the high-level client exposes as ``log_assertion_results`` -- that
+    routes through the streamer like every other write.
 
-    For Slice 3 we only ever see assertion results on items via the
-    Compare view's ``ExperimentItemCompare.assertion_results``; those are
-    the trace-scoped writes the source had. We re-emit them scoped to the
-    new destination trace id so the destination ``ExperimentItemCompare``
+    For Slice 3 we only see assertion results on items via the Compare
+    view's ``ExperimentItemCompare.assertion_results``; those are the
+    trace-scoped writes the source had. We re-emit them scoped to the new
+    destination trace id so the destination ``ExperimentItemCompare``
     surfaces them in the same place at the same shape.
 
     The read shape ``AssertionResultCompare`` carries ``value`` / ``passed``
-    / ``reason``; the write shape ``AssertionResultBatchItem`` requires
-    ``entity_id`` / ``name`` / ``status`` / ``source`` (+ optional
-    ``project_name`` / ``reason``). The mapping is:
+    / ``reason``; ``client.log_assertion_results`` accepts dicts with
+    ``id`` (= trace id), ``name``, ``status`` ("passed" | "failed"),
+    ``reason``. The mapping is:
 
-      AssertionResultCompare.value  <->  AssertionResultBatchItem.name
-      AssertionResultCompare.passed <->  AssertionResultBatchItem.status
+      AssertionResultCompare.value  <->  log_assertion_results.name
+      AssertionResultCompare.passed <->  log_assertion_results.status
                                           ("passed" | "failed")
-      AssertionResultCompare.reason <->  AssertionResultBatchItem.reason
+      AssertionResultCompare.reason <->  log_assertion_results.reason
     """
-    from opik.rest_api.types.assertion_result_batch_item import (
-        AssertionResultBatchItem,
-    )
-
-    batch: List[AssertionResultBatchItem] = []
+    batch: List[Dict[str, Any]] = []
     for source_trace_id, results in assertion_results_by_source_trace.items():
         new_trace_id = source_to_new_trace.get(source_trace_id)
         if not new_trace_id:
@@ -653,57 +654,73 @@ def _copy_trace_assertion_results(
                 # Skip degenerate entries; the BE write rejects items
                 # missing the required ``name``/``status`` fields.
                 continue
-            batch.append(
-                AssertionResultBatchItem(
-                    entity_id=new_trace_id,
-                    project_name=target_project_name,
-                    name=value,
-                    status="passed" if passed else "failed",
-                    reason=reason,
-                    source="sdk",
-                )
-            )
+            entry: Dict[str, Any] = {
+                "id": new_trace_id,
+                "project_name": target_project_name,
+                "name": value,
+                "status": "passed" if passed else "failed",
+            }
+            if reason is not None:
+                entry["reason"] = reason
+            batch.append(entry)
 
     if not batch:
         return
 
-    for chunk in _chunks(batch, _FEEDBACK_BATCH_SIZE):
-        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda c=chunk: rest_client.assertion_results.store_assertions_batch(
-                entity_type="TRACE",
-                assertion_results=c,
-            )
-        )
+    client.log_assertion_results(
+        assertion_results=batch, project_name=target_project_name
+    )
 
 
-def _prepare_spans_for_trace(
+def _to_error_info_dict(error_info: Any) -> Optional[Dict[str, Any]]:
+    """Convert a wire-shape ``ErrorInfoPublic`` (or already-dict) to the
+    plain dict shape the streamer / high-level API expects.
+
+    Returns ``None`` when there's no error info, so callers can pass it
+    through verbatim without nil-handling.
+    """
+    if error_info is None:
+        return None
+    if isinstance(error_info, dict):
+        return error_info
+    dump = getattr(error_info, "model_dump", None)
+    if dump is not None:
+        return dump(exclude_none=True)
+    return dict(getattr(error_info, "__dict__", {}))
+
+
+def _emit_spans_for_trace(
+    client: opik.Opik,
     rest_client: OpikApi,
     *,
     source_trace_id: str,
     source_project_id: str,
     new_trace_id: str,
     target_project_name: str,
-) -> Tuple[List[SpanWrite], List[Any]]:
+) -> Tuple[int, List[Dict[str, Any]]]:
     """Fetch source spans for one trace, mint new ids preserving the parent
-    tree, and return the per-trace contributions to the cascade's
-    cross-trace batches.
+    tree, and emit destination spans via direct ``client._streamer.put(
+    CreateSpanMessage(...))`` calls. Returns ``(spans_emitted,
+    span_feedback_scores)``.
 
-    Returns ``(span_writes, span_feedback_batch)`` for the caller to
-    extend onto experiment-level lists; the caller batches the actual
-    ``create_spans`` / ``score_batch_of_spans`` writes across all
-    traces in the experiment, which keeps REST call count proportional
-    to ``total_spans / _SPAN_BATCH_SIZE`` rather than ``num_traces``.
+    Why bypass ``client.span(...)``: the public method routes through
+    ``span_client.create_span()`` which calls
+    ``helpers.add_usage_to_metadata`` -- a user-facing convenience that
+    merges ``usage`` into ``metadata["usage"]`` for fresh writes. The
+    cascade needs strict round-trip metadata fidelity (source has
+    ``usage`` and ``metadata`` as distinct fields, the merge would
+    diverge the destination). The streamer's ``CreateSpanMessage``
+    accepts ``usage`` and ``metadata`` as separate fields and serializes
+    verbatim, so building the message directly preserves both.
 
     Span_id remap stays per-trace -- parents must precede children
-    WITHIN a trace, and span ids only collide within a trace tree --
-    but spans across different traces are independent and can land in
-    any order in the cross-trace ``create_spans`` batch.
+    within a trace tree, and span ids only collide within a tree.
 
-    Returns empty lists if the source trace has no spans.
+    Span-level feedback scores are returned for the caller to batch via
+    ``client.log_spans_feedback_scores`` after the spans are flushed.
     """
-    from opik.rest_api.types.feedback_score_batch_item import (
-        FeedbackScoreBatchItem,
-    )
+    from opik import datetime_helpers
+    from opik.message_processing import messages
 
     source_spans = list(
         _fetch_spans_for_trace(
@@ -713,7 +730,7 @@ def _prepare_spans_for_trace(
         )
     )
     if not source_spans:
-        return [], []
+        return 0, []
 
     # Topological order: parents before children, so the parent_span_id
     # remap entry for every child is always populated by the time we
@@ -723,8 +740,8 @@ def _prepare_spans_for_trace(
     span_dicts = sort_spans_topologically(span_dicts)
 
     span_id_remap: Dict[str, str] = {}
-    span_writes: List[SpanWrite] = []
-    span_feedback_batch: List[FeedbackScoreBatchItem] = []
+    feedback_scores: List[Dict[str, Any]] = []
+    spans_emitted = 0
     for span_dict in span_dicts:
         original_id = span_dict.get("id")
         new_span_id = id_helpers_module.generate_id()
@@ -734,32 +751,51 @@ def _prepare_spans_for_trace(
         original_parent = span_dict.get("parent_span_id")
         new_parent = span_id_remap.get(original_parent) if original_parent else None
 
-        span_writes.append(
-            _build_span_write(
-                span_dict,
-                new_span_id=new_span_id,
-                new_trace_id=new_trace_id,
-                new_parent_span_id=new_parent,
-                target_project_name=target_project_name,
-            )
+        # Build CreateSpanMessage directly; bypasses span_client.create_span's
+        # add_usage_to_metadata merge. Field-for-field mapping from
+        # SpanPublic -> CreateSpanMessage.
+        msg = messages.CreateSpanMessage(
+            span_id=new_span_id,
+            trace_id=new_trace_id,
+            project_name=target_project_name,
+            parent_span_id=new_parent,
+            name=span_dict.get("name"),
+            type=span_dict.get("type") or "general",
+            start_time=span_dict.get("start_time")
+            or datetime_helpers.local_timestamp(),
+            end_time=span_dict.get("end_time"),
+            input=span_dict.get("input"),
+            output=span_dict.get("output"),
+            metadata=span_dict.get("metadata"),
+            tags=span_dict.get("tags"),
+            usage=span_dict.get("usage"),
+            model=span_dict.get("model"),
+            provider=span_dict.get("provider"),
+            error_info=_to_error_info_dict(span_dict.get("error_info")),
+            total_cost=span_dict.get("total_estimated_cost"),
+            last_updated_at=span_dict.get("last_updated_at"),
+            source=span_dict.get("source") or "experiment",
         )
+        client._streamer.put(msg)
+        spans_emitted += 1
 
         # Collect per-span feedback scores keyed by the new span id so
-        # the caller can batch-emit them across all traces.
+        # the caller can batch-emit them via log_spans_feedback_scores
+        # after the spans flush.
         for score in span_dict.get("feedback_scores") or []:
-            span_feedback_batch.append(
-                FeedbackScoreBatchItem(
-                    id=new_span_id,
-                    project_name=target_project_name,
-                    name=score["name"],
-                    category_name=score.get("category_name"),
-                    value=score["value"],
-                    reason=score.get("reason"),
-                    source=score["source"],
-                )
-            )
+            entry: Dict[str, Any] = {
+                "id": new_span_id,
+                "project_name": target_project_name,
+                "name": score["name"],
+                "value": score["value"],
+            }
+            if score.get("reason") is not None:
+                entry["reason"] = score["reason"]
+            if score.get("category_name") is not None:
+                entry["category_name"] = score["category_name"]
+            feedback_scores.append(entry)
 
-    return span_writes, span_feedback_batch
+    return spans_emitted, feedback_scores
 
 
 def _fetch_spans_for_trace(
@@ -775,6 +811,13 @@ def _fetch_spans_for_trace(
     because the caller has the source experiment's project_id directly
     (every experiment is project-scoped on the BE), avoiding a name
     lookup round-trip.
+
+    Stays on ``rest_client`` rather than ``client.search_spans``: the
+    high-level wrapper takes ``project_name`` only, which would require
+    a per-trace ``client.get_project(id=...)`` lookup to translate
+    ``project_id`` -> ``project_name``. That's an extra read per trace
+    in the tight inner loop -- net negative on the rate-limit budget for
+    no behavior gain.
     """
     collected: List[SpanPublic] = []
     page = 1
@@ -793,70 +836,6 @@ def _fetch_spans_for_trace(
             break
         page += 1
     return collected
-
-
-def _build_trace_write(
-    source: TracePublic, new_id: str, target_project_name: str
-) -> TraceWrite:
-    return TraceWrite(
-        id=new_id,
-        project_name=target_project_name,
-        name=source.name,
-        start_time=source.start_time,
-        end_time=source.end_time,
-        input=source.input,
-        output=source.output,
-        metadata=source.metadata,
-        tags=source.tags,
-        error_info=_to_error_info_write(source.error_info),
-        last_updated_at=source.last_updated_at,
-        ttft=source.ttft,
-        thread_id=source.thread_id,
-    )
-
-
-def _build_span_write(
-    source_dict: Dict[str, Any],
-    *,
-    new_span_id: str,
-    new_trace_id: str,
-    new_parent_span_id: Optional[str],
-    target_project_name: str,
-) -> SpanWrite:
-    # Only forward fields that exist on SpanWrite; the BE adds extras on read
-    # (project_id, feedback_scores, comments, duration aggregates) that the
-    # write surface either rejects or recomputes.
-    return SpanWrite(
-        id=new_span_id,
-        project_name=target_project_name,
-        trace_id=new_trace_id,
-        parent_span_id=new_parent_span_id,
-        name=source_dict.get("name"),
-        type=source_dict.get("type"),
-        start_time=source_dict["start_time"],
-        end_time=source_dict.get("end_time"),
-        input=source_dict.get("input"),
-        output=source_dict.get("output"),
-        metadata=source_dict.get("metadata"),
-        model=source_dict.get("model"),
-        provider=source_dict.get("provider"),
-        tags=source_dict.get("tags"),
-        usage=source_dict.get("usage"),
-        error_info=source_dict.get("error_info"),
-        last_updated_at=source_dict.get("last_updated_at"),
-        total_estimated_cost=source_dict.get("total_estimated_cost"),
-        total_estimated_cost_version=source_dict.get("total_estimated_cost_version"),
-        ttft=source_dict.get("ttft"),
-    )
-
-
-def _to_error_info_write(error_info: Any) -> Any:
-    """``TraceWrite.error_info`` is ``ErrorInfoWrite``; ``TracePublic`` returns
-    ``ErrorInfoPublic``. The two share the relevant fields verbatim, so we
-    pass the read shape through and let pydantic's ``extra="allow"`` accept
-    the difference. Returning the raw value keeps this a single-line helper
-    today, but kept named in case the schemas diverge in the future."""
-    return error_info
 
 
 def _build_experiment_data(
@@ -911,7 +890,3 @@ def _build_experiment_data(
         for item in items
     ]
     return ExperimentData(experiment=experiment_dict, items=items_dicts)
-
-
-def _chunks(seq: List[Any], size: int) -> List[List[Any]]:
-    return [seq[i : i + size] for i in range(0, len(seq), size)]

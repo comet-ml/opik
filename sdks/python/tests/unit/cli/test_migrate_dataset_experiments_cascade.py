@@ -289,14 +289,24 @@ def _audit() -> Any:
     return MagicMock()
 
 
-def _client_with_recreate_capture() -> tuple:
-    """opik.Opik mock that records ``create_experiment`` calls.
+def _client_with_recreate_capture() -> Any:
+    """opik.Opik mock wired for the cascade's high-level surface.
 
-    The cascade calls ``recreate_experiment`` (from imports/experiment.py),
-    which in turn calls ``client.get_or_create_dataset`` and
-    ``client.create_experiment``. We capture both so tests can assert on
-    the destination experiment shape, particularly which fields were stripped
-    vs forwarded.
+    The cascade now routes its writes via:
+    * ``client.__internal_api__trace__(...)`` -- trace creates
+    * ``client._streamer.put(CreateSpanMessage(...))`` -- span creates,
+      bypassing ``client.span(usage=...)``'s metadata mutation
+    * ``client.log_traces_feedback_scores`` / ``log_spans_feedback_scores``
+    * ``client.log_assertion_results``
+    * ``client.flush``
+
+    It also calls ``recreate_experiment`` (from imports/experiment.py)
+    which uses ``client.get_or_create_dataset`` and
+    ``client.create_experiment`` + the rest_client.experiments insertion.
+
+    ``MagicMock`` blocks attribute names starting with ``__`` by default
+    (treated as magic methods), so ``__internal_api__trace__`` must be
+    set explicitly.
     """
     client = MagicMock()
     client.get_or_create_dataset = MagicMock(return_value=MagicMock())
@@ -305,8 +315,23 @@ def _client_with_recreate_capture() -> tuple:
     created_experiment.id = "dest-exp-1"
     client.create_experiment = MagicMock(return_value=created_experiment)
 
-    # ``recreate_experiment`` also inserts experiment-items via REST directly.
+    # ``recreate_experiment`` inserts experiment-items via REST directly.
     client._rest_client.experiments.create_experiment_items = MagicMock()
+
+    # High-level cascade write surface. MagicMock by default blocks
+    # double-underscore attributes (treated as magic methods); set them
+    # explicitly so the cascade can call them.
+    client.__internal_api__trace__ = MagicMock()
+    client.log_traces_feedback_scores = MagicMock()
+    client.log_spans_feedback_scores = MagicMock()
+    client.log_assertion_results = MagicMock()
+    client.flush = MagicMock()
+
+    # The cascade calls ``client._streamer.put(CreateSpanMessage(...))``
+    # for spans (bypassing client.span()'s add_usage_to_metadata merge).
+    client._streamer = MagicMock()
+    client._streamer.put = MagicMock()
+
     return client
 
 
@@ -561,18 +586,15 @@ class TestCascadeExperiments:
         assert new_trace_id != "src-trace-1"
         assert result.traces_migrated == 1
 
-        # The destination TraceWrite carries the destination project,
-        # the minted id, and the source content verbatim.
-        create_calls = rest_client.traces.create_traces.call_args_list
-        assert len(create_calls) == 1
-        written_traces = create_calls[0].kwargs["traces"]
-        assert len(written_traces) == 1
-        tw = written_traces[0]
-        assert tw.id == new_trace_id
-        assert tw.project_name == "DestProject"
-        assert tw.name == "prod-trace"
-        assert tw.tags == ["nightly"]
-        assert tw.metadata == {"call_id": "abc"}
+        # client.__internal_api__trace__ called once with the destination
+        # project + minted id + source content verbatim.
+        client.__internal_api__trace__.assert_called_once()
+        kwargs = client.__internal_api__trace__.call_args.kwargs
+        assert kwargs["id"] == new_trace_id
+        assert kwargs["project_name"] == "DestProject"
+        assert kwargs["name"] == "prod-trace"
+        assert kwargs["tags"] == ["nightly"]
+        assert kwargs["metadata"] == {"call_id": "abc"}
 
     def test_span_tree__topological_order_preserves_parent_span_remap(
         self,
@@ -637,26 +659,30 @@ class TestCascadeExperiments:
 
         assert result.spans_migrated == 4
 
-        # Inspect the single create_spans batch.
-        spans_call = rest_client.spans.create_spans.call_args_list
-        assert len(spans_call) == 1
-        written = spans_call[0].kwargs["spans"]
-        assert len(written) == 4
+        # Inspect the CreateSpanMessage instances put on the streamer.
+        # One put() call per source span.
+        put_calls = client._streamer.put.call_args_list
+        # Filter to just the CreateSpanMessage put calls (the streamer
+        # also receives CreateTraceMessage etc. for traces; but in this
+        # test the trace was emitted via __internal_api__trace__ which
+        # mocks separately, not via _streamer.put).
+        span_messages = [c.args[0] for c in put_calls]
+        assert len(span_messages) == 4
 
-        # Build a name -> SpanWrite map for inspection.
-        by_name = {sw.name: sw for sw in written}
+        # Build a name -> message map for inspection.
+        by_name = {msg.name: msg for msg in span_messages}
         assert by_name["root"].parent_span_id is None
         # Both root-children point at the SAME new root id (whatever it was
         # minted as), not the source id.
-        assert by_name["child-a"].parent_span_id == by_name["root"].id
-        assert by_name["child-b"].parent_span_id == by_name["root"].id
+        assert by_name["child-a"].parent_span_id == by_name["root"].span_id
+        assert by_name["child-b"].parent_span_id == by_name["root"].span_id
         # Grandchild points at the new child-a id, not the source string.
-        assert by_name["grandchild"].parent_span_id == by_name["child-a"].id
+        assert by_name["grandchild"].parent_span_id == by_name["child-a"].span_id
         # All spans carry the destination project + the same new trace id.
         trace_id_remap = result.trace_id_remap["src-trace-1"]
-        for sw in written:
-            assert sw.project_name == "DestProject"
-            assert sw.trace_id == trace_id_remap
+        for msg in span_messages:
+            assert msg.project_name == "DestProject"
+            assert msg.trace_id == trace_id_remap
 
     def test_missing_trace_in_source__counts_as_skipped_item(self) -> None:
         # An experiment item with a trace_id that has no corresponding
@@ -820,8 +846,10 @@ class TestCascadeExperiments:
         assert result.traces_migrated == 1
         # The remap has exactly one entry, shared between both experiments.
         assert len(result.trace_id_remap) == 1
-        # create_traces was called exactly once.
-        assert rest_client.traces.create_traces.call_count == 1
+        # __internal_api__trace__ was called exactly once -- E2's
+        # _copy_traces_and_spans saw the trace already in trace_id_remap
+        # and skipped re-emitting it.
+        assert client.__internal_api__trace__.call_count == 1
 
     def test_experiment_without_id__raises_experiment_cascade_error(self) -> None:
         # Defensive check: the BE shouldn't return an experiment with
@@ -900,21 +928,22 @@ class TestCascadeExperiments:
 
         new_trace_id = result.trace_id_remap["src-trace-1"]
 
-        # score_batch_of_traces called exactly once with both scores,
-        # rewritten to point at the destination trace id + project.
-        rest_client.traces.score_batch_of_traces.assert_called_once()
-        kwargs = rest_client.traces.score_batch_of_traces.call_args.kwargs
+        # client.log_traces_feedback_scores called exactly once with both
+        # scores rewritten to point at the destination trace id + project.
+        client.log_traces_feedback_scores.assert_called_once()
+        kwargs = client.log_traces_feedback_scores.call_args.kwargs
         scores = kwargs["scores"]
+        assert kwargs["project_name"] == "DestProject"
         assert len(scores) == 2
-        names = {s.name for s in scores}
+        names = {s["name"] for s in scores}
         assert names == {"correctness", "latency_p95"}
         for s in scores:
-            assert s.id == new_trace_id
-            assert s.project_name == "DestProject"
+            assert s["id"] == new_trace_id
+            assert s["project_name"] == "DestProject"
 
     def test_trace_without_feedback_scores__skips_score_batch_call(self) -> None:
         # No-op path: when a source trace carries no feedback scores, the
-        # cascade must NOT call score_batch_of_traces (saves a round-trip).
+        # cascade must NOT call log_traces_feedback_scores.
         experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
         item = _ExperimentItem(
             id="src-item-1",
@@ -943,7 +972,7 @@ class TestCascadeExperiments:
             audit=_audit(),
         )
 
-        rest_client.traces.score_batch_of_traces.assert_not_called()
+        client.log_traces_feedback_scores.assert_not_called()
 
     def test_span_feedback_scores__copied_to_destination_spans(self) -> None:
         # Span-level feedback scores ride along on the spans' read payload
@@ -991,14 +1020,15 @@ class TestCascadeExperiments:
             audit=_audit(),
         )
 
-        rest_client.spans.score_batch_of_spans.assert_called_once()
-        kwargs = rest_client.spans.score_batch_of_spans.call_args.kwargs
+        client.log_spans_feedback_scores.assert_called_once()
+        kwargs = client.log_spans_feedback_scores.call_args.kwargs
         scores = kwargs["scores"]
+        assert kwargs["project_name"] == "DestProject"
         assert len(scores) == 1
-        assert scores[0].name == "span-quality"
-        assert scores[0].project_name == "DestProject"
+        assert scores[0]["name"] == "span-quality"
+        assert scores[0]["project_name"] == "DestProject"
         # The score's id must be the NEW span id (not the source).
-        assert scores[0].id != "span-root"
+        assert scores[0]["id"] != "span-root"
 
     def test_trace_assertion_results__copied_to_destination_trace(self) -> None:
         # Source experiment item carries assertion_results via the Compare
@@ -1048,26 +1078,24 @@ class TestCascadeExperiments:
             audit=_audit(),
         )
 
-        # store_assertions_batch called with entity_type=TRACE, scoped to
-        # the new destination trace id + project.
-        rest_client.assertion_results.store_assertions_batch.assert_called_once()
-        call = rest_client.assertion_results.store_assertions_batch.call_args
-        assert call.kwargs["entity_type"] == "TRACE"
+        # client.log_assertion_results called once with both assertions
+        # scoped to the new destination trace id + project.
+        client.log_assertion_results.assert_called_once()
+        call = client.log_assertion_results.call_args
+        assert call.kwargs["project_name"] == "DestProject"
         ars = call.kwargs["assertion_results"]
         assert len(ars) == 2
         new_trace_id = result.trace_id_remap["src-trace-1"]
         # Mapping: AssertionResultCompare.value -> name,
         # AssertionResultCompare.passed -> status (passed|failed),
         # AssertionResultCompare.reason -> reason.
-        by_name = {a.name: a for a in ars}
-        assert by_name["exact-match"].entity_id == new_trace_id
-        assert by_name["exact-match"].project_name == "DestProject"
-        assert by_name["exact-match"].status == "passed"
-        assert by_name["exact-match"].reason == "matched reference"
-        assert by_name["threshold-check"].status == "failed"
-        assert by_name["threshold-check"].reason == "below 0.8"
-        for a in ars:
-            assert a.source == "sdk"
+        by_name = {a["name"]: a for a in ars}
+        assert by_name["exact-match"]["id"] == new_trace_id
+        assert by_name["exact-match"]["project_name"] == "DestProject"
+        assert by_name["exact-match"]["status"] == "passed"
+        assert by_name["exact-match"]["reason"] == "matched reference"
+        assert by_name["threshold-check"]["status"] == "failed"
+        assert by_name["threshold-check"]["reason"] == "below 0.8"
 
     def test_no_assertion_results__skips_store_assertions_call(self) -> None:
         # Regular-dataset items (no assertion_results) must NOT trigger
