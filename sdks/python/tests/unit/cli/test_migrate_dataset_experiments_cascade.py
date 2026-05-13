@@ -21,7 +21,7 @@ Scope this module covers (ticket AC for OPIK-6416):
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 from unittest.mock import MagicMock
 
 import datetime as dt
@@ -290,6 +290,66 @@ def _cascade_rest_client(
     # can wire ``client.search_traces`` against it without each test
     # restating the fixture data.
     rest_client._traces_by_id_for_cascade_search = traces_by_id
+
+    # Bulk project-discovery path: the cascade calls
+    # ``rest_client.experiments.stream_experiment_items(experiment_name=,
+    # truncate=True)`` to discover which projects the experiment's traces
+    # actually live in (cross-project support). The stub returns one
+    # ``ExperimentItemPublic``-shaped MagicMock per trace, populated with
+    # the trace's ``project_id`` from the test's traces_by_id map so the
+    # cascade's per-project bulk-read loop sees the right grouping.
+    #
+    # The cascade's stream parser (``read_and_parse_full_stream``)
+    # expects an iterable of bytes; we return NDJSON-encoded items so the
+    # parser deserializes them into ``ExperimentItemPublic`` correctly.
+    def _stream_experiment_items(
+        *,
+        experiment_name: Optional[str] = None,
+        limit: Optional[int] = None,
+        last_retrieved_id: Optional[str] = None,
+        truncate: Optional[bool] = None,
+        **_kwargs: Any,
+    ) -> Iterator[bytes]:
+        # Tests don't exercise multi-page streams; pagination is via
+        # ``last_retrieved_id`` which the stream parser increments off
+        # the last ``id`` field. We return everything on the first call,
+        # empty on the second so the parser breaks the loop.
+        if last_retrieved_id is not None:
+            return iter([])
+        chunks: List[bytes] = []
+        # Find which traces belong to the requested experiment. The
+        # cascade calls with ``experiment_name``; look it up in
+        # ``experiments_by_dataset`` to get the matching experiment id,
+        # then route via ``items_by_experiment``.
+        matching_exp_id: Optional[str] = None
+        for exps in experiments_by_dataset.values():
+            for exp in exps:
+                if exp.name == experiment_name:
+                    matching_exp_id = exp.id
+                    break
+            if matching_exp_id:
+                break
+        for exp_name_key, exp_items in items_by_experiment.items():
+            for it in exp_items:
+                if it.experiment_id != matching_exp_id:
+                    continue
+                trace = traces_by_id.get(it.trace_id)
+                project_id = (
+                    getattr(trace, "project_id", None) if trace is not None else None
+                )
+                payload = {
+                    "id": it.id,
+                    "experiment_id": it.experiment_id,
+                    "dataset_item_id": it.dataset_item_id,
+                    "trace_id": it.trace_id,
+                    "project_id": project_id,
+                }
+                chunks.append(json.dumps(payload).encode() + b"\n")
+        return iter(chunks)
+
+    rest_client.experiments.stream_experiment_items.side_effect = (
+        _stream_experiment_items
+    )
 
     def _get_spans_by_project(
         trace_id: str,

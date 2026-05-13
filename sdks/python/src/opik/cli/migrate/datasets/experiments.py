@@ -54,9 +54,10 @@ from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cas
 
 import opik
 import opik.id_helpers as id_helpers_module
-from opik.api_objects import rest_helpers
+from opik.api_objects import rest_helpers, rest_stream_parser
 from opik.api_objects.experiment import experiment_item, rest_operations
 from opik.rest_api import OpikApi
+from opik.rest_api.types.experiment_item_public import ExperimentItemPublic
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
 from opik.rest_api.types.trace_public import TracePublic
@@ -360,6 +361,7 @@ def cascade_one_experiment(
         client,
         rest_client,
         source_experiment_id=experiment_id,
+        source_experiment_name=experiment_name,
         source_trace_ids=source_trace_ids,
         source_project_id=source_project_id,
         target_project_name=target_project_name,
@@ -500,11 +502,74 @@ def _read_source_experiment_items(
     )
 
 
+def _discover_trace_projects(
+    rest_client: OpikApi,
+    *,
+    source_experiment_name: str,
+    fallback_project_id: str,
+) -> Dict[str, Set[str]]:
+    """Map each source trace_id to the project where its trace actually lives.
+
+    Cross-project experiments are legal on the BE: ``experiment_items``
+    rows can reference traces in projects different from the experiment's
+    own project. The BE populates ``experiment_items.project_id`` from
+    ``traces.project_id`` at write time (see
+    ``ExperimentItemService.populateProjectIdFromTraces``), and
+    ``streamExperimentItems`` surfaces that field on each row (verified
+    on staging -- the Compare-view endpoint omits ``project_id`` via its
+    ``@JsonView`` annotation, but the stream-experiment-items endpoint
+    has no view restriction and includes it).
+
+    We stream the experiment's items, group source trace_ids by their
+    actual project_id, and return ``{project_id: {trace_ids}}``. The
+    cascade then issues one ``search_traces`` and one ``search_spans``
+    per distinct project -- typically 1 in practice (``opik.evaluate(...)``
+    co-locates), but legal cross-project setups stay lossless without
+    falling back to per-trace ``get_trace_content`` for each.
+
+    Items whose ``project_id`` is ``None`` (defensive; the BE
+    populate-from-traces step shouldn't leave nulls but the schema allows
+    it) are routed to ``fallback_project_id`` -- the experiment's own
+    project. This matches the per-trace fallback's old behavior from
+    commit ``7e0f9a8bb``: ``trace.project_id or source_project_id``.
+    """
+    project_ids_by_trace: Dict[str, Set[str]] = {}
+
+    def _fetch_page(batch_size: int, last_retrieved_id: Optional[str]) -> Any:
+        return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            operation_name="stream_experiment_items (project discovery)",
+            rest_callable=lambda: list(
+                rest_client.experiments.stream_experiment_items(
+                    experiment_name=source_experiment_name,
+                    limit=batch_size,
+                    last_retrieved_id=last_retrieved_id,
+                    truncate=True,
+                )
+            ),
+        )
+
+    items = rest_stream_parser.read_and_parse_full_stream(
+        read_source=_fetch_page,
+        max_results=sys.maxsize,
+        parsed_item_class=ExperimentItemPublic,
+    )
+
+    for item in items:
+        trace_id = item.trace_id
+        if not trace_id:
+            continue
+        project_id = item.project_id or fallback_project_id
+        project_ids_by_trace.setdefault(project_id, set()).add(trace_id)
+
+    return project_ids_by_trace
+
+
 def _copy_traces_and_spans(
     client: opik.Opik,
     rest_client: OpikApi,
     *,
     source_experiment_id: str,
+    source_experiment_name: str,
     source_trace_ids: Set[str],
     source_project_id: str,
     target_project_name: str,
@@ -563,11 +628,28 @@ def _copy_traces_and_spans(
     source_to_new_trace: Dict[str, str] = {}
     project_id_to_name_cache: Dict[str, str] = {}
 
-    # Phase 1: fetch source traces in BULK via
-    # ``search_traces(filter="experiment_id=...")`` -- one HTTP read
-    # instead of one per trace. The BE has ``TraceField.EXPERIMENT_ID``
-    # as a first-class filter (joined through ``experiment_items``), so
-    # this returns every trace linked to ``source_experiment_id``.
+    # Phase 1a: discover which projects this experiment's traces actually
+    # live in. The BE allows ``experiment_items`` rows to reference traces
+    # in projects different from the experiment's own project (legal but
+    # rare; ``opik.evaluate(...)`` always co-locates). We stream the
+    # experiment's items via ``streamExperimentItems`` -- each row carries
+    # ``project_id`` populated from the trace's actual project at write
+    # time -- and group by project so we can issue one ``search_traces``
+    # per distinct project. Single-project experiments (the common case)
+    # still produce one read; cross-project experiments stay lossless.
+    traces_by_project: Dict[str, Set[str]] = _discover_trace_projects(
+        rest_client,
+        source_experiment_name=source_experiment_name,
+        fallback_project_id=source_project_id,
+    )
+
+    # Phase 1b: fetch source traces in BULK via
+    # ``search_traces(filter="experiment_id=...")`` -- one HTTP read PER
+    # DISTINCT PROJECT. The BE has ``TraceField.EXPERIMENT_ID`` as a
+    # first-class filter (joined through ``experiment_items``), but the
+    # outer SQL clamps ``project_id = :project_id`` -- so the filter is
+    # AND-ed with the project scope. Looping per project covers every
+    # trace including cross-project ones.
     #
     # ``truncate=False`` is required for round-trip fidelity: the SDK
     # wrapper defaults to ``True``, which replaces inline base64 image
@@ -578,23 +660,28 @@ def _copy_traces_and_spans(
     # (PAGE_SIZE=2000 via ``last_retrieved_id`` cursor) walk every page;
     # the cap is the wrapper's caller-side "stop at N" UI knob, not a
     # safety limit -- a migration must be lossless.
-    source_project_name = _resolve_project_name(
-        client, project_id=source_project_id, cache=project_id_to_name_cache
-    )
-    bulk_traces = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: client.search_traces(
-            project_name=source_project_name,
-            filter_string=f'experiment_id = "{source_experiment_id}"',
-            max_results=sys.maxsize,
-            truncate=False,
-        ),
-        operation_name="search_traces (experiment cascade)",
-    )
-    source_traces_by_id: Dict[str, TracePublic] = {
-        t.id: t for t in bulk_traces if t.id is not None
-    }
+    source_traces_by_id: Dict[str, TracePublic] = {}
+    for project_id in traces_by_project:
+        project_name = _resolve_project_name(
+            client, project_id=project_id, cache=project_id_to_name_cache
+        )
+        bulk_traces = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda pn=project_name: client.search_traces(
+                project_name=pn,
+                filter_string=f'experiment_id = "{source_experiment_id}"',
+                max_results=sys.maxsize,
+                truncate=False,
+            ),
+            operation_name="search_traces (experiment cascade)",
+        )
+        for t in bulk_traces:
+            if t.id is not None:
+                source_traces_by_id[t.id] = t
     if inner_progress is not None:
-        inner_progress.tick(label=f"fetched {len(source_traces_by_id)} traces in bulk")
+        inner_progress.tick(
+            label=f"fetched {len(source_traces_by_id)} traces in bulk "
+            f"({len(traces_by_project)} project{'s' if len(traces_by_project) != 1 else ''})"
+        )
 
     # Defensive fallback: if any trace_ids from the Compare-view items are
     # missing from the bulk search response (rare -- shouldn't happen if
@@ -679,26 +766,33 @@ def _copy_traces_and_spans(
     if inner_progress is not None:
         inner_progress.tick(label="logged assertion results")
 
-    # Phase 2a: bulk-fetch spans for the experiment in ONE call.
-    # ``_bulk_fetch_spans_for_experiment`` reads via the Fern POST
-    # ``search_spans`` endpoint with a ``[from_time, to_time]`` window
-    # derived from the bulk-read traces' own start/end timestamps. The
-    # destination spans are then emitted per-trace from the resulting
-    # in-memory bucket, keeping the span-id-remap and parent-span-id
-    # rewiring per-trace (span ids only collide within a trace tree).
+    # Phase 2a: bulk-fetch spans for the experiment, one call per distinct
+    # project the experiment's traces live in. ``search_spans`` (like
+    # ``search_traces``) clamps ``project_id`` on the outer SQL, so a
+    # single call cannot cover cross-project experiments. We reuse the
+    # ``traces_by_project`` mapping computed before the trace bulk-read.
+    #
+    # Each per-project call uses a ``[from_time, to_time]`` window derived
+    # from THAT project's traces' start/end timestamps, then filters
+    # client-side by ``trace_id in <project's trace_ids>`` so spans from
+    # concurrent activity in the same project + time window are discarded.
     #
     # We drop to the Fern method because the high-level
     # ``client.search_spans`` wrapper doesn't expose ``from_time`` /
     # ``to_time``. Tactical Fern use, scoped to this one bulk read.
     spans_by_trace_id = _bulk_fetch_spans_for_experiment(
         client,
-        source_project_name=source_project_name,
         source_traces_by_id=source_traces_by_id,
+        traces_by_project=traces_by_project,
+        project_id_to_name_cache=project_id_to_name_cache,
         expected_trace_ids=set(source_to_new_trace.keys()),
     )
     if inner_progress is not None:
         total_spans_in_bulk = sum(len(s) for s in spans_by_trace_id.values())
-        inner_progress.tick(label=f"fetched {total_spans_in_bulk} spans in bulk")
+        inner_progress.tick(
+            label=f"fetched {total_spans_in_bulk} spans in bulk "
+            f"({len(traces_by_project)} project{'s' if len(traces_by_project) != 1 else ''})"
+        )
 
     # Phase 2b: emit destination spans per-trace from the in-memory
     # bucket. Same topological-sort + per-trace span_id_remap logic as
@@ -938,25 +1032,28 @@ def _as_aware(value: datetime) -> datetime:
 def _bulk_fetch_spans_for_experiment(
     client: opik.Opik,
     *,
-    source_project_name: str,
     source_traces_by_id: Dict[str, TracePublic],
+    traces_by_project: Dict[str, Set[str]],
+    project_id_to_name_cache: Dict[str, str],
     expected_trace_ids: Set[str],
 ) -> Dict[str, List[SpanPublic]]:
-    """Fetch every span parented by ``expected_trace_ids`` in ONE bulk read.
+    """Fetch every span parented by ``expected_trace_ids`` in bulk.
 
-    Routes through the high-level ``client.search_spans`` wrapper with a
-    ``filter_string="start_time >= … AND start_time <= …"`` clause
-    derived from the bulk-read traces' own start/end timestamps. The
-    wrapper doesn't expose dedicated ``from_time`` / ``to_time`` params,
-    but the BE filter grammar accepts the same bounds via the date-time
-    filter operators on ``SpanField.START_TIME``.
+    One ``client.search_spans`` call per distinct project the
+    experiment's traces live in. The BE's ``search_spans`` clamps
+    ``project_id = :project_id`` on the outer SQL, so a single call can
+    only cover traces in one project. ``traces_by_project`` (computed
+    earlier from ``streamExperimentItems``) tells us where each trace
+    actually lives, so this loop covers cross-project experiments
+    losslessly.
 
-    Time-bounded by the traces' own window (see
-    ``_compute_span_time_window``) so we don't paginate through the
-    entire project's span history. Client-side filter by
-    ``span.trace_id in expected_trace_ids`` discards any over-fetch from
-    concurrent activity in the same window (other experiments, ad-hoc
-    traces, online evaluations).
+    Each per-project call uses a ``filter_string="start_time >= … AND
+    start_time <= …"`` clause derived from THAT project's traces'
+    start/end timestamps. The BE filter grammar accepts the bounds via
+    the date-time filter operators on ``SpanField.START_TIME``. Spans
+    from concurrent activity in the same project + time window are
+    discarded by the client-side ``span.trace_id in expected_trace_ids``
+    filter.
 
     Returns a dict ``{trace_id: [spans]}`` covering every id in
     ``expected_trace_ids``. Missing entries are present with empty lists
@@ -968,42 +1065,61 @@ def _bulk_fetch_spans_for_experiment(
     workspaces with a strict ``search_spans:{workspaceId}`` bucket
     produced a 30-then-pause throttle pattern for large experiments.
     """
-    window = _compute_span_time_window(source_traces_by_id)
-
     spans_by_trace: Dict[str, List[SpanPublic]] = {
         tid: [] for tid in expected_trace_ids
     }
 
-    filter_string: Optional[str] = None
-    if window is not None:
-        from_time, to_time = window
-        # ISO 8601 with explicit ``Z`` UTC suffix matches the BE filter
-        # grammar's date-time literal format (see the search_spans
-        # docstring on ``client.search_spans``: "use ISO 8601 format,
-        # e.g., '2024-01-01T00:00:00Z'"). We anchor the lower bound on
-        # ``start_time >= from_time`` and the upper bound on
-        # ``start_time <= to_time``; ``SpanField.END_TIME`` is filterable
-        # too but using a single field for both bounds keeps the filter
-        # AST simple and lets the BE's primary-key range scan stay tight.
-        filter_string = (
-            f'start_time >= "{_to_iso_z(from_time)}" '
-            f'AND start_time <= "{_to_iso_z(to_time)}"'
+    for project_id, trace_ids_in_project in traces_by_project.items():
+        project_name = _resolve_project_name(
+            client, project_id=project_id, cache=project_id_to_name_cache
         )
 
-    all_spans = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        operation_name="search_spans (experiment bulk read)",
-        rest_callable=lambda: client.search_spans(
-            project_name=source_project_name,
-            filter_string=filter_string,
-            max_results=sys.maxsize,
-            truncate=False,
-        ),
-    )
+        # Narrow the time window to just THIS project's traces -- shrinks
+        # over-fetch from concurrent activity unrelated to the experiment.
+        per_project_traces = {
+            tid: source_traces_by_id[tid]
+            for tid in trace_ids_in_project
+            if tid in source_traces_by_id
+        }
+        window = _compute_span_time_window(per_project_traces)
+        filter_string: Optional[str] = None
+        if window is not None:
+            from_time, to_time = window
+            # ISO 8601 with explicit ``Z`` UTC suffix matches the BE
+            # filter grammar's date-time literal format (see the
+            # search_spans docstring on ``client.search_spans``:
+            # "use ISO 8601 format, e.g., '2024-01-01T00:00:00Z'").
+            # ``SpanField.END_TIME`` is filterable too but using
+            # ``start_time`` for both bounds keeps the filter AST simple
+            # and lets the BE's primary-key range scan stay tight.
+            filter_string = (
+                f'start_time >= "{_to_iso_z(from_time)}" '
+                f'AND start_time <= "{_to_iso_z(to_time)}"'
+            )
 
-    for span in all_spans:
-        tid = span.trace_id
-        if tid is not None and tid in spans_by_trace:
-            spans_by_trace[tid].append(span)
+        all_spans = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            operation_name="search_spans (experiment bulk read)",
+            rest_callable=lambda pn=project_name, fs=filter_string: client.search_spans(
+                project_name=pn,
+                filter_string=fs,
+                max_results=sys.maxsize,
+                truncate=False,
+            ),
+        )
+
+        for span in all_spans:
+            tid = span.trace_id
+            # Filter twice: must be one of the experiment's expected
+            # trace_ids AND must belong to this project's subset (the
+            # outer ``project_name`` filter already restricts the
+            # returned spans, but checking here too makes the contract
+            # explicit and defends against any BE quirk).
+            if (
+                tid is not None
+                and tid in spans_by_trace
+                and tid in trace_ids_in_project
+            ):
+                spans_by_trace[tid].append(span)
 
     # Surface zero-bucket traces. Could be legitimate (genuinely no spans
     # on the source trace) OR the bulk window missed them. We don't
