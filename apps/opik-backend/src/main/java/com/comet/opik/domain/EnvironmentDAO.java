@@ -27,7 +27,7 @@ interface EnvironmentDAO {
 
     @SqlBatch("INSERT IGNORE INTO environments (id, workspace_id, name, color, position, created_by, last_updated_by) "
             +
-            "VALUES (:bean.id, :workspaceId, :bean.name, 'default', 0, :userName, :userName)")
+            "VALUES (:bean.id, :workspaceId, :bean.name, COALESCE(:bean.color, 'default'), 0, :userName, :userName)")
     void saveBatch(@Bind("workspaceId") String workspaceId, @Bind("userName") String userName,
             @BindMethods("bean") List<Environment> environments);
 
