@@ -41,7 +41,6 @@ import {
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
 import { getOrFetch as promptCacheGetOrFetch } from "@/prompt/promptCache";
-import { injectPromptIntoTraceContext } from "@/prompt/promptReference";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -67,7 +66,7 @@ import {
   getCachedBlueprint,
   initBlueprintCacheEntry,
 } from "@/agent-config/blueprintCache";
-import { trackStorage } from "@/decorators/track";
+import { trackStorage, getTrackContext } from "@/decorators/track";
 import { ConfigNotFoundError, ConfigMismatchError } from "@/errors/agent-config/errors";
 import { EnvironmentAlreadyExistsError } from "@/errors/environment/errors";
 import { DEFAULT_CONFIG } from "@/config/Config";
@@ -1495,7 +1494,11 @@ export class OpikClient {
     );
 
     if (result !== null) {
-      injectPromptIntoTraceContext(result);
+      const ctx = getTrackContext();
+      if (ctx) {
+        ctx.trace.update({ prompts: [result] });
+        ctx.span.update({ prompts: [result] });
+      }
     }
 
     return result;

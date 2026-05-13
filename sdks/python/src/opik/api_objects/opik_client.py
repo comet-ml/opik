@@ -47,7 +47,6 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .prompt import base_prompt as base_prompt_module
 from .prompt import prompt_cache
 from .prompt.text import prompt as text_prompt_module
 from .prompt.chat import chat_prompt as chat_prompt_module
@@ -2367,7 +2366,16 @@ class Opik:
             fetch_fn=_fetch,
         )
         if result is not None:
-            base_prompt_module.inject_prompt_into_trace_context(result)
+            from opik import opik_context
+
+            try:
+                opik_context.update_current_trace(prompts=[result])
+            except Exception:
+                pass
+            try:
+                opik_context.update_current_span(prompts=[result])
+            except Exception:
+                pass
         return result
 
     def get_prompt_history(

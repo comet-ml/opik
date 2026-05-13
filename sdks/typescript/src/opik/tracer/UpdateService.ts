@@ -1,27 +1,40 @@
+import type { BasePrompt } from "@/prompt/BasePrompt";
 import type { Prompt } from "@/prompt/Prompt";
+import type { ChatPrompt } from "@/prompt/ChatPrompt";
 import type * as OpikApi from "@/rest_api/api";
 import type { PromptInfoDict, TraceUpdateData, SpanUpdateData } from "./types";
+
+function isTextPrompt(p: BasePrompt): p is Prompt {
+  return p.templateStructure === "text";
+}
+
+function isChatPrompt(p: BasePrompt): p is ChatPrompt {
+  return p.templateStructure === "chat";
+}
 
 /**
  * Service for processing trace and span updates with prompts support.
  * Handles serialization of prompts and merging into metadata.
  */
 export class UpdateService {
-  /**
-   * Serializes a Prompt object to info dict format.
-   * Matches Python SDK serialization format.
-   *
-   * @param prompt - Prompt instance to serialize
-   * @returns Serialized prompt in info dict format
-   */
-  private static serializePromptToInfoDict(prompt: Prompt): PromptInfoDict {
+  private static serializePromptToInfoDict(prompt: BasePrompt): PromptInfoDict {
+    let template: unknown;
+    if (isTextPrompt(prompt)) {
+      template = prompt.prompt;
+    } else if (isChatPrompt(prompt)) {
+      template = prompt.messages;
+    } else {
+      template = "";
+    }
+
     return {
       name: prompt.name,
       ...(prompt.id && { id: prompt.id }),
+      template_structure: prompt.templateStructure,
       version: {
         ...(prompt.versionId && { id: prompt.versionId }),
         ...(prompt.commit && { commit: prompt.commit }),
-        template: prompt.prompt,
+        template,
       },
     };
   }
@@ -78,7 +91,7 @@ export class UpdateService {
   private static mergePromptsIntoMetadata(
     existingMetadata: OpikApi.JsonListString | undefined,
     newMetadata: OpikApi.JsonListString | undefined,
-    prompts: Prompt[]
+    prompts: BasePrompt[]
   ): OpikApi.JsonListString {
     const serializedPrompts = prompts.map((p) =>
       this.serializePromptToInfoDict(p)
@@ -94,7 +107,7 @@ export class UpdateService {
     };
   }
 
-  private static processUpdate<T extends { metadata?: OpikApi.JsonListString; prompts?: Prompt[] }>(
+  private static processUpdate<T extends { metadata?: OpikApi.JsonListString; prompts?: BasePrompt[] }>(
     updates: T,
     existingMetadata?: OpikApi.JsonListString
   ): Omit<T, "prompts"> {

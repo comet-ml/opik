@@ -301,133 +301,65 @@ class TestPromptCacheEdgeCases:
         assert cache._thread is None
 
 
-class TestPromptReferences:
-    def test_inject_prompt_into_trace_context__in_track_context__injects_into_trace_and_span(
-        self,
-    ):
-        from opik.api_objects.prompt.base_prompt import inject_prompt_into_trace_context
+class TestPromptAutoInjection:
+    """Test that _get_prompt_with_cache injects prompts into the active trace context via opik_prompts."""
 
-        mock_trace_data = mock.Mock()
-        mock_trace_data.metadata = None
-        mock_span_data = mock.Mock()
-        mock_span_data.metadata = None
+    def _call_get_prompt_with_cache(self, cache_return_value):
+        from opik.api_objects.opik_client import Opik
 
-        with (
-            mock.patch(
-                "opik.opik_context.get_current_trace_data", return_value=mock_trace_data
-            ),
-            mock.patch(
-                "opik.opik_context.get_current_span_data", return_value=mock_span_data
-            ),
-            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
-            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
+        client = mock.Mock(spec=Opik)
+        client._resolve_project_name = mock.Mock(return_value="default")
+        client._rest_client = mock.Mock()
+
+        with mock.patch(
+            "opik.api_objects.prompt.prompt_cache.get_or_fetch",
+            return_value=cache_return_value,
         ):
-            p = _make_mock_prompt(name="my-prompt", commit="abc123")
-            inject_prompt_into_trace_context(p)
-
-        expected_payload = {
-            "_prompt_references": [{"name": "my-prompt", "commit": "abc123"}]
-        }
-        mock_trace_update.assert_called_once_with(metadata=expected_payload)
-        mock_span_update.assert_called_once_with(metadata=expected_payload)
-
-    def test_inject_prompt_into_trace_context__prompt_id_present__includes_prompt_id(
-        self,
-    ):
-        from opik.api_objects.prompt.base_prompt import inject_prompt_into_trace_context
-
-        mock_trace_data = mock.Mock()
-        mock_trace_data.metadata = None
-        mock_span_data = mock.Mock()
-        mock_span_data.metadata = None
-
-        with (
-            mock.patch(
-                "opik.opik_context.get_current_trace_data", return_value=mock_trace_data
-            ),
-            mock.patch(
-                "opik.opik_context.get_current_span_data", return_value=mock_span_data
-            ),
-            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
-            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
-        ):
-            p = _make_mock_prompt(
-                name="my-prompt", commit="abc123", prompt_id="pid-123"
-            )
-            inject_prompt_into_trace_context(p)
-
-        expected_payload = {
-            "_prompt_references": [
-                {"name": "my-prompt", "commit": "abc123", "prompt_id": "pid-123"}
-            ]
-        }
-        mock_trace_update.assert_called_once_with(metadata=expected_payload)
-        mock_span_update.assert_called_once_with(metadata=expected_payload)
-
-    def test_inject_prompt_into_trace_context__multiple_prompts__accumulates_refs(self):
-        from opik.api_objects.prompt.base_prompt import inject_prompt_into_trace_context
-
-        mock_trace_data = mock.Mock()
-        mock_trace_data.metadata = None
-        mock_span_data = mock.Mock()
-        mock_span_data.metadata = None
-
-        with (
-            mock.patch(
-                "opik.opik_context.get_current_trace_data", return_value=mock_trace_data
-            ),
-            mock.patch(
-                "opik.opik_context.get_current_span_data", return_value=mock_span_data
-            ),
-            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
-            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
-        ):
-            inject_prompt_into_trace_context(
-                _make_mock_prompt(name="p1", commit="c1", prompt_id="pid-1")
-            )
-            mock_trace_data.metadata = {
-                "_prompt_references": [
-                    {"name": "p1", "commit": "c1", "prompt_id": "pid-1"}
-                ]
-            }
-            mock_span_data.metadata = {
-                "_prompt_references": [
-                    {"name": "p1", "commit": "c1", "prompt_id": "pid-1"}
-                ]
-            }
-            inject_prompt_into_trace_context(
-                _make_mock_prompt(name="p2", commit="c2", prompt_id="pid-2")
+            return Opik._get_prompt_with_cache(
+                client,
+                name="my-prompt",
+                commit="abc123",
+                project_name=None,
+                template_structure="text",
+                prompt_cls=mock.Mock,
             )
 
-        assert mock_trace_update.call_count == 2
-        assert mock_span_update.call_count == 2
-        assert mock_trace_update.call_args == mock.call(
-            metadata={
-                "_prompt_references": [
-                    {"name": "p1", "commit": "c1", "prompt_id": "pid-1"},
-                    {"name": "p2", "commit": "c2", "prompt_id": "pid-2"},
-                ]
-            }
-        )
-        assert mock_span_update.call_args == mock.call(
-            metadata={
-                "_prompt_references": [
-                    {"name": "p1", "commit": "c1", "prompt_id": "pid-1"},
-                    {"name": "p2", "commit": "c2", "prompt_id": "pid-2"},
-                ]
-            }
-        )
-
-    def test_inject_prompt_into_trace_context__no_track_context__no_injection(self):
-        from opik.api_objects.prompt.base_prompt import inject_prompt_into_trace_context
+    def test_get_prompt_with_cache__in_track_context__calls_update_with_prompts(self):
+        mock_prompt = _make_mock_prompt(name="my-prompt", commit="abc123")
 
         with (
-            mock.patch("opik.opik_context.get_current_trace_data", return_value=None),
-            mock.patch("opik.opik_context.get_current_span_data", return_value=None),
             mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
             mock.patch("opik.opik_context.update_current_span") as mock_span_update,
         ):
-            inject_prompt_into_trace_context(_make_mock_prompt())
+            self._call_get_prompt_with_cache(mock_prompt)
 
+        mock_trace_update.assert_called_once_with(prompts=[mock_prompt])
+        mock_span_update.assert_called_once_with(prompts=[mock_prompt])
+
+    def test_get_prompt_with_cache__no_track_context__no_error(self):
+        """When there is no active trace context, injection silently does nothing."""
+        mock_prompt = _make_mock_prompt(name="my-prompt", commit="abc123")
+
+        with (
+            mock.patch(
+                "opik.opik_context.update_current_trace",
+                side_effect=Exception("no context"),
+            ),
+            mock.patch(
+                "opik.opik_context.update_current_span",
+                side_effect=Exception("no context"),
+            ),
+        ):
+            result = self._call_get_prompt_with_cache(mock_prompt)
+            assert result is mock_prompt
+
+    def test_get_prompt_with_cache__none_result__no_injection(self):
+        with (
+            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
+            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
+        ):
+            result = self._call_get_prompt_with_cache(None)
+
+        assert result is None
         mock_trace_update.assert_not_called()
         mock_span_update.assert_not_called()
