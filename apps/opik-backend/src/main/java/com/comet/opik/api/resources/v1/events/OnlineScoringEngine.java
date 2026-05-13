@@ -233,13 +233,20 @@ public class OnlineScoringEngine {
     /**
      * Compact per-trace summary shipped to the model as part of the thread skeleton.
      * Field set is small on purpose — anything beyond this is a {@code read} away.
+     *
+     * <p>{@code @JsonNaming(SnakeCaseStrategy)} keeps the wire shape consistent with
+     * {@link Trace}'s serialization (also snake_case via the same strategy), so the
+     * model sees the same field names in the skeleton and in a follow-up
+     * {@code read(type=trace, id=X)} response. Camel-case here would surprise the
+     * model with two different schemas for the same entity.
      */
+    @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ThreadTraceSkeleton(
             UUID id,
             String name,
             Instant startTime,
             Instant endTime,
-            Double durationMs,
+            Double duration,
             int spanCount,
             int llmSpanCount) {
     }

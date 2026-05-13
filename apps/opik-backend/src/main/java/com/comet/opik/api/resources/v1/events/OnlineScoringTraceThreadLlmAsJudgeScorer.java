@@ -20,10 +20,8 @@ import com.comet.opik.infrastructure.OnlineScoringConfig;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
-import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.ToolExecutionResultMessage;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
@@ -60,19 +58,6 @@ import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 @EagerSingleton
 @Slf4j
 public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseScorer<TraceThreadToScoreLlmAsJudge> {
-
-    private static final int MAX_TOOL_CALL_ROUNDS = 10;
-
-    /**
-     * Cumulative cap on tool-result string length across the whole tool-call loop. Same
-     * shape and sizing as the trace-level scorer's cap — see that class for the budget
-     * math. Pairs with {@link com.comet.opik.api.resources.v1.events.tools.ReadTool#OUTPUT_SAFETY_CHARS}.
-     */
-    static final long CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS = 150_000L;
-
-    private static final String BUDGET_EXHAUSTED_MESSAGE = "{\"error\": \"Cumulative tool-output"
-            + " budget (%d chars) exhausted for this judgment; further tool calls return this"
-            + " error. Respond now with your best assessment from the data already gathered.\"}";
 
     private final ChatCompletionService aiProxyService;
     private final Logger userFacingLogger;
@@ -382,10 +367,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             return Mono.just(chatResponse);
         }
 
-        // Defer everything below to subscription time. Same reasoning as the trace-side
-        // scorer: keeps ctx/messages/budget allocation aligned with chain subscription, so a
-        // future caller that composes the returned Mono differently doesn't trigger the
-        // setup work at the wrong moment.
+        // Defer to subscription time so context + message list allocation happen exactly once
+        // per subscription. Early Mono.just above stays outside the defer because it's cold.
         return Mono.defer(() -> {
             // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
             // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
@@ -398,9 +381,12 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     .build();
 
             var messages = new ArrayList<ChatMessage>(toolRequest.messages());
-            var budget = new ToolOutputBudget();
+            var budget = new ToolCallLoop.Budget();
 
-            return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
+            return ToolCallLoop.run(
+                    chatResponse, toolRequest, followUpParameters, toolRegistry,
+                    request -> scoreTraceReactive(request, message),
+                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc)
                     .flatMap(loopFinalResponse -> {
                         messages.add(UserMessage.from(
                                 "You have completed your investigation using the available tools."
@@ -413,73 +399,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                         return scoreTraceReactive(finalRequest, message);
                     });
         });
-    }
-
-    private Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse, ChatRequest toolRequest,
-            ChatRequestParameters followUpParameters, TraceThreadToScoreLlmAsJudge message,
-            ArrayList<ChatMessage> messages, TraceToolContext ctx, ToolOutputBudget budget,
-            Map<String, String> mdc) {
-        if (round >= MAX_TOOL_CALL_ROUNDS) {
-            return Mono.just(currentResponse);
-        }
-        if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
-            return Mono.just(currentResponse);
-        }
-
-        // Defer side effects (messages.add, tool executions, followUp scoreTrace) until
-        // subscription. Early returns above are pure cold Mono.just and don't need defer.
-        return Mono.defer(() -> {
-            messages.add(currentResponse.aiMessage());
-
-            // concatMap (not flatMap) so tool executions within a round preserve order — same
-            // contract as the trace-level scorer.
-            Flux<ToolExecutionResultMessage> roundResults = Flux
-                    .fromIterable(currentResponse.aiMessage().toolExecutionRequests())
-                    .concatMap(toolExecRequest -> executeToolOrBudgetExhausted(round, toolExecRequest, message,
-                            ctx, budget, mdc));
-
-            return roundResults
-                    .doOnNext(messages::add)
-                    .then(Mono.defer(() -> {
-                        var followUp = toolRequest.toBuilder()
-                                .messages(new ArrayList<>(messages))
-                                .parameters(followUpParameters)
-                                .build();
-                        return scoreTraceReactive(followUp, message);
-                    }))
-                    .flatMap(nextResponse -> toolCallLoop(round + 1, nextResponse, toolRequest, followUpParameters,
-                            message, messages, ctx, budget, mdc));
-        });
-    }
-
-    private Mono<ToolExecutionResultMessage> executeToolOrBudgetExhausted(int round,
-            ToolExecutionRequest toolExecRequest, TraceThreadToScoreLlmAsJudge message,
-            TraceToolContext ctx, ToolOutputBudget budget, Map<String, String> mdc) {
-        try (var logContext = wrapWithMdc(mdc)) {
-            log.debug("Tool call round '{}' for ruleId '{}': tool '{}'",
-                    round, message.ruleId(), toolExecRequest.name());
-            if (budget.cumulative >= CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS) {
-                if (!budget.exhaustedLogged) {
-                    log.warn("Tool-output budget '{}' chars exhausted for ruleId '{}';"
-                            + " subsequent tool calls return budget-exhausted sentinel",
-                            CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS, message.ruleId());
-                    budget.exhaustedLogged = true;
-                }
-                return Mono.just(ToolExecutionResultMessage.from(toolExecRequest,
-                        BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS)));
-            }
-        }
-        return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
-                .map(result -> {
-                    budget.cumulative += result.length();
-                    return ToolExecutionResultMessage.from(toolExecRequest, result);
-                });
-    }
-
-    /** Shared per-evaluation tool-output budget state. Mutated sequentially via concatMap. */
-    private static final class ToolOutputBudget {
-        long cumulative = 0L;
-        boolean exhaustedLogged = false;
     }
 
     private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools) {

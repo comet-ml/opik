@@ -196,6 +196,30 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
     @Nested
     class ToolLoopTests {
 
+        // Real evaluator code so the message mock can return a model that scoreTrace
+        // calls accept. We mirror the trace-side ToolLoopTests pattern.
+        private com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge newMessage() {
+            var msg = org.mockito.Mockito.mock(com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge.class);
+            var code = org.mockito.Mockito.mock(
+                    com.comet.opik.api.evaluators.AutomationRuleEvaluatorTraceThreadLlmAsJudge.TraceThreadLlmAsJudgeCode.class);
+            var modelParams = org.mockito.Mockito.mock(
+                    com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.class);
+            org.mockito.Mockito.lenient().when(code.model()).thenReturn(modelParams);
+            org.mockito.Mockito.lenient().when(modelParams.name()).thenReturn("gpt-test");
+            org.mockito.Mockito.lenient().when(msg.code()).thenReturn(code);
+            org.mockito.Mockito.lenient().when(msg.workspaceId()).thenReturn("ws-1");
+            org.mockito.Mockito.lenient().when(msg.userName()).thenReturn("user-1");
+            org.mockito.Mockito.lenient().when(msg.ruleId()).thenReturn(UUID.randomUUID());
+            return msg;
+        }
+
+        private static dev.langchain4j.agent.tool.ToolSpecification stubSpec(String name) {
+            return dev.langchain4j.agent.tool.ToolSpecification.builder()
+                    .name(name)
+                    .parameters(dev.langchain4j.model.chat.request.json.JsonObjectSchema.builder().build())
+                    .build();
+        }
+
         @org.junit.jupiter.api.Test
         void handleToolCallsReturnsImmediatelyWhenNoToolRequests() {
             var plainResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
@@ -215,6 +239,187 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.assertj.core.api.Assertions.assertThat(result).isSameAs(plainResponse);
             org.mockito.Mockito.verifyNoInteractions(aiProxyService);
             org.mockito.Mockito.verifyNoInteractions(toolRegistry);
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsAccumulatesResultsAndFinalizesWithStructuredRequestShape() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call-1")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            var initialResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+            // Round-1 follow-up returns no more tool calls — loop exits.
+            var roundOneResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("ok"))
+                    .build();
+            // Final structured wrap-up — handleToolCalls re-scores with the forcing user message.
+            var finalResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("{\"thread_coherence\":4}"))
+                    .build();
+
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(roundOneResponse, finalResponse);
+            // Tool execution returns a small JSON blob — exercises the messages.add(result) path.
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{\"trace\":\"...\"}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score the thread"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score the thread"))
+                    .build();
+
+            var result = scorer.handleToolCalls(
+                    initialResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block();
+
+            org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
+
+            // 2 scoreTrace calls: round-1 follow-up (with tool specs) + final structured re-issue.
+            var requests = org.mockito.ArgumentCaptor.forClass(dev.langchain4j.model.chat.request.ChatRequest.class);
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(2)).scoreTrace(
+                    requests.capture(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+
+            var sent = requests.getAllValues();
+            // Round 1: 3 messages — UserMessage + AiMessage(tool calls) + ToolExecutionResultMessage.
+            org.assertj.core.api.Assertions.assertThat(sent.get(0).messages()).hasSize(3);
+            org.assertj.core.api.Assertions.assertThat(sent.get(0).toolSpecifications())
+                    .extracting(dev.langchain4j.agent.tool.ToolSpecification::name)
+                    .containsExactly("read");
+            // Final: no tool specs + the forcing UserMessage at the end.
+            var finalSent = sent.get(1);
+            org.assertj.core.api.Assertions.assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages()).hasSize(4);
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages().get(3))
+                    .isInstanceOf(dev.langchain4j.data.message.UserMessage.class);
+            org.assertj.core.api.Assertions.assertThat(
+                    ((dev.langchain4j.data.message.UserMessage) finalSent.messages().get(3)).singleText())
+                    .contains("Now respond with ONLY the JSON object");
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsPropagatesScoreTraceFailureMidLoop() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call-1")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            var initialResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+
+            // Follow-up scoreTrace blows up (transient provider 503 after the per-LLM retry
+            // policy is exhausted). The contract: failure escapes handleToolCalls, the message
+            // returns un-ACKed, Redis Streams redelivers — same as the trace scorer's contract.
+            var providerFailure = new RuntimeException("provider 503");
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenThrow(providerFailure);
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            org.assertj.core.api.Assertions
+                    .assertThatThrownBy(() -> scorer.handleToolCalls(
+                            initialResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block())
+                    .isSameAs(providerFailure);
+
+            // Exactly one provider call attempted — the loop didn't swallow + continue.
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(1)).scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+        }
+
+        @org.junit.jupiter.api.Test
+        void handleToolCallsCapsAtMaxRoundsAndStillFiresWrapUpStructuredCall() {
+            var message = newMessage();
+            var toolReq = dev.langchain4j.agent.tool.ToolExecutionRequest.builder()
+                    .id("call")
+                    .name("read")
+                    .arguments("{}")
+                    .build();
+            // Every response keeps emitting tool calls — the loop runs MAX_TOOL_CALL_ROUNDS=10
+            // times before bailing. After the cap, handleToolCalls still fires the wrap-up
+            // structured call. Total: 10 in-loop + 1 wrap-up = 11 scoreTrace calls.
+            var toolCallingResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from(java.util.List.of(toolReq)))
+                    .build();
+            var finalResponse = dev.langchain4j.model.chat.response.ChatResponse.builder()
+                    .aiMessage(dev.langchain4j.data.message.AiMessage.from("{\"thread_coherence\":3}"))
+                    .build();
+
+            org.mockito.Mockito.when(aiProxyService.scoreTrace(
+                    org.mockito.ArgumentMatchers.any(dev.langchain4j.model.chat.request.ChatRequest.class),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any()))
+                    // 10 in-loop returns (rounds 1..10), then the wrap-up structured call.
+                    .thenReturn(toolCallingResponse,
+                            toolCallingResponse, toolCallingResponse, toolCallingResponse, toolCallingResponse,
+                            toolCallingResponse, toolCallingResponse, toolCallingResponse, toolCallingResponse,
+                            toolCallingResponse, finalResponse);
+            org.mockito.Mockito.when(toolRegistry.execute(
+                    org.mockito.ArgumentMatchers.eq("read"),
+                    org.mockito.ArgumentMatchers.anyString(),
+                    org.mockito.ArgumentMatchers.any()))
+                    .thenReturn(reactor.core.publisher.Mono.just("{}"));
+
+            var toolRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .toolSpecifications(stubSpec("read"))
+                    .build();
+            var structuredRequest = dev.langchain4j.model.chat.request.ChatRequest.builder()
+                    .messages(dev.langchain4j.data.message.UserMessage.from("score"))
+                    .build();
+
+            var result = scorer.handleToolCalls(
+                    toolCallingResponse, toolRequest, structuredRequest, message, java.util.Map.of()).block();
+
+            org.assertj.core.api.Assertions.assertThat(result).isSameAs(finalResponse);
+
+            // 11 total scoreTrace calls: 10 in-loop + 1 wrap-up structured. The wrap-up still
+            // fires when the cap is hit — that's the safety net that prevents the model from
+            // continuing prose ("Now let me check…") past the loop boundary.
+            var requests = org.mockito.ArgumentCaptor.forClass(dev.langchain4j.model.chat.request.ChatRequest.class);
+            org.mockito.Mockito.verify(aiProxyService, org.mockito.Mockito.times(11)).scoreTrace(
+                    requests.capture(),
+                    org.mockito.ArgumentMatchers.any(),
+                    org.mockito.ArgumentMatchers.any());
+
+            var finalSent = requests.getAllValues().get(10);
+            org.assertj.core.api.Assertions.assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
+            var lastMessage = finalSent.messages().get(finalSent.messages().size() - 1);
+            org.assertj.core.api.Assertions.assertThat(lastMessage)
+                    .isInstanceOf(dev.langchain4j.data.message.UserMessage.class);
+            org.assertj.core.api.Assertions.assertThat(
+                    ((dev.langchain4j.data.message.UserMessage) lastMessage).singleText())
+                    .contains("Now respond with ONLY the JSON object");
         }
     }
 
