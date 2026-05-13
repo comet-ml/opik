@@ -196,6 +196,7 @@ def build_pairing_link(
     session_id: str,
     activation_key: bytes,
     project_id: str,
+    project_name: str,
     runner_name: str,
     runner_type: RunnerType,
     workspace: Optional[str],
@@ -215,11 +216,15 @@ def build_pairing_link(
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     domain_root = get_base_url(base_url)
-    # Include the user-facing URL (no `/api/` suffix) so the pairing page
-    # shows the address the user would actually visit in a browser, not the
-    # internal API endpoint. Diagnostic context only — never affects flow.
+    # Pass user-facing context the FE can render on error screens. The
+    # fragment carries the project ID (a UUID); the project NAME has to
+    # travel separately because it's not in the binary payload.
+    # Diagnostic-only — none of these affect activation flow.
     ui_url = _to_ui_base_url(base_url)
-    query_parts: List[str] = [f"url={urllib.parse.quote(ui_url, safe='')}"]
+    query_parts: List[str] = [
+        f"url={urllib.parse.quote(ui_url, safe='')}",
+        f"project={urllib.parse.quote(project_name, safe='')}",
+    ]
     if workspace:
         query_parts.append(f"workspace={workspace}")
     query = "?" + "&".join(query_parts)
@@ -451,6 +456,7 @@ def run_pairing(
         session.session_id,
         session.activation_key,
         session.project_id,
+        project_name,
         runner_name,
         runner_type,
         workspace=workspace,

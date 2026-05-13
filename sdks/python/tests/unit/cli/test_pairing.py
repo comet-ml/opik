@@ -54,6 +54,7 @@ def _link(**overrides):
         session_id="550e8400-e29b-41d4-a716-446655440000",
         activation_key=b"\x00" * 32,
         project_id="660e8400-e29b-41d4-a716-446655440000",
+        project_name="my-proj",
         runner_name="r",
         runner_type=RunnerType.CONNECT,
         workspace=None,
@@ -194,9 +195,17 @@ class TestBuildPairingLink:
             base_url="http://localhost:5173/api/",
             workspace="team-a",
         )
-        # Both query params present; order is stable for FE parsing.
+        # All query params present; order is stable for FE parsing.
         assert "url=" in link
+        assert "project=my-proj" in link
         assert "workspace=team-a" in link
+
+    def test_build_pairing_link__project_name_with_special_chars__url_encoded(
+        self,
+    ):
+        link = _link(project_name="My Project / Demo")
+        # Spaces and `/` must be percent-encoded so the query stays parseable.
+        assert "project=My%20Project%20%2F%20Demo" in link
 
 
 class TestResolveProjectId:

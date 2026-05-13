@@ -20,6 +20,8 @@ export interface PairingStatusScreenProps {
   errorKind?: PairingErrorKind;
   // Workspace the CLI generated the pairing link for (from `?workspace=`).
   expectedWorkspace?: string | null;
+  // Project name the CLI was pairing into (from `?project=`).
+  expectedProject?: string | null;
   // Opik API base URL the CLI was talking to (from `?url=`). Used for
   // diagnostic display only — does not affect activation.
   expectedBaseUrl?: string | null;
@@ -137,6 +139,14 @@ export const PairingStatusScreen: React.FC<PairingStatusScreenProps> = (
               ) : null}
               <dt className="text-muted-slate">Workspace</dt>
               <dd className="font-medium">{props.expectedWorkspace}</dd>
+              {props.expectedProject ? (
+                <>
+                  <dt className="text-muted-slate">Project</dt>
+                  <dd className="break-all font-medium">
+                    {props.expectedProject}
+                  </dd>
+                </>
+              ) : null}
             </dl>
           </div>
         )}
