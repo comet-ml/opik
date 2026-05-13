@@ -49,7 +49,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Literal, Optional, Set, Tuple, cast
 
 import opik
 import opik.id_helpers as id_helpers_module
@@ -59,6 +59,11 @@ from opik.rest_api import OpikApi
 from opik.rest_api.types.experiment_public import ExperimentPublic
 from opik.rest_api.types.span_public import SpanPublic
 from opik.rest_api.types.trace_public import TracePublic
+from opik.types import (
+    BatchAssertionResultDict,
+    BatchFeedbackScoreDict,
+    ErrorInfoDict,
+)
 
 from ...imports.experiment import ExperimentData, recreate_experiment
 from ...imports.utils import sort_spans_topologically
@@ -616,7 +621,7 @@ def _copy_traces_and_spans(
     # Experiments typically have one or two distinct trace-project_ids in
     # practice, so the cache is small and amortizes the lookup cost.
     spans_emitted = 0
-    span_feedback_scores: List[Dict[str, Any]] = []
+    span_feedback_scores: List[BatchFeedbackScoreDict] = []
     project_id_to_name_cache: Dict[str, str] = {}
     span_trace_count = len(source_to_new_trace)
     for index, (source_trace_id, new_trace_id) in enumerate(
@@ -670,13 +675,13 @@ def _log_trace_feedback_scores(
 
     No-op for traces with no feedback scores.
     """
-    batch: List[Dict[str, Any]] = []
+    batch: List[BatchFeedbackScoreDict] = []
     for source_trace_id, new_trace_id in source_to_new_trace.items():
         source = source_traces_by_id.get(source_trace_id)
         if source is None or not source.feedback_scores:
             continue
         for score in source.feedback_scores:
-            entry: Dict[str, Any] = {
+            entry: BatchFeedbackScoreDict = {
                 "id": new_trace_id,
                 "project_name": target_project_name,
                 "name": score.name,
@@ -726,7 +731,7 @@ def _log_trace_assertion_results(
                                           ("passed" | "failed")
       AssertionResultCompare.reason <->  log_assertion_results.reason
     """
-    batch: List[Dict[str, Any]] = []
+    batch: List[BatchAssertionResultDict] = []
     for source_trace_id, results in assertion_results_by_source_trace.items():
         new_trace_id = source_to_new_trace.get(source_trace_id)
         if not new_trace_id:
@@ -755,11 +760,15 @@ def _log_trace_assertion_results(
                 # Skip degenerate entries; the BE write rejects items
                 # missing the required ``name``/``status`` fields.
                 continue
-            entry: Dict[str, Any] = {
+            # ``status`` is ``Literal["passed", "failed"]`` on
+            # ``BatchAssertionResultDict``; the explicit ternary keeps mypy
+            # narrowing intact (a bare ``str`` would widen and fail).
+            status: Literal["passed", "failed"] = "passed" if passed else "failed"
+            entry: BatchAssertionResultDict = {
                 "id": new_trace_id,
                 "project_name": target_project_name,
                 "name": value,
-                "status": "passed" if passed else "failed",
+                "status": status,
             }
             if reason is not None:
                 entry["reason"] = reason
@@ -773,21 +782,25 @@ def _log_trace_assertion_results(
     )
 
 
-def _to_error_info_dict(error_info: Any) -> Optional[Dict[str, Any]]:
+def _to_error_info_dict(error_info: Any) -> Optional[ErrorInfoDict]:
     """Convert a wire-shape ``ErrorInfoPublic`` (or already-dict) to the
-    plain dict shape the streamer / high-level API expects.
+    ``ErrorInfoDict`` TypedDict shape the streamer / high-level API expects.
 
     Returns ``None`` when there's no error info, so callers can pass it
-    through verbatim without nil-handling.
+    through verbatim without nil-handling. ``cast`` at the boundary
+    because the runtime shape (``exception_type`` + ``traceback`` plus
+    optional ``message``) already matches the TypedDict's required keys --
+    BE writes always populate them -- but mypy can't infer that from a
+    generic dict / a ``model_dump`` call.
     """
     if error_info is None:
         return None
     if isinstance(error_info, dict):
-        return error_info
+        return cast(ErrorInfoDict, error_info)
     dump = getattr(error_info, "model_dump", None)
     if dump is not None:
-        return dump(exclude_none=True)
-    return dict(getattr(error_info, "__dict__", {}))
+        return cast(ErrorInfoDict, dump(exclude_none=True))
+    return cast(ErrorInfoDict, dict(getattr(error_info, "__dict__", {})))
 
 
 def _emit_spans_for_trace(
@@ -798,7 +811,7 @@ def _emit_spans_for_trace(
     new_trace_id: str,
     target_project_name: str,
     project_id_to_name_cache: Dict[str, str],
-) -> Tuple[int, List[Dict[str, Any]]]:
+) -> Tuple[int, List[BatchFeedbackScoreDict]]:
     """Fetch source spans for one trace, mint new ids preserving the parent
     tree, and emit destination spans via direct ``client._streamer.put(
     CreateSpanMessage(...))`` calls. Returns ``(spans_emitted,
@@ -842,7 +855,7 @@ def _emit_spans_for_trace(
     span_dicts = sort_spans_topologically(span_dicts)
 
     span_id_remap: Dict[str, str] = {}
-    feedback_scores: List[Dict[str, Any]] = []
+    feedback_scores: List[BatchFeedbackScoreDict] = []
     spans_emitted = 0
     for span_dict in span_dicts:
         original_id = span_dict.get("id")
@@ -885,7 +898,7 @@ def _emit_spans_for_trace(
         # the caller can batch-emit them via log_spans_feedback_scores
         # after the spans flush.
         for score in span_dict.get("feedback_scores") or []:
-            entry: Dict[str, Any] = {
+            entry: BatchFeedbackScoreDict = {
                 "id": new_span_id,
                 "project_name": target_project_name,
                 "name": score["name"],
