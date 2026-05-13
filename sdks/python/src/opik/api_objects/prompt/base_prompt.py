@@ -105,7 +105,7 @@ class BasePrompt(ABC):
         pass
 
 
-def prompt_reference(p: "BasePrompt") -> None:
+def inject_prompt_into_trace_context(p: "BasePrompt") -> None:
     from opik import opik_context
 
     ref: Dict[str, Any] = {"name": p.name, "commit": p.commit}
