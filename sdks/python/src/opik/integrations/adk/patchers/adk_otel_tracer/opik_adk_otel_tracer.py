@@ -1,5 +1,5 @@
 import logging
-from typing import Iterator, Optional, Tuple
+from typing import Callable, ContextManager, Iterator, Optional, Tuple
 
 import opentelemetry.trace
 import opik
@@ -18,33 +18,29 @@ from . import llm_span_helpers
 LOGGER = logging.getLogger(__name__)
 
 
-class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
+class OpikADKOtelTracer:
     """
-    A patched OpenTelemetry tracer for ADK integration.
+    A delegating OpenTelemetry tracer wrapper for ADK integration.
 
-    This tracer intercepts OpenTelemetry span creation calls from ADK and converts them
-    into Opik spans and traces, providing seamless integration between ADK's telemetry
-    system and Opik's tracking capabilities.
+    This wrapper intercepts OpenTelemetry span creation calls from ADK to drive
+    Opik's trace/span bookkeeping, while still delegating to the original ADK tracer
+    so that any user-configured OpenTelemetry pipeline (Cloud Trace, Jaeger, OTLP,
+    etc.) continues to receive ADK spans.
 
     Key Features:
-    - Converts OpenTelemetry spans to Opik spans and traces
-    - Handles trace lifecycle management automatically
-    - Skips internal ADK spans that shouldn't have Opik spans created for them
+    - Delegates span creation to the original ADK tracer (preserves Cloud Trace /
+      Jaeger / OTLP export of ADK spans)
+    - Drives Opik trace/span bookkeeping alongside the real OTel spans
+    - Skips Opik-side bookkeeping for internal ADK spans (still emits them to OTel)
     - Maintains context storage for nested span relationships
     - Provides special logic for handling LLM spans and their lifecycle. In particular:
         * LLM spans are created by OpikTracer.before_model_callback
         * No other Opik spans are created inside LLM spans (ADK creates tool spans inside LLM spans)
-    - Supports the flows in which Opik spans are being created, updated or finalized outside of this class.
-
-    The tracer operates as a no-op from OpenTelemetry's perspective (returning INVALID_SPAN)
-    while creating corresponding Opik tracking objects in the background.
-
-    Args:
-        opik_client: The Opik client instance used for creating spans and traces
+    - Supports the flows in which Opik spans are being created, updated, or finalized outside of this class.
 
     Attributes:
         _ADK_INTERNAL_SPAN_NAME_SKIP_LIST: List of span names that should be skipped
-            during tracking.
+            during Opik tracking (still delegated to OTel).
     """
 
     _ADK_INTERNAL_SPAN_NAME_SKIP_LIST = [
@@ -54,8 +50,26 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
 
     def __init__(
         self,
+        inner_start_as_current_span: Callable[
+            ..., ContextManager["opentelemetry.trace.Span"]
+        ],
+        inner_start_span: Callable[..., "opentelemetry.trace.Span"],
         distributed_headers: Optional[DistributedTraceHeadersDict],
     ) -> None:
+        """
+        Initializes an instance of the class with specified callbacks and distributed trace headers.
+
+        Args:
+            inner_start_as_current_span: A callable that creates a context manager for starting
+                a span as the current span. The callable is expected to return a context manager
+                containing a span of type "opentelemetry.trace.Span".
+            inner_start_span: A callable that starts and returns a new span of type
+                "opentelemetry.trace.Span".
+            distributed_headers: An optional dictionary-like object containing the distributed
+                tracing headers used for propagating context across services.
+        """
+        self._inner_start_as_current_span = inner_start_as_current_span
+        self._inner_start_span = inner_start_span
         self._distributed_headers = distributed_headers
 
     @property
@@ -73,7 +87,20 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         record_exception: bool = True,
         set_status_on_exception: bool = True,
     ) -> "opentelemetry.trace.Span":
-        return opentelemetry.trace.INVALID_SPAN
+        # Delegate to the original ADK tracer so user-configured OTel exporters
+        # (Cloud Trace, Jaeger, etc.) still receive the span. ADK does not call
+        # this method for any span Opik needs to track today, so no Opik-side
+        # bookkeeping is required here.
+        return self._inner_start_span(
+            name,
+            context=context,
+            kind=kind,
+            attributes=attributes,
+            links=links,
+            start_time=start_time,
+            record_exception=record_exception,
+            set_status_on_exception=set_status_on_exception,
+        )
 
     @opentelemetry.util._decorator._agnosticcontextmanager
     def start_as_current_span(
@@ -89,7 +116,20 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
         end_on_exit: bool = True,
     ) -> Iterator["opentelemetry.trace.Span"]:
         if name in self._ADK_INTERNAL_SPAN_NAME_SKIP_LIST:
-            yield opentelemetry.trace.INVALID_SPAN
+            # Skip Opik bookkeeping for ADK-internal spans but still delegate
+            # to the original tracer so OTel exporters see them.
+            with self._inner_start_as_current_span(
+                name,
+                context=context,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                start_time=start_time,
+                record_exception=record_exception,
+                set_status_on_exception=set_status_on_exception,
+                end_on_exit=end_on_exit,
+            ) as inner_span:
+                yield inner_span
             return
 
         trace_to_close_in_finally_block = None
@@ -125,7 +165,18 @@ class OpikADKOtelTracer(opentelemetry.trace.NoOpTracer):
                 )
             )
 
-            yield opentelemetry.trace.INVALID_SPAN
+            with self._inner_start_as_current_span(
+                name,
+                context=context,
+                kind=kind,
+                attributes=attributes,
+                links=links,
+                start_time=start_time,
+                record_exception=record_exception,
+                set_status_on_exception=set_status_on_exception,
+                end_on_exit=end_on_exit,
+            ) as inner_span:
+                yield inner_span
         except Exception as exception:
             # The expected exception here is the exception that happened during the agent
             # execution and was re-raised from the `opentelemetry.util._decorator._agnosticcontextmanagergenerator`s
