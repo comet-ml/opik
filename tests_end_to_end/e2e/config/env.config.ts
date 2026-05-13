@@ -80,6 +80,11 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     throw new Error('cloud deployment requires OPIK_TEST_USER_EMAIL and OPIK_TEST_USER_PASSWORD');
   }
 
+  const apiKey = env.OPIK_API_KEY ?? null;
+  if (deployment === 'cloud' && !apiKey) {
+    throw new Error('cloud deployment requires OPIK_API_KEY (teardown sweeps the workspace via authenticated REST)');
+  }
+
   const rawBaseUrl = env.OPIK_BASE_URL ?? defaults.baseUrl;
   if (!rawBaseUrl) {
     throw new Error(`OPIK_BASE_URL is required for deployment=${deployment}`);
@@ -88,6 +93,11 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   const baseUrl = trimmed.endsWith('/api') ? trimmed.slice(0, -'/api'.length) : trimmed;
 
   const workspace = env.OPIK_WORKSPACE ?? (deployment === 'oss' ? 'default' : (userName ?? ''));
+  if (deployment !== 'oss' && !workspace) {
+    throw new Error(
+      `${deployment} deployment requires a workspace — set OPIK_WORKSPACE or OPIK_TEST_USER_NAME (Comet-Workspace header must be present for private REST calls)`,
+    );
+  }
 
   const skipLlmJudges = boolFromEnv(env.SKIP_LLM_JUDGES, false);
   const hasAnthropicKey = !!env.ANTHROPIC_API_KEY;
@@ -102,7 +112,7 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
     userEmail,
     userPassword,
     userName,
-    apiKey: env.OPIK_API_KEY ?? null,
+    apiKey,
     features: {
       ollie: boolFromEnv(env.OLLIE_ENABLED, defaults.ollie),
       opikConnect: boolFromEnv(env.OPIK_CONNECT_ENABLED, defaults.opikConnect),
@@ -119,15 +129,28 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
 }
 
 export function printEnvBanner(env: EnvConfig): void {
-  const lines = [
-    '═══════════════════════════════════════════════════════════',
-    `  Opik 2.0 E2E — ${env.deployment.toUpperCase()}`,
-    `  Base URL:      ${env.baseUrl}`,
-    `  Workspace:     ${env.workspace}`,
-    `  Run ID:        ${env.runId}`,
-    `  Features:      ollie=${env.features.ollie}  opikConnect=${env.features.opikConnect}  llmJudges=${env.features.llmJudges}`,
-    `  Leave failures: ${env.leaveFailures}`,
-    '═══════════════════════════════════════════════════════════',
-  ];
-  console.log(lines.join('\n'));
+  // Only forward non-secret scalars to the console. apiKey, userPassword, and
+  // userEmail never appear in the banner — keep this allowlist tight and copy
+  // each value through String() so the data-flow lineage to console.log is a
+  // fixed set of primitives, not the full EnvConfig object.
+  const safe = {
+    deployment: String(env.deployment).toUpperCase(),
+    baseUrl: String(env.baseUrl),
+    workspace: String(env.workspace),
+    runId: String(env.runId),
+    ollie: String(env.features.ollie),
+    opikConnect: String(env.features.opikConnect),
+    llmJudges: String(env.features.llmJudges),
+    leaveFailures: String(env.leaveFailures),
+  };
+  const banner =
+    '═══════════════════════════════════════════════════════════\n' +
+    `  Opik 2.0 E2E — ${safe.deployment}\n` +
+    `  Base URL:      ${safe.baseUrl}\n` +
+    `  Workspace:     ${safe.workspace}\n` +
+    `  Run ID:        ${safe.runId}\n` +
+    `  Features:      ollie=${safe.ollie}  opikConnect=${safe.opikConnect}  llmJudges=${safe.llmJudges}\n` +
+    `  Leave failures: ${safe.leaveFailures}\n` +
+    '═══════════════════════════════════════════════════════════';
+  console.log(banner);
 }
