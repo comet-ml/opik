@@ -278,6 +278,9 @@ onlineScoring:
   # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
   #   through the agentic-tools path. Below the threshold the inline path is used.
   agenticToolsThresholdTokens: 50000
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
+  agenticToolsCharsPerToken: 4
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
