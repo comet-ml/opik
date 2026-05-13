@@ -50,6 +50,9 @@ public final class ToolArgs {
             return Result.error(errorJson("Unknown type: " + typeStr));
         }
         if (type == EntityType.THREAD) {
+            // Text block with `\` line continuations: keeps the message on a single logical
+            // line for the LLM (one coherent error, not a multi-line block) while still
+            // letting the source format wrap at our column limit.
             return Result.error(errorJson("""
                     type=thread is not supported by the %s tool — threads are not fetched as \
                     entities, they ARE the prompt context. Use read(type=trace, id=<uuid>) on \

@@ -487,9 +487,11 @@ public class ReadTool implements ToolExecutor {
         CompressionResult current = initial;
         CompressionTier lastRequested = current.tier();
         // Bounded by the tier ladder (FULL → MEDIUM → SKELETON terminal), but capped explicitly
-        // at CompressionTier.values().length so a future tier change can't accidentally turn
-        // this into an unbounded loop even if downgradeTierOrSame's contract drifts.
-        for (int attempt = 0; attempt < CompressionTier.values().length; attempt++) {
+        // at the enum's cardinality so a future tier change can't accidentally turn this into
+        // an unbounded loop even if downgradeTierOrSame's contract drifts. Cached locally
+        // because Enum.values() allocates a fresh array on each call.
+        int maxAttempts = CompressionTier.values().length;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             if (current.payload().toString().length() <= OUTPUT_SAFETY_CHARS) {
                 return current;
             }
@@ -514,7 +516,7 @@ public class ReadTool implements ToolExecutor {
         // tier ladder reaches a terminal state in at most 3 steps. If it does, log loudly and
         // return what we have rather than spinning.
         log.warn("Read tool guardOutput exhausted '{}' iterations without reaching a terminal tier",
-                CompressionTier.values().length);
+                maxAttempts);
         return current;
     }
 
