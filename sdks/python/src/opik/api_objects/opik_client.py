@@ -2207,7 +2207,7 @@ class Opik:
             tags=tags,
             project_name=project_name,
         )
-        return prompt_module.Prompt.from_api_response(
+        return prompt_module.Prompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )
 
@@ -2264,7 +2264,7 @@ class Opik:
             tags=tags,
             project_name=project_name,
         )
-        return prompt_module.ChatPrompt.from_api_response(
+        return prompt_module.ChatPrompt.from_fern_prompt_version(
             name, prompt_version, project_name=project_name
         )
 
@@ -2354,7 +2354,7 @@ class Opik:
             )
             if prompt_version is None:
                 return None
-            return prompt_cls.from_api_response(
+            return prompt_cls.from_fern_prompt_version(
                 name, prompt_version, project_name=project_name
             )
 
@@ -2475,7 +2475,7 @@ class Opik:
         )
 
         result = [
-            prompt_module.Prompt.from_api_response(
+            prompt_module.Prompt.from_fern_prompt_version(
                 name, version, project_name=project_name
             )
             for version in fern_prompt_versions
@@ -2567,7 +2567,7 @@ class Opik:
         )
 
         result = [
-            prompt_module.ChatPrompt.from_api_response(
+            prompt_module.ChatPrompt.from_fern_prompt_version(
                 name, version, project_name=project_name
             )
             for version in fern_prompt_versions
@@ -2646,7 +2646,7 @@ class Opik:
         for result in search_results:
             if result.template_structure == "chat":
                 prompts.append(
-                    prompt_module.ChatPrompt.from_api_response(
+                    prompt_module.ChatPrompt.from_fern_prompt_version(
                         result.name,
                         result.prompt_version_detail,
                         project_name=project_name,
@@ -2654,7 +2654,7 @@ class Opik:
                 )
             else:
                 prompts.append(
-                    prompt_module.Prompt.from_api_response(
+                    prompt_module.Prompt.from_fern_prompt_version(
                         result.name,
                         result.prompt_version_detail,
                         project_name=project_name,

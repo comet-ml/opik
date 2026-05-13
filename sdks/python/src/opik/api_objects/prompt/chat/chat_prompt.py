@@ -282,7 +282,7 @@ class ChatPrompt(base_prompt.BasePrompt):
         return info_dict
 
     @classmethod
-    def from_api_response(
+    def from_fern_prompt_version(
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,

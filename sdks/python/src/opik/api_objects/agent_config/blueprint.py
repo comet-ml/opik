@@ -19,10 +19,10 @@ def _resolve_prompt_from_commit(
         prompt_detail.template_structure == "chat"
         or version_detail.template_structure == "chat"
     ):
-        return ChatPrompt.from_api_response(
+        return ChatPrompt.from_fern_prompt_version(
             name=prompt_detail.name, prompt_version=version_detail
         )
-    return Prompt.from_api_response(
+    return Prompt.from_fern_prompt_version(
         name=prompt_detail.name, prompt_version=version_detail
     )
 

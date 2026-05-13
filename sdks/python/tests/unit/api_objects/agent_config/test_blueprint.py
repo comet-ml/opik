@@ -146,7 +146,7 @@ class TestBlueprintPromptResolution:
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
-            "opik.api_objects.prompt.text.prompt.Prompt.from_api_response",
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
             return_value=fake_prompt,
         ):
             bp = Blueprint(
@@ -176,7 +176,7 @@ class TestBlueprintPromptResolution:
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
-            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_api_response",
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
             return_value=fake_chat_prompt,
         ):
             bp = Blueprint(
@@ -205,7 +205,7 @@ class TestBlueprintPromptResolution:
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
-            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_api_response",
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
             return_value=fake_chat_prompt,
         ):
             bp = Blueprint(
@@ -233,7 +233,7 @@ class TestBlueprintPromptResolution:
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
-            "opik.api_objects.prompt.text.prompt.Prompt.from_api_response",
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
             return_value=fake_prompt,
         ):
             bp = Blueprint(
@@ -325,7 +325,7 @@ class TestBlueprintPromptResolution:
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
-            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_api_response",
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
             return_value=fake_chat_prompt,
         ):
             bp = Blueprint(
@@ -358,7 +358,7 @@ class TestBlueprintPromptResolution:
         mock_rest.prompts.get_prompt_by_commit.side_effect = _commit_side_effect
 
         with mock.patch(
-            "opik.api_objects.prompt.text.prompt.Prompt.from_api_response",
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
             return_value=mock.Mock(spec=Prompt),
         ):
             Blueprint(
@@ -390,7 +390,7 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
 
         fake_prompt = mock.Mock(spec=Prompt)
         with mock.patch(
-            "opik.api_objects.prompt.text.prompt.Prompt.from_api_response",
+            "opik.api_objects.prompt.text.prompt.Prompt.from_fern_prompt_version",
             return_value=fake_prompt,
         ):
             bp = Blueprint(raw, rest_client_=mock_rest)
@@ -414,7 +414,7 @@ class TestBlueprintPromptResolutionWithoutFieldTypes:
 
         fake_chat_prompt = mock.Mock(spec=ChatPrompt)
         with mock.patch(
-            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_api_response",
+            "opik.api_objects.prompt.chat.chat_prompt.ChatPrompt.from_fern_prompt_version",
             return_value=fake_chat_prompt,
         ):
             bp = Blueprint(raw, rest_client_=mock_rest)
