@@ -40,6 +40,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sys
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, List, Optional, Set
 
@@ -540,17 +541,31 @@ def _stream_version_items_raw(
     because the SDK helper drops ``tags`` during dataclass reconstruction.
     Going direct to the wire type preserves every persisted field for the
     diff and the write payload.
+
+    Paginates via ``read_and_parse_full_stream`` because the BE caps each
+    ``/items/stream`` response at 2000 items (``DatasetItemStreamRequest.
+    steamLimit``'s ``@Max(2000)`` + default-2000). Without pagination, any
+    version with >2000 items was silently truncated and ``_compute_delta``
+    misclassified the missing tail as deletions — every subsequent source
+    version then appeared to "delete" 500 items relative to the previous,
+    leaving the target stuck at 2000.
     """
-    raw_stream = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.datasets.stream_dataset_items(
-            dataset_name=dataset_name,
-            project_name=project_name,
-            dataset_version=version_hash,
+
+    def _fetch_page(batch_size: int, last_retrieved_id: Optional[str]) -> Any:
+        return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda: rest_client.datasets.stream_dataset_items(
+                dataset_name=dataset_name,
+                project_name=project_name,
+                dataset_version=version_hash,
+                last_retrieved_id=last_retrieved_id,
+                steam_limit=batch_size,
+            )
         )
-    )
-    return rest_stream_parser.read_and_parse_stream(
-        stream=raw_stream,
-        item_class=dataset_item_public.DatasetItemPublic,
+
+    return rest_stream_parser.read_and_parse_full_stream(
+        read_source=_fetch_page,
+        parsed_item_class=dataset_item_public.DatasetItemPublic,
+        max_results=sys.maxsize,
     )
 
 

@@ -107,6 +107,97 @@ def _ds_item(
     )
 
 
+class TestVersionItemStreamPagination:
+    """Pin the per-version item-stream pagination contract.
+
+    The BE caps each ``/items/stream`` response at 2000 items
+    (``DatasetItemStreamRequest.steamLimit``'s ``@Max(2000)`` + 2000
+    default). ``_stream_version_items_raw`` MUST paginate via
+    ``lastRetrievedId`` -- without it, any version with >2000 items was
+    silently truncated and ``_compute_delta`` then misclassified the
+    missing tail as deletions on every subsequent source version.
+
+    These tests bypass the executor and hit ``_stream_version_items_raw``
+    directly so the pagination behavior is anchored independently of the
+    rest of the replay machinery.
+    """
+
+    def test_streams_single_page_when_version_under_cap(self) -> None:
+        from opik.cli.migrate.datasets.version_replay import (
+            _stream_version_items_raw,
+        )
+
+        rest_client = MagicMock()
+        rest_client.datasets.stream_dataset_items.return_value = iter(())
+
+        # Three items, all fit in one page (cap=2000) -- expect a single
+        # call to ``stream_dataset_items`` with ``last_retrieved_id=None``.
+        all_items = [_ds_item(f"id-{i}", q=f"Q{i}") for i in range(3)]
+        with patch(
+            "opik.cli.migrate.datasets.version_replay.rest_stream_parser.read_and_parse_stream",
+            return_value=all_items,
+        ):
+            result = _stream_version_items_raw(
+                rest_client,
+                dataset_name="MyDataset",
+                project_name="A",
+                version_hash="v1-hash",
+            )
+
+        assert [it.id for it in result] == ["id-0", "id-1", "id-2"]
+        assert rest_client.datasets.stream_dataset_items.call_count == 1
+        first_call_kwargs = rest_client.datasets.stream_dataset_items.call_args_list[
+            0
+        ].kwargs
+        assert first_call_kwargs["last_retrieved_id"] is None
+
+    def test_paginates_until_short_page_when_version_exceeds_cap(self) -> None:
+        """A version with 2500 items must yield ALL 2500, not just 2000.
+
+        The BE returns at most ``steam_limit`` items per call (default
+        2000); the client must re-call with ``last_retrieved_id`` set to
+        the last item's id until it gets a short page. This test pins
+        that behavior: previously the replay code called once and
+        truncated to 2000, then ``_compute_delta`` saw the 500-item tail
+        as "deletions" against the next version that DID include them.
+        """
+        from opik.cli.migrate.datasets.version_replay import (
+            _stream_version_items_raw,
+        )
+
+        rest_client = MagicMock()
+        rest_client.datasets.stream_dataset_items.return_value = iter(())
+
+        page_one = [_ds_item(f"id-{i}", q=f"Q{i}") for i in range(2000)]
+        page_two = [_ds_item(f"id-{i}", q=f"Q{i}") for i in range(2000, 2500)]
+        pages = iter([page_one, page_two])
+
+        with patch(
+            "opik.cli.migrate.datasets.version_replay.rest_stream_parser.read_and_parse_stream",
+            side_effect=lambda *args, **kwargs: next(pages),
+        ):
+            result = _stream_version_items_raw(
+                rest_client,
+                dataset_name="MyDataset",
+                project_name="A",
+                version_hash="big-version",
+            )
+
+        assert len(result) == 2500
+        assert [it.id for it in result[:3]] == ["id-0", "id-1", "id-2"]
+        assert [it.id for it in result[-3:]] == ["id-2497", "id-2498", "id-2499"]
+
+        assert rest_client.datasets.stream_dataset_items.call_count == 2
+        kwargs_first = rest_client.datasets.stream_dataset_items.call_args_list[
+            0
+        ].kwargs
+        kwargs_second = rest_client.datasets.stream_dataset_items.call_args_list[
+            1
+        ].kwargs
+        assert kwargs_first["last_retrieved_id"] is None
+        assert kwargs_second["last_retrieved_id"] == "id-1999"
+
+
 class TestVersionReplayUnit:
     """Direct unit tests for ``version_replay`` — bypass the Click CLI so
     we can exercise the delta / apply / remap logic without staging the
