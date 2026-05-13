@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import cometApi from "@/plugins/comet/api";
 import { useActiveWorkspaceName } from "@/store/AppStore";
 import { IS_ASSISTANT_DEV } from "@/plugins/comet/constants/assistant";
+import type { AssistantBackendPhase } from "@/types/assistant-sidebar";
 
 const HEALTH_POLL_INTERVAL_MS = 1000;
 const HEALTH_POLL_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes
@@ -35,14 +36,6 @@ const fetchAssistantCompute = async (
   const baseUrl = data.computeURL.replace(/\/api\/get-python-panel-url$/, "");
   return { baseUrl, enabled: true };
 };
-
-export type AssistantBackendPhase =
-  | "idle"
-  | "compute"
-  | "health"
-  | "ready"
-  | "error"
-  | "disabled";
 
 interface UseAssistantBackendResult {
   backendUrl: string | null;
@@ -261,23 +254,4 @@ export default function useAssistantBackend(
     retry,
     retryCount,
   };
-}
-
-// Shares the `assistant-compute` queryKey so the sidebar's later subscription
-// reuses the prewarmed cache instead of re-issuing the request. Plugin-level
-// gating (OSS vs Comet) is handled by whether the AssistantPrewarmer plugin
-// component is registered in the store.
-export function usePrewarmAssistantCompute(): void {
-  const workspaceName = useActiveWorkspaceName();
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (IS_ASSISTANT_DEV) return;
-    if (!workspaceName) return;
-    queryClient.prefetchQuery({
-      queryKey: getComputeQueryKey(workspaceName),
-      queryFn: ({ signal }) => fetchAssistantCompute(workspaceName, signal),
-      staleTime: Infinity,
-    });
-  }, [workspaceName, queryClient]);
 }

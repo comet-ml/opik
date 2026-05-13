@@ -4,6 +4,7 @@ import SideBar from "@/v2/layout/SideBar/SideBar";
 import TopBar from "@/v2/layout/TopBar/TopBar";
 import useLocalStorageState from "use-local-storage-state";
 import usePluginsStore from "@/store/PluginsStore";
+import useAssistantPhaseStore from "@/store/AssistantPhaseStore";
 import WelcomeWizardDialog from "@/v2/pages-shared/WelcomeWizard/WelcomeWizardDialog";
 import useWelcomeWizardStatus from "@/api/welcome-wizard/useWelcomeWizardStatus";
 import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
@@ -48,6 +49,7 @@ const PageLayout = () => {
 
   const RetentionBanner = usePluginsStore((state) => state.RetentionBanner);
   const AssistantSidebar = usePluginsStore((state) => state.AssistantSidebar);
+  const assistantPhase = useAssistantPhaseStore((s) => s.phase);
 
   const matchRoute = useMatchRoute();
   // TODO: OPIK-6260 - Remove /home match once home page redesign is restored
@@ -59,7 +61,12 @@ const PageLayout = () => {
       to: "/$workspaceName/projects/$projectId/home",
     });
 
-  const showAssistantSidebar = !!AssistantSidebar && !isOlliePage;
+  // `assistantPhase` defaults to "idle" and is only set to "disabled" by the
+  // AssistantPrewarmer plugin after `/opik/ollie/compute` returns
+  // `{enabled: false}`. In OSS no plugin writes to the store, so the gate
+  // falls through to `!!AssistantSidebar` (null in OSS).
+  const showAssistantSidebar =
+    !!AssistantSidebar && !isOlliePage && assistantPhase !== "disabled";
 
   const assistantWidth = showAssistantSidebar ? assistantSidebarWidth : 0;
   const { isPhone } = useIsPhone();

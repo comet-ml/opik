@@ -5,6 +5,14 @@ export type BridgeSurface = "sidebar" | "page";
 export type AssistantSurfaceVariant = "page" | "sidebar" | "collapsed";
 export type NotificationType = "success" | "error" | "info";
 
+export type AssistantBackendPhase =
+  | "idle"
+  | "compute"
+  | "health"
+  | "ready"
+  | "error"
+  | "disabled";
+
 export interface ProjectStats {
   traceCount: number;
   experimentCount: number;
