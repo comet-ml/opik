@@ -50,6 +50,7 @@ from .. import verifiers
 from .conftest import (
     create_dataset_shell,
     destination_experiment_items,
+    destination_spans_for_trace,
     find_destination_experiment,
     run_migrate_cli,
     seed_experiment_with_trace_tree,
@@ -271,6 +272,40 @@ def test_migrate_dataset__cross_project_experiment__all_traces_land_in_target(
             opik_client=opik_client,
             trace_id=it.trace_id,
             project_name=target_project_name,
+        )
+
+    # Per-span fidelity per source project: spans live under the same project
+    # as their parent trace and are discovered+read by the cascade in the
+    # same per-project loop as traces. So the cross-project safety we just
+    # verified for traces only holds if the per-project ``search_spans``
+    # loop also fired for B and C; if it didn't, the cross-project traces
+    # would land at the destination but with zero spans attached.
+    #
+    # Trace ``name`` is the stable handle for classifying which source
+    # project a destination trace came from:
+    #   * ``task-N``        -> same-project (A), seeded with root + 1 LLM child
+    #   * ``task-cross-b``  -> cross-project from B, seeded with 1 root span
+    #   * ``task-cross-c``  -> cross-project from C, seeded with 1 root span
+    expected_spans_by_trace_name = {"task-cross-b": 1, "task-cross-c": 1}
+    for i in range(len(same_project_trace_ids)):
+        expected_spans_by_trace_name[f"task-{i}"] = 2  # root + 1 LLM child
+
+    for it in dest_items:
+        dest_trace = rest.traces.get_trace_by_id(id=it.trace_id)
+        assert dest_trace.name in expected_spans_by_trace_name, (
+            f"unexpected destination trace name {dest_trace.name!r} -- the "
+            f"cross-project trace naming contract changed and this test "
+            f"doesn't know which source project to attribute it to"
+        )
+        dest_spans = destination_spans_for_trace(
+            rest, trace_id=it.trace_id, project_name=target_project_name
+        )
+        expected = expected_spans_by_trace_name[dest_trace.name]
+        assert len(dest_spans) == expected, (
+            f"destination trace {dest_trace.name!r} should have {expected} "
+            f"span(s) at the destination, got {len(dest_spans)} -- if 0 for "
+            f"a cross-project trace, the per-project search_spans loop didn't "
+            f"fire for that source project"
         )
 
     # Fresh destination ids — migrate is copy-not-move. No source trace id
