@@ -112,28 +112,33 @@ export const PairingStatusScreen: React.FC<PairingStatusScreenProps> = (
         <h1 className="comet-title-s text-center">{headline}</h1>
         <p className="comet-body text-center text-muted-slate">{subtitle}</p>
         {showWorkspaceContext && (
-          <dl
-            aria-label="Pairing context"
-            className="comet-body-s mt-6 grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-1.5 rounded-md border border-border bg-soft-background px-5 py-3 text-left"
-          >
-            <dt className="text-muted-slate">Workspace</dt>
-            <dd className="font-medium">{props.expectedWorkspace}</dd>
-            {props.expectedBaseUrl ? (
-              <>
-                <dt className="text-muted-slate">Pairing with Opik at</dt>
-                <dd className="break-all font-medium">
-                  <a
-                    href={props.expectedBaseUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary underline-offset-2 hover:underline"
-                  >
-                    {props.expectedBaseUrl}
-                  </a>
-                </dd>
-              </>
-            ) : null}
-          </dl>
+          <div className="mt-6 flex flex-col items-center gap-2">
+            <p className="comet-body-s text-muted-slate">
+              The CLI tried to pair using these Opik settings:
+            </p>
+            <dl
+              aria-label="Pairing context"
+              className="comet-body-s grid grid-cols-[auto_1fr] items-center gap-x-6 gap-y-1.5 rounded-md border border-border bg-soft-background px-5 py-3 text-left"
+            >
+              {props.expectedBaseUrl ? (
+                <>
+                  <dt className="text-muted-slate">Opik URL</dt>
+                  <dd className="break-all font-medium">
+                    <a
+                      href={props.expectedBaseUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary underline-offset-2 hover:underline"
+                    >
+                      {props.expectedBaseUrl}
+                    </a>
+                  </dd>
+                </>
+              ) : null}
+              <dt className="text-muted-slate">Workspace</dt>
+              <dd className="font-medium">{props.expectedWorkspace}</dd>
+            </dl>
+          </div>
         )}
       </div>
     </main>
