@@ -34,17 +34,18 @@ class OptimizationJobContext:
     workspace_name: str
     config: Dict[str, Any]
     opik_api_key: Optional[str] = None
-    
+    project_name: Optional[str] = None
+
     @classmethod
     def from_job_message(cls, job_message: Dict[str, Any]) -> "OptimizationJobContext":
         """Create context from job message.
-        
+
         Args:
             job_message: Raw job message from RQ
-            
+
         Returns:
             OptimizationJobContext instance
-            
+
         Raises:
             KeyError: If required fields are missing
         """
@@ -54,6 +55,7 @@ class OptimizationJobContext:
             workspace_name=job_message["workspace_name"],
             config=job_message["config"],
             opik_api_key=job_message.get("opik_api_key"),
+            project_name=job_message.get("project_name"),
         )
 
 

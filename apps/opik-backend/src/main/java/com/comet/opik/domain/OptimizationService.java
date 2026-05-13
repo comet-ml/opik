@@ -444,6 +444,8 @@ class OptimizationServiceImpl implements OptimizationService {
         log.info("Enqueuing Optimization Studio job for id: '{}', workspace: '{}' (name: '{}')",
                 optimization.id(), workspaceId, workspaceName);
 
+        String projectName = resolveProjectNameForJob(optimization, workspaceId);
+
         // Build job message (use workspace name for SDK, workspace ID for log storage)
         var jobMessage = OptimizationStudioJobMessage.builder()
                 .optimizationId(optimization.id())
@@ -451,6 +453,7 @@ class OptimizationServiceImpl implements OptimizationService {
                 .workspaceName(workspaceName)
                 .config(optimization.studioConfig())
                 .opikApiKey(opikApiKey)
+                .projectName(projectName)
                 .build();
 
         var queue = resolveQueue(optimization);
@@ -468,6 +471,19 @@ class OptimizationServiceImpl implements OptimizationService {
 
     private Queue resolveQueue(Optimization optimization) {
         return Queue.OPTIMIZER_CLOUD;
+    }
+
+    private String resolveProjectNameForJob(Optimization optimization, String workspaceId) {
+        if (optimization.projectId() == null) {
+            return null;
+        }
+        try {
+            return projectService.get(optimization.projectId(), workspaceId).name();
+        } catch (Exception exception) {
+            log.warn("Failed to resolve project name for projectId '{}' of optimization '{}'",
+                    optimization.projectId(), optimization.id(), exception);
+            return null;
+        }
     }
 
     private void cancelOptimization(UUID optimizationId, String workspaceId) {
