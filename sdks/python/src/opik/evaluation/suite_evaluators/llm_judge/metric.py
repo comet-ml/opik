@@ -223,7 +223,7 @@ class LLMJudge(base.BaseSuiteEvaluator):
         self,
         input: Any,
         output: Any,
-        **ignored_kwargs: Any,
+        **kwargs: Any,
     ) -> List[score_result.ScoreResult]:
         """
         Evaluate the output against all assertions.
@@ -233,7 +233,9 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 or any JSON-serializable structure containing the user query and metadata.
             output: All outputs from the agent. Can be a string, dict, list,
                 or any JSON-serializable structure containing the response and metadata.
-            **ignored_kwargs: Additional keyword arguments that are ignored.
+            **kwargs: Additional keyword arguments. ``trace_tool_context``
+                (when present) routes the call through the agentic tool loop
+                instead of the one-shot path.
 
         Returns:
             List[ScoreResult]: A list of ScoreResult objects, one per assertion.
@@ -242,6 +244,10 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 - value: True if passed, False if failed
                 - reason: Explanation from the judge
         """
+        trace_tool_context = kwargs.get("trace_tool_context")
+        if trace_tool_context is not None:
+            return self._score_agentic(trace_tool_context)
+
         try:
             return self._generate_and_parse(input=input, output=output)
         except LLMJudgeParseError as e:
@@ -249,6 +255,16 @@ class LLMJudge(base.BaseSuiteEvaluator):
                 "LLMJudge scoring failed after retries: %s", e, exc_info=True
             )
             return e.results
+
+    def _score_agentic(self, ctx: Any) -> List[score_result.ScoreResult]:
+        # Import lazily so the agentic dependencies (tool registry, loop,
+        # prompt) don't load when the one-shot path is the only one used.
+        from opik.evaluation.suite_evaluators.agentic import judge as agentic_judge
+
+        judge = agentic_judge.AgenticLLMJudge(
+            assertions=self._assertions, model=self._model
+        )
+        return judge.score(ctx)
 
     @_RETRY_POLICY
     def _generate_and_parse(

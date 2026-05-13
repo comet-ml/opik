@@ -588,37 +588,62 @@ def _evaluate_test_suite_task(
     dataset_item_ids: Optional[List[str]] = None,
     dataset_filter_string: Optional[str] = None,
 ) -> Tuple[evaluation_result.EvaluationResult, float]:
+    from opik.message_processing.processors import message_processors_chain
+
     start_time = time.time()
 
-    with asyncio_support.async_http_connections_expire_immediately():
-        scoring_metrics = dataset.get_evaluators(evaluator_model)
-        execution_policy = dataset.get_execution_policy()
-        items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
-            nb_samples=None,
-            dataset_item_ids=dataset_item_ids,
-            batch_size=helpers.EVALUATION_STREAM_DATASET_BATCH_SIZE,
-            filter_string=dataset_filter_string,
-        )
-        total = dataset.dataset_items_count
+    # Activate the local emulator so suite-level LLMJudge assertions get
+    # access to the full trace tree via the agentic tool loop. The
+    # emulator caches every trace/span logged in-process; it stays
+    # inactive at idle. We toggle for the duration of the suite run and
+    # restore prior state in `finally` so concurrent (foreign) uses of
+    # the emulator aren't disturbed.
+    chain = getattr(client, "__internal_api__message_processor__", None)
+    emulator_was_active = False
+    if chain is not None:
+        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
+        if emulator is not None:
+            emulator_was_active = emulator.is_active()
+            if not emulator_was_active:
+                message_processors_chain.toggle_local_emulator_message_processor(
+                    active=True, chain=chain, reset=True
+                )
 
-        evaluation_engine = engine.EvaluationEngine(
-            client=client,
-            project_name=project_name,
-            workers=task_threads,
-            verbose=verbose,
-            source=source,
-        )
-        test_results = evaluation_engine.run_and_score(
-            dataset_items=items_iter,
-            task=task,
-            scoring_metrics=scoring_metrics,
-            scoring_key_mapping=None,
-            evaluator_model=evaluator_model,
-            experiment_=experiment,
-            default_execution_policy=execution_policy,
-            total_items=total,
-            show_scores_in_progress_bar=False,
-        )
+    try:
+        with asyncio_support.async_http_connections_expire_immediately():
+            scoring_metrics = dataset.get_evaluators(evaluator_model)
+            execution_policy = dataset.get_execution_policy()
+            items_iter = dataset.__internal_api__stream_items_as_dataclasses__(
+                nb_samples=None,
+                dataset_item_ids=dataset_item_ids,
+                batch_size=helpers.EVALUATION_STREAM_DATASET_BATCH_SIZE,
+                filter_string=dataset_filter_string,
+            )
+            total = dataset.dataset_items_count
+
+            evaluation_engine = engine.EvaluationEngine(
+                client=client,
+                project_name=project_name,
+                workers=task_threads,
+                verbose=verbose,
+                source=source,
+            )
+            test_results = evaluation_engine.run_and_score(
+                dataset_items=items_iter,
+                task=task,
+                scoring_metrics=scoring_metrics,
+                scoring_key_mapping=None,
+                evaluator_model=evaluator_model,
+                experiment_=experiment,
+                default_execution_policy=execution_policy,
+                total_items=total,
+                show_scores_in_progress_bar=False,
+            )
+    finally:
+        if chain is not None and not emulator_was_active:
+            message_processors_chain.toggle_local_emulator_message_processor(
+                active=False, chain=chain, reset=True
+            )
 
     total_time = time.time() - start_time
 

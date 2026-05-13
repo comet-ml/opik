@@ -11,8 +11,10 @@ from opik.api_objects.dataset import dataset_item
 from opik.api_objects.experiment import experiment
 from opik.api_objects.dataset import execution_policy as dataset_execution_policy
 from opik.evaluation import rest_operations, test_case, test_result
+from opik.evaluation.suite_evaluators.agentic import context as agentic_context
 from opik.evaluation.types import LLMTask, ScoringKeyMappingType
 from opik.message_processing.emulation import models
+from opik.message_processing.processors import message_processors_chain
 from opik.types import TraceSource
 
 from . import evaluation_tasks_executor, exception_analyzer, helpers, metrics_evaluator
@@ -105,9 +107,11 @@ class EvaluationEngine:
             scoring_key_mapping=scoring_key_mapping,
             evaluator_model=evaluator_model,
         )
+        trace_tool_context = self._build_trace_tool_context(test_case_.trace_id)
         score_results, mapped_scoring_inputs = item_evaluator.compute_regular_scores(
             dataset_item_content=test_case_.dataset_item_content,
             task_output=test_case_.task_output,
+            trace_tool_context=trace_tool_context,
         )
         test_case_.mapped_scoring_inputs = mapped_scoring_inputs
 
@@ -152,6 +156,29 @@ class EvaluationEngine:
             project_name=self._project_name,
         )
         return score_results
+
+    def _build_trace_tool_context(
+        self, trace_id: str
+    ) -> Optional[agentic_context.TraceToolContext]:
+        """Return a TraceToolContext for `trace_id` if the local emulator is active.
+
+        Returns None when the emulator is not in the processor chain, is
+        inactive, or doesn't have a record of this trace (e.g. flush
+        timing). The LLMJudge falls back to its one-shot path in that
+        case — see ``LLMJudge.score``.
+        """
+        chain = getattr(self._client, "__internal_api__message_processor__", None)
+        if chain is None:
+            return None
+        emulator = message_processors_chain.get_local_emulator_message_processor(chain)
+        if emulator is None or not emulator.is_active():
+            return None
+        # Force trace_trees rebuild so spans logged in this process are
+        # attached to the trace before we copy them into the context.
+        _ = emulator.trace_trees
+        return agentic_context.build_trace_tool_context(
+            trace_id=trace_id, emulator=emulator
+        )
 
     # --- Private: task execution ---
 
