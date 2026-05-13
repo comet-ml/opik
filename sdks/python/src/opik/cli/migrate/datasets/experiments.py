@@ -328,21 +328,26 @@ def cascade_one_experiment(
                 item.assertion_results
             )
 
-    # Inner progress total = 1 (read items, just completed) + 2 ticks per
-    # trace (one for the read+emit pass, one for the span fetch+emit pass)
-    # + 5 fixed-overhead ticks (flush-traces / log-trace-feedback / log-
-    # assertions / flush-spans+log-span-feedback / recreate). The trace
-    # count we use is the SET size (deduped) -- not ``len(items)`` -- to
-    # avoid overcounting items that share a trace. The ``_InnerProgress``
-    # adapter clamps overshoots at ``total`` so a stale estimate (e.g.
-    # idempotent-skip removes traces) doesn't push the bar past 100%.
-    inner_total = 1 + 2 * len(source_trace_ids) + 5
+    # Inner progress total = 1 (read items, just completed)
+    # + 1 (bulk-read traces via search_traces(filter=experiment_id))
+    # + N (per-trace emit ticks; the writes are streamer-batched so each
+    #     tick is in-memory but gives the user motion)
+    # + 3 (flush traces / log-trace-feedback / log-assertions)
+    # + N (span fetch+emit per trace)
+    # + 1 (flush spans + log span feedback)
+    # + 1 (recreate)
+    # = 2N + 7. The trace count we use is the SET size (deduped) -- not
+    # ``len(items)`` -- to avoid overcounting items that share a trace.
+    # ``_InnerProgress`` clamps overshoots at ``total`` so a stale estimate
+    # (e.g. idempotent-skip removes traces) doesn't push the bar past 100%.
+    inner_total = 1 + 1 + 2 * len(source_trace_ids) + 5
     inner = _InnerProgress(inner_progress_callback, inner_total)
     inner.tick(label="read items")
 
     traces_copied, spans_copied = _copy_traces_and_spans(
         client,
         rest_client,
+        source_experiment_id=experiment_id,
         source_trace_ids=source_trace_ids,
         source_project_id=source_project_id,
         target_project_name=target_project_name,
@@ -487,6 +492,7 @@ def _copy_traces_and_spans(
     client: opik.Opik,
     rest_client: OpikApi,
     *,
+    source_experiment_id: str,
     source_trace_ids: Set[str],
     source_project_id: str,
     target_project_name: str,
@@ -515,10 +521,13 @@ def _copy_traces_and_spans(
     untouched. The streamer's ``CreateSpanMessage`` accepts them as
     separate fields and serializes verbatim.
 
-    Reads stay on ``rest_client`` because the high-level client doesn't
-    expose every read shape we need (e.g.
-    ``find_dataset_items_with_experiment_items``,
-    ``get_spans_by_project``).
+    Trace reads now go through one ``client.search_traces(filter=
+    "experiment_id=...", truncate=False)`` call per experiment -- the BE
+    exposes ``TraceField.EXPERIMENT_ID`` as a first-class filter, so a
+    single paginated read returns every trace linked to this experiment.
+    This is the per-experiment fix for the per-trace 30-then-pause rate-
+    limit pattern. Span reads stay per-trace (no ``experiment_id`` filter
+    on ``SpanField``); the bulk-read win is on traces only.
 
     Populates ``trace_id_remap`` in place with one entry per copied trace.
     Returns ``(traces_copied, spans_copied)`` for counter aggregation.
@@ -540,23 +549,71 @@ def _copy_traces_and_spans(
         return 0, 0
 
     source_to_new_trace: Dict[str, str] = {}
-    source_traces_by_id: Dict[str, TracePublic] = {}
+    project_id_to_name_cache: Dict[str, str] = {}
 
-    # Phase 1: fetch source traces + emit destination via
-    # __internal_api__trace__. ``source="experiment"`` matches what
-    # opik.evaluate(...) writes on the source (the public client.trace()
-    # would override to source="sdk", which the deep-compare would
-    # flag).
+    # Phase 1: fetch source traces in BULK via
+    # ``search_traces(filter="experiment_id=...")`` -- one HTTP read
+    # instead of one per trace. The BE has ``TraceField.EXPERIMENT_ID``
+    # as a first-class filter (joined through ``experiment_items``), so
+    # this returns every trace linked to ``source_experiment_id``.
+    #
+    # ``truncate=False`` is required for round-trip fidelity: the SDK
+    # wrapper defaults to ``True``, which replaces inline base64 image
+    # data in input/output/metadata with the placeholder ``"[image]"``.
+    # We need the raw bytes preserved.
+    #
+    # ``max_results=sys.maxsize`` lets the wrapper's internal pagination
+    # (PAGE_SIZE=2000 via ``last_retrieved_id`` cursor) walk every page;
+    # the cap is the wrapper's caller-side "stop at N" UI knob, not a
+    # safety limit -- a migration must be lossless.
+    source_project_name = _resolve_project_name(
+        client, project_id=source_project_id, cache=project_id_to_name_cache
+    )
+    bulk_traces = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: client.search_traces(
+            project_name=source_project_name,
+            filter_string=f'experiment_id = "{source_experiment_id}"',
+            max_results=sys.maxsize,
+            truncate=False,
+        ),
+        operation_name="search_traces (experiment cascade)",
+    )
+    source_traces_by_id: Dict[str, TracePublic] = {
+        t.id: t for t in bulk_traces if t.id is not None
+    }
+    if inner_progress is not None:
+        inner_progress.tick(label=f"fetched {len(source_traces_by_id)} traces in bulk")
+
+    # Defensive fallback: if any trace_ids from the Compare-view items are
+    # missing from the bulk search response (rare -- shouldn't happen if
+    # the experiment_items table is consistent), fall back to per-trace
+    # ``get_trace_content`` so correctness wins over throughput. This keeps
+    # the cascade lossless even if the join filter has edge-case misses.
+    missing_ids = [tid for tid in new_source_ids if tid not in source_traces_by_id]
+    if missing_ids:
+        LOGGER.warning(
+            "search_traces(experiment_id=%s) returned %d traces but %d "
+            "were expected from Compare-view items; falling back to "
+            "get_trace_content for %d missing ids.",
+            source_experiment_id,
+            len(source_traces_by_id),
+            len(new_source_ids),
+            len(missing_ids),
+        )
+        for tid in missing_ids:
+            fetched = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda sid=tid: client.get_trace_content(id=sid),
+                operation_name="get_trace_content (fallback)",
+            )
+            source_traces_by_id[tid] = fetched
+
+    # Phase 1b: emit destination traces. ``source="experiment"`` matches
+    # what opik.evaluate(...) writes on the source (the public
+    # client.trace() would override to source="sdk", which the deep-
+    # compare would flag).
     total_traces = len(new_source_ids)
     for index, source_trace_id in enumerate(new_source_ids, start=1):
-        # ``client.get_trace_content(id)`` is a paper-thin wrapper around
-        # ``self._rest_client.traces.get_trace_by_id(id)``; use the
-        # high-level surface so this module's reads stay routed through
-        # the Opik client where a wrapper exists.
-        source_trace = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda sid=source_trace_id: client.get_trace_content(id=sid)
-        )
-        source_traces_by_id[source_trace_id] = source_trace
+        source_trace = source_traces_by_id[source_trace_id]
         new_trace_id = id_helpers_module.generate_id()
         source_to_new_trace[source_trace_id] = new_trace_id
 
@@ -615,14 +672,15 @@ def _copy_traces_and_spans(
     # Spans across different traces are independent and ride the
     # streamer's batching.
     #
-    # ``project_id_to_name_cache`` lets ``_fetch_spans_for_trace`` route
-    # through ``client.search_spans`` (which needs ``project_name``) without
-    # paying a ``client.get_project(id=...)`` round-trip per trace.
-    # Experiments typically have one or two distinct trace-project_ids in
-    # practice, so the cache is small and amortizes the lookup cost.
+    # ``project_id_to_name_cache`` (initialized above for the bulk trace
+    # read) lets ``_fetch_spans_for_trace`` route through
+    # ``client.search_spans`` (which needs ``project_name``) without paying
+    # a ``client.get_project(id=...)`` round-trip per trace. Experiments
+    # typically have one or two distinct trace-project_ids in practice, so
+    # the cache stays small and reuses the source-project lookup we
+    # already did for the bulk trace read.
     spans_emitted = 0
     span_feedback_scores: List[BatchFeedbackScoreDict] = []
-    project_id_to_name_cache: Dict[str, str] = {}
     span_trace_count = len(source_to_new_trace)
     for index, (source_trace_id, new_trace_id) in enumerate(
         source_to_new_trace.items(), start=1
@@ -782,6 +840,34 @@ def _log_trace_assertion_results(
     )
 
 
+def _resolve_project_name(
+    client: opik.Opik,
+    *,
+    project_id: str,
+    cache: Dict[str, str],
+) -> str:
+    """Translate a project_id to project_name with caching.
+
+    ``client.search_traces`` and ``client.search_spans`` take
+    ``project_name`` (the underlying BE endpoint accepts either, but the
+    SDK only exposes ``project_name``). The cascade has ``project_id``
+    handy from ``source_experiment.project_id`` and per-trace
+    ``trace.project_id``; resolving once and caching means we pay at most
+    one ``client.get_project(id=...)`` per distinct project per
+    experiment (typically 1).
+    """
+    cached = cache.get(project_id)
+    if cached is not None:
+        return cached
+    project = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+        lambda: client.get_project(id=project_id),
+        operation_name="get_project (project_id -> name resolution)",
+    )
+    name = project.name
+    cache[project_id] = name
+    return name
+
+
 def _to_error_info_dict(error_info: Any) -> Optional[ErrorInfoDict]:
     """Convert a wire-shape ``ErrorInfoPublic`` (or already-dict) to the
     ``ErrorInfoDict`` TypedDict shape the streamer / high-level API expects.
@@ -936,13 +1022,9 @@ def _fetch_spans_for_trace(
     ``max_results=sys.maxsize`` disables the wrapper's default 1000-span
     cap so traces with very large span trees aren't silently truncated.
     """
-    project_name = project_id_to_name_cache.get(source_project_id)
-    if project_name is None:
-        project = rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-            lambda: client.get_project(id=source_project_id)
-        )
-        project_name = project.name
-        project_id_to_name_cache[source_project_id] = project_name
+    project_name = _resolve_project_name(
+        client, project_id=source_project_id, cache=project_id_to_name_cache
+    )
 
     return rest_helpers.ensure_rest_api_call_respecting_rate_limit(
         lambda: client.search_spans(

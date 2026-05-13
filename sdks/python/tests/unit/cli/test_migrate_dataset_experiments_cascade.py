@@ -270,6 +270,10 @@ def _cascade_rest_client(
 
     rest_client.traces.get_trace_by_id.side_effect = _get_trace
     rest_client.traces.create_traces = MagicMock()
+    # Stash the trace map on the mock so ``_client_with_recreate_capture``
+    # can wire ``client.search_traces`` against it without each test
+    # restating the fixture data.
+    rest_client._traces_by_id_for_cascade_search = traces_by_id
 
     def _get_spans_by_project(
         trace_id: str,
@@ -297,6 +301,7 @@ def _audit() -> Any:
 def _client_with_recreate_capture(
     rest_client: Optional[Any] = None,
     project_names_by_id: Optional[Dict[str, str]] = None,
+    traces_by_id: Optional[Dict[str, Any]] = None,
 ) -> Any:
     """opik.Opik mock wired for the cascade's high-level surface.
 
@@ -309,8 +314,13 @@ def _client_with_recreate_capture(
     * ``client.flush``
 
     Reads route via:
-    * ``client.get_trace_content(id)`` (paper-thin wrapper around
-      ``rest_client.traces.get_trace_by_id``)
+    * ``client.search_traces(project_name=, filter_string="experiment_id=
+      X", truncate=False)`` -- one bulk read per experiment, returns
+      every trace linked to the experiment via the BE's
+      ``TraceField.EXPERIMENT_ID`` filter
+    * ``client.get_trace_content(id)`` -- defensive fallback when the
+      bulk search misses a trace (rare; preserves correctness when the
+      ``experiment_items`` join is inconsistent)
     * ``client.search_spans(project_name=, trace_id=)`` (with the
       cascade resolving ``project_id`` -> ``project_name`` via
       ``client.get_project(id=)`` once per distinct trace project)
@@ -318,8 +328,11 @@ def _client_with_recreate_capture(
     When a ``rest_client`` is passed in, ``get_trace_content`` and
     ``search_spans`` are wired to delegate to its ``traces.get_trace_by_id``
     and ``spans.get_spans_by_project`` side_effects so per-test stubs keep
-    working without restating the wiring. ``get_project`` returns a
-    MagicMock whose ``.name`` defaults to ``f"project-name-for-{id}"`` for
+    working without restating the wiring. ``search_traces`` is wired off
+    ``traces_by_id`` (when passed) so the bulk-read path is exercised
+    rather than falling back per-trace; omit ``traces_by_id`` to exercise
+    the fallback path explicitly. ``get_project`` returns a MagicMock
+    whose ``.name`` defaults to ``f"project-name-for-{id}"`` for
     convenience; pass ``project_names_by_id`` to control the mapping
     explicitly when a test asserts on the resolved name (e.g. the
     per-trace-project-scoping test).
@@ -356,6 +369,26 @@ def _client_with_recreate_capture(
             return list(page.content or [])
 
         client.search_spans = MagicMock(side_effect=_search_spans)
+
+    # Bulk-read path for ``client.search_traces(filter="experiment_id=
+    # ...")``. Prefer the explicit ``traces_by_id`` arg; otherwise pull
+    # from the ``_traces_by_id_for_cascade_search`` stash that
+    # ``_cascade_rest_client`` attaches. When neither is present, the
+    # MagicMock default returns an iterable-mock and the cascade falls
+    # back to per-trace ``get_trace_content``.
+    effective_traces_by_id = traces_by_id
+    if effective_traces_by_id is None and rest_client is not None:
+        effective_traces_by_id = getattr(
+            rest_client, "_traces_by_id_for_cascade_search", None
+        )
+
+    if effective_traces_by_id is not None:
+        bulk_traces = list(effective_traces_by_id.values())
+
+        def _search_traces(**_kwargs: Any) -> List[Any]:
+            return bulk_traces
+
+        client.search_traces = MagicMock(side_effect=_search_traces)
 
     project_names_by_id = project_names_by_id or {}
 
@@ -1267,12 +1300,78 @@ class TestCascadeExperiments:
         assert scoping_by_trace["src-trace-in-Z"] == "project-Z-name"
         assert "project-X-name" not in scoping_by_trace.values()
 
+        # Project-id resolution now happens for:
+        #   1. The bulk ``search_traces(filter="experiment_id=...")`` read,
+        #      which needs the EXPERIMENT's project (project-X) translated
+        #      to a project_name for the SDK wrapper.
+        #   2. Each per-trace ``search_spans`` call, which needs the
+        #      TRACE's own project (project-Y, project-Z) -- because spans
+        #      live in the trace's project, not the experiment's.
+        # The test's original intent (spans are read per-trace, not from
+        # the experiment's project) is preserved: project-X is resolved
+        # ONLY for the experiment-level trace search, never appears in the
+        # per-trace span scoping above.
         resolved_project_ids = {
             call.kwargs["id"] for call in client.get_project.call_args_list
         }
-        assert resolved_project_ids == {"project-Y", "project-Z"}, (
-            "expected per-trace project resolution, not the experiment's project-X"
+        assert resolved_project_ids == {"project-X", "project-Y", "project-Z"}, (
+            "expected project-X for experiment-level trace search PLUS "
+            "project-Y/project-Z for per-trace span reads"
         )
+
+    def test_bulk_trace_read__one_search_traces_call_per_experiment(self) -> None:
+        # Pin the rate-limit-pressure fix: trace reads collapse from N
+        # per-trace ``get_trace_content`` calls to ONE
+        # ``search_traces(filter="experiment_id=...")`` call per
+        # experiment. With N=3 source traces in one experiment we expect:
+        #   * exactly 1 ``client.search_traces`` call
+        #   * 0 ``client.get_trace_content`` calls (fallback unused when
+        #     bulk read returns the expected set)
+        # Regression guard for the per-trace 30-then-pause rate-limit
+        # pattern that motivated the bulk-read refactor.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        items = [
+            _ExperimentItem(
+                id=f"src-item-{i}",
+                experiment_id="src-exp-1",
+                trace_id=f"src-trace-{i}",
+                dataset_item_id=f"src-ds-item-{i}",
+            )
+            for i in range(3)
+        ]
+        traces = {f"src-trace-{i}": _Trace(id=f"src-trace-{i}") for i in range(3)}
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": items},
+            traces_by_id=traces,
+            spans_by_trace={f"src-trace-{i}": [] for i in range(3)},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={f"src-ds-item-{i}": f"dest-ds-item-{i}" for i in range(3)},
+            audit=_audit(),
+        )
+
+        # One bulk read for this experiment's traces.
+        client.search_traces.assert_called_once()
+        search_kwargs = client.search_traces.call_args.kwargs
+        assert search_kwargs["filter_string"] == 'experiment_id = "src-exp-1"', (
+            "expected the bulk read to filter by experiment_id, not trace_id"
+        )
+        assert search_kwargs["truncate"] is False, (
+            "truncate must be False for round-trip image fidelity"
+        )
+
+        # No fallback to per-trace get_trace_content -- the bulk read
+        # returned everything we expected.
+        client.get_trace_content.assert_not_called()
 
     def test_inner_progress_callback__fires_per_trace_and_phase(self) -> None:
         # The outer progress callback fires once per experiment (which on a
