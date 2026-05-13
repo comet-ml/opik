@@ -128,29 +128,3 @@ export function loadEnvConfig(env: NodeJS.ProcessEnv = process.env): EnvConfig {
   };
 }
 
-export function printEnvBanner(env: EnvConfig): void {
-  // Only forward non-secret scalars to the console. apiKey, userPassword, and
-  // userEmail never appear in the banner — keep this allowlist tight and copy
-  // each value through String() so the data-flow lineage to console.log is a
-  // fixed set of primitives, not the full EnvConfig object.
-  const safe = {
-    deployment: String(env.deployment).toUpperCase(),
-    baseUrl: String(env.baseUrl),
-    workspace: String(env.workspace),
-    runId: String(env.runId),
-    ollie: String(env.features.ollie),
-    opikConnect: String(env.features.opikConnect),
-    llmJudges: String(env.features.llmJudges),
-    leaveFailures: String(env.leaveFailures),
-  };
-  const banner =
-    '═══════════════════════════════════════════════════════════\n' +
-    `  Opik 2.0 E2E — ${safe.deployment}\n` +
-    `  Base URL:      ${safe.baseUrl}\n` +
-    `  Workspace:     ${safe.workspace}\n` +
-    `  Run ID:        ${safe.runId}\n` +
-    `  Features:      ollie=${safe.ollie}  opikConnect=${safe.opikConnect}  llmJudges=${safe.llmJudges}\n` +
-    `  Leave failures: ${safe.leaveFailures}\n` +
-    '═══════════════════════════════════════════════════════════';
-  console.log(banner);
-}

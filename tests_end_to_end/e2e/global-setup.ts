@@ -1,6 +1,6 @@
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
-import { loadEnvConfig, printEnvBanner } from './config/env.config';
+import { loadEnvConfig } from './config/env.config';
 import { makeBackendClient } from './core/backend';
 
 const E2E_DIR = __dirname;
@@ -54,7 +54,6 @@ async function globalSetup() {
   // across the run agrees on cujPrefix — otherwise each worker would re-stamp
   // its own timestamp and teardown would sweep the wrong prefix.
   process.env.OPIK_RUN_ID = env.runId;
-  printEnvBanner(env);
 
   await fs.writeFile(RUN_ID_MARKER, env.runId, 'utf-8');
 
