@@ -382,31 +382,37 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             return Mono.just(chatResponse);
         }
 
-        // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
-        // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
-        // returns a redirect error on this context (see GetTraceSpansTool#execute).
-        var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName());
+        // Defer everything below to subscription time. Same reasoning as the trace-side
+        // scorer: keeps ctx/messages/budget allocation aligned with chain subscription, so a
+        // future caller that composes the returned Mono differently doesn't trigger the
+        // setup work at the wrong moment.
+        return Mono.defer(() -> {
+            // Thread-scoped context: no single active trace. ReadTool fetches any trace from the
+            // thread on demand via the standard read(type=trace, id=X) path. GetTraceSpansTool
+            // returns a redirect error on this context (see GetTraceSpansTool#execute).
+            var ctx = TraceToolContext.forThread(message.workspaceId(), message.userName());
 
-        var followUpParameters = ChatRequestParameters.builder()
-                .overrideWith(toolRequest.parameters())
-                .toolChoice(ToolChoice.AUTO)
-                .build();
+            var followUpParameters = ChatRequestParameters.builder()
+                    .overrideWith(toolRequest.parameters())
+                    .toolChoice(ToolChoice.AUTO)
+                    .build();
 
-        var messages = new ArrayList<ChatMessage>(toolRequest.messages());
-        var budget = new ToolOutputBudget();
+            var messages = new ArrayList<ChatMessage>(toolRequest.messages());
+            var budget = new ToolOutputBudget();
 
-        return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
-                .flatMap(loopFinalResponse -> {
-                    messages.add(UserMessage.from(
-                            "You have completed your investigation using the available tools."
-                                    + " Now respond with ONLY the JSON object specified in the original instructions."
-                                    + " Do not call any more tools. Do not include any prose, commentary, or markdown"
-                                    + " fences — emit only the raw JSON object."));
-                    var finalRequest = structuredRequest.toBuilder()
-                            .messages(new ArrayList<>(messages))
-                            .build();
-                    return scoreTraceReactive(finalRequest, message);
-                });
+            return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
+                    .flatMap(loopFinalResponse -> {
+                        messages.add(UserMessage.from(
+                                "You have completed your investigation using the available tools."
+                                        + " Now respond with ONLY the JSON object specified in the original instructions."
+                                        + " Do not call any more tools. Do not include any prose, commentary, or markdown"
+                                        + " fences — emit only the raw JSON object."));
+                        var finalRequest = structuredRequest.toBuilder()
+                                .messages(new ArrayList<>(messages))
+                                .build();
+                        return scoreTraceReactive(finalRequest, message);
+                    });
+        });
     }
 
     private Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse, ChatRequest toolRequest,

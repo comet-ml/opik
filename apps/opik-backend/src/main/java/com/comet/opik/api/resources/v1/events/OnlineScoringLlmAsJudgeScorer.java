@@ -441,50 +441,58 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             return Mono.just(chatResponse);
         }
 
-        var trace = message.trace();
-        var ctx = new TraceToolContext(trace, spans, message.workspaceId(), message.userName());
-        // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
-        // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
-        // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
-        // one (e.g. unit tests that call handleToolCalls directly).
-        ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
-                fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
+        // Defer everything below to subscription time. Without this, the TraceToolContext +
+        // cache pre-seed + ArrayList allocation would happen at method-invoke time — fine
+        // under the current single-subscriber call shape, but a future caller composing the
+        // returned Mono differently (or subscribing twice) would observe the side effects
+        // out of sync with the chain. The early Mono.just above stays outside the defer
+        // because it's cold and pure.
+        return Mono.defer(() -> {
+            var trace = message.trace();
+            var ctx = new TraceToolContext(trace, spans, message.workspaceId(), message.userName());
+            // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
+            // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
+            // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
+            // one (e.g. unit tests that call handleToolCalls directly).
+            ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
+                    fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
 
-        // Subsequent rounds use tool_choice=AUTO so the model can decide when it has enough
-        // information to stop investigating. The initial call uses REQUIRED to force ≥1 tool
-        // call (see prepareEvaluation() — overcomes OpenAI's bias against calling tools when it
-        // can satisfy the output schema from visible context). If we kept REQUIRED on follow-ups,
-        // the wrap-up turn would loop forever, since every round would be forced to invoke
-        // a tool even after the model is ready to emit the final JSON.
-        var followUpParameters = ChatRequestParameters.builder()
-                .overrideWith(toolRequest.parameters())
-                .toolChoice(ToolChoice.AUTO)
-                .build();
+            // Subsequent rounds use tool_choice=AUTO so the model can decide when it has enough
+            // information to stop investigating. The initial call uses REQUIRED to force ≥1 tool
+            // call (see prepareEvaluation() — overcomes OpenAI's bias against calling tools when it
+            // can satisfy the output schema from visible context). If we kept REQUIRED on follow-ups,
+            // the wrap-up turn would loop forever, since every round would be forced to invoke
+            // a tool even after the model is ready to emit the final JSON.
+            var followUpParameters = ChatRequestParameters.builder()
+                    .overrideWith(toolRequest.parameters())
+                    .toolChoice(ToolChoice.AUTO)
+                    .build();
 
-        // Shared mutable state. handleToolCalls runs once per evaluation; the recursive
-        // toolCallLoop chains rounds sequentially via flatMap and the inner tool dispatch
-        // uses concatMap, so concurrent mutation can't occur here.
-        var messages = new ArrayList<ChatMessage>(toolRequest.messages());
-        var budget = new ToolOutputBudget();
+            // Shared mutable state. handleToolCalls runs once per evaluation; the recursive
+            // toolCallLoop chains rounds sequentially via flatMap and the inner tool dispatch
+            // uses concatMap, so concurrent mutation can't occur here.
+            var messages = new ArrayList<ChatMessage>(toolRequest.messages());
+            var budget = new ToolOutputBudget();
 
-        return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
-                .flatMap(loopFinalResponse -> {
-                    // Force closure of the tool-using phase. Without this, the model can return prose
-                    // that continues the investigation ("Now let me check...") instead of the required
-                    // JSON, even when the request carries no tool specs. Combined with the provider-native
-                    // structured-output strategy on `structuredRequest`, this gives both a soft and a
-                    // hard signal: "stop calling tools, emit only JSON now".
-                    messages.add(UserMessage.from(
-                            "You have completed your investigation using the available tools."
-                                    + " Now respond with ONLY the JSON object specified in the original instructions."
-                                    + " Do not call any more tools. Do not include any prose, commentary, or markdown"
-                                    + " fences — emit only the raw JSON object."));
+            return toolCallLoop(0, chatResponse, toolRequest, followUpParameters, message, messages, ctx, budget, mdc)
+                    .flatMap(loopFinalResponse -> {
+                        // Force closure of the tool-using phase. Without this, the model can return prose
+                        // that continues the investigation ("Now let me check...") instead of the required
+                        // JSON, even when the request carries no tool specs. Combined with the provider-native
+                        // structured-output strategy on `structuredRequest`, this gives both a soft and a
+                        // hard signal: "stop calling tools, emit only JSON now".
+                        messages.add(UserMessage.from(
+                                "You have completed your investigation using the available tools."
+                                        + " Now respond with ONLY the JSON object specified in the original instructions."
+                                        + " Do not call any more tools. Do not include any prose, commentary, or markdown"
+                                        + " fences — emit only the raw JSON object."));
 
-                    var finalRequest = structuredRequest.toBuilder()
-                            .messages(new ArrayList<>(messages))
-                            .build();
-                    return scoreTraceReactive(finalRequest, message);
-                });
+                        var finalRequest = structuredRequest.toBuilder()
+                                .messages(new ArrayList<>(messages))
+                                .build();
+                        return scoreTraceReactive(finalRequest, message);
+                    });
+        });
     }
 
     private Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse, ChatRequest toolRequest,
