@@ -121,6 +121,15 @@ export class PromptCache {
     return prompt;
   }
 
+  evictByIds(ids: string[]): void {
+    const idSet = new Set(ids);
+    for (const [key, entry] of this.entries) {
+      if (entry.prompt.id && idSet.has(entry.prompt.id)) {
+        this.entries.delete(key);
+      }
+    }
+  }
+
   clear(): void {
     this.stopRefreshTimer();
     this.entries.clear();

@@ -40,7 +40,7 @@ import {
   fetchLatestPromptVersion,
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
-import { getOrFetch as promptCacheGetOrFetch } from "@/prompt/promptCache";
+import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -1496,8 +1496,8 @@ export class OpikClient {
     if (result !== null) {
       const ctx = getTrackContext();
       if (ctx) {
-        ctx.trace.update({ prompts: [result] });
-        ctx.span.update({ prompts: [result] });
+        ctx.trace.update({ prompts: [result], appendPrompts: true });
+        ctx.span.update({ prompts: [result], appendPrompts: true });
       }
     }
 
@@ -1644,6 +1644,7 @@ export class OpikClient {
         this.api.requestOptions
       );
 
+      getGlobalCache().evictByIds(ids);
       logger.info("Successfully deleted prompts", { count: ids.length });
     } catch (error) {
       logger.error("Failed to delete prompts", { count: ids.length, error });

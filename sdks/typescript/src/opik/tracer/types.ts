@@ -43,6 +43,7 @@ export interface PromptInfoDict {
 export interface TraceUpdateData
   extends Omit<OpikApi.TraceUpdate, "projectId"> {
   prompts?: BasePrompt[];
+  appendPrompts?: boolean;
 }
 
 /**
@@ -55,4 +56,5 @@ export interface SpanUpdateData
     "traceId" | "parentSpanId" | "projectId" | "projectName"
   > {
   prompts?: BasePrompt[];
+  appendPrompts?: boolean;
 }

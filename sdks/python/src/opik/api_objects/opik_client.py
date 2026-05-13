@@ -2366,16 +2366,24 @@ class Opik:
             fetch_fn=_fetch,
         )
         if result is not None:
-            from opik import opik_context
+            from opik import context_storage
 
-            try:
-                opik_context.update_current_trace(prompts=[result])
-            except Exception:
-                pass
-            try:
-                opik_context.update_current_span(prompts=[result])
-            except Exception:
-                pass
+            prompt_info = result.__internal_api__to_info_dict__()
+
+            def _append_prompt(observation_data: Optional[Any]) -> None:
+                try:
+                    if observation_data is not None:
+                        existing = (observation_data.metadata or {}).get(
+                            "opik_prompts", []
+                        )
+                        observation_data.update(
+                            metadata={"opik_prompts": existing + [prompt_info]}
+                        )
+                except Exception:
+                    pass
+
+            _append_prompt(context_storage.get_trace_data())
+            _append_prompt(context_storage.top_span_data())
         return result
 
     def get_prompt_history(

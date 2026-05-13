@@ -91,7 +91,8 @@ export class UpdateService {
   private static mergePromptsIntoMetadata(
     existingMetadata: OpikApi.JsonListString | undefined,
     newMetadata: OpikApi.JsonListString | undefined,
-    prompts: BasePrompt[]
+    prompts: BasePrompt[],
+    append: boolean
   ): OpikApi.JsonListString {
     const serializedPrompts = prompts.map((p) =>
       this.serializePromptToInfoDict(p)
@@ -100,18 +101,22 @@ export class UpdateService {
     const existingObj = this.normalizeMetadata(existingMetadata);
     const newObj = this.normalizeMetadata(newMetadata);
 
+    const existingPrompts = append && Array.isArray(existingObj.opik_prompts)
+      ? existingObj.opik_prompts as PromptInfoDict[]
+      : [];
+
     return {
       ...existingObj,
       ...newObj,
-      opik_prompts: serializedPrompts,
+      opik_prompts: [...existingPrompts, ...serializedPrompts],
     };
   }
 
-  private static processUpdate<T extends { metadata?: OpikApi.JsonListString; prompts?: BasePrompt[] }>(
+  private static processUpdate<T extends { metadata?: OpikApi.JsonListString; prompts?: BasePrompt[]; appendPrompts?: boolean }>(
     updates: T,
     existingMetadata?: OpikApi.JsonListString
-  ): Omit<T, "prompts"> {
-    const { prompts, ...restUpdates } = updates;
+  ): Omit<T, "prompts" | "appendPrompts"> {
+    const { prompts, appendPrompts, ...restUpdates } = updates;
 
     if (!prompts || prompts.length === 0) {
       // Even without prompts, merge existing metadata with new metadata
@@ -121,12 +126,12 @@ export class UpdateService {
         const newObj = this.normalizeMetadata(restUpdates.metadata);
         return { ...restUpdates, metadata: { ...existingObj, ...newObj } };
       }
-      return restUpdates as Omit<T, "prompts">;
+      return restUpdates as Omit<T, "prompts" | "appendPrompts">;
     }
 
     return {
       ...restUpdates,
-      metadata: this.mergePromptsIntoMetadata(existingMetadata, restUpdates.metadata, prompts),
+      metadata: this.mergePromptsIntoMetadata(existingMetadata, restUpdates.metadata, prompts, appendPrompts ?? false),
     };
   }
 

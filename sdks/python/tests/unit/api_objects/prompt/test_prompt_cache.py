@@ -302,7 +302,15 @@ class TestPromptCacheEdgeCases:
 
 
 class TestPromptAutoInjection:
-    """Test that _get_prompt_with_cache injects prompts into the active trace context via opik_prompts."""
+    """Test that _get_prompt_with_cache injects prompts into the active trace/span context via opik_prompts."""
+
+    @staticmethod
+    def _make_prompt_with_info_dict(name="my-prompt", commit="abc123", info_dict=None):
+        p = _make_mock_prompt(name=name, commit=commit)
+        p.__internal_api__to_info_dict__ = mock.Mock(
+            return_value=info_dict or {"name": name, "version": {"commit": commit}}
+        )
+        return p
 
     def _call_get_prompt_with_cache(self, cache_return_value):
         from opik.api_objects.opik_client import Opik
@@ -324,42 +332,80 @@ class TestPromptAutoInjection:
                 prompt_cls=mock.Mock,
             )
 
-    def test_get_prompt_with_cache__in_track_context__calls_update_with_prompts(self):
-        mock_prompt = _make_mock_prompt(name="my-prompt", commit="abc123")
+    def test_get_prompt_with_cache__in_track_context__injects_into_metadata(self):
+        info_dict = {"name": "my-prompt", "version": {"commit": "abc123"}}
+        mock_prompt = self._make_prompt_with_info_dict(info_dict=info_dict)
+
+        mock_trace_data = mock.Mock()
+        mock_trace_data.metadata = None
+        mock_span_data = mock.Mock()
+        mock_span_data.metadata = None
 
         with (
-            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
-            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
+            mock.patch(
+                "opik.context_storage.get_trace_data", return_value=mock_trace_data
+            ),
+            mock.patch(
+                "opik.context_storage.top_span_data", return_value=mock_span_data
+            ),
         ):
             self._call_get_prompt_with_cache(mock_prompt)
 
-        mock_trace_update.assert_called_once_with(prompts=[mock_prompt])
-        mock_span_update.assert_called_once_with(prompts=[mock_prompt])
+        mock_trace_data.update.assert_called_once_with(
+            metadata={"opik_prompts": [info_dict]}
+        )
+        mock_span_data.update.assert_called_once_with(
+            metadata={"opik_prompts": [info_dict]}
+        )
 
-    def test_get_prompt_with_cache__no_track_context__no_error(self):
-        """When there is no active trace context, injection silently does nothing."""
-        mock_prompt = _make_mock_prompt(name="my-prompt", commit="abc123")
+    def test_get_prompt_with_cache__appends_to_existing_prompts(self):
+        existing_prompt_info = {"name": "old-prompt", "version": {"commit": "old123"}}
+        new_info_dict = {"name": "my-prompt", "version": {"commit": "abc123"}}
+        mock_prompt = self._make_prompt_with_info_dict(info_dict=new_info_dict)
+
+        mock_trace_data = mock.Mock()
+        mock_trace_data.metadata = {
+            "opik_prompts": [existing_prompt_info],
+            "other_key": "value",
+        }
+        mock_span_data = mock.Mock()
+        mock_span_data.metadata = {"opik_prompts": [existing_prompt_info]}
 
         with (
             mock.patch(
-                "opik.opik_context.update_current_trace",
-                side_effect=Exception("no context"),
+                "opik.context_storage.get_trace_data", return_value=mock_trace_data
             ),
             mock.patch(
-                "opik.opik_context.update_current_span",
-                side_effect=Exception("no context"),
+                "opik.context_storage.top_span_data", return_value=mock_span_data
             ),
+        ):
+            self._call_get_prompt_with_cache(mock_prompt)
+
+        mock_trace_data.update.assert_called_once_with(
+            metadata={"opik_prompts": [existing_prompt_info, new_info_dict]}
+        )
+        mock_span_data.update.assert_called_once_with(
+            metadata={"opik_prompts": [existing_prompt_info, new_info_dict]}
+        )
+
+    def test_get_prompt_with_cache__no_track_context__no_error(self):
+        """When there is no active trace context, injection silently does nothing."""
+        mock_prompt = self._make_prompt_with_info_dict()
+
+        with (
+            mock.patch("opik.context_storage.get_trace_data", return_value=None),
+            mock.patch("opik.context_storage.top_span_data", return_value=None),
         ):
             result = self._call_get_prompt_with_cache(mock_prompt)
             assert result is mock_prompt
 
     def test_get_prompt_with_cache__none_result__no_injection(self):
         with (
-            mock.patch("opik.opik_context.update_current_trace") as mock_trace_update,
-            mock.patch("opik.opik_context.update_current_span") as mock_span_update,
+            mock.patch("opik.context_storage.get_trace_data") as mock_get_trace,
+            mock.patch("opik.context_storage.top_span_data") as mock_top_span,
         ):
             result = self._call_get_prompt_with_cache(None)
 
         assert result is None
-        mock_trace_update.assert_not_called()
-        mock_span_update.assert_not_called()
+        mock_get_trace.assert_not_called()
+        mock_top_span.assert_not_called()
