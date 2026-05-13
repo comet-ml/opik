@@ -62,6 +62,16 @@ LOGGER = logging.getLogger(__name__)
 # we paginate to exhaustion and reverse to chronological order before replay.
 _VERSIONS_PAGE_SIZE = 100
 
+# Maximum ``items`` per ``create_or_update_dataset_items`` POST. The BE
+# enforces ``DatasetItemBatch.@Size(max=1000)``; oversized payloads are
+# rejected with HTTP 422. ``_mint_v1`` therefore chunks the source-v1
+# items into batches of ``_DATASET_ITEMS_INSERT_BATCH_SIZE`` and sends
+# each batch under the SAME ``batch_group_id`` so the BE rolls them
+# into ONE target version (per ``DatasetItemService.applyToLatestVersion``:
+# "If batchGroupId is provided: Creates a new version with batch grouping
+# (multiple batches can share the same version)").
+_DATASET_ITEMS_INSERT_BATCH_SIZE = 1000
+
 
 @dataclass(frozen=True)
 class _SourceItem:
@@ -358,19 +368,30 @@ def _create_first_version_with_items(
     somehow grew suite-level fields on v1 still round-trip correctly.)
     """
     from opik import id_helpers
+    from opik.message_processing.batching import sequence_splitter
     from opik.rest_api.types.dataset_item_write import DatasetItemWrite
 
     batch_group_id = id_helpers.generate_id()
     payloads = [
         DatasetItemWrite(**_added_item_payload(item)) for item in reversed(adds)
     ]
-    rest_helpers.ensure_rest_api_call_respecting_rate_limit(
-        lambda: rest_client.datasets.create_or_update_dataset_items(
-            dataset_id=dest_dataset_id,
-            items=payloads,
-            batch_group_id=batch_group_id,
-        )
+    # Chunk at the BE's ``DatasetItemBatch.@Size(max=1000)`` cap. All chunks
+    # share ``batch_group_id`` so the BE rolls them into ONE target version
+    # rather than minting one per chunk; without chunking, a source v1 with
+    # >1000 items (legal -- ``apply_dataset_item_changes`` has no @Size cap
+    # and produces such versions) was rejected with HTTP 422 by the target.
+    item_batches = sequence_splitter.split_into_batches(
+        payloads,
+        max_length=_DATASET_ITEMS_INSERT_BATCH_SIZE,
     )
+    for batch in item_batches:
+        rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+            lambda b=batch: rest_client.datasets.create_or_update_dataset_items(
+                dataset_id=dest_dataset_id,
+                items=b,
+                batch_group_id=batch_group_id,
+            )
+        )
 
     # No structured response — list_dataset_versions to find the new v1.
     new_version = rest_helpers.ensure_rest_api_call_respecting_rate_limit(

@@ -338,6 +338,76 @@ class TestVersionReplayUnit:
             {"input": "hello"},
         ]
 
+    def test_replay__v1_over_be_cap__chunks_create_or_update_with_shared_batch_group(
+        self,
+    ) -> None:
+        # The BE caps ``DatasetItemBatch.items`` at @Size(max=1000); a
+        # source v1 with more than 1000 items must be split across multiple
+        # ``create_or_update_dataset_items`` POSTs. All chunks must share
+        # the SAME ``batch_group_id`` so the BE rolls them into ONE target
+        # version (per ``DatasetItemService.applyToLatestVersion``); a
+        # fresh group id per chunk would mint one new version per chunk and
+        # blow up target version count.
+        from opik.cli.migrate.datasets.version_replay import (
+            _DATASET_ITEMS_INSERT_BATCH_SIZE,
+            replay_all_versions,
+        )
+
+        # Use a size just over the cap so the test is fast but the chunking
+        # branch is exercised (cap + 1 -> 2 chunks).
+        oversize_n = _DATASET_ITEMS_INSERT_BATCH_SIZE + 1
+        source_items = [_ds_item(f"item-{i}", input=f"v{i}") for i in range(oversize_n)]
+        target_items = [_ds_item(f"tgt-{i}", input=f"v{i}") for i in range(oversize_n)]
+
+        rest_client, audit = self._setup(
+            source_versions=[
+                _SourceVersion(id="src-v1", version_hash="hv1", version_name="v1"),
+            ],
+            items_per_version={
+                "hv1": source_items,
+                "tgt-h1": target_items,
+            },
+            applied_versions=[_AppliedVersion(id="tgt-v1", version_hash="tgt-h1")],
+        )
+
+        result = replay_all_versions(
+            rest_client,
+            source_dataset_id="src-id",
+            source_name_after_rename="MyDataset_v1",
+            source_project_name=None,
+            dest_dataset_id="tgt-dataset-id",
+            dest_name="MyDataset",
+            dest_project_name="B",
+            audit=audit,
+        )
+
+        # Single source version => single target version after chunked writes.
+        assert result.versions_replayed == 1
+        assert result.version_remap == {"src-v1": "tgt-v1"}
+
+        # Two chunks: 1000 + 1.
+        call_args_list = (
+            rest_client.datasets.create_or_update_dataset_items.call_args_list
+        )
+        assert len(call_args_list) == 2
+        chunk_sizes = [len(c.kwargs["items"]) for c in call_args_list]
+        assert chunk_sizes == [_DATASET_ITEMS_INSERT_BATCH_SIZE, 1], (
+            "expected first chunk at the BE cap and a small tail chunk"
+        )
+
+        # All chunks must share one batch_group_id -- otherwise the BE
+        # mints N versions.
+        batch_group_ids = {c.kwargs["batch_group_id"] for c in call_args_list}
+        assert len(batch_group_ids) == 1, (
+            f"chunks must share one batch_group_id, got {batch_group_ids}"
+        )
+
+        # Reversed display-order pinning still holds across chunks: item 0
+        # of the source (newest in stream order) is written LAST overall.
+        all_sent_items = [it for call in call_args_list for it in call.kwargs["items"]]
+        assert all_sent_items[-1].data == {"input": "v0"}
+        assert all_sent_items[0].data == {"input": f"v{oversize_n - 1}"}
+
     def test_replay__items_built_from_traces__source_and_trace_id_round_trip(
         self,
     ) -> None:
