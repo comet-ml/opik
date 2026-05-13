@@ -87,7 +87,7 @@ class RunnerTUI:
 
         info = Text()
         info.append("   ")
-        info.append("\u2800\u20dd", style="rgb(224,62,45)")
+        info.append("\u25cf", style="rgb(224,62,45)")
         info.append(" opik  ", style="bold")
         info.append("Opik URL".ljust(lw), style="dim")
         info.append(url if url else "-", style="bold")
