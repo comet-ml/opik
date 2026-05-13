@@ -482,9 +482,93 @@ def test_conversation_thread_metric_with_trace_thread_type(client, app):
     assert response.status_code == 200
     scores = response.json['scores']
     assert len(scores) == 1
-    
+
     score = scores[0]
     assert score['name'] == 'test_conversation_thread_metric'
     assert score['value'] == 1.0  # 2 messages is within 2-10 range
     assert score['reason'] == "Conversation has 2 messages"
     assert score['scoring_failed'] is False
+
+
+# Thread metric with the opt-in spans/traces signature used by the kwargs-shaped payload.
+# Backend sends data as a dict when the rule's `arguments` declares spans/traces; the sandbox
+# runner unpacks it as kwargs, so the metric signature is `def score(self, messages, spans=None, traces=None)`.
+THREAD_METRIC_WITH_SPANS = """
+from typing import Any, List, Optional, Union
+from opik.evaluation.metrics import base_metric, score_result
+
+
+class ThreadMetricWithSpans(base_metric.BaseMetric):
+    def __init__(self, name: str = "thread_metric_with_spans"):
+        super().__init__(name=name, track=False)
+
+    def score(
+        self,
+        messages: List[Any],
+        spans: Optional[List[Any]] = None,
+        traces: Optional[List[Any]] = None,
+    ) -> Union[score_result.ScoreResult, List[score_result.ScoreResult]]:
+        return score_result.ScoreResult(
+            value=float(len(spans or [])),
+            name=self.name,
+            reason=f"{len(messages)} messages, {len(spans or [])} spans, {len(traces or [])} traces",
+        )
+"""
+
+
+def test_trace_thread_metric_with_dict_data_unpacks_as_kwargs(client, app):
+    """Dict-shaped data + type=trace_thread: sandbox unpacks as **kwargs, spans / traces optional.
+
+    Mirrors what the Java side sends when a trace-thread rule declares opt-in `spans` (and/or
+    `traces`) in its `arguments` field — `OnlineScoringTraceThreadUserDefinedMetricPythonScorer`
+    builds `{"messages": [...], "spans": [...]}` and calls `evaluateThreadWithData`.
+    """
+    payload = {
+        "data": {
+            "messages": [
+                {"role": "user", "content": {"q": "hi"}},
+                {"role": "assistant", "content": {"a": "hello"}},
+            ],
+            "spans": [
+                {"id": "span-1", "name": "llm-call"},
+                {"id": "span-2", "name": "tool-call"},
+                {"id": "span-3", "name": "guardrail"},
+            ],
+        },
+        "type": PayloadType.TRACE_THREAD.value,
+        "code": THREAD_METRIC_WITH_SPANS,
+    }
+
+    response = client.post(EVALUATORS_URL, json=payload)
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert len(scores) == 1
+    score = scores[0]
+    assert score["name"] == "thread_metric_with_spans"
+    assert score["value"] == 3.0
+    assert score["reason"] == "2 messages, 3 spans, 0 traces"
+    assert score["scoring_failed"] is False
+
+
+def test_trace_thread_metric_dict_without_spans_still_works(client, app):
+    """Defaults work: dict-shaped data with only the messages key calls the metric with
+    spans=None / traces=None, exercising the optional-kwarg defaults on the user's signature.
+    """
+    payload = {
+        "data": {
+            "messages": [
+                {"role": "user", "content": {"q": "hi"}},
+                {"role": "assistant", "content": {"a": "hello"}},
+            ],
+        },
+        "type": PayloadType.TRACE_THREAD.value,
+        "code": THREAD_METRIC_WITH_SPANS,
+    }
+
+    response = client.post(EVALUATORS_URL, json=payload)
+
+    assert response.status_code == 200
+    scores = response.json["scores"]
+    assert scores[0]["value"] == 0.0
+    assert scores[0]["reason"] == "2 messages, 0 spans, 0 traces"

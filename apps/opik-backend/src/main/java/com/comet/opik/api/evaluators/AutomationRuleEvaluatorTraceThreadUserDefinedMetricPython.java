@@ -2,6 +2,7 @@ package com.comet.opik.api.evaluators;
 
 import com.comet.opik.api.filter.TraceThreadFilter;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
@@ -50,7 +51,8 @@ public final class AutomationRuleEvaluatorTraceThreadUserDefinedMetricPython
     public record TraceThreadUserDefinedMetricPythonCode(
             @JsonView( {
                     View.Public.class, View.Write.class}) @NotNull String metric,
-            @JsonView({View.Public.class, View.Write.class}) Map<String, String> arguments){
+            @JsonView({View.Public.class,
+                    View.Write.class}) @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, String> arguments){
 
         public static final String CONTEXT_ARG_NAME = "context";
 
