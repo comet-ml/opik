@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import useAssistantBackend from "@/plugins/comet/useAssistantBackend";
+import { useAssistantCompute } from "@/plugins/comet/useAssistantBackend";
 import useAssistantPhaseStore from "@/store/AssistantPhaseStore";
 
 // Mounts at workspace level so PageLayout can read the resolved phase before
@@ -7,12 +7,13 @@ import useAssistantPhaseStore from "@/store/AssistantPhaseStore";
 // Ollie. Shares the `assistant-compute` query key with the sidebar, so this
 // also serves as the compute prewarm.
 const AssistantPrewarmer: React.FC = () => {
-  const { phase } = useAssistantBackend();
+  const { data: computeResult } = useAssistantCompute();
   const setPhase = useAssistantPhaseStore((s) => s.setPhase);
 
   useEffect(() => {
-    setPhase(phase);
-  }, [phase, setPhase]);
+    if (!computeResult) return;
+    setPhase(computeResult.enabled ? "idle" : "disabled");
+  }, [computeResult, setPhase]);
 
   return null;
 };

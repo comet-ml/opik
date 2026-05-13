@@ -80,23 +80,29 @@ interface UseAssistantBackendOptions {
   enabled?: boolean;
 }
 
-export default function useAssistantBackend(
-  options?: UseAssistantBackendOptions,
-): UseAssistantBackendResult {
+// Compute-only slice of the assistant backend. Shared with `AssistantPrewarmer`
+// so it can detect Ollie-disabled without running a second copy of the
+// health-poll + pod-death recovery state machine that lives in the full hook.
+export function useAssistantCompute(options?: UseAssistantBackendOptions) {
   const configEnabled = options?.enabled ?? true;
   const workspaceName = useActiveWorkspaceName();
-
-  const {
-    data: computeResult,
-    isLoading: isComputeLoading,
-    error: computeError,
-  } = useQuery<ComputeResult>({
+  return useQuery<ComputeResult>({
     queryKey: getComputeQueryKey(workspaceName),
     queryFn: ({ signal }) => fetchAssistantCompute(workspaceName, signal),
     enabled: !IS_ASSISTANT_DEV && configEnabled && !!workspaceName,
     staleTime: Infinity,
     retry: 2,
   });
+}
+
+export default function useAssistantBackend(
+  options?: UseAssistantBackendOptions,
+): UseAssistantBackendResult {
+  const {
+    data: computeResult,
+    isLoading: isComputeLoading,
+    error: computeError,
+  } = useAssistantCompute(options);
 
   const baseUrl = computeResult?.baseUrl ?? null;
   const computeEnabled = computeResult?.enabled ?? false;
