@@ -280,3 +280,185 @@ def test_migrate_dataset__evaluate_shape__round_trips(
             trace_id=it.trace_id,
             project_name=target_project_name,
         )
+
+
+def test_migrate_dataset__cascade_trace_and_span_comments__round_trip(
+    opik_client: opik.Opik,
+    source_project_name: str,
+    target_project_name: str,
+    dataset_name: str,
+    experiment_name: str,
+    tmp_path: Path,
+) -> None:
+    """Slice 4 (OPIK-6417): comments on traces + spans survive the cascade.
+
+    Seeds an evaluate() run, POSTs a handful of comments on one of the
+    resulting traces + one of its spans, runs the migrate, and asserts
+    the destination trace + span carry the same comments in the same
+    order on read-back. ``add_trace_comment`` / ``add_span_comment`` are
+    the only write surface (comments are ``READ_ONLY`` on the trace/span
+    Write payload); the cascade re-emits them via those endpoints after
+    the destination trace/span lands.
+    """
+    rest = opik_client.rest_client
+
+    # ── Seed ──
+    dataset = opik_client.create_dataset(dataset_name, project_name=source_project_name)
+    dataset.insert(
+        [
+            {
+                "input": {"question": "Capital of France?"},
+                "expected": {"output": "Paris"},
+            },
+        ]
+    )
+    eval_result = opik.evaluate(
+        dataset=dataset,
+        task=_llm_task,
+        scoring_functions=[_equals_score],
+        experiment_name=experiment_name,
+        experiment_config={"phase": "comments-cascade"},
+    )
+    opik.flush_tracker()
+
+    def _experiment_ready() -> bool:
+        return (
+            rest.experiments.get_experiment_by_id(id=eval_result.experiment_id)
+            is not None
+        )
+
+    assert _wait_until(_experiment_ready), (
+        "experiment not visible on BE after flush; streamer may have failed"
+    )
+
+    # Pick one source trace + one of its spans to attach comments to. The
+    # cascade reads ``comments`` off the bulk trace/span read, so the
+    # specific id we attach to doesn't matter -- any trace/span in the
+    # experiment is fine.
+    source_traces = _wait_until(
+        lambda: list(
+            opik_client.search_traces(
+                project_name=source_project_name,
+                filter_string=f'experiment_id = "{eval_result.experiment_id}"',
+                max_results=10,
+                truncate=False,
+            )
+        )
+    )
+    assert source_traces, "no source traces visible to seed comments on"
+    target_trace = source_traces[0]
+    source_spans = _wait_until(
+        lambda: list(
+            opik_client.search_spans(
+                project_name=source_project_name,
+                trace_id=target_trace.id,
+                max_results=10,
+                truncate=False,
+            )
+        )
+    )
+    assert source_spans, "no source spans visible to seed comments on"
+    target_span = source_spans[0]
+
+    # POST trace + span comments in a deterministic order so we can assert
+    # round-trip ordering at the destination.
+    trace_comment_texts = [
+        "qa-note: golden path verified",
+        "pm-note: tracked in OPS-1234",
+        "debug-note: see screenshot in #incidents",
+    ]
+    span_comment_texts = [
+        "first span observation",
+        "second span observation",
+    ]
+    for text in trace_comment_texts:
+        rest.traces.add_trace_comment(id_=target_trace.id, text=text)
+    for text in span_comment_texts:
+        rest.spans.add_span_comment(id_=target_span.id, text=text)
+
+    # ── Run the migration ──
+    audit_path = tmp_path / "audit.json"
+    result = run_migrate_cli(
+        [
+            "dataset",
+            dataset_name,
+            "--from-project",
+            source_project_name,
+            "--to-project",
+            target_project_name,
+        ],
+        audit_log_path=str(audit_path),
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+    # ── Verify the destination trace + span round-trip the comments ──
+    dest_dataset = rest.datasets.get_dataset_by_identifier(
+        dataset_name=dataset_name, project_name=target_project_name
+    )
+    dest_experiment = find_destination_experiment(
+        rest,
+        destination_dataset_id=dest_dataset.id,
+        experiment_name=experiment_name,
+    )
+
+    dest_items = _wait_until(
+        lambda: destination_experiment_items(
+            rest,
+            experiment_id=dest_experiment.id,
+            dataset_id=dest_dataset.id,
+        )
+    )
+    assert dest_items, "no destination experiment items after migrate"
+    dest_trace_id = dest_items[0].trace_id
+    assert dest_trace_id is not None
+
+    def _dest_trace_has_comments() -> Any:
+        t = rest.traces.get_trace_by_id(id=dest_trace_id)
+        return (
+            t if (t.comments and len(t.comments) == len(trace_comment_texts)) else None
+        )
+
+    dest_trace = _wait_until(_dest_trace_has_comments)
+    assert dest_trace is not None, (
+        f"destination trace {dest_trace_id} did not receive all "
+        f"{len(trace_comment_texts)} expected comments"
+    )
+    assert [c.text for c in dest_trace.comments] == trace_comment_texts, (
+        "destination trace comments differ in content or order"
+    )
+
+    # Find the destination span matching our source span by ``name`` (the
+    # cascade mints fresh span ids, so we can't match on id). Pick a span
+    # off the destination trace with the same ``name`` as the source
+    # ``target_span`` we attached comments to.
+    dest_spans = _wait_until(
+        lambda: list(
+            opik_client.search_spans(
+                project_name=target_project_name,
+                trace_id=dest_trace_id,
+                max_results=50,
+                truncate=False,
+            )
+        )
+    )
+    assert dest_spans, "no destination spans after migrate"
+    candidates = [s for s in dest_spans if s.name == target_span.name]
+    assert candidates, (
+        f"destination trace has no span matching source name {target_span.name!r}"
+    )
+
+    def _matching_dest_span_with_comments() -> Any:
+        for candidate in candidates:
+            span = rest.spans.get_span_by_id(id=candidate.id)
+            if span.comments and len(span.comments) == len(span_comment_texts):
+                return span
+        return None
+
+    dest_span = _wait_until(_matching_dest_span_with_comments)
+    assert dest_span is not None, (
+        f"no destination span carried the expected {len(span_comment_texts)} "
+        "comments after migrate"
+    )
+    assert [c.text for c in dest_span.comments] == span_comment_texts, (
+        "destination span comments differ in content or order"
+    )

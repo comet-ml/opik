@@ -131,6 +131,7 @@ class _Trace:
         last_updated_at: Optional[dt.datetime] = None,
         ttft: Optional[float] = None,
         feedback_scores: Optional[List[Any]] = None,
+        comments: Optional[List[Any]] = None,
         project_id: Optional[str] = "src-project-1",
     ) -> None:
         self.id = id
@@ -149,6 +150,10 @@ class _Trace:
         # decide whether to re-emit any per-trace feedback. None / [] is a
         # valid "no scores" state.
         self.feedback_scores = feedback_scores
+        # ``cascade`` reads source.comments after the trace flush and
+        # re-emits each via ``rest_client.traces.add_trace_comment(...)``.
+        # None / [] = no comments to cascade.
+        self.comments = comments
         # Spans are read scoped to the TRACE's project_id (not the
         # experiment's), so the stand-in carries one. Default matches the
         # default ``_Experiment.project_id`` so existing tests behave as
@@ -190,6 +195,15 @@ class _Span:
 
     def model_dump(self) -> Dict[str, Any]:
         return dict(self._fields)
+
+
+class _Comment:
+    """Stand-in for ``CommentPublic`` on ``TracePublic.comments`` /
+    ``SpanPublic.comments``. The cascade reads only ``.text`` off each
+    comment when POSTing to ``add_trace_comment`` / ``add_span_comment``."""
+
+    def __init__(self, *, text: str) -> None:
+        self.text = text
 
 
 # ---------------------------------------------------------------------------
@@ -1518,6 +1532,133 @@ class TestCascadeExperiments:
         # executor's nested Rich bar uses this to mark completion).
         assert inner_ticks[-1][0] == inner_ticks[-1][1]
         assert inner_ticks[-1][2] in {"recreated", "skipped"}
+
+    def test_cascade_trace_and_span_comments__re_emits_in_source_order(
+        self,
+    ) -> None:
+        # Slice 4 (OPIK-6417): comments are READ_ONLY on the trace/span
+        # Write payload, so the cascade must POST them via the dedicated
+        # single-comment endpoints after the destination trace/span lands.
+        # This test seeds two comments on a trace and two on a span and
+        # asserts each is POSTed against the destination ids in source
+        # order, with the per-comment text preserved.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        trace_comments = [
+            _Comment(text="first trace comment"),
+            _Comment(text="second trace comment"),
+        ]
+        span_comments = [
+            _Comment(text="first span comment"),
+            _Comment(text="second span comment"),
+        ]
+        trace = _Trace(id="src-trace-1", comments=trace_comments)
+        span = _Span(
+            id="src-span-1",
+            parent_span_id=None,
+            name="root",
+            trace_id="src-trace-1",
+            comments=span_comments,
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": trace},
+            spans_by_trace={"src-trace-1": [span]},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        # Per-comment counters surface on the cascade result.
+        assert result.trace_comments_migrated == 2
+        assert result.span_comments_migrated == 2
+
+        # Trace comments: each POST scoped to the destination trace id
+        # (NOT the source id), in source order.
+        new_trace_id = result.trace_id_remap["src-trace-1"]
+        trace_calls = rest_client.traces.add_trace_comment.call_args_list
+        assert len(trace_calls) == 2
+        assert [c.kwargs for c in trace_calls] == [
+            {"id_": new_trace_id, "text": "first trace comment"},
+            {"id_": new_trace_id, "text": "second trace comment"},
+        ]
+
+        # Span comments: each POST scoped to the destination span id (NOT
+        # the source "src-span-1"), in source order. The destination span
+        # id is whatever the cascade minted; inspect via the streamer.
+        span_messages = [
+            c.args[0]
+            for c in client._streamer.put.call_args_list
+            if hasattr(c.args[0], "span_id")
+        ]
+        assert len(span_messages) == 1
+        new_span_id = span_messages[0].span_id
+        span_calls = rest_client.spans.add_span_comment.call_args_list
+        assert len(span_calls) == 2
+        assert [c.kwargs for c in span_calls] == [
+            {"id_": new_span_id, "text": "first span comment"},
+            {"id_": new_span_id, "text": "second span comment"},
+        ]
+
+    def test_cascade_with_zero_comments__no_extra_http_no_counter_drift(
+        self,
+    ) -> None:
+        # When a trace + span carry NO comments, the cascade must not call
+        # the comment endpoints at all and counters stay at 0. Guards
+        # against silently emitting noisy zero-shaped requests.
+        experiment = _Experiment(id="src-exp-1", dataset_version_id="src-v-1")
+        item = _ExperimentItem(
+            id="src-item-1",
+            experiment_id="src-exp-1",
+            trace_id="src-trace-1",
+            dataset_item_id="src-ds-item-1",
+        )
+        trace = _Trace(id="src-trace-1")  # comments=None default
+        span = _Span(
+            id="src-span-1",
+            parent_span_id=None,
+            name="root",
+            trace_id="src-trace-1",
+            comments=None,
+        )
+        rest_client = _cascade_rest_client(
+            experiments_by_dataset={"src-dataset-1": [experiment]},
+            items_by_experiment={"experiment": [item]},
+            traces_by_id={"src-trace-1": trace},
+            spans_by_trace={"src-trace-1": [span]},
+        )
+        client = _client_with_recreate_capture(rest_client)
+
+        result = cascade_experiments(
+            client,
+            rest_client,
+            source_dataset_id="src-dataset-1",
+            target_dataset_name="MyDataset",
+            target_project_name="DestProject",
+            version_remap={"src-v-1": "dest-v-1"},
+            item_id_remap={"src-ds-item-1": "dest-ds-item-1"},
+            audit=_audit(),
+        )
+
+        assert result.trace_comments_migrated == 0
+        assert result.span_comments_migrated == 0
+        rest_client.traces.add_trace_comment.assert_not_called()
+        rest_client.spans.add_span_comment.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

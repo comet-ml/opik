@@ -157,6 +157,8 @@ class ExperimentCascadeResult:
     experiments_skipped: int = 0
     traces_migrated: int = 0
     spans_migrated: int = 0
+    trace_comments_migrated: int = 0
+    span_comments_migrated: int = 0
     items_skipped_missing_trace: int = 0
     items_skipped_missing_item: int = 0
     # Per-experiment skip reasons for the audit log. Each entry is
@@ -209,6 +211,11 @@ def cascade_experiments(
           ``ExperimentCascadeError`` instead.
         - ``traces_migrated`` / ``spans_migrated`` -- per-entity counters
           aggregating across every source experiment processed.
+        - ``trace_comments_migrated`` / ``span_comments_migrated`` --
+          counters for comments re-emitted via the dedicated single-
+          comment write endpoints (comments are READ_ONLY on the
+          trace/span Write payload, so they ride along the cascade as
+          post-write follow-up POSTs rather than the bulk writes).
         - ``items_skipped_missing_trace`` / ``items_skipped_missing_item``
           -- per-experiment-item skip counters, tallied after the recreate
           call by comparing each source item's ``trace_id`` /
@@ -357,7 +364,12 @@ def cascade_one_experiment(
     inner = _InnerProgress(inner_progress_callback, inner_total)
     inner.tick(label="read items")
 
-    traces_copied, spans_copied = _copy_traces_and_spans(
+    (
+        traces_copied,
+        spans_copied,
+        trace_comments_copied,
+        span_comments_copied,
+    ) = _copy_traces_and_spans(
         client,
         rest_client,
         source_experiment_id=experiment_id,
@@ -371,6 +383,8 @@ def cascade_one_experiment(
     )
     result.traces_migrated += traces_copied
     result.spans_migrated += spans_copied
+    result.trace_comments_migrated += trace_comments_copied
+    result.span_comments_migrated += span_comments_copied
 
     # Build the ExperimentData payload that recreate_experiment consumes.
     # Only the FK fields land on the destination ExperimentItem -- the
@@ -576,7 +590,7 @@ def _copy_traces_and_spans(
     trace_id_remap: Dict[str, str],
     assertion_results_by_source_trace: Optional[Dict[str, List[Any]]] = None,
     inner_progress: Optional["_InnerProgress"] = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, int, int]:
     """Re-emit traces + spans under ``target_project_name`` via the high-level
     Opik client's streamer infrastructure.
 
@@ -607,7 +621,16 @@ def _copy_traces_and_spans(
     on ``SpanField``); the bulk-read win is on traces only.
 
     Populates ``trace_id_remap`` in place with one entry per copied trace.
-    Returns ``(traces_copied, spans_copied)`` for counter aggregation.
+    Returns ``(traces_copied, spans_copied, trace_comments_copied,
+    span_comments_copied)`` for counter aggregation.
+
+    Comments are read off the same ``TracePublic.comments`` /
+    ``SpanPublic.comments`` payload as the bulk trace/span reads
+    (no extra fetches) and re-emitted via the dedicated single-comment
+    write endpoints after the destination trace/span lands. Order is
+    preserved by iterating the source list in place: the BE returns
+    comments sorted by ``createdAt`` and POSTs are serialized, so the
+    destination read order matches.
 
     ``source_project_id`` is only a defensive fallback used when an
     individual source trace has a null ``project_id`` field. Per-trace
@@ -617,13 +640,13 @@ def _copy_traces_and_spans(
     invariance across an experiment's traces).
     """
     if not source_trace_ids:
-        return 0, 0
+        return 0, 0, 0, 0
 
     # Skip traces we already copied (idempotent retries, cross-experiment
     # trace sharing in the rare case it happens).
     new_source_ids = [tid for tid in source_trace_ids if tid not in trace_id_remap]
     if not new_source_ids:
-        return 0, 0
+        return 0, 0, 0, 0
 
     source_to_new_trace: Dict[str, str] = {}
     project_id_to_name_cache: Dict[str, str] = {}
@@ -766,6 +789,19 @@ def _copy_traces_and_spans(
     if inner_progress is not None:
         inner_progress.tick(label="logged assertion results")
 
+    # Re-emit trace comments via the dedicated single-comment write
+    # endpoint. ``TracePublic.comments`` rides along the bulk trace read,
+    # so no additional source-side fetch. Comments are READ_ONLY on the
+    # trace Write payload (can't ride along ``__internal_api__trace__``),
+    # so we POST one-at-a-time after the trace flush -- production-wide
+    # there are ~4k comments total across all workspaces, the per-comment
+    # cost is acceptable.
+    trace_comments_copied = _copy_trace_comments(
+        rest_client,
+        source_traces_by_id=source_traces_by_id,
+        source_to_new_trace=source_to_new_trace,
+    )
+
     # Phase 2a: bulk-fetch spans for the experiment, one call per distinct
     # project the experiment's traces live in. ``search_spans`` (like
     # ``search_traces``) clamps ``project_id`` on the outer SQL, so a
@@ -798,13 +834,21 @@ def _copy_traces_and_spans(
     # bucket. Same topological-sort + per-trace span_id_remap logic as
     # before; the only change is the source of ``source_spans`` shifted
     # from a per-trace REST call to a dict lookup.
+    #
+    # ``span_id_remaps_by_trace`` keeps each trace's per-trace remap
+    # (source span id -> destination span id) so the comment-cascade
+    # follow-up can POST source span comments against the correct
+    # destination span id. Per-trace scoping is correct: span ids only
+    # collide within a tree, and ``comments`` are span-attached so the
+    # mapping never needs to span trees.
     spans_emitted = 0
     span_feedback_scores: List[BatchFeedbackScoreDict] = []
+    span_id_remaps_by_trace: Dict[str, Dict[str, str]] = {}
     span_trace_count = len(source_to_new_trace)
     for index, (source_trace_id, new_trace_id) in enumerate(
         source_to_new_trace.items(), start=1
     ):
-        per_trace_count, per_trace_fbs = _emit_spans_for_trace(
+        per_trace_count, per_trace_fbs, per_trace_span_remap = _emit_spans_for_trace(
             client,
             source_spans=spans_by_trace_id.get(source_trace_id, []),
             new_trace_id=new_trace_id,
@@ -812,6 +856,7 @@ def _copy_traces_and_spans(
         )
         spans_emitted += per_trace_count
         span_feedback_scores.extend(per_trace_fbs)
+        span_id_remaps_by_trace[source_trace_id] = per_trace_span_remap
         if inner_progress is not None:
             inner_progress.tick(label=f"spans for trace {index}/{span_trace_count}")
 
@@ -826,7 +871,18 @@ def _copy_traces_and_spans(
     if inner_progress is not None:
         inner_progress.tick(label="flushed spans + logged span feedback scores")
 
-    return traces_copied, spans_emitted
+    # Re-emit span comments via the dedicated single-comment write
+    # endpoint, after the span flush so the destination span id is
+    # persisted. Same shape as trace comments: ``SpanPublic.comments``
+    # rides along the bulk span read (no extra fetch), per-comment POST
+    # wrapped with the rate-limit helper.
+    span_comments_copied = _copy_span_comments(
+        rest_client,
+        spans_by_trace_id=spans_by_trace_id,
+        span_id_remaps_by_trace=span_id_remaps_by_trace,
+    )
+
+    return traces_copied, spans_emitted, trace_comments_copied, span_comments_copied
 
 
 def _log_trace_feedback_scores(
@@ -951,6 +1007,89 @@ def _log_trace_assertion_results(
     client.log_assertion_results(
         assertion_results=batch, project_name=target_project_name
     )
+
+
+def _copy_trace_comments(
+    rest_client: OpikApi,
+    *,
+    source_traces_by_id: Dict[str, TracePublic],
+    source_to_new_trace: Dict[str, str],
+) -> int:
+    """Re-emit each source trace's comments on the destination trace.
+
+    ``TracePublic.comments`` rides along the bulk trace read (no extra
+    source-side fetch). Comments are READ_ONLY on the trace Write
+    payload, so they can't ride along ``__internal_api__trace__``; we
+    POST one-at-a-time via the dedicated single-comment write endpoint
+    after the destination trace lands.
+
+    Order is preserved by iterating the source ``comments`` list in
+    place: the BE returns comments sorted by ``createdAt`` and the POSTs
+    are serialized, so the destination read order matches.
+
+    Returns the total number of comments copied (sum across all traces).
+    """
+    copied = 0
+    for source_trace_id, new_trace_id in source_to_new_trace.items():
+        source_trace = source_traces_by_id.get(source_trace_id)
+        if source_trace is None or not source_trace.comments:
+            continue
+        for comment in source_trace.comments:
+            rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                lambda nt=new_trace_id,
+                text=comment.text: rest_client.traces.add_trace_comment(
+                    id_=nt, text=text
+                ),
+                operation_name="add_trace_comment (experiment cascade)",
+            )
+            copied += 1
+    return copied
+
+
+def _copy_span_comments(
+    rest_client: OpikApi,
+    *,
+    spans_by_trace_id: Dict[str, List[SpanPublic]],
+    span_id_remaps_by_trace: Dict[str, Dict[str, str]],
+) -> int:
+    """Re-emit each source span's comments on the destination span.
+
+    Same shape as ``_copy_trace_comments``: ``SpanPublic.comments``
+    rides along the bulk span read, comments POST via the dedicated
+    single-comment write endpoint after the destination span lands.
+
+    The destination span id comes from the per-trace ``span_id_remap``
+    populated in ``_emit_spans_for_trace``. Per-trace scoping is correct
+    -- span ids only collide within a tree, so the remap never needs to
+    span trees.
+
+    Returns the total number of comments copied (sum across all spans).
+    """
+    copied = 0
+    for source_trace_id, source_spans in spans_by_trace_id.items():
+        span_id_remap = span_id_remaps_by_trace.get(source_trace_id, {})
+        if not span_id_remap:
+            continue
+        for source_span in source_spans:
+            if not source_span.comments:
+                continue
+            new_span_id = span_id_remap.get(source_span.id or "")
+            if new_span_id is None:
+                # Defensive: every span we wrote produced a remap entry,
+                # so this should only fire if the bulk fetch returned a
+                # span we didn't write (e.g. the cascade's expected-id
+                # filter dropped it). Skip rather than crash.
+                continue
+            for comment in source_span.comments:
+                rest_helpers.ensure_rest_api_call_respecting_rate_limit(
+                    lambda ns=new_span_id,
+                    text=comment.text: rest_client.spans.add_span_comment(
+                        id_=ns, text=text
+                    ),
+                    operation_name="add_span_comment (experiment cascade)",
+                )
+                copied += 1
+    return copied
 
 
 def _resolve_project_name(
@@ -1184,10 +1323,14 @@ def _emit_spans_for_trace(
     source_spans: List[SpanPublic],
     new_trace_id: str,
     target_project_name: str,
-) -> Tuple[int, List[BatchFeedbackScoreDict]]:
+) -> Tuple[int, List[BatchFeedbackScoreDict], Dict[str, str]]:
     """Mint new ids preserving the parent tree and emit destination spans
     via direct ``client._streamer.put(CreateSpanMessage(...))`` calls.
-    Returns ``(spans_emitted, span_feedback_scores)``.
+    Returns ``(spans_emitted, span_feedback_scores, span_id_remap)``.
+
+    ``span_id_remap`` (source span id -> destination span id) is needed
+    by the comment-cascade follow-up so it can POST each source span's
+    ``comments`` against the correct destination span id.
 
     ``source_spans`` is the pre-fetched bucket for ONE trace, populated
     by the experiment-level bulk read in
@@ -1215,7 +1358,7 @@ def _emit_spans_for_trace(
     from opik.message_processing import messages
 
     if not source_spans:
-        return 0, []
+        return 0, [], {}
 
     # Topological order: parents before children, so the parent_span_id
     # remap entry for every child is always populated by the time we
@@ -1280,7 +1423,7 @@ def _emit_spans_for_trace(
                 entry["category_name"] = score["category_name"]
             feedback_scores.append(entry)
 
-    return spans_emitted, feedback_scores
+    return spans_emitted, feedback_scores, span_id_remap
 
 
 def _build_experiment_data(
