@@ -2148,7 +2148,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
-      label: "Gemini 3.1 Flash TTS Preview",
+      label: "Gemini 3.1 Flash Tts Preview",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
@@ -2172,7 +2172,7 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_5_FLASH_LITE,
-      label: "Gemini 2.5 Flash-Lite",
+      label: "Gemini 2.5 Flash Lite",
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH,
@@ -2180,7 +2180,19 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     },
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
-      label: "Gemini 2.0 Flash-Lite",
+      label: "Gemini 2.0 Flash Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_3_27B_IT,
+      label: "Gemma 3 27b It",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_GEMMA_2_9B_IT,
+      label: "Gemini Gemma 2 9b It",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_GEMMA_2_27B_IT,
+      label: "Gemini Gemma 2 27b It",
     },
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
