@@ -172,9 +172,12 @@ const PairingPage: React.FC = () => {
     }
   }, [fragment]);
 
-  const workspaceName = new URLSearchParams(window.location.search).get(
-    "workspace",
-  );
+  const params = new URLSearchParams(window.location.search);
+  const workspaceName = params.get("workspace");
+  // Informational only — passed in by the CLI so the FE can render the
+  // "expected at <url>" / project context on error screens.
+  const expectedBaseUrl = params.get("url");
+  const expectedProject = params.get("project");
 
   const {
     mutate: runActivation,
@@ -202,11 +205,23 @@ const PairingPage: React.FC = () => {
 
   let screenProps: PairingStatusScreenProps;
   if (parseError || !workspaceName) {
-    screenProps = { status: "error", errorKind: "invalid_link" };
+    // Even when the link is malformed or missing the workspace, the CLI
+    // may have populated other context params (project, url) we can still
+    // surface so the user knows which instance the failed link came from.
+    screenProps = {
+      status: "error",
+      errorKind: "invalid_link",
+      expectedWorkspace: workspaceName,
+      expectedProject,
+      expectedBaseUrl,
+    };
   } else if (activationIsError) {
     screenProps = {
       status: "error",
       errorKind: mapActivationError(activationError),
+      expectedWorkspace: workspaceName,
+      expectedProject,
+      expectedBaseUrl,
     };
   } else if (activationIsSuccess) {
     screenProps = { status: "success", runnerVariant: payload?.runnerType };

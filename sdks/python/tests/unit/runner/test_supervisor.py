@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 
-from opik.cli.pairing import RunnerType
+from opik.cli.local_runner.pairing import RunnerType
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.types.local_runner_heartbeat_response import (
     LocalRunnerHeartbeatResponse,
