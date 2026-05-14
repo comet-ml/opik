@@ -1,0 +1,260 @@
+"""Tests for the agentic loop's telemetry emission.
+
+Covers the design-doc §9 signals: per-run round counts, per-tool call
+counts, and the "judge returned a verdict on a large trace without
+calling `read`" warning. Drives the loop with a stub model so we don't
+hit the network and can dictate the tool-call sequence directly.
+"""
+
+import datetime
+import logging
+from typing import Any, List, Optional, Type
+
+import pydantic
+import pytest
+
+from opik.evaluation.models import base_model
+from opik.evaluation.suite_evaluators.agentic import loop
+from opik.evaluation.suite_evaluators.agentic.tools import registry as tool_registry
+from opik.message_processing.emulation import models
+
+from . import _seeding
+
+
+class _CapturingHandler(logging.Handler):
+    """Drop-in handler that buffers records — opik configures its
+    logger with `propagate=False`, so pytest's caplog (which sits on the
+    root logger) doesn't see anything emitted under `opik.*`. Attaching
+    this handler directly to `loop.LOGGER` works around that without
+    touching opik's logging configuration.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.records: List[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@pytest.fixture
+def loop_log_records():
+    handler = _CapturingHandler()
+    handler.setLevel(logging.DEBUG)
+    previous_level = loop.LOGGER.level
+    loop.LOGGER.setLevel(logging.DEBUG)
+    loop.LOGGER.addHandler(handler)
+    try:
+        yield handler.records
+    finally:
+        loop.LOGGER.removeHandler(handler)
+        loop.LOGGER.setLevel(previous_level)
+
+
+class _StubChatModel(base_model.OpikBaseModel):
+    """Returns canned responses in order; records every call."""
+
+    def __init__(self, responses: List[base_model.ConversationDict]) -> None:
+        super().__init__(model_name="stub-model")
+        self._responses = list(responses)
+        self.calls: List[dict] = []
+
+    def generate_string(
+        self,
+        input: str,
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> str:
+        raise NotImplementedError
+
+    def generate_provider_response(self, messages: List[dict], **kwargs: Any) -> Any:
+        raise NotImplementedError
+
+    def generate_chat_completion(
+        self,
+        messages: List[base_model.ConversationDict],
+        response_format: Optional[Type[pydantic.BaseModel]] = None,
+        **kwargs: Any,
+    ) -> base_model.ConversationDict:
+        self.calls.append(
+            {
+                "tool_choice": kwargs.get("tool_choice"),
+                "response_format": response_format,
+            }
+        )
+        return self._responses.pop(0)
+
+
+class _StubTool:
+    """Minimal ToolExecutor for the registry under test."""
+
+    def __init__(self, name: str, payload: str = "{}") -> None:
+        self.name = name
+        self.spec = {"type": "function", "function": {"name": name}}
+        self._payload = payload
+
+    def execute(self, arguments, ctx):
+        return self._payload
+
+
+class _WrapupSchema(pydantic.BaseModel):
+    verdict: str
+
+
+def _trace(input_payload=None) -> models.TraceModel:
+    return models.TraceModel(
+        id="t-1",
+        start_time=datetime.datetime(2026, 5, 13),
+        name="trace",
+        project_name="default",
+        source="sdk",
+        input=input_payload or {"q": "hi"},
+        output={"a": "ok"},
+        end_time=datetime.datetime(2026, 5, 13, 0, 0, 1),
+    )
+
+
+def _ctx(trace: models.TraceModel):
+    return _seeding.build_ctx(trace, [])
+
+
+def _tool_call(tool_id: str, name: str, arguments: str = "{}") -> dict:
+    return {
+        "id": tool_id,
+        "function": {"name": name, "arguments": arguments},
+    }
+
+
+def _run_with_responses(responses, tools, ctx):
+    model = _StubChatModel(responses)
+    registry = tool_registry.ToolRegistry(tools=tools)
+    content = loop.run_agentic_judge(
+        model=model,
+        system_prompt="sys",
+        user_prompt="user",
+        wrapup_instruction="wrap",
+        registry=registry,
+        ctx=ctx,
+        response_format=_WrapupSchema,
+    )
+    return content, model
+
+
+class TestTelemetryLogging:
+    def test_run_agentic_judge__single_round__logs_round_and_tool_counts(
+        self, loop_log_records
+    ):
+        # Sequence:
+        #  1) forced tool turn → calls get_trace_spans once
+        #  2) auto turn → no tool calls (loop ends)
+        #  3) wrap-up → JSON verdict
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+
+        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+
+        finished = [
+            r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
+        ]
+        assert len(finished) == 1
+        message = finished[0].getMessage()
+        assert "rounds=1" in message
+        assert "get_trace_spans=1" in message
+
+    def test_run_agentic_judge__multi_tool_round__counts_per_tool(
+        self, loop_log_records
+    ):
+        # One round, two tool calls in parallel: read + scan.
+        responses = [
+            {
+                "tool_calls": [
+                    _tool_call("c1", "read"),
+                    _tool_call("c2", "scan"),
+                ],
+            },
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+
+        _run_with_responses(responses, [_StubTool("read"), _StubTool("scan")], ctx)
+
+        finished = [
+            r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
+        ]
+        assert len(finished) == 1
+        message = finished[0].getMessage()
+        # Names are sorted alphabetically for stable rendering.
+        assert "rounds=1" in message
+        assert "read=1, scan=1" in message
+
+
+class TestZeroReadOnLargeTraceWarning:
+    def test_run_agentic_judge__zero_read_on_large_trace__warns(self, loop_log_records):
+        # Trace whose JSON-rendered composite exceeds LARGE_TRACE_BYTES,
+        # and the judge only calls `get_trace_spans` (no `read`). The
+        # warning fires.
+        big_input = {"prompt": "x" * (loop.LARGE_TRACE_BYTES + 100)}
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace(input_payload=big_input))
+
+        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+
+        warnings = [
+            r
+            for r in loop_log_records
+            if r.levelno >= logging.WARNING
+            and "without ever calling `read`" in r.getMessage()
+        ]
+        assert len(warnings) == 1
+
+    def test_run_agentic_judge__small_trace_zero_read__does_not_warn(
+        self, loop_log_records
+    ):
+        # Tiny trace, no `read` → the warning would be noise; suppress it.
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+
+        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+
+        warnings = [
+            r
+            for r in loop_log_records
+            if r.levelno >= logging.WARNING
+            and "without ever calling `read`" in r.getMessage()
+        ]
+        assert warnings == []
+
+    def test_run_agentic_judge__read_called_on_large_trace__does_not_warn(
+        self, loop_log_records
+    ):
+        # Large trace BUT the judge does call `read` once. No warning.
+        big_input = {"prompt": "x" * (loop.LARGE_TRACE_BYTES + 100)}
+        responses = [
+            {"tool_calls": [_tool_call("c1", "read")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace(input_payload=big_input))
+
+        _run_with_responses(responses, [_StubTool("read", payload='{"data": {}}')], ctx)
+
+        warnings = [
+            r
+            for r in loop_log_records
+            if r.levelno >= logging.WARNING
+            and "without ever calling `read`" in r.getMessage()
+        ]
+        assert warnings == []
