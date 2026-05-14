@@ -32,7 +32,6 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 @EagerSingleton
 @Slf4j
@@ -115,28 +114,14 @@ public class OnlineScoringUserDefinedMetricPythonScorer
     private Map<String, Object> prepareData(TraceToScoreUserDefinedMetricPython message, List<Span> spans,
             Map<String, String> mdc) {
         var trace = message.trace();
-        try (var logContext = wrapWithMdc(mdc)) {
-            userFacingLogger.info("Evaluating traceId '{}' sampled by rule '{}'", trace.id(), message.ruleName());
-
-            try {
-                Map<String, Object> data;
-                if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
-                    data = OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
-                } else {
-                    data = new LinkedHashMap<>(
-                            OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
-                }
-                if (userFacingLogger.isInfoEnabled()) {
-                    userFacingLogger.info("Sending traceId '{}' to Python evaluator: '{}'",
-                            trace.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
-                }
-                return data;
-            } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for traceId '{}': \n\n{}",
-                        trace.id(), exception.getMessage());
-                throw exception;
-            }
-        }
+        return OnlineScoringEngine.logAndPrepareEvaluatorInput(
+                userFacingLogger, mdc, "traceId", trace.id(), message.ruleName(),
+                () -> {
+                    if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
+                        return OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);
+                    }
+                    return new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
+                });
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Trace trace) {

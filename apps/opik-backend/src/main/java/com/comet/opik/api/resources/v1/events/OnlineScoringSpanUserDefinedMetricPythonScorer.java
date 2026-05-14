@@ -28,7 +28,6 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * This service listens to a Redis stream for Spans to be scored using Python evaluators. It will prepare the Python
@@ -96,23 +95,9 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
 
     private Map<String, Object> prepareData(SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         var span = message.span();
-        // This is crucial for logging purposes to identify the rule and span
-        try (var logContext = wrapWithMdc(mdc)) {
-            userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
-            try {
-                var data = new LinkedHashMap<String, Object>(
-                        OnlineScoringEngine.toReplacements(message.code().arguments(), span));
-                if (userFacingLogger.isInfoEnabled()) {
-                    userFacingLogger.info("Sending spanId '{}' to Python evaluator: '{}'",
-                            span.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
-                }
-                return data;
-            } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for spanId '{}': \n\n{}",
-                        span.id(), exception.getMessage());
-                throw exception;
-            }
-        }
+        return OnlineScoringEngine.logAndPrepareEvaluatorInput(
+                userFacingLogger, mdc, "spanId", span.id(), message.ruleName(),
+                () -> new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), span)));
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Span span) {

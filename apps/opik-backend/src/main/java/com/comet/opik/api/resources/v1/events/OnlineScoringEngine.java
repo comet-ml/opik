@@ -13,6 +13,7 @@ import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -52,6 +53,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -698,6 +700,38 @@ public class OnlineScoringEngine {
      * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
      * so we surface key names and sizes only.
      */
+    /**
+     * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
+     * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
+     * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
+     * log, and the rethrow-with-error-log fallback. Callers supply only what actually differs:
+     * the entity label ({@code "traceId"} / {@code "spanId"}), the id, the rule name, and a
+     * supplier that builds the rendered evaluator input.
+     */
+    public static Map<String, Object> logAndPrepareEvaluatorInput(
+            @NonNull Logger userFacingLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Supplier<Map<String, Object>> dataSupplier) {
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
+            try {
+                Map<String, Object> data = dataSupplier.get();
+                if (userFacingLogger.isInfoEnabled()) {
+                    userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
+                            entityLabel, entityId, summarizeEvaluatorInput(data));
+                }
+                return data;
+            } catch (Exception exception) {
+                userFacingLogger.error("Error preparing Python request for {} '{}': \n\n{}",
+                        entityLabel, entityId, exception.getMessage());
+                throw exception;
+            }
+        }
+    }
+
     public static String summarizeEvaluatorInput(@NonNull Map<String, Object> data) {
         var parts = data.entrySet().stream()
                 .map(e -> {
