@@ -106,10 +106,10 @@ class TraceToolContext:
         land alongside `read` in Phase 2.
         """
         if ref.type == entity_ref.EntityType.TRACE:
-            trace = self.emulator._trace_observations.get(ref.id)
+            trace = self.emulator.get_trace(ref.id)
             return _serialize_trace(trace) if trace is not None else None
         if ref.type == entity_ref.EntityType.SPAN:
-            span = self.emulator._span_observations.get(ref.id)
+            span = self.emulator.get_span(ref.id)
             return _serialize_span(span) if span is not None else None
         return None
 
@@ -123,7 +123,7 @@ def build_trace_tool_context(
     Returns None when the trace isn't in the emulator cache — caller falls
     back to the one-shot judge path.
     """
-    trace = emulator._trace_observations.get(trace_id)
+    trace = emulator.get_trace(trace_id)
     if trace is None:
         LOGGER.debug(
             "TraceToolContext: trace %s not in emulator cache; agentic path skipped",
@@ -131,11 +131,5 @@ def build_trace_tool_context(
         )
         return None
 
-    spans: List[models.SpanModel] = [
-        span
-        for span_id, span_trace_id in emulator._span_to_trace.items()
-        if span_trace_id == trace_id
-        and (span := emulator._span_observations.get(span_id)) is not None
-    ]
-    spans.sort(key=lambda s: s.start_time)
+    spans = emulator.spans_for_trace(trace_id)
     return TraceToolContext(trace=trace, spans=spans, emulator=emulator)
