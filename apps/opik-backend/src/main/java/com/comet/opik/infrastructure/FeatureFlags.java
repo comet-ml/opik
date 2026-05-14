@@ -28,16 +28,6 @@ public class FeatureFlags {
     }
 
     /**
-     * Checks if CSV upload feature is enabled.
-     *
-     * @return true if CSV upload is enabled, false otherwise
-     */
-    public boolean isCsvUploadEnabled() {
-        return config.getServiceToggles() != null
-                && config.getServiceToggles().isCsvUploadEnabled();
-    }
-
-    /**
      * Checks if dataset versioning feature is enabled and throws ForbiddenException if not.
      *
      * @throws ForbiddenException if dataset versioning is not enabled

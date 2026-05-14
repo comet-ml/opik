@@ -999,9 +999,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Welcome Wizard is enabled
   welcomeWizardEnabled: ${TOGGLE_WELCOME_WIZARD_ENABLED:-"false"}
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: ${TOGGLE_CSV_UPLOAD_ENABLED:-"false"}
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: ${TOGGLE_EXPORT_ENABLED:-"true"}
@@ -1038,13 +1035,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
-  # Deprecated (OPIK-6434): the Collaborators tab is always enabled on the frontend.
-  # The TOGGLE_COLLABORATORS_TAB_ENABLED env var is no longer consulted; value is
-  # hardcoded to preserve the /v1/private/feature-toggles response shape for older
-  # Python/TypeScript SDK clients that declare it as a required boolean. Safe to
-  # delete (along with the dangling helm-chart env-var settings) once those SDK
-  # versions are out of support.
-  collaboratorsTabEnabled: false
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
