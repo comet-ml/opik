@@ -134,14 +134,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
-      label: "Claude Opus 4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
-      label: "Claude Sonnet 4",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -525,6 +517,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH,
       label: "deepseek/deepseek-v4-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
+      label: "deepseek/deepseek-v4-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,

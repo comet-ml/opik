@@ -27,6 +27,7 @@ import ExperimentsPathsAutocomplete from "@/v2/pages-shared/experiments/Experime
 import { getTagsFilterConfig } from "@/v2/pages-shared/TagsAutocomplete/tagsFilterConfig";
 import ExperimentFilterSelectBox from "./ExperimentFilterSelectBox";
 import { EXPERIMENT_IDS_FILTER_FIELD } from "@/lib/filters";
+import { ITEM_SOURCE_LABEL } from "@/v2/pages-shared/experiments/ItemSourceCell";
 
 type ExperimentColumnData = {
   id: string;
@@ -42,7 +43,7 @@ const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   },
   {
     id: COLUMN_DATASET_ID,
-    label: "Dataset",
+    label: ITEM_SOURCE_LABEL,
     type: COLUMN_TYPE.string,
     disposable: true,
   },
@@ -62,7 +63,7 @@ const EXPERIMENT_FILTER_COLUMNS: ColumnData<ExperimentColumnData>[] = [
 const EXPERIMENT_GROUP_COLUMNS: ColumnData<ExperimentColumnData>[] = [
   {
     id: COLUMN_DATASET_ID,
-    label: "Test suite",
+    label: ITEM_SOURCE_LABEL,
     type: COLUMN_TYPE.string,
     disposable: true,
   },
