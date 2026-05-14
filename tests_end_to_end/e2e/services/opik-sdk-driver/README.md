@@ -60,15 +60,17 @@ Response (HTTP 201):
 { "id": "<uuid>", "name": "cuj-..." }
 ```
 
-Errors:
+Errors — the bridge catches `opik.rest_api.core.api_error.ApiError` and
+re-raises it as `HTTPException` with the SDK's original status code and
+body, so backend errors stay faithful to the wire:
+
 - `422` — missing required field (`name`), via Pydantic. Response body lists
   the missing field path.
-- `500` with body `Internal Server Error` — any SDK exception propagates as
-  an uncaught error. Duplicate-name is the common case: the Opik backend
-  returns 409 with `{"errors":["Project already exists"]}`, the Python SDK
-  raises `opik.rest_api.core.api_error.ApiError`, and FastAPI emits a 500
-  with no JSON body. **The exception detail is only available in the
-  bridge's stderr**, so log capture is required for debugging.
+- `409` — duplicate name. Body: `{"detail": {"errors": ["Project already exists"]}}`.
+- Other 4xx — propagated from the backend (auth, permissions, etc.) with
+  the SDK's `body` under `detail`.
+- `500` — uncaught non-API errors (network failures, programmer bugs). The
+  stack trace is in the bridge's stderr.
 
 ## Adding a new route
 
@@ -78,7 +80,11 @@ Errors:
    handler.
 3. Register it in `src/opik_sdk_driver/main.py` via `app.include_router`.
 
-Follow the pattern in `routes/projects.py` — instantiate `opik.Opik()` fresh
-per request so workspaces don't leak across calls, then `client.end(flush=False)`
-+ `atexit.unregister(client.end)` in a `finally` block to avoid leaking the
-streamer thread and atexit reference the SDK constructor creates.
+Follow the pattern in `routes/projects.py`:
+
+- Instantiate `opik.Opik()` fresh per request so workspaces don't leak.
+- Wrap SDK calls in `try/except ApiError`, re-raise as `HTTPException` with
+  the SDK's `status_code` and `body` so callers see real backend errors.
+- In a `finally` block, `client.end(flush=False)` + `atexit.unregister(client.end)`
+  to avoid leaking the streamer thread and atexit reference the SDK
+  constructor creates.
