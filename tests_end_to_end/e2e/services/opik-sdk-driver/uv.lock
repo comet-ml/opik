@@ -1110,7 +1110,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115.0" },
-    { name = "opik", specifier = ">=2.0.0" },
+    { name = "opik", specifier = ">=2.0.0,<3.0.0" },
     { name = "pydantic", specifier = ">=2.9.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
