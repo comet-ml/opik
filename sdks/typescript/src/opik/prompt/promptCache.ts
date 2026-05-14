@@ -147,7 +147,9 @@ export class PromptCache {
       Math.max(PROMPT_CACHE_TTL_SECONDS, MIN_REFRESH_INTERVAL_SECONDS) * 1000;
 
     this.refreshTimer = setInterval(() => {
-      void this.refreshStaleEntries();
+      this.refreshStaleEntries().catch((err) => {
+        logger.debug("Prompt cache background refresh loop failed", { error: err });
+      });
     }, intervalMs);
 
     // Don't keep the Node.js process alive just for cache refresh
@@ -177,9 +179,13 @@ export class PromptCache {
           })
         );
 
-        for (const result of results) {
+        for (let j = 0; j < results.length; j++) {
+          const result = results[j];
           if (result.status === "rejected") {
-            logger.debug("Background prompt cache refresh failed");
+            logger.debug("Background prompt cache refresh failed", {
+              promptName: batch[j].prompt.name,
+              error: result.reason,
+            });
           }
         }
       }

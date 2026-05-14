@@ -146,7 +146,11 @@ class PromptCache:
                         entry.prompt = new_prompt
                         entry.last_fetch = time.monotonic()
             except Exception:
-                logger.debug("Background prompt cache refresh failed", exc_info=True)
+                logger.debug(
+                    "Background prompt cache refresh failed for prompt %r",
+                    entry.prompt.name,
+                    exc_info=True,
+                )
 
     def _stop_refresh_thread(self) -> None:
         with self._lock:
