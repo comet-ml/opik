@@ -44,6 +44,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;
+    @JsonProperty
+    @NotNull boolean demoDataEnabled;
     // LLM Provider feature flags
     @JsonProperty
     @NotNull boolean openaiProviderEnabled;
