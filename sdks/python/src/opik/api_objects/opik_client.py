@@ -2376,9 +2376,13 @@ class Opik:
                         existing = (observation_data.metadata or {}).get(
                             "opik_prompts", []
                         )
-                        dedup_key = (prompt_info.get("id"), prompt_info.get("commit"))
+                        dedup_key = (
+                            prompt_info.get("id"),
+                            (prompt_info.get("version") or {}).get("commit"),
+                        )
                         existing_keys = {
-                            (p.get("id"), p.get("commit")) for p in existing
+                            (p.get("id"), (p.get("version") or {}).get("commit"))
+                            for p in existing
                         }
                         if dedup_key not in existing_keys:
                             observation_data.update(
