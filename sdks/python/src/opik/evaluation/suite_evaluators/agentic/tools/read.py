@@ -26,7 +26,7 @@ from ..compression import (
     tier as tier_module,
     trace_compressor,
 )
-from . import _tool_args
+from . import tool_args
 
 LOGGER = logging.getLogger(__name__)
 
@@ -143,13 +143,13 @@ def _compress_trace(
 
 
 def _parse_arguments(arguments: str) -> Dict[str, Any]:
-    envelope = _tool_args.parse_envelope(arguments)
+    envelope = tool_args.parse_envelope(arguments)
     if envelope.error is not None:
         return {"error": envelope.error}
     raw, ref = envelope.unwrap()
 
     # `tier` is the only field unique to `read`; keep its parsing here so
-    # `_tool_args` stays focused on the shape every tool shares.
+    # `tool_args` stays focused on the shape every tool shares.
     forced_tier_raw = raw.get("tier")
     forced_tier: Optional[tier_module.CompressionTier] = None
     if forced_tier_raw is not None:

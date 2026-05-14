@@ -29,7 +29,7 @@ import re
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .. import context, entity_ref, path_format
-from . import _tool_args, path_evaluator
+from . import tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -161,12 +161,12 @@ class SearchTool:
 
 
 def _parse_arguments(arguments: str) -> Dict[str, Any]:
-    envelope = _tool_args.parse_envelope(arguments)
+    envelope = tool_args.parse_envelope(arguments)
     if envelope.error is not None:
         return {"error": envelope.error}
     raw, ref = envelope.unwrap()
 
-    pattern_result = _tool_args.require_string(raw, "pattern")
+    pattern_result = tool_args.require_string(raw, "pattern")
     if pattern_result.error is not None:
         return {"error": pattern_result.error}
 

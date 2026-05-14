@@ -26,7 +26,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .. import context, entity_ref
-from . import _tool_args, path_evaluator
+from . import tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,12 +131,12 @@ class ScanTool:
 
 
 def _parse_arguments(arguments: str) -> Dict[str, Any]:
-    envelope = _tool_args.parse_envelope(arguments)
+    envelope = tool_args.parse_envelope(arguments)
     if envelope.error is not None:
         return {"error": envelope.error}
     raw, ref = envelope.unwrap()
 
-    expression_result = _tool_args.require_string(raw, "expression")
+    expression_result = tool_args.require_string(raw, "expression")
     if expression_result.error is not None:
         return {"error": expression_result.error}
 
