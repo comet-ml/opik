@@ -133,6 +133,33 @@ describe("PromptCache", () => {
 
       expect(cache.get("key1")).toBeNull();
     });
+
+    it("allows refresh timer to restart after clear", async () => {
+      vi.useFakeTimers();
+      try {
+        const prompt1 = makeFakePrompt({ name: "p1" });
+        const prompt2 = makeFakePrompt({ name: "p2" });
+
+        await cache.getOrFetch("key1", vi.fn().mockResolvedValue(prompt1), 300);
+        cache.clear();
+
+        expect(cache.get("key1")).toBeNull();
+
+        // After clear, inserting another unpinned entry must cache correctly —
+        // proving the stopped flag was reset and the timer can restart.
+        const fetchFn2 = vi.fn().mockResolvedValue(prompt2);
+        const result = await cache.getOrFetch("key2", fetchFn2, 300);
+        expect(result).toBe(prompt2);
+        expect(fetchFn2).toHaveBeenCalledOnce();
+
+        const result2 = await cache.getOrFetch("key2", fetchFn2, 300);
+        expect(result2).toBe(prompt2);
+        expect(fetchFn2).toHaveBeenCalledOnce();
+      } finally {
+        vi.useRealTimers();
+        cache.clear();
+      }
+    });
   });
 
   describe("pinned vs unpinned", () => {
@@ -152,7 +179,6 @@ describe("PromptCache", () => {
       await cache.getOrFetch("unpinned-key", fetchFn, 300);
 
       expect(cache.get("unpinned-key")).toBe(prompt);
-      // fetchFn should only be called once for the initial fetch
       expect(fetchFn).toHaveBeenCalledOnce();
     });
   });
@@ -161,12 +187,12 @@ describe("PromptCache", () => {
 describe("buildCacheKey", () => {
   it("builds key from all parameters", () => {
     const key = buildCacheKey("my-prompt", "abc123", "my-project", "text");
-    expect(key).toBe("my-prompt|abc123|my-project|text");
+    expect(key).toBe(JSON.stringify(["my-prompt", "abc123", "my-project", "text"]));
   });
 
   it("handles undefined commit and project", () => {
     const key = buildCacheKey("my-prompt", undefined, undefined, "chat");
-    expect(key).toBe("my-prompt|||chat");
+    expect(key).toBe(JSON.stringify(["my-prompt", "", "", "chat"]));
   });
 
   it("produces different keys for different parameters", () => {
@@ -175,5 +201,16 @@ describe("buildCacheKey", () => {
     const key3 = buildCacheKey("prompt", "commit1", "project", "chat");
     expect(key1).not.toBe(key2);
     expect(key1).not.toBe(key3);
+  });
+
+  it("does not collide when pipe characters appear in name or project", () => {
+    // With the old delimiter approach these two would produce the same key.
+    const key1 = buildCacheKey("a|b", "", "project", "text");
+    const key2 = buildCacheKey("a", "b", "project", "text");
+    expect(key1).not.toBe(key2);
+
+    const key3 = buildCacheKey("name", "", "proj|ect", "text");
+    const key4 = buildCacheKey("name", "", "proj", "ect");
+    expect(key3).not.toBe(key4);
   });
 });

@@ -129,6 +129,7 @@ export class PromptCache {
   clear(): void {
     this.stopRefreshTimer();
     this.entries.clear();
+    this.stopped = false;
   }
 
   private evict(): void {
@@ -215,7 +216,7 @@ export function buildCacheKey(
   projectName: string | undefined,
   templateStructure: string
 ): string {
-  return `${name}|${commit ?? ""}|${projectName ?? ""}|${templateStructure}`;
+  return JSON.stringify([name, commit ?? "", projectName ?? "", templateStructure]);
 }
 
 export async function getOrFetch<T extends BasePrompt>(

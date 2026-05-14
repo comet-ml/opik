@@ -4,7 +4,7 @@ import type { ExperimentPublic, Trace as ITrace } from "@/rest_api/api";
 import * as OpikApi from "@/rest_api/api";
 import { FeedbackScoreBatchItemSource } from "@/rest_api/api/types/FeedbackScoreBatchItemSource";
 import { Trace } from "@/tracer/Trace";
-import type { FeedbackScoreData } from "@/tracer/types";
+import type { FeedbackScoreData, PromptInfoDict } from "@/tracer/types";
 import { generateId } from "@/utils/generateId";
 import { createLink, logger } from "@/utils/logger";
 import { getProjectUrlByTraceId } from "@/utils/url";
@@ -1496,8 +1496,27 @@ export class OpikClient {
     if (result !== null) {
       const ctx = getTrackContext();
       if (ctx) {
-        ctx.trace.update({ prompts: [result], appendPrompts: true });
-        ctx.span.update({ prompts: [result], appendPrompts: true });
+        const promptExists = (metadata: OpikApi.JsonListString | undefined) => {
+          let obj: Record<string, unknown> = {};
+          if (metadata && typeof metadata === "object" && !Array.isArray(metadata)) {
+            obj = metadata;
+          } else if (typeof metadata === "string") {
+            try {
+              obj = JSON.parse(metadata) as Record<string, unknown>;
+            } catch {
+              obj = {};
+            }
+          }
+          const existing = Array.isArray(obj.opik_prompts) ? (obj.opik_prompts as PromptInfoDict[]) : [];
+          return existing.some((p) => p.id === result.id && p.version?.commit === result.commit);
+        };
+
+        if (!promptExists(ctx.trace.data.metadata)) {
+          ctx.trace.update({ prompts: [result], appendPrompts: true });
+        }
+        if (!promptExists(ctx.span.data.metadata)) {
+          ctx.span.update({ prompts: [result], appendPrompts: true });
+        }
       }
     }
 

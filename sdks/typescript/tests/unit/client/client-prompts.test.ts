@@ -10,6 +10,10 @@ import {
 import * as OpikApi from "@/rest_api/api";
 import { PromptTemplateStructure } from "@/prompt/types";
 import { getGlobalCache } from "@/prompt/promptCache";
+import { trackStorage } from "@/decorators/track";
+import { Trace } from "@/tracer/Trace";
+import { Span } from "@/tracer/Span";
+import type { PromptInfoDict } from "@/tracer/types";
 
 describe("Opik prompt operations", () => {
   let client: Opik;
@@ -1069,6 +1073,107 @@ describe("Opik prompt operations", () => {
       await client.flush();
 
       expect(loggerErrorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("getPrompt — auto-injection deduplication", () => {
+    const mockPromptPublic = {
+      id: "prompt-id",
+      name: "my-prompt",
+    };
+    const mockVersionDetail: OpikApi.PromptVersionDetail = {
+      id: "version-id",
+      promptId: "prompt-id",
+      commit: "abc123",
+      template: "Hello!",
+      type: "mustache",
+      createdAt: new Date("2024-01-01"),
+      createdBy: "test-user",
+      templateStructure: PromptTemplateStructure.Text,
+    };
+
+    function setupPromptMocks() {
+      getPromptsSpy.mockResolvedValue({ content: [mockPromptPublic] } as never);
+      retrievePromptVersionSpy.mockResolvedValue(mockVersionDetail as never);
+    }
+
+    function makeTrackContext() {
+      vi.spyOn(client.traceBatchQueue, "update").mockReturnValue(undefined as never);
+      vi.spyOn(client.spanBatchQueue, "update").mockReturnValue(undefined as never);
+      const trace = new Trace({ id: "trace-id", projectName: "opik-sdk-typescript" } as never, client);
+      const span = new Span({ id: "span-id", traceId: "trace-id", projectName: "opik-sdk-typescript" } as never, client);
+      return { trace, span };
+    }
+
+    it("injects prompt into trace and span when inside a track context", async () => {
+      setupPromptMocks();
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        () => client.getPrompt({ name: "my-prompt" })
+      );
+
+      expect((trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+      expect((span.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+    });
+
+    it("does not inject the same prompt twice when called twice inside a track context", async () => {
+      setupPromptMocks();
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        async () => {
+          await client.getPrompt({ name: "my-prompt" });
+          await client.getPrompt({ name: "my-prompt" });
+        }
+      );
+
+      expect((trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+      expect((span.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[]).toHaveLength(1);
+    });
+
+    it("injects two different prompts, both appear exactly once", async () => {
+      const mockPromptB = { id: "prompt-id-b", name: "other-prompt" };
+      const mockVersionDetailB: OpikApi.PromptVersionDetail = {
+        id: "version-id-b",
+        promptId: "prompt-id-b",
+        commit: "def456",
+        template: "World!",
+        type: "mustache",
+        createdAt: new Date("2024-01-01"),
+        createdBy: "test-user",
+        templateStructure: PromptTemplateStructure.Text,
+      };
+
+      const { trace, span } = makeTrackContext();
+
+      await trackStorage.run(
+        { trace, span } as never,
+        async () => {
+          getPromptsSpy.mockResolvedValueOnce({ content: [mockPromptPublic] } as never);
+          retrievePromptVersionSpy.mockResolvedValueOnce(mockVersionDetail as never);
+          await client.getPrompt({ name: "my-prompt" });
+
+          getPromptsSpy.mockResolvedValueOnce({ content: [mockPromptB] } as never);
+          retrievePromptVersionSpy.mockResolvedValueOnce(mockVersionDetailB as never);
+          await client.getPrompt({ name: "other-prompt" });
+        }
+      );
+
+      const injected = (trace.data.metadata as Record<string, unknown>)?.opik_prompts as PromptInfoDict[];
+      expect(injected).toHaveLength(2);
+      const ids = injected.map((p) => p.id);
+      expect(ids).toContain("prompt-id");
+      expect(ids).toContain("prompt-id-b");
+    });
+
+    it("does not inject when outside a track context", async () => {
+      setupPromptMocks();
+      // Should not throw and should return the prompt normally
+      const result = await client.getPrompt({ name: "my-prompt" });
+      expect(result).toBeInstanceOf(Prompt);
     });
   });
 });
