@@ -41,25 +41,25 @@ def _ctx():
     )
 
 
-def test_default_registry_exposes_overview_and_read_tools():
+def test_default_registry__judge_built_with_no_injection__exposes_overview_and_read_tools():
     judge = AgenticLLMJudge(assertions=["x"], model=mock.MagicMock())
 
     registered = judge._registry.names()  # noqa: SLF001 — guarding surface
 
-    assert sorted(registered) == ["get_trace_spans", "read", "scan"]
+    assert sorted(registered) == ["get_trace_spans", "read", "scan", "search"]
 
 
-def test_default_registry_specs_well_formed():
+def test_default_registry__specs__are_well_formed():
     judge = AgenticLLMJudge(assertions=["x"], model=mock.MagicMock())
 
     specs = judge._registry.specs()  # noqa: SLF001 — guarding surface
 
     # Each spec is an OpenAI-style tool descriptor with a function name.
     spec_names = {spec["function"]["name"] for spec in specs}
-    assert spec_names == {"get_trace_spans", "read", "scan"}
+    assert spec_names == {"get_trace_spans", "read", "scan", "search"}
 
 
-def test_read_tool_is_reachable_via_registry_dispatch():
+def test_default_registry__read_tool_dispatch__reaches_execute():
     # Sanity: registry-level dispatch routes to ReadTool's execute and
     # returns its JSON envelope (here an `error` because the entity is
     # absent — but the routing itself succeeds, which is the point).

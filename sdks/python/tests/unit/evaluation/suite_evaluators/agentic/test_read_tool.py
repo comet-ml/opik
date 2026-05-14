@@ -49,7 +49,7 @@ def _ctx(trace, spans, parent_by_child=None):
 
 
 class TestArgumentParsing:
-    def test_missing_type_returns_error(self):
+    def test_read__missing_type__returns_error(self):
         tool = ReadTool()
         ctx = _ctx(_trace(), [])
 
@@ -58,7 +58,7 @@ class TestArgumentParsing:
         assert "error" in response
         assert "type" in response["error"].lower()
 
-    def test_missing_id_returns_error(self):
+    def test_read__missing_id__returns_error(self):
         tool = ReadTool()
         ctx = _ctx(_trace(), [])
 
@@ -67,7 +67,7 @@ class TestArgumentParsing:
         assert "error" in response
         assert "id" in response["error"].lower()
 
-    def test_unsupported_type_returns_error(self):
+    def test_read__unsupported_type__returns_error(self):
         tool = ReadTool()
         ctx = _ctx(_trace(), [])
 
@@ -78,7 +78,7 @@ class TestArgumentParsing:
         assert "error" in response
         assert "not_known_type" in response["error"].lower()
 
-    def test_invalid_tier_returns_error(self):
+    def test_read__invalid_tier__returns_error(self):
         tool = ReadTool()
         ctx = _ctx(_trace(), [])
 
@@ -89,7 +89,7 @@ class TestArgumentParsing:
         assert "error" in response
         assert "TINY" in response["error"]
 
-    def test_malformed_arguments_json_returns_error(self):
+    def test_read__malformed_arguments_json__returns_error(self):
         tool = ReadTool()
         ctx = _ctx(_trace(), [])
 
@@ -99,7 +99,7 @@ class TestArgumentParsing:
 
 
 class TestReadTrace:
-    def test_active_trace_returned_at_full_tier_by_default(self):
+    def test_read__active_trace__returns_full_tier_by_default(self):
         trace = _trace()
         spans = [_span("s-1")]
         ctx = _ctx(trace, spans)
@@ -115,7 +115,7 @@ class TestReadTrace:
         assert response["data"]["trace"]["id"] == trace.id
         assert [s["id"] for s in response["data"]["spans"]] == ["s-1"]
 
-    def test_forced_skeleton_returns_minimal_tree(self):
+    def test_read__forced_skeleton__returns_minimal_tree(self):
         trace = _trace()
         spans = [_span("root"), _span("child", start_offset_s=1)]
         parents = {"root": None, "child": "root"}
@@ -135,7 +135,7 @@ class TestReadTrace:
         assert root_nodes[0]["id"] == "root"
         assert root_nodes[0]["spans"][0]["id"] == "child"
 
-    def test_unknown_trace_id_returns_not_found(self):
+    def test_read__unknown_trace_id__returns_not_found(self):
         ctx = _ctx(_trace(), [])
         tool = ReadTool()
 
@@ -146,7 +146,7 @@ class TestReadTrace:
 
 
 class TestReadSpan:
-    def test_active_span_returned_at_full_tier(self):
+    def test_read__active_span__returns_full_tier(self):
         trace = _trace()
         spans = [_span("s-1", input={"k": "v"})]
         ctx = _ctx(trace, spans)
@@ -158,7 +158,7 @@ class TestReadSpan:
         assert response["data"]["id"] == "s-1"
         assert response["data"]["input"] == {"k": "v"}
 
-    def test_span_resolved_via_emulator_when_not_preseeded(self):
+    def test_read__span_not_preseeded__resolved_via_emulator(self):
         # The emulator may have spans from other evaluation items in
         # scope; the read tool should resolve them via the emulator
         # fallback even though they weren't preseeded into the cache.
@@ -174,7 +174,7 @@ class TestReadSpan:
 
         assert response["data"]["id"] == "s-other"
 
-    def test_unknown_span_returns_not_found(self):
+    def test_read__unknown_span__returns_not_found(self):
         ctx = _ctx(_trace(), [])
         tool = ReadTool()
 
@@ -185,7 +185,7 @@ class TestReadSpan:
 
 
 class TestSpec:
-    def test_spec_exposes_only_in_scope_entity_types(self):
+    def test_spec__entity_type_enum__exposes_only_in_scope_types(self):
         # Schema should match the trimmed EntityType enum — TRACE / SPAN
         # only. Future scope expansion must update both sides in lockstep.
         enum_values = ReadTool.spec["function"]["parameters"]["properties"]["type"][

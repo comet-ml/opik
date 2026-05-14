@@ -49,7 +49,7 @@ def _emulator_with(trace, spans):
 
 
 class TestTraceToolContextPreseed:
-    def test_active_trace_cached(self):
+    def test_get_cached__active_trace__returns_composite(self):
         trace = _trace()
         ctx = TraceToolContext(
             trace=trace,
@@ -66,7 +66,7 @@ class TestTraceToolContextPreseed:
         assert cached["trace"]["input"] == {"q": "hi"}
         assert cached["spans"] == []
 
-    def test_active_spans_cached(self):
+    def test_get_cached__active_spans__returns_cached_entries(self):
         trace = _trace()
         spans = [_span("s-1"), _span("s-2", start_offset_s=1)]
         ctx = TraceToolContext(
@@ -78,7 +78,7 @@ class TestTraceToolContextPreseed:
         assert ctx.get_cached(EntityRef(EntityType.SPAN, "s-1")) is not None
         assert ctx.get_cached(EntityRef(EntityType.SPAN, "s-2")) is not None
 
-    def test_unknown_entity_returns_none(self):
+    def test_get_cached__unknown_entity__returns_none(self):
         trace = _trace()
         ctx = TraceToolContext(
             trace=trace,
@@ -90,11 +90,11 @@ class TestTraceToolContextPreseed:
 
 
 class TestBuildTraceToolContext:
-    def test_returns_none_when_trace_missing(self):
+    def test_build__missing_trace__returns_none(self):
         emulator = _emulator_with(_trace(), [])
         assert build_trace_tool_context("nope", emulator) is None
 
-    def test_returns_context_with_pre_seeded_spans(self):
+    def test_build__pre_seeded_spans__returns_context_sorted_by_start_time(self):
         trace = _trace()
         spans = [_span("s-1"), _span("s-2", start_offset_s=1)]
         emulator = _emulator_with(trace, spans)

@@ -35,7 +35,7 @@ def _ctx():
     )
 
 
-def test_score_without_context_uses_one_shot_path():
+def test_score__without_context__uses_one_shot_path():
     judge = _make_judge()
     with (
         mock.patch.object(
@@ -51,7 +51,7 @@ def test_score_without_context_uses_one_shot_path():
         assert results[0].name == "x"
 
 
-def test_score_with_context_routes_to_agentic_path():
+def test_score__with_context__routes_to_agentic_path():
     judge = _make_judge()
     ctx = _ctx()
     expected = [score_result.ScoreResult(name="x", value=False, reason="r")]

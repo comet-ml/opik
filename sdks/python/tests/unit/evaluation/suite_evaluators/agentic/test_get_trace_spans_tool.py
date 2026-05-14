@@ -44,7 +44,7 @@ def _trace_with_spans():
     return trace, [root, child], emulator
 
 
-def test_get_trace_spans_returns_overview_json():
+def test_get_trace_spans__active_trace__returns_overview_json():
     trace, spans, emulator = _trace_with_spans()
     ctx = TraceToolContext(
         trace=trace,
@@ -63,7 +63,7 @@ def test_get_trace_spans_returns_overview_json():
     assert span_names == ["root", "tool_call"]
 
 
-def test_spec_advertises_no_required_parameters():
+def test_get_trace_spans_spec__parameters__advertise_no_required():
     spec = GetTraceSpansTool().spec
     assert spec["function"]["name"] == "get_trace_spans"
     assert spec["function"]["parameters"]["properties"] == {}

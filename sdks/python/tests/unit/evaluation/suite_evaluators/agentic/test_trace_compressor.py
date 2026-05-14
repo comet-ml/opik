@@ -46,7 +46,7 @@ def _span(span_id, parent_span_id=None, **overrides):
 
 
 class TestPickTier:
-    def test_small_payload_chooses_full(self):
+    def test_compress__small_payload__chooses_full_tier(self):
         trace = _trace()
         full = trace_compressor.build_full_json(trace, [])
 
@@ -57,7 +57,7 @@ class TestPickTier:
         assert result.tier is tier_module.CompressionTier.FULL
         assert result.payload is full
 
-    def test_medium_payload_truncates_strings(self):
+    def test_compress__medium_payload__truncates_strings(self):
         # Force MEDIUM by inflating a string past FULL_TOKEN_LIMIT but
         # below MEDIUM_TOKEN_LIMIT. FULL_TOKEN_LIMIT*4 chars = 32k.
         big = "x" * 40_000
@@ -75,7 +75,7 @@ class TestPickTier:
         # cached composite shape (e.g. `.trace.input.prompt`).
         assert "scan('.trace.input.prompt')" in truncated
 
-    def test_large_payload_collapses_to_skeleton(self):
+    def test_compress__large_payload__collapses_to_skeleton(self):
         # > MEDIUM_TOKEN_LIMIT*4 = 200k chars worth → SKELETON.
         huge_span = _span("s-big", input={"prompt": "y" * 300_000})
         trace = _trace()
@@ -98,7 +98,7 @@ class TestPickTier:
 
 
 class TestForcedTier:
-    def test_forced_full_returns_payload_verbatim(self):
+    def test_compress__forced_full__returns_payload_verbatim(self):
         trace = _trace()
         full = trace_compressor.build_full_json(trace, [])
 
@@ -113,7 +113,7 @@ class TestForcedTier:
         assert result.tier is tier_module.CompressionTier.FULL
         assert result.payload is full
 
-    def test_forced_skeleton_collapses_even_when_small(self):
+    def test_compress__forced_skeleton__collapses_even_when_small(self):
         trace = _trace()
         spans = [_span("s-1"), _span("s-2", parent_span_id="s-1")]
         full = trace_compressor.build_full_json(trace, spans)
@@ -133,7 +133,7 @@ class TestForcedTier:
         assert root[0]["id"] == "s-1"
         assert root[0]["spans"][0]["id"] == "s-2"
 
-    def test_forced_summary_reports_as_skeleton(self):
+    def test_compress__forced_summary__reports_as_skeleton(self):
         # This compressor has no SUMMARY rendering; SUMMARY requests are
         # served as SKELETON and reported as such so the caller sees the
         # actual tier they received.
@@ -152,7 +152,7 @@ class TestForcedTier:
 
 
 class TestSkeletonBuilder:
-    def test_error_count_reflects_span_error_info(self):
+    def test_skeleton__spans_with_errors__error_count_matches(self):
         trace = _trace()
         spans = [
             _span("a"),
@@ -171,7 +171,7 @@ class TestSkeletonBuilder:
 
         assert result.payload["error_count"] == 2
 
-    def test_orphan_spans_promoted_to_roots(self):
+    def test_skeleton__orphan_spans__promoted_to_roots(self):
         trace = _trace()
         # `child` points at a parent not in the spans list.
         spans = [_span("child", parent_span_id="ghost")]
@@ -188,7 +188,7 @@ class TestSkeletonBuilder:
         roots = result.payload["span_tree"]
         assert [r["id"] for r in roots] == ["child"]
 
-    def test_duration_ms_computed_from_iso_timestamps(self):
+    def test_skeleton__iso_timestamps__duration_ms_computed(self):
         trace = _trace(start_time="2026-05-13T12:00:00", end_time="2026-05-13T12:00:02")
         full = trace_compressor.build_full_json(trace, [])
 
@@ -202,7 +202,7 @@ class TestSkeletonBuilder:
 
         assert result.payload["total_duration_ms"] == 2000.0
 
-    def test_duration_ms_none_when_end_time_missing(self):
+    def test_skeleton__missing_end_time__duration_ms_none(self):
         trace = _trace(end_time=None)
         full = trace_compressor.build_full_json(trace, [])
 

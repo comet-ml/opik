@@ -92,7 +92,7 @@ def _build_ctx() -> TraceToolContext:
     )
 
 
-def test_full_loop_calls_overview_and_produces_verdict():
+def test_score__full_loop__calls_overview_and_produces_verdict():
     verdict = json.dumps(
         {
             "assertion_1": {
@@ -141,7 +141,7 @@ def test_full_loop_calls_overview_and_produces_verdict():
     assert wrapup["tools"] is None
 
 
-def test_loop_terminates_within_max_rounds_even_if_model_loops():
+def test_score__model_loops_forever__terminates_within_max_rounds():
     """If the model keeps emitting tool calls, the loop bounds at MAX_TOOL_CALL_ROUNDS."""
     verdict = json.dumps(
         {

@@ -18,29 +18,29 @@ class _StubTool:
         return self._payload
 
 
-def test_specs_returns_in_insertion_order():
+def test_specs__multiple_tools__returns_in_insertion_order():
     registry = ToolRegistry([_StubTool("alpha"), _StubTool("beta")])
     names = [spec["function"]["name"] for spec in registry.specs()]
     assert names == ["alpha", "beta"]
 
 
-def test_duplicate_tool_name_rejected():
+def test_registry__duplicate_tool_name__rejected():
     with pytest.raises(ValueError):
         ToolRegistry([_StubTool("alpha"), _StubTool("alpha")])
 
 
-def test_execute_returns_tool_payload():
+def test_execute__known_tool__returns_tool_payload():
     registry = ToolRegistry([_StubTool("alpha", payload="hi")])
     assert registry.execute("alpha", "{}", ctx=None) == "hi"
 
 
-def test_execute_unknown_tool_returns_error_json():
+def test_execute__unknown_tool__returns_error_json():
     registry = ToolRegistry([_StubTool("alpha")])
     result = json.loads(registry.execute("missing", "{}", ctx=None))
     assert "error" in result and "missing" in result["error"]
 
 
-def test_execute_swallows_exceptions_into_error_json():
+def test_execute__tool_raises__swallows_exception_into_error_json():
     registry = ToolRegistry([_StubTool("alpha", raises=RuntimeError("boom"))])
     result = json.loads(registry.execute("alpha", "{}", ctx=None))
     assert "error" in result and "boom" in result["error"]

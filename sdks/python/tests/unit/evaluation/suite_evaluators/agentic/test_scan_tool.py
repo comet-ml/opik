@@ -51,7 +51,7 @@ def _ctx(trace, spans, parent_by_child=None):
 
 
 class TestArgumentParsing:
-    def test_missing_expression_returns_error(self):
+    def test_scan__missing_expression__returns_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -60,7 +60,7 @@ class TestArgumentParsing:
         assert "ERROR" in result
         assert "expression" in result.lower()
 
-    def test_unsupported_entity_type_returns_error(self):
+    def test_scan__unsupported_entity_type__returns_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -72,7 +72,7 @@ class TestArgumentParsing:
         assert "ERROR" in result
         assert "dataset" in result.lower()
 
-    def test_malformed_arguments_json_returns_error(self):
+    def test_scan__malformed_arguments_json__returns_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -82,7 +82,7 @@ class TestArgumentParsing:
 
 
 class TestScanAgainstActiveTrace:
-    def test_root_returns_composite(self):
+    def test_scan__root_expression__returns_composite(self):
         trace = _trace()
         spans = [_span("root")]
         ctx = _ctx(trace, spans)
@@ -101,7 +101,7 @@ class TestScanAgainstActiveTrace:
         assert parsed["trace"]["id"] == trace.id
         assert [s["id"] for s in parsed["spans"]] == ["root"]
 
-    def test_field_access_returns_value(self):
+    def test_scan__field_access__returns_value(self):
         ctx = _ctx(_trace(input={"prompt": "hello"}), [])
         tool = scan_module.ScanTool()
 
@@ -121,7 +121,7 @@ class TestScanAgainstActiveTrace:
         # `jq` rendering.
         assert body == "hello"
 
-    def test_iterate_emits_one_per_line(self):
+    def test_scan__iterate_expression__emits_one_per_line(self):
         trace = _trace()
         spans = [_span("a"), _span("b", start_offset_s=1)]
         ctx = _ctx(trace, spans)
@@ -141,7 +141,7 @@ class TestScanAgainstActiveTrace:
         body = result.split("\n", 1)[1]
         assert body.splitlines() == ["a", "b"]
 
-    def test_no_matches_renders_placeholder(self):
+    def test_scan__no_matches__renders_placeholder(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -161,7 +161,7 @@ class TestScanAgainstActiveTrace:
 
 
 class TestErrorPropagation:
-    def test_unknown_entity_returns_not_found_error(self):
+    def test_scan__unknown_entity__returns_not_found_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -173,7 +173,7 @@ class TestErrorPropagation:
         assert "ERROR" in result
         assert "not found" in result.lower()
 
-    def test_unsupported_grammar_returns_structured_error(self):
+    def test_scan__unsupported_grammar__returns_structured_error(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -194,7 +194,7 @@ class TestErrorPropagation:
 
 
 class TestOutputCap:
-    def test_oversized_output_truncates_with_refine_hint(self):
+    def test_scan__oversized_output__truncates_with_refine_hint(self):
         # Use a large list iterated as strings to drive past the 16 KB cap.
         big_value = "x" * 200
         trace = _trace()
@@ -224,7 +224,7 @@ class TestOutputCap:
 
 
 class TestEnvelopeFormat:
-    def test_ok_envelope_header_format(self):
+    def test_scan__ok_response__envelope_header_format(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 
@@ -235,7 +235,7 @@ class TestEnvelopeFormat:
 
         assert result.startswith("[scan: trace:t-1 | expression='.trace.name']")
 
-    def test_error_envelope_header_format(self):
+    def test_scan__error_response__envelope_header_format(self):
         ctx = _ctx(_trace(), [])
         tool = scan_module.ScanTool()
 

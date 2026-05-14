@@ -37,7 +37,7 @@ def _span(span_id, start_offset_s=0, **overrides):
 
 
 class TestSerializeOverview:
-    def test_flat_structure_with_parent_links(self):
+    def test_serialize_overview__flat_structure__preserves_parent_links(self):
         root = _span("root")
         child = _span("child", start_offset_s=1)
 
@@ -52,7 +52,9 @@ class TestSerializeOverview:
         parent_links = {s["id"]: s["parent_span_id"] for s in result["spans"]}
         assert parent_links == {"root": None, "child": "root"}
 
-    def test_trace_summary_counts_spans_and_errors(self):
+    def test_serialize_overview__mixed_spans__trace_summary_counts_spans_and_errors(
+        self,
+    ):
         ok = _span("ok")
         err = _span(
             "err",
@@ -70,7 +72,7 @@ class TestSerializeOverview:
         assert result["trace"]["error_count"] == 1
         assert result["trace"]["has_error"] is False
 
-    def test_parent_links_resolved_without_nested_spans_attribute(self):
+    def test_serialize_overview__flat_spans__resolves_parent_links_from_map(self):
         # `spans_for_trace` returns a flat list with `.spans` empty on every
         # node. The serializer must rely on the parent map, not walk `.spans`.
         root = _span("root")
@@ -86,7 +88,7 @@ class TestSerializeOverview:
         parent_links = {s["id"]: s["parent_span_id"] for s in result["spans"]}
         assert parent_links == {"root": None, "child": "root"}
 
-    def test_long_strings_truncated_with_suffix(self):
+    def test_serialize_overview__long_strings__truncated_with_suffix(self):
         long_input = "x" * 300
         result = span_tree_serializer.serialize_overview(
             _trace(input=long_input),

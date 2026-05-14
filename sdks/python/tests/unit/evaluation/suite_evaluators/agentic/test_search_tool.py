@@ -357,7 +357,7 @@ class TestEnvelope:
         )
 
         header = result.splitlines()[0]
-        assert header == ("[search: trace:t-1 | pattern='hello' | path='.trace.input']")
+        assert header == "[search: trace:t-1 | pattern='hello' | path='.trace.input']"
 
     def test_search__error_response__envelope_includes_error_tag(self):
         ctx = _ctx(_trace(), [])

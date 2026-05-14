@@ -19,7 +19,7 @@ def _span_dict(**overrides):
 
 
 class TestPickTier:
-    def test_small_payload_chooses_full(self):
+    def test_compress__small_payload__chooses_full_tier(self):
         span = _span_dict()
 
         result = generic_compressor.compress(span)
@@ -27,7 +27,7 @@ class TestPickTier:
         assert result.tier is tier_module.CompressionTier.FULL
         assert result.payload is span
 
-    def test_large_payload_chooses_medium_and_truncates(self):
+    def test_compress__large_payload__chooses_medium_and_truncates(self):
         big = "x" * 40_000
         span = _span_dict(output={"text": big})
 
@@ -40,7 +40,7 @@ class TestPickTier:
 
 
 class TestForcedTier:
-    def test_full_forced_keeps_payload_verbatim(self):
+    def test_compress__forced_full__keeps_payload_verbatim(self):
         big = "x" * 40_000
         span = _span_dict(output={"text": big})
 
@@ -52,7 +52,7 @@ class TestForcedTier:
         # Full tier means no truncation even if the size exceeds budget.
         assert result.payload["output"]["text"] == big
 
-    def test_skeleton_request_collapses_to_medium(self):
+    def test_compress__forced_skeleton__collapses_to_medium(self):
         # GenericCompressor has no SKELETON renderer; SKELETON / SUMMARY
         # requests collapse to MEDIUM (matches GenericCompressor.java).
         span = _span_dict()
@@ -63,7 +63,7 @@ class TestForcedTier:
 
         assert result.tier is tier_module.CompressionTier.MEDIUM
 
-    def test_summary_request_collapses_to_medium(self):
+    def test_compress__forced_summary__collapses_to_medium(self):
         span = _span_dict()
 
         result = generic_compressor.compress(
