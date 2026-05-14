@@ -28,4 +28,5 @@ response = client.chat.completions.create(
     max_tokens=100,
 )
 
-print(response.choices[0].message.content)
+if response.choices:
+    print(response.choices[0].message.content)

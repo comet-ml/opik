@@ -185,6 +185,8 @@ Return ONLY the JSON object, no explanation."""
             max_tokens=200
         )
         
+        if not response.choices:
+            return None
         result_text = response.choices[0].message.content.strip()
         
         # Clean up response - remove markdown code blocks if present
@@ -332,4 +334,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

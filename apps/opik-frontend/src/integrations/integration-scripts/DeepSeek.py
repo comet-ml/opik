@@ -23,4 +23,5 @@ response = client.chat.completions.create(
     stream=False,
 )
 
-print(response.choices[0].message.content)
+if response.choices:
+    print(response.choices[0].message.content)
