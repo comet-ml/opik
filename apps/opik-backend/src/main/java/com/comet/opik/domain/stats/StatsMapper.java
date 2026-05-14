@@ -110,6 +110,12 @@ public class StatsMapper {
         addMapStats(row, USAGE, stats);
         addMapStats(row, USAGE_SUM, stats);
 
+        // Thread stats queries inline feedback_scores in the same row; project stats split it
+        // into a separate query handled by mapProjectScoresStats. Emit only when present.
+        if (row.getMetadata().contains(FEEDBACK_SCORE)) {
+            addMapStats(row, FEEDBACK_SCORE, stats);
+        }
+
         // spans cannot accept guardrails and therefore will not have guardrails_failed_count in the result set
         if (row.getMetadata().contains(GUARDRAILS_FAILED_COUNT)) {
             Optional.ofNullable(row.get(GUARDRAILS_FAILED_COUNT, Long.class)).ifPresent(

@@ -7,8 +7,13 @@ import org.apache.commons.collections4.MapUtils;
 
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
+import static com.comet.opik.domain.stats.StatsMapper.ERROR_COUNT;
+import static com.comet.opik.domain.stats.StatsMapper.GUARDRAILS_FAILED_COUNT;
+import static com.comet.opik.domain.stats.StatsMapper.PAST_PERIOD_ERROR_COUNT;
+import static com.comet.opik.domain.stats.StatsMapper.RECENT_ERROR_COUNT;
 import static java.util.stream.Collectors.toMap;
 
 /**
@@ -45,8 +50,10 @@ public class StatsMerger {
     }
 
     /**
-     * Single-project variant — attaches the feedback stats to the trace+span stats by
-     * concatenating the lists. Returns {@code base} unchanged when there's nothing to attach.
+     * Single-project variant — splices the feedback stats into the trace+span stats at the
+     * canonical position (just before guardrails / error-count entries) so the merged output
+     * matches what the pre-split single-query mapper produced. Returns {@code base} unchanged
+     * when there's nothing to attach.
      */
     public static ProjectStats merge(ProjectStats base, ProjectStats feedback) {
         if (base == null) {
@@ -56,9 +63,22 @@ public class StatsMerger {
             return base;
         }
 
-        var combined = new ArrayList<>(base.stats());
-        combined.addAll(feedback.stats());
+        var combined = new ArrayList<ProjectStats.ProjectStatItem<?>>(base.stats().size() + feedback.stats().size());
+        boolean inserted = false;
+        for (var stat : base.stats()) {
+            if (!inserted && TRAILING_STATS.contains(stat.getName())) {
+                combined.addAll(feedback.stats());
+                inserted = true;
+            }
+            combined.add(stat);
+        }
+        if (!inserted) {
+            combined.addAll(feedback.stats());
+        }
         return new ProjectStats(combined);
     }
+
+    private static final Set<String> TRAILING_STATS = Set.of(
+            GUARDRAILS_FAILED_COUNT, RECENT_ERROR_COUNT, PAST_PERIOD_ERROR_COUNT, ERROR_COUNT);
 
 }
