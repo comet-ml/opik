@@ -33,12 +33,12 @@ describe("PromptCache", () => {
       const prompt = makeFakePrompt();
       const fetchFn = vi.fn().mockResolvedValue(prompt);
 
-      const result = await cache.getOrFetch("key1", fetchFn, true);
+      const result = await cache.getOrFetch("key1", fetchFn, null);
       expect(result).toBe(prompt);
       expect(fetchFn).toHaveBeenCalledOnce();
 
       // Second call should return cached value without calling fetchFn again
-      const result2 = await cache.getOrFetch("key1", fetchFn, true);
+      const result2 = await cache.getOrFetch("key1", fetchFn, null);
       expect(result2).toBe(prompt);
       expect(fetchFn).toHaveBeenCalledOnce();
     });
@@ -46,11 +46,11 @@ describe("PromptCache", () => {
     it("returns null and does not cache when fetchFn returns null", async () => {
       const fetchFn = vi.fn().mockResolvedValue(null);
 
-      const result = await cache.getOrFetch("key1", fetchFn, true);
+      const result = await cache.getOrFetch("key1", fetchFn, null);
       expect(result).toBeNull();
 
       // Should call fetchFn again since null was not cached
-      const result2 = await cache.getOrFetch("key1", fetchFn, true);
+      const result2 = await cache.getOrFetch("key1", fetchFn, null);
       expect(result2).toBeNull();
       expect(fetchFn).toHaveBeenCalledTimes(2);
     });
@@ -59,8 +59,8 @@ describe("PromptCache", () => {
       const prompt1 = makeFakePrompt({ name: "prompt-1" });
       const prompt2 = makeFakePrompt({ name: "prompt-2" });
 
-      await cache.getOrFetch("key1", vi.fn().mockResolvedValue(prompt1), true);
-      await cache.getOrFetch("key2", vi.fn().mockResolvedValue(prompt2), true);
+      await cache.getOrFetch("key1", vi.fn().mockResolvedValue(prompt1), null);
+      await cache.getOrFetch("key2", vi.fn().mockResolvedValue(prompt2), null);
 
       expect(cache.get("key1")).toBe(prompt1);
       expect(cache.get("key2")).toBe(prompt2);
@@ -79,7 +79,7 @@ describe("PromptCache", () => {
         await smallCache.getOrFetch(
           `key${i}`,
           vi.fn().mockResolvedValue(prompts[i]),
-          true
+          null
         );
       }
 
@@ -102,7 +102,7 @@ describe("PromptCache", () => {
         await smallCache.getOrFetch(
           `key${i}`,
           vi.fn().mockResolvedValue(prompts[i]),
-          true
+          null
         );
       }
 
@@ -114,7 +114,7 @@ describe("PromptCache", () => {
       await smallCache.getOrFetch(
         "key3",
         vi.fn().mockResolvedValue(newPrompt),
-        true
+        null
       );
 
       expect(smallCache.get("key0")).toBe(prompts[0]);
@@ -127,7 +127,7 @@ describe("PromptCache", () => {
   describe("clear", () => {
     it("removes all entries", async () => {
       const prompt = makeFakePrompt();
-      await cache.getOrFetch("key1", vi.fn().mockResolvedValue(prompt), true);
+      await cache.getOrFetch("key1", vi.fn().mockResolvedValue(prompt), null);
 
       cache.clear();
 
@@ -136,21 +136,20 @@ describe("PromptCache", () => {
   });
 
   describe("pinned vs unpinned", () => {
-    it("pinned entries do not get a refresh callback", async () => {
+    it("pinned entries (ttlSeconds=null) do not start a refresh timer", async () => {
       const prompt = makeFakePrompt();
       const fetchFn = vi.fn().mockResolvedValue(prompt);
 
-      await cache.getOrFetch("pinned-key", fetchFn, true);
+      await cache.getOrFetch("pinned-key", fetchFn, null);
 
-      // The prompt should be cached
       expect(cache.get("pinned-key")).toBe(prompt);
     });
 
-    it("unpinned entries are cached the same way for get", async () => {
+    it("unpinned entries (ttlSeconds set) are cached and returned", async () => {
       const prompt = makeFakePrompt();
       const fetchFn = vi.fn().mockResolvedValue(prompt);
 
-      await cache.getOrFetch("unpinned-key", fetchFn, false);
+      await cache.getOrFetch("unpinned-key", fetchFn, 300);
 
       expect(cache.get("unpinned-key")).toBe(prompt);
       // fetchFn should only be called once for the initial fetch

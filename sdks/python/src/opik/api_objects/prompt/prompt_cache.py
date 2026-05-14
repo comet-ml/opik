@@ -38,23 +38,21 @@ _MAX_CACHE_SIZE = 128
 
 
 class _CachedPrompt:
-    __slots__ = ("prompt", "pinned", "ttl_seconds", "last_fetch", "refresh_callback")
+    __slots__ = ("prompt", "ttl_seconds", "last_fetch", "refresh_callback")
 
     def __init__(
         self,
         prompt: BasePrompt,
-        pinned: bool,
-        ttl_seconds: int,
+        ttl_seconds: typing.Optional[int],
         refresh_callback: typing.Optional[_RefreshCallback] = None,
     ) -> None:
         self.prompt = prompt
-        self.pinned = pinned
         self.ttl_seconds = ttl_seconds
         self.last_fetch = time.monotonic()
         self.refresh_callback = refresh_callback
 
     def is_stale(self) -> bool:
-        if self.pinned:
+        if self.ttl_seconds is None:
             return False
         return (time.monotonic() - self.last_fetch) >= self.ttl_seconds
 
@@ -86,7 +84,7 @@ class PromptCache:
         self,
         key: _CacheKey,
         fetch_fn: _RefreshCallback,
-        pinned: bool,
+        ttl_seconds: typing.Optional[int],
     ) -> typing.Optional[BasePrompt]:
         with self._lock:
             entry = self._entries.get(key)
@@ -100,9 +98,8 @@ class PromptCache:
 
         cached = _CachedPrompt(
             prompt=prompt,
-            pinned=pinned,
-            ttl_seconds=_PROMPT_CACHE_TTL_SECONDS,
-            refresh_callback=None if pinned else fetch_fn,
+            ttl_seconds=ttl_seconds,
+            refresh_callback=None if ttl_seconds is None else fetch_fn,
         )
         with self._lock:
             self._entries[key] = cached
@@ -110,7 +107,7 @@ class PromptCache:
             while len(self._entries) > self._max_size:
                 self._entries.popitem(last=False)
 
-        if not pinned:
+        if ttl_seconds is not None:
             self._ensure_refresh_thread_started()
 
         return prompt
@@ -200,6 +197,6 @@ def get_or_fetch(
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,
-        pinned=commit is not None,
+        ttl_seconds=None if commit is not None else _PROMPT_CACHE_TTL_SECONDS,
     )
     return typing.cast(typing.Optional[_PromptT], result)

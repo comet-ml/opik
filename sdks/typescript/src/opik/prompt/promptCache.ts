@@ -23,8 +23,7 @@ type RefreshCallback = () => Promise<BasePrompt | null>;
 
 interface CachedPrompt {
   prompt: BasePrompt;
-  pinned: boolean;
-  ttlSeconds: number;
+  ttlSeconds: number | null;
   lastFetch: number;
   refreshCallback?: RefreshCallback;
 
@@ -33,18 +32,16 @@ interface CachedPrompt {
 
 function makeCachedPrompt(
   prompt: BasePrompt,
-  pinned: boolean,
-  ttlSeconds: number,
+  ttlSeconds: number | null,
   refreshCallback?: RefreshCallback
 ): CachedPrompt {
   return {
     prompt,
-    pinned,
     ttlSeconds,
     lastFetch: Date.now(),
     refreshCallback,
     get isStale() {
-      if (this.pinned) return false;
+      if (this.ttlSeconds === null) return false;
       return Date.now() - this.lastFetch >= this.ttlSeconds * 1000;
     },
   };
@@ -74,7 +71,7 @@ export class PromptCache {
   async getOrFetch(
     key: string,
     fetchFn: RefreshCallback,
-    pinned: boolean
+    ttlSeconds: number | null
   ): Promise<BasePrompt | null> {
     const existing = this.entries.get(key);
     if (existing) {
@@ -86,7 +83,7 @@ export class PromptCache {
     const pending = this.inflight.get(key);
     if (pending) return pending;
 
-    const promise = this.fetchAndCache(key, fetchFn, pinned);
+    const promise = this.fetchAndCache(key, fetchFn, ttlSeconds);
     this.inflight.set(key, promise);
     try {
       return await promise;
@@ -98,7 +95,7 @@ export class PromptCache {
   private async fetchAndCache(
     key: string,
     fetchFn: RefreshCallback,
-    pinned: boolean
+    ttlSeconds: number | null
   ): Promise<BasePrompt | null> {
     const prompt = await fetchFn();
     if (prompt === null) return null;
@@ -107,14 +104,13 @@ export class PromptCache {
       key,
       makeCachedPrompt(
         prompt,
-        pinned,
-        PROMPT_CACHE_TTL_SECONDS,
-        pinned ? undefined : fetchFn,
+        ttlSeconds,
+        ttlSeconds === null ? undefined : fetchFn,
       ),
     );
     this.evict();
 
-    if (!pinned) {
+    if (ttlSeconds !== null) {
       this.ensureRefreshTimerStarted();
     }
 
@@ -224,6 +220,6 @@ export async function getOrFetch<T extends BasePrompt>(
   fetchFn: () => Promise<T | null>
 ): Promise<T | null> {
   const key = buildCacheKey(name, commit, projectName, templateStructure);
-  const result = await globalCache.getOrFetch(key, fetchFn, commit != null);
+  const result = await globalCache.getOrFetch(key, fetchFn, commit != null ? null : PROMPT_CACHE_TTL_SECONDS);
   return result as T | null;
 }
