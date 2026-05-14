@@ -25,6 +25,7 @@ class ServiceTogglesConfig(UniversalBaseModel):
     optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
     dataset_export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetExportEnabled")]
+    demo_data_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="demoDataEnabled")]
     openai_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="openaiProviderEnabled")]
     anthropic_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="anthropicProviderEnabled")]
     gemini_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="geminiProviderEnabled")]

@@ -13,6 +13,7 @@ export interface ServiceTogglesConfig {
     optimizationStudioEnabled: boolean;
     datasetVersioningEnabled: boolean;
     datasetExportEnabled: boolean;
+    demoDataEnabled: boolean;
     openaiProviderEnabled: boolean;
     anthropicProviderEnabled: boolean;
     geminiProviderEnabled: boolean;
