@@ -1684,7 +1684,7 @@ class AutomationRuleEvaluatorsResourceTest {
                 .anyMatch(log -> log.message().matches(
                         "Sending traceId '.*' to LLM: model='.*', messages=\\d+ \\(~\\d+ chars\\), tools=\\d+, toolsEnabled=.*")
                         || log.message().matches(
-                                "Sending traceId '.*' to Python evaluator: arguments=\\[.*\\]"));
+                                "Sending traceId '.*' to Python evaluator: 'arguments=\\[.*\\]'"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Evaluating traceId '.*' sampled by rule '.*'"));

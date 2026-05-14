@@ -20,6 +20,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
+import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -687,9 +688,7 @@ public class OnlineScoringEngine {
      * and GC churn.
      */
     public static int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
-        if (charsPerToken < 1) {
-            throw new IllegalArgumentException("charsPerToken must be >= 1, got " + charsPerToken);
-        }
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
         return fullJson.toString().length() / charsPerToken;
     }
 
