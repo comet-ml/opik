@@ -94,8 +94,6 @@ GEMINI_EXCLUDE_PATTERNS = [
     r"-image-generation",
     r"-computer-use-",
     r"^learnlm",
-    r"^gemma",
-    r"^gemini-gemma",
     r"^gemini-robotics",
     r"^text-embedding",
     r"^aqa$",
@@ -200,11 +198,28 @@ def _anthropic_sort_key(entry: ModelEntry) -> tuple:
 
 
 def _gemini_sort_key(entry: ModelEntry) -> tuple:
-    """Sort Gemini/VertexAI: by generation desc, then Pro → Flash → Flash-Lite."""
+    """Sort Gemini first by generation, then Gemma by generation/size.
+
+    Within Gemini: Pro → Flash → Flash-Lite.
+    Within Gemma: base `gemma-N-*b-it` (small → large) before `gemma-Nn-*` variants.
+    """
     value = entry.value.removeprefix("vertex_ai/")
+
+    # Gemma family (including legacy `gemini-gemma-*`) — sorts after Gemini.
+    gemma = re.match(r'^(?:gemini-)?gemma-(\d+)(n)?(?:-(e?\d+)b-)?', value)
+    if gemma:
+        major = int(gemma.group(1))
+        is_3n = gemma.group(2) == "n"
+        size_token = gemma.group(3) or ""
+        size_digits = re.search(r"\d+", size_token)
+        size = int(size_digits.group()) if size_digits else 99
+        sub = 0 if not is_3n else 1
+        return (1, -major, sub, size, value)
+
+    # Gemini family — existing behaviour.
     m = re.match(r'^gemini-(\d+)(?:\.(\d+))?', value)
     if not m:
-        return (99, 0, 0, value)
+        return (1, 99, 0, 99, value)
     major, minor = int(m.group(1)), int(m.group(2)) if m.group(2) else 0
     if '-pro' in value:
         tier = 0
@@ -214,7 +229,7 @@ def _gemini_sort_key(entry: ModelEntry) -> tuple:
         tier = 1
     else:
         tier = 3
-    return (-major, -minor, tier, value)
+    return (0, -major, -minor, tier, value)
 
 
 def _deduplicate_by_base(entries: list[ModelEntry]) -> list[ModelEntry]:
