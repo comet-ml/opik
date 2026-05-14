@@ -21,7 +21,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
     opik_ai_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="opikAIEnabled")]
     alerts_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="alertsEnabled")]
     welcome_wizard_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="welcomeWizardEnabled")]
-    csv_upload_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="csvUploadEnabled")]
     export_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="exportEnabled")]
     optimization_studio_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="optimizationStudioEnabled")]
     dataset_versioning_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="datasetVersioningEnabled")]
@@ -34,7 +33,6 @@ class ServiceTogglesConfig(UniversalBaseModel):
     bedrock_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="bedrockProviderEnabled")]
     customllm_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="customllmProviderEnabled")]
     ollama_provider_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="ollamaProviderEnabled")]
-    collaborators_tab_enabled: typing_extensions.Annotated[bool, FieldMetadata(alias="collaboratorsTabEnabled")]
     v2workspace_allowlist_ids: typing_extensions.Annotated[
         typing.List[str], FieldMetadata(alias="v2WorkspaceAllowlistIds")
     ]

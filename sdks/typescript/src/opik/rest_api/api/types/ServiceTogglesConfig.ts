@@ -9,7 +9,6 @@ export interface ServiceTogglesConfig {
     opikAiEnabled: boolean;
     alertsEnabled: boolean;
     welcomeWizardEnabled: boolean;
-    csvUploadEnabled: boolean;
     exportEnabled: boolean;
     optimizationStudioEnabled: boolean;
     datasetVersioningEnabled: boolean;
@@ -22,7 +21,6 @@ export interface ServiceTogglesConfig {
     bedrockProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
-    collaboratorsTabEnabled: boolean;
     v2WorkspaceAllowlistIds: string[];
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
