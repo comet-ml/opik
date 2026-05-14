@@ -9,6 +9,7 @@ import os
 import platform
 import secrets
 import time
+import urllib.parse
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,6 +22,8 @@ from opik.api_objects.rest_helpers import resolve_project_id_by_name
 from opik.rest_api.core.api_error import ApiError
 from opik.rest_api.errors.not_found_error import NotFoundError
 from opik.url_helpers import get_base_url, get_project_url_by_id
+
+from .error_view import build_config_error_block
 
 LOGGER = logging.getLogger(__name__)
 
@@ -53,12 +56,71 @@ def hkdf_sha256(ikm: bytes, salt: bytes, info: bytes, length: int = 32) -> bytes
     return okm[:length]
 
 
-def resolve_project_id(api: "OpikApi", project_name: str) -> str:
+def resolve_project_id(
+    api: "OpikApi",
+    project_name: str,
+    *,
+    create_if_missing: bool,
+    project_known_missing: bool = False,
+    workspace: Optional[str],
+    base_url: Optional[str],
+    config_file_exists: bool,
+) -> str:
+    if project_known_missing and create_if_missing:
+        # Interactive preflight already observed the 404 and the user confirmed
+        # creation — skip the duplicate lookup.
+        _create_project(
+            api,
+            project_name,
+            workspace=workspace,
+            base_url=base_url,
+            config_file_exists=config_file_exists,
+        )
+        return resolve_project_id_by_name(api, project_name)
+
     try:
         return resolve_project_id_by_name(api, project_name)
     except ApiError as e:
-        raise click.ClickException(
-            _format_project_retrieval_error(project_name, e)
+        if e.status_code == 404 and create_if_missing:
+            _create_project(
+                api,
+                project_name,
+                workspace=workspace,
+                base_url=base_url,
+                config_file_exists=config_file_exists,
+            )
+            return resolve_project_id_by_name(api, project_name)
+        header, reason, hint = _project_retrieval_components(project_name, e)
+        raise build_config_error_block(
+            header,
+            reason=reason,
+            workspace=workspace,
+            base_url=base_url,
+            config_file_exists=config_file_exists,
+            hint=hint,
+        ) from e
+
+
+def _create_project(
+    api: "OpikApi",
+    project_name: str,
+    *,
+    workspace: Optional[str],
+    base_url: Optional[str],
+    config_file_exists: bool,
+) -> None:
+    try:
+        api.projects.create_project(name=project_name)
+    except ApiError as e:
+        detail = _extract_server_error_message(e) or (
+            f"server returned HTTP {e.status_code or 'unknown'}"
+        )
+        raise build_config_error_block(
+            f"Could not create project '{project_name}'",
+            reason=detail.rstrip(".").strip(),
+            workspace=workspace,
+            base_url=base_url,
+            config_file_exists=config_file_exists,
         ) from e
 
 
@@ -66,21 +128,31 @@ _CONFIGURE_DOCS_URL = (
     "https://www.comet.com/docs/opik/tracing/advanced/sdk_configuration"
 )
 
-_PROJECT_RETRIEVAL_NOT_FOUND_HINT = "check the project name and try again"
-_PROJECT_RETRIEVAL_AUTH_HINT = (
-    f"run `opik configure` to set your API key and workspace "
-    f"(see {_CONFIGURE_DOCS_URL})"
+
+_DEFAULT_RUN_COMMAND = "opik configure"
+
+
+@dataclass(frozen=True)
+class _ErrorHint:
+    fix: Optional[str] = None
+    docs: Optional[str] = None
+    command: str = _DEFAULT_RUN_COMMAND
+
+
+_HINT_NOT_FOUND = _ErrorHint(fix="check the project name and try again")
+_HINT_AUTH = _ErrorHint(
+    fix="set your API key and workspace",
+    docs=_CONFIGURE_DOCS_URL,
 )
-_PROJECT_RETRIEVAL_GENERIC_HINT = (
-    f"verify your Opik configuration and connectivity (see {_CONFIGURE_DOCS_URL})"
+_HINT_GENERIC = _ErrorHint(
+    fix="verify your Opik configuration and connectivity",
+    docs=_CONFIGURE_DOCS_URL,
 )
 
-# Hints read as lowercase verb phrases because they are joined to the
-# server's message in one sentence.
-_PROJECT_RETRIEVAL_STATUS_HINTS: "dict[int, str]" = {
-    404: _PROJECT_RETRIEVAL_NOT_FOUND_HINT,
-    401: _PROJECT_RETRIEVAL_AUTH_HINT,
-    403: _PROJECT_RETRIEVAL_AUTH_HINT,
+_HINT_BY_STATUS: "dict[int, _ErrorHint]" = {
+    404: _HINT_NOT_FOUND,
+    401: _HINT_AUTH,
+    403: _HINT_AUTH,
 }
 
 
@@ -107,15 +179,23 @@ def _extract_server_error_message(error: ApiError) -> Optional[str]:
     return None
 
 
-def _format_project_retrieval_error(project_name: str, error: ApiError) -> str:
-    hint = _PROJECT_RETRIEVAL_STATUS_HINTS.get(
-        error.status_code or -1, _PROJECT_RETRIEVAL_GENERIC_HINT
-    )
-    detail = _extract_server_error_message(error) or (
+def _project_retrieval_components(
+    project_name: str,
+    error: ApiError,
+) -> tuple[str, str, _ErrorHint]:
+    """Distil a project-retrieve ApiError into (header, reason, hint).
+
+    No rendering here — the view layer turns these into the user-facing block.
+    """
+    hint = _HINT_BY_STATUS.get(error.status_code or -1, _HINT_GENERIC)
+    reason = _extract_server_error_message(error) or (
         f"server returned HTTP {error.status_code or 'unknown'}"
     )
-    detail = detail.rstrip(".").strip()
-    return f"Could not retrieve project '{project_name}': {detail} — {hint}."
+    return (
+        f"Could not retrieve project '{project_name}'",
+        reason.rstrip(".").strip(),
+        hint,
+    )
 
 
 _RUNNER_TYPE_BYTE = {
@@ -129,9 +209,10 @@ def build_pairing_link(
     session_id: str,
     activation_key: bytes,
     project_id: str,
+    project_name: str,
     runner_name: str,
-    runner_type: RunnerType = RunnerType.CONNECT,
-    workspace: Optional[str] = None,
+    runner_type: RunnerType,
+    workspace: Optional[str],
 ) -> str:
     session_bytes = uuid.UUID(session_id).bytes
     project_bytes = uuid.UUID(project_id).bytes
@@ -148,8 +229,36 @@ def build_pairing_link(
 
     fragment = base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
     domain_root = get_base_url(base_url)
-    query = f"?workspace={workspace}" if workspace else ""
+    # Pass user-facing context the FE can render on error screens. The
+    # fragment carries the project ID (a UUID); the project NAME has to
+    # travel separately because it's not in the binary payload.
+    # Diagnostic-only — none of these affect activation flow.
+    ui_url = _to_ui_base_url(base_url)
+    query_parts: List[str] = [
+        f"url={urllib.parse.quote(ui_url, safe='')}",
+        f"project={urllib.parse.quote(project_name, safe='')}",
+    ]
+    if workspace:
+        # Encode for the same reason as `project` — reserved chars like
+        # `&`/`=` in a workspace name would otherwise split the query and
+        # the FE's URLSearchParams would parse a truncated value.
+        query_parts.append(f"workspace={urllib.parse.quote(workspace, safe='')}")
+    query = "?" + "&".join(query_parts)
     return f"{domain_root}opik/pair/v1{query}#{fragment}"
+
+
+def _to_ui_base_url(api_url: str) -> str:
+    """Translate the CLI's API URL into the user-facing UI URL.
+
+    >>> _to_ui_base_url("https://www.comet.com/opik/api/")
+    'https://www.comet.com/opik/'
+    >>> _to_ui_base_url("http://localhost:8080/api/")
+    'http://localhost:8080/'
+    """
+    trimmed = api_url.rstrip("/")
+    if trimmed.endswith("/api"):
+        trimmed = trimmed[: -len("/api")]
+    return trimmed + "/" if trimmed else "/"
 
 
 def validate_runner_name(runner_name: str) -> None:
@@ -174,8 +283,8 @@ def launch_supervisor(
     api: "OpikApi",
     tui: "RunnerTUI",
     runner_type: RunnerType,
-    command: Optional[List[str]] = None,
-    watch: Optional[bool] = None,
+    command: Optional[List[str]],
+    watch: Optional[bool],
 ) -> None:
     from opik.runner.supervisor import Supervisor
 
@@ -248,9 +357,23 @@ def _create_session(
     runner_name: str,
     runner_type: RunnerType,
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    *,
+    create_if_missing: bool,
+    project_known_missing: bool = False,
+    workspace: Optional[str],
+    base_url: Optional[str],
+    config_file_exists: bool,
 ) -> _Session:
     validate_runner_name(runner_name)
-    project_id = resolve_project_id(api, project_name)
+    project_id = resolve_project_id(
+        api,
+        project_name,
+        create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
+        workspace=workspace,
+        base_url=base_url,
+        config_file_exists=config_file_exists,
+    )
     activation_key = secrets.token_bytes(32)
     activation_key_b64 = base64.b64encode(activation_key).decode("ascii")
 
@@ -278,6 +401,12 @@ def run_headless(
     project_name: str,
     runner_name: str,
     runner_type: RunnerType,
+    *,
+    create_if_missing: bool,
+    project_known_missing: bool = False,
+    workspace: Optional[str],
+    base_url: Optional[str],
+    config_file_exists: bool,
 ) -> PairingResult:
     """Register and self-activate a runner without browser pairing.
 
@@ -291,7 +420,17 @@ def run_headless(
             "(no bridge key can be derived without browser pairing)."
         )
 
-    session = _create_session(api, project_name, runner_name, runner_type)
+    session = _create_session(
+        api,
+        project_name,
+        runner_name,
+        runner_type,
+        create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
+        workspace=workspace,
+        base_url=base_url,
+        config_file_exists=config_file_exists,
+    )
 
     activation_hmac = _compute_activation_hmac(
         session.activation_key, session.session_id, runner_name
@@ -313,17 +452,33 @@ def run_pairing(
     runner_name: str,
     runner_type: RunnerType,
     base_url: str,
-    workspace: Optional[str] = None,
-    tui: Optional["RunnerTUI"] = None,
+    *,
+    workspace: Optional[str],
+    tui: Optional["RunnerTUI"],
     ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    create_if_missing: bool,
+    project_known_missing: bool = False,
+    config_file_exists: bool,
 ) -> PairingResult:
-    session = _create_session(api, project_name, runner_name, runner_type, ttl_seconds)
+    session = _create_session(
+        api,
+        project_name,
+        runner_name,
+        runner_type,
+        ttl_seconds,
+        create_if_missing=create_if_missing,
+        project_known_missing=project_known_missing,
+        workspace=workspace,
+        base_url=base_url,
+        config_file_exists=config_file_exists,
+    )
 
     pairing_url = build_pairing_link(
         base_url,
         session.session_id,
         session.activation_key,
         session.project_id,
+        project_name,
         runner_name,
         runner_type,
         workspace=workspace,
