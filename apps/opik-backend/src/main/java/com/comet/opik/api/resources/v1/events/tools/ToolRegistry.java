@@ -65,10 +65,11 @@ public class ToolRegistry {
                     // Mirrors the ReadTool exception path so both surfaces leak the same (minimal)
                     // info to the model.
                     String correlationId = UUID.randomUUID().toString();
-                    log.warn("Tool '{}' threw; returning error JSON to keep judge loop alive,"
-                            + " correlationId='{}'", name, correlationId, e);
+                    log.warn(
+                            "Tool '{}' threw; returning error JSON to keep judge loop alive, correlationId='{}'",
+                            name, correlationId, e);
                     return Mono.just(ToolArgs.errorJson(
-                            "Tool '" + name + "' failed (ref: " + correlationId + ")"));
+                            "Tool '%s' failed (ref: %s)".formatted(name, correlationId)));
                 });
     }
 }

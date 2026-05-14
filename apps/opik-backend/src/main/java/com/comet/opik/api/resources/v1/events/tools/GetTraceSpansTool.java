@@ -3,6 +3,7 @@ package com.comet.opik.api.resources.v1.events.tools;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import reactor.core.publisher.Mono;
 
@@ -32,17 +33,15 @@ public class GetTraceSpansTool implements ToolExecutor {
     }
 
     @Override
-    public Mono<String> execute(String arguments, TraceToolContext ctx) {
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
         // fromCallable so any throw from SpanTreeSerializer is captured as a Mono error
         // and reported via ToolRegistry's onErrorResume — matches the legacy throw path.
         return Mono.fromCallable(() -> {
             log.debug("get_trace_spans tool call with arguments: '{}' for trace={}", arguments,
                     ctx.getTrace().id());
             String result = SpanTreeSerializer.serializeOverview(ctx.getSpans());
-            if (log.isDebugEnabled()) {
-                log.debug("get_trace_spans summary: traceId='{}', spanCount='{}', outputBytes='{}'",
-                        ctx.getTrace().id(), ctx.getSpans().size(), result.length());
-            }
+            log.debug("get_trace_spans summary: traceId='{}', spanCount='{}', outputBytes='{}'",
+                    ctx.getTrace().id(), ctx.getSpans().size(), result.length());
             return result;
         });
     }

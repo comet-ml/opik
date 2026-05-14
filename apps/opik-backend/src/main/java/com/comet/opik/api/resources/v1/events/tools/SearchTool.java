@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.thisptr.jackson.jq.BuiltinFunctionLoader;
 import net.thisptr.jackson.jq.JsonQuery;
@@ -142,7 +143,7 @@ public class SearchTool implements ToolExecutor {
     }
 
     @Override
-    public Mono<String> execute(String arguments, TraceToolContext ctx) {
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
         // No I/O — regex/jq evaluation runs in-process on whatever scheduler called us.
         return Mono.fromCallable(() -> {
             ParsedArgs args = parseArgs(arguments);

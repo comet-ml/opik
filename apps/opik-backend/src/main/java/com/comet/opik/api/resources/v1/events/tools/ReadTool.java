@@ -149,7 +149,7 @@ public class ReadTool implements ToolExecutor {
     }
 
     @Override
-    public Mono<String> execute(String arguments, TraceToolContext ctx) {
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
         ParsedArgs args = parseArgs(arguments);
         if (args.error != null) {
             return Mono.just(args.error);
@@ -293,7 +293,7 @@ public class ReadTool implements ToolExecutor {
             UUID id = parseUuid(idStr);
             return withRequestContext(spanService.getById(id), ctx)
                     .switchIfEmpty(Mono.error(new NotFoundLikeException("Span not found: " + idStr)))
-                    .map(span -> (JsonNode) JsonUtils.getMapper().valueToTree(span));
+                    .map(span -> JsonUtils.getMapper().valueToTree(span));
         });
     }
 
@@ -302,7 +302,7 @@ public class ReadTool implements ToolExecutor {
             UUID id = parseUuid(idStr);
             return withRequestContext(datasetItemService.get(id), ctx)
                     .switchIfEmpty(Mono.error(new NotFoundLikeException("Dataset item not found: " + idStr)))
-                    .map(item -> (JsonNode) JsonUtils.getMapper().valueToTree(item));
+                    .map(item -> JsonUtils.getMapper().valueToTree(item));
         });
     }
 
@@ -314,7 +314,7 @@ public class ReadTool implements ToolExecutor {
             if (project == null) {
                 throw new NotFoundLikeException("Project not found: " + idStr);
             }
-            return (JsonNode) JsonUtils.getMapper().valueToTree(project);
+            return JsonUtils.getMapper().valueToTree(project);
         });
     }
 

@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.thisptr.jackson.jq.BuiltinFunctionLoader;
 import net.thisptr.jackson.jq.JsonQuery;
@@ -98,7 +99,7 @@ public class JqTool implements ToolExecutor {
     }
 
     @Override
-    public Mono<String> execute(String arguments, TraceToolContext ctx) {
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
         // No I/O — jackson-jq evaluation is CPU-bound and runs on the current scheduler.
         // fromCallable captures any throw as a Mono error for ToolRegistry's onErrorResume.
         return Mono.fromCallable(() -> {
