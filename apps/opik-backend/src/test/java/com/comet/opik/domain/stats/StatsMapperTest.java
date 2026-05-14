@@ -104,20 +104,11 @@ class StatsMapperTest {
     }
 
     @Test
-    void mapProjectStats_withSpanFeedbackScores_returnsSpanFeedbackScoresStats() {
+    void mapProjectScoresStats_withSpanFeedbackScores_returnsSpanFeedbackScoresStats() {
+        // Split-B (SELECT_FEEDBACK_SCORES_STATS / SELECT_SPAN_FEEDBACK_SCORES_STATS) materialises
+        // feedback aggregates in their own row mapped via mapProjectScoresStats — mapProjectStats
+        // (split-A) no longer carries feedback columns.
         Map<String, Object> values = new HashMap<>();
-        values.put("trace_count", 1L);
-        values.put("duration", List.of(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
-        values.put("input", 0L);
-        values.put("output", 0L);
-        values.put("metadata", 0L);
-        values.put("tags", 0.0);
-        values.put("llm_span_count_avg", 2.0);
-        values.put("span_count_avg", 3.0);
-        values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
-        values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
-
-        // Add span feedback scores map
         Map<String, BigDecimal> spanFeedbackScores = new HashMap<>();
         spanFeedbackScores.put("accuracy", new BigDecimal("0.85"));
         spanFeedbackScores.put("relevance", new BigDecimal("0.80"));
@@ -125,7 +116,7 @@ class StatsMapperTest {
 
         Row row = new SimpleRow(values);
 
-        ProjectStats stats = StatsMapper.mapProjectStats(row, "trace_count");
+        ProjectStats stats = StatsMapper.mapProjectScoresStats(row);
         Map<String, Object> mapped = stats.stats()
                 .stream()
                 .collect(Collectors.toMap(ProjectStats.ProjectStatItem::getName,
@@ -138,32 +129,36 @@ class StatsMapperTest {
     }
 
     @Test
-    void mapProjectStats_withSpanFeedbackScoresForSpans_doesNotReturnSpanFeedbackScoresStats() {
+    void mapProjectStats_doesNotEmitFeedbackScoreStats() {
+        // mapProjectStats (split-A) intentionally drops feedback-score columns — they live in the
+        // companion mapProjectScoresStats(Row) used by SELECT_FEEDBACK_SCORES_STATS.
         Map<String, Object> values = new HashMap<>();
-        values.put("span_count", 1L);
+        values.put("trace_count", 1L);
         values.put("duration", List.of(BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO));
         values.put("input", 0L);
         values.put("output", 0L);
         values.put("metadata", 0L);
         values.put("tags", 0.0);
+        values.put("llm_span_count_avg", 2.0);
+        values.put("span_count_avg", 3.0);
         values.put("total_estimated_cost_avg", new BigDecimal("1.25"));
         values.put("total_estimated_cost_sum", new BigDecimal("2.50"));
 
-        // Add span feedback scores map (should be ignored for spans)
-        Map<String, BigDecimal> spanFeedbackScores = new HashMap<>();
-        spanFeedbackScores.put("accuracy", new BigDecimal("0.85"));
-        values.put(StatsMapper.SPAN_FEEDBACK_SCORE, spanFeedbackScores);
+        Map<String, BigDecimal> feedbackScores = new HashMap<>();
+        feedbackScores.put("accuracy", new BigDecimal("0.85"));
+        values.put(StatsMapper.FEEDBACK_SCORE, feedbackScores);
+        values.put(StatsMapper.SPAN_FEEDBACK_SCORE, feedbackScores);
 
         Row row = new SimpleRow(values);
 
-        ProjectStats stats = StatsMapper.mapProjectStats(row, "span_count");
+        ProjectStats stats = StatsMapper.mapProjectStats(row, "trace_count");
         Map<String, Object> mapped = stats.stats()
                 .stream()
                 .collect(Collectors.toMap(ProjectStats.ProjectStatItem::getName,
                         ProjectStats.ProjectStatItem::getValue));
 
-        // Span feedback scores should not be included for span statistics
-        assertThat(mapped.containsKey("%s.%s".formatted(StatsMapper.SPAN_FEEDBACK_SCORE, "accuracy")))
-                .isFalse();
+        assertThat(mapped.keySet())
+                .noneMatch(k -> k.startsWith(StatsMapper.FEEDBACK_SCORE)
+                        || k.startsWith(StatsMapper.SPAN_FEEDBACK_SCORE));
     }
 }
