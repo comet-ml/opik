@@ -2641,7 +2641,8 @@ public class SpanDAO {
                             })
                             .flatMap(result -> result.map(
                                     (row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count")))
-                            .singleOrEmpty();
+                            .singleOrEmpty()
+                            .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
 
                     Mono<ProjectStats> feedbackMono = Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> {

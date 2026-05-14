@@ -3844,7 +3844,8 @@ class TraceDAOImpl implements TraceDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(result -> result.map(
                                         (row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
-                                .singleOrEmpty();
+                                .singleOrEmpty()
+                                .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
                     });
 
                     Mono<ProjectStats> feedbackMono = asyncTemplate.nonTransaction(connection -> {
