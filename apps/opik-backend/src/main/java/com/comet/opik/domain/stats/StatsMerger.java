@@ -40,7 +40,8 @@ public class StatsMerger {
         return tracesSpansByProject.entrySet().stream()
                 .collect(toMap(
                         Map.Entry::getKey,
-                        entry -> merge(entry.getValue(), feedbackByProject.get(entry.getKey()))));
+                        entry -> merge(entry.getValue(),
+                                feedbackByProject.getOrDefault(entry.getKey(), ProjectStats.empty()))));
     }
 
     /**

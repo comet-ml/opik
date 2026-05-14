@@ -48,6 +48,7 @@ import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
@@ -1388,6 +1389,44 @@ class ProjectsResourceTest {
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
+        }
+
+        @Test
+        @DisplayName("when has_legacy_scores is flipped, stats endpoint stays consistent")
+        void getProjects__whenHasLegacyScoresFlipped__thenStatsStayConsistent(WorkspacesService workspacesService) {
+            // Test infra writes feedback scores through the authenticated path, so data lands in
+            // authored_feedback_scores (not the legacy feedback_scores table). This test can't
+            // observe the legacy-UNION gate directly — that surface is covered by the existing
+            // FilterTest variants and by manual benchmarking against real legacy data. What this
+            // test does verify: flipping the workspace flag does not break the endpoint and the
+            // response stays correct for data that lives in authored_feedback_scores.
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
+            var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+
+            workspacesService.upsertHasLegacyScores(workspaceId, false, USER);
+
+            var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            var actual = response.readEntity(ProjectStatsSummary.class);
+
+            assertThat(actual.content())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expectedStats);
         }
 
         @Test

@@ -54,7 +54,6 @@ import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SignalType;
-import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -3825,7 +3824,7 @@ class TraceDAOImpl implements TraceDAO {
         // tolerate two concurrent statements on the same connection. The legacy-scores flag is
         // looked up once (sync JDBI) and threaded through both branches so they can skip the
         // legacy feedback_scores table UNION when no data exists there.
-        return makeMonoContextAware((userName, workspaceId) -> resolveHasLegacyScores(workspaceId)
+        return makeMonoContextAware((userName, workspaceId) -> workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
 
                     Mono<ProjectStats> tracesSpansMono = asyncTemplate.nonTransaction(connection -> {
@@ -3863,21 +3862,6 @@ class TraceDAOImpl implements TraceDAO {
                     return Mono.zip(tracesSpansMono, feedbackMono)
                             .map(tuple -> StatsMerger.merge(tuple.getT1(), tuple.getT2()));
                 }));
-    }
-
-    /**
-     * Sync MySQL lookup of the workspace's legacy-feedback-scores flag, off the R2DBC event loop.
-     * Falls back to {@code true} (safe-include legacy UNION) on any error so the stats endpoint
-     * stays available when the state DB is degraded.
-     */
-    private Mono<Boolean> resolveHasLegacyScores(String workspaceId) {
-        return Mono.fromCallable(() -> workspacesService.hasLegacyScores(workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(throwable -> {
-                    log.warn("Failed to resolve has_legacy_scores for workspace '{}', defaulting to true",
-                            workspaceId, throwable);
-                    return Mono.just(true);
-                });
     }
 
     /**
@@ -3992,7 +3976,7 @@ class TraceDAOImpl implements TraceDAO {
         // tolerate two concurrent statements on the same connection. The legacy-scores flag is
         // resolved once (sync JDBI) so both branches can skip the legacy feedback_scores UNION
         // when no data exists there.
-        return resolveHasLegacyScores(workspaceId)
+        return workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
 
                     Mono<Map<UUID, ProjectStats>> tracesSpansMono = asyncTemplate.nonTransaction(connection -> {

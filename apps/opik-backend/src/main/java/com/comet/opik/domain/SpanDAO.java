@@ -43,7 +43,6 @@ import org.reactivestreams.Publisher;
 import org.stringtemplate.v4.ST;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -2622,7 +2621,7 @@ public class SpanDAO {
         // Split into a span-aggregation query and a span-feedback-scores aggregation query, run in
         // parallel on separate connections. Same pattern as TraceDAO.getStats — eliminates the
         // per-span JOIN against feedback_scores_agg and the groupArray-of-tuples materialisation.
-        return makeMonoContextAware((userName, workspaceId) -> resolveHasLegacyScores(workspaceId)
+        return makeMonoContextAware((userName, workspaceId) -> workspacesService.hasLegacyScores(workspaceId)
                 .flatMap(hasLegacyScores -> {
 
                     Mono<ProjectStats> spansMono = Mono.from(connectionFactory.create())
@@ -2684,21 +2683,6 @@ public class SpanDAO {
                 || template.getAttribute("type") != null
                 || template.getAttribute("feedback_scores_filters") != null
                 || template.getAttribute("feedback_scores_empty_filters") != null;
-    }
-
-    /**
-     * Sync MySQL lookup of the workspace's legacy-feedback-scores flag, off the R2DBC event loop.
-     * Falls back to {@code true} (safe-include legacy UNION) on any error so the stats endpoint
-     * stays available when the state DB is degraded.
-     */
-    private Mono<Boolean> resolveHasLegacyScores(String workspaceId) {
-        return Mono.fromCallable(() -> workspacesService.hasLegacyScores(workspaceId))
-                .subscribeOn(Schedulers.boundedElastic())
-                .onErrorResume(throwable -> {
-                    log.warn("Failed to resolve has_legacy_scores for workspace '{}', defaulting to true",
-                            workspaceId, throwable);
-                    return Mono.just(true);
-                });
     }
 
     @WithSpan
