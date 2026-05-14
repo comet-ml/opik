@@ -55,7 +55,10 @@ class TestTraceToolContextPreseed:
     def test_active_trace_cached(self):
         trace = _trace()
         ctx = TraceToolContext(
-            trace=trace, spans=[], emulator=_emulator_with(trace, [])
+            trace=trace,
+            spans=[],
+            parent_by_child={},
+            emulator=_emulator_with(trace, []),
         )
         cached = ctx.get_cached(EntityRef(EntityType.TRACE, trace.id))
         assert cached is not None
@@ -66,7 +69,10 @@ class TestTraceToolContextPreseed:
         trace = _trace()
         spans = [_span("s-1"), _span("s-2", start_offset_s=1)]
         ctx = TraceToolContext(
-            trace=trace, spans=spans, emulator=_emulator_with(trace, spans)
+            trace=trace,
+            spans=spans,
+            parent_by_child={"s-1": None, "s-2": None},
+            emulator=_emulator_with(trace, spans),
         )
         assert ctx.get_cached(EntityRef(EntityType.SPAN, "s-1")) is not None
         assert ctx.get_cached(EntityRef(EntityType.SPAN, "s-2")) is not None
@@ -74,7 +80,10 @@ class TestTraceToolContextPreseed:
     def test_unknown_entity_returns_none(self):
         trace = _trace()
         ctx = TraceToolContext(
-            trace=trace, spans=[], emulator=_emulator_with(trace, [])
+            trace=trace,
+            spans=[],
+            parent_by_child={},
+            emulator=_emulator_with(trace, []),
         )
         assert ctx.get_cached(EntityRef(EntityType.SPAN, "missing")) is None
 
@@ -93,3 +102,5 @@ class TestBuildTraceToolContext:
         assert {s.id for s in ctx.spans} == {"s-1", "s-2"}
         # Spans are sorted by start_time.
         assert [s.id for s in ctx.spans] == ["s-1", "s-2"]
+        # Parent links are pulled from the emulator alongside the spans.
+        assert ctx.parent_by_child == {"s-1": None, "s-2": None}

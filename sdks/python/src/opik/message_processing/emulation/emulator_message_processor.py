@@ -139,6 +139,21 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         with self._rlock:
             return self._span_observations.get(span_id)
 
+    def parent_span_ids_for_trace(self, trace_id: str) -> Dict[str, Optional[str]]:
+        """Return `{span_id: parent_span_id}` for every span in `trace_id`.
+
+        Authoritative parent links straight from the span-to-parent map
+        populated at message-process time. Callers should prefer this over
+        walking `SpanModel.spans`, because that nested-children list is only
+        populated as a side effect of `trace_trees` / `_build_spans_tree`.
+        """
+        with self._rlock:
+            return {
+                span_id: self._span_to_parent_span.get(span_id)
+                for span_id, span_trace_id in self._span_to_trace.items()
+                if span_trace_id == trace_id
+            }
+
     def spans_for_trace(self, trace_id: str) -> List[models.SpanModel]:
         """Return all spans associated with `trace_id`, sorted by start_time.
 

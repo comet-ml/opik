@@ -84,7 +84,12 @@ def _build_ctx() -> TraceToolContext:
     emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
         active=True
     )
-    return TraceToolContext(trace=trace, spans=[span], emulator=emulator)
+    return TraceToolContext(
+        trace=trace,
+        spans=[span],
+        parent_by_child={"s-1": None},
+        emulator=emulator,
+    )
 
 
 def test_full_loop_calls_overview_and_produces_verdict():

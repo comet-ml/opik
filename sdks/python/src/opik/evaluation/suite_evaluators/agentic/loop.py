@@ -41,7 +41,7 @@ def run_agentic_judge(
     schema constrains). Caller parses it via the same path the one-shot
     LLMJudge uses.
 
-    Raises whatever the underlying model raises on hard failures — same
+    Raises whatever the underlying model raises on hard failures — the same
     contract as `LLMJudge._generate_and_parse`.
     """
     tool_specs: List[Any] = registry.specs()

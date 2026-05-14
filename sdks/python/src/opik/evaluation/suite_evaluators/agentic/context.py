@@ -76,6 +76,7 @@ class TraceToolContext:
 
     trace: models.TraceModel
     spans: List[models.SpanModel]
+    parent_by_child: Dict[str, Optional[str]]
     emulator: emulator_message_processor.EmulatorMessageProcessor
     _fetched: Dict[entity_ref.EntityRef, Dict[str, Any]] = dataclasses.field(
         default_factory=dict
@@ -132,4 +133,10 @@ def build_trace_tool_context(
         return None
 
     spans = emulator.spans_for_trace(trace_id)
-    return TraceToolContext(trace=trace, spans=spans, emulator=emulator)
+    parent_by_child = emulator.parent_span_ids_for_trace(trace_id)
+    return TraceToolContext(
+        trace=trace,
+        spans=spans,
+        parent_by_child=parent_by_child,
+        emulator=emulator,
+    )

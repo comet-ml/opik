@@ -69,6 +69,7 @@ def _serialize_span_node(
 def serialize_overview(
     trace: models.TraceModel,
     spans: List[models.SpanModel],
+    parent_by_child: Dict[str, Optional[str]],
 ) -> Dict[str, Any]:
     """Render a flat overview of the trace + its spans.
 
@@ -79,30 +80,15 @@ def serialize_overview(
           "spans": [ {id, name, type, parent_span_id, ...}, ... ]
         }
 
-    Spans are flat (parent_span_id surfaces the hierarchy). The flat
-    representation is easier for the judge to reason about than nested
-    trees and keeps token count predictable.
+    Spans are flat (parent_span_id surfaces the hierarchy). Parent links
+    come from `parent_by_child` — the caller is expected to source this
+    from `EmulatorMessageProcessor.parent_span_ids_for_trace`, since the
+    nested `SpanModel.spans` list is only populated as a side effect of
+    `trace_trees` and is unreliable on a freshly-fetched flat list.
     """
-    parent_by_child: Dict[str, Optional[str]] = {}
-
-    def walk(parent: Optional[str], node: models.SpanModel) -> None:
-        parent_by_child[node.id] = parent
-        for child in node.spans:
-            walk(node.id, child)
-
-    for top in spans:
-        walk(None, top)
-
-    flat_nodes: List[Dict[str, Any]] = []
-
-    def collect(node: models.SpanModel) -> None:
-        flat_nodes.append(_serialize_span_node(node, parent_by_child.get(node.id)))
-        for child in node.spans:
-            collect(child)
-
-    for top in spans:
-        collect(top)
-
+    flat_nodes = [
+        _serialize_span_node(span, parent_by_child.get(span.id)) for span in spans
+    ]
     flat_nodes.sort(key=lambda n: n["start_time"])
     error_count = sum(1 for n in flat_nodes if n["has_error"])
 

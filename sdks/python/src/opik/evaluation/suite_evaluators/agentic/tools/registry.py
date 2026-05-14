@@ -1,11 +1,9 @@
 import json
 import logging
-from typing import Any, Dict, List, TYPE_CHECKING
+from typing import Any, Dict, List
 
 from . import executor
-
-if TYPE_CHECKING:
-    from ..context import TraceToolContext
+from .. import context
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,7 +26,7 @@ class ToolRegistry:
         self,
         name: str,
         arguments: str,
-        ctx: "TraceToolContext",
+        ctx: context.TraceToolContext,
     ) -> str:
         tool = self._by_name.get(name)
         if tool is None:

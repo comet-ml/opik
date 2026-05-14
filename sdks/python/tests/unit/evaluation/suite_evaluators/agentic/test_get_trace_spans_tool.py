@@ -38,16 +38,20 @@ def _trace_with_spans():
         name="tool_call",
         type="tool",
     )
-    root.spans = [child]
     emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
         active=True
     )
-    return trace, [root], emulator
+    return trace, [root, child], emulator
 
 
 def test_get_trace_spans_returns_overview_json():
     trace, spans, emulator = _trace_with_spans()
-    ctx = TraceToolContext(trace=trace, spans=spans, emulator=emulator)
+    ctx = TraceToolContext(
+        trace=trace,
+        spans=spans,
+        parent_by_child={"root": None, "child": "root"},
+        emulator=emulator,
+    )
 
     tool = GetTraceSpansTool()
     raw = tool.execute(arguments="{}", ctx=ctx)

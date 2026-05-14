@@ -40,9 +40,12 @@ class TestSerializeOverview:
     def test_flat_structure_with_parent_links(self):
         root = _span("root")
         child = _span("child", start_offset_s=1)
-        root.spans = [child]
 
-        result = span_tree_serializer.serialize_overview(_trace(), spans=[root])
+        result = span_tree_serializer.serialize_overview(
+            _trace(),
+            spans=[root, child],
+            parent_by_child={"root": None, "child": "root"},
+        )
 
         ids = [s["id"] for s in result["spans"]]
         assert ids == ["root", "child"]
@@ -56,19 +59,39 @@ class TestSerializeOverview:
             start_offset_s=1,
             error_info={"exception_type": "X", "message": "m", "traceback": "tb"},
         )
-        ok.spans = [err]
 
-        result = span_tree_serializer.serialize_overview(_trace(), spans=[ok])
+        result = span_tree_serializer.serialize_overview(
+            _trace(),
+            spans=[ok, err],
+            parent_by_child={"ok": None, "err": "ok"},
+        )
 
         assert result["trace"]["span_count"] == 2
         assert result["trace"]["error_count"] == 1
         assert result["trace"]["has_error"] is False
+
+    def test_parent_links_resolved_without_nested_spans_attribute(self):
+        # `spans_for_trace` returns a flat list with `.spans` empty on every
+        # node. The serializer must rely on the parent map, not walk `.spans`.
+        root = _span("root")
+        child = _span("child", start_offset_s=1)
+        assert root.spans == []  # flat, as returned by spans_for_trace
+
+        result = span_tree_serializer.serialize_overview(
+            _trace(),
+            spans=[root, child],
+            parent_by_child={"root": None, "child": "root"},
+        )
+
+        parent_links = {s["id"]: s["parent_span_id"] for s in result["spans"]}
+        assert parent_links == {"root": None, "child": "root"}
 
     def test_long_strings_truncated_with_suffix(self):
         long_input = "x" * 300
         result = span_tree_serializer.serialize_overview(
             _trace(input=long_input),
             spans=[],
+            parent_by_child={},
         )
         assert "TRUNCATED" in result["trace"]["input"]
         assert result["trace"]["input"].startswith("x" * 200)

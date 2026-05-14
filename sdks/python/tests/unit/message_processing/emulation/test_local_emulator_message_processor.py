@@ -2098,6 +2098,31 @@ class TestEmulatorMessageProcessorPublicReadAPI:
         assert [s.id for s in spans_1] == ["span_a"]
         assert [s.id for s in spans_2] == ["span_b"]
 
+    def test_parent_span_ids_for_trace__resolves_parent_links_flat(self):
+        # Mapping must reflect the parent links set at message-process time,
+        # without depending on `_build_spans_tree` having run.
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._span_message("root", "trace_1"))
+        self.processor.process(
+            self._span_message("child", "trace_1", parent_span_id="root")
+        )
+
+        mapping = self.processor.parent_span_ids_for_trace("trace_1")
+
+        assert mapping == {"root": None, "child": "root"}
+
+    def test_parent_span_ids_for_trace__filters_by_trace_id(self):
+        self.processor.process(self._trace_message("trace_1"))
+        self.processor.process(self._trace_message("trace_2"))
+        self.processor.process(self._span_message("span_a", "trace_1"))
+        self.processor.process(self._span_message("span_b", "trace_2"))
+
+        assert self.processor.parent_span_ids_for_trace("trace_1") == {"span_a": None}
+        assert self.processor.parent_span_ids_for_trace("trace_2") == {"span_b": None}
+
+    def test_parent_span_ids_for_trace__unknown_trace_id__returns_empty(self):
+        assert self.processor.parent_span_ids_for_trace("missing") == {}
+
     def test_spans_for_trace__does_not_mutate_trace_observation(self):
         # `trace_trees` mutates trace.spans as a side effect; spans_for_trace
         # must not. Otherwise, the caller can't rely on flat-vs-tree semantics

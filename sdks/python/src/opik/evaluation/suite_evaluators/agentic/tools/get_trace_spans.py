@@ -39,5 +39,7 @@ class GetTraceSpansTool:
     spec = GET_TRACE_SPANS_SPEC
 
     def execute(self, arguments: str, ctx: "TraceToolContext") -> str:
-        overview = span_tree_serializer.serialize_overview(ctx.trace, ctx.spans)
+        overview = span_tree_serializer.serialize_overview(
+            ctx.trace, ctx.spans, ctx.parent_by_child
+        )
         return json.dumps(overview, default=str)

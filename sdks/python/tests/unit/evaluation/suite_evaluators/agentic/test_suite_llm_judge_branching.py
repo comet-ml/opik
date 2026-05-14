@@ -30,7 +30,9 @@ def _ctx():
     emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
         active=True
     )
-    return TraceToolContext(trace=trace, spans=[], emulator=emulator)
+    return TraceToolContext(
+        trace=trace, spans=[], parent_by_child={}, emulator=emulator
+    )
 
 
 def test_score_without_context_uses_one_shot_path():
