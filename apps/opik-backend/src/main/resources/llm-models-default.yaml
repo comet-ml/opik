@@ -150,13 +150,11 @@ anthropic:
   - id: "claude-opus-4-1-20250805"
     label: "Claude Opus 4.1"
     structuredOutput: true
+  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    label: "Claude Opus 4"
     structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    label: "Claude Sonnet 4"
     structuredOutput: true
-  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -325,6 +323,8 @@ openrouter:
   - id: "anthropic/claude-opus-4.7"
     label: "anthropic/claude-opus-4.7"
     structuredOutput: true
+  - id: "anthropic/claude-opus-4.7-fast"
+    label: "anthropic/claude-opus-4.7-fast"
   - id: "anthropic/claude-sonnet-4"
     label: "anthropic/claude-sonnet-4"
   - id: "anthropic/claude-sonnet-4.5"
@@ -462,6 +462,8 @@ openrouter:
     label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
+  - id: "deepseek/deepseek-v4-flash:free"
+    label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
   - id: "eleutherai/llemma_7b"
@@ -1041,6 +1043,8 @@ openrouter:
     label: "openrouter/owl-alpha"
   - id: "openrouter/pareto-code"
     label: "openrouter/pareto-code"
+  - id: "perceptron/perceptron-mk1"
+    label: "perceptron/perceptron-mk1"
   - id: "perplexity/sonar"
     label: "perplexity/sonar"
   - id: "perplexity/sonar-deep-research"

@@ -277,6 +277,26 @@ public interface DatasetItemVersionDAO {
     Mono<Long> countItemsInVersion(UUID datasetId, UUID versionId, String workspaceId);
 
     /**
+     * Counts distinct {@code dataset_item_id}s in a version after applying the same exclusion
+     * semantics used by the copy-from-base path: exclude a set of stable item IDs and/or exclude
+     * rows matching a set of filters.
+     *
+     * <p>Source of truth for sizing the UUID pool passed into {@link #copyVersionItems} and
+     * {@link #applyDelta}. Replaces the previous reliance on the MySQL-stored {@code items_total},
+     * which can drift away from the actual ClickHouse row count and silently truncate copies
+     * (OPIK-6390).
+     *
+     * @param datasetId the dataset ID
+     * @param versionId the source version ID
+     * @param excludedIds stable {@code dataset_item_id}s to exclude (deletes + edits); may be empty
+     * @param excludeFilters filters whose matching rows should be excluded; may be null/empty
+     * @param workspaceId the workspace ID
+     * @return Mono emitting the count of rows that would be copied
+     */
+    Mono<Long> countRowsInVersion(UUID datasetId, UUID versionId, Set<UUID> excludedIds,
+            List<DatasetItemFilter> excludeFilters, String workspaceId);
+
+    /**
      * Counts items for multiple dataset versions in a single query.
      * This is used for batch migration of items_total field.
      * Uses workspace_id, dataset_id, and dataset_version_id to optimize the query
@@ -390,6 +410,20 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
               AND workspace_id = :workspace_id
               <if(item_ids)>AND dataset_item_id IN :item_ids<endif>
               <if(dataset_item_filters)>AND (<dataset_item_filters>)<endif>
+            """;
+
+    // OPIK-6390: count distinct stable items that would be copied from a source version after
+    // applying the same exclusion semantics as COPY_VERSION_ITEMS. Used to size the UUID pool
+    // from the actual ClickHouse row count rather than the (drift-prone) MySQL items_total.
+    private static final String COUNT_ROWS_IN_VERSION = """
+            SELECT count(DISTINCT dataset_item_id) as count
+            FROM dataset_item_versions
+            WHERE dataset_id = :dataset_id
+              AND dataset_version_id = :version_id
+              AND workspace_id = :workspace_id
+              <if(exclude_filters)>AND NOT (<exclude_filters>)<endif>
+              <if(exclude_ids)>AND dataset_item_id NOT IN :excluded_ids<endif>
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     /**
@@ -1775,6 +1809,23 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
     // Copy items from source version to target version
     // Optionally excludes items matching filters (when exclude_filters is set)
     // Optionally excludes specific item IDs (when exclude_ids is set)
+    //
+    // OPIK-6390:
+    //   - LIMIT 1 BY dataset_item_id (not id) so that any duplicate physical rows for the same
+    //     stable item within a version collapse to one, matching the dedup pattern used by every
+    //     other read path in this file.
+    //   - row_number() OVER (ORDER BY id DESC) AS rn is computed on the *post-dedup* result
+    //     (inner `deduped` subquery wraps the WHERE + LIMIT 1 BY). Numbering before LIMIT 1 BY
+    //     would leave sparse ranks (e.g. 1,3,5) on unmerged ReplacingMergeTree duplicates and
+    //     the `rn <= length(:uuids)` predicate would push valid rows onto the generateUUIDv7
+    //     fallback even when the pool size is correct, breaking the sort-order invariant.
+    //   - if(rn <= length(:uuids), arrayElement(...), generateUUIDv7()) guarantees each copied row
+    //     receives a unique id even when the Java-supplied pool is shorter than the source row
+    //     count. Previously, out-of-range arrayElement returned an empty string which was padded
+    //     to a NUL-byte FixedString(36); identical NUL ids then collapsed under ReplacingMergeTree
+    //     and items disappeared silently. The fallback UUIDv7 preserves insert atomicity at the
+    //     cost of putting overflowing rows ahead of added/edited rows in id-desc order — a
+    //     visible-but-non-destructive degradation only reached if the pool is undersized.
     private static final String COPY_VERSION_ITEMS = """
             INSERT INTO dataset_item_versions (
                 id,
@@ -1801,7 +1852,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 workspace_id
             )
             SELECT
-                arrayElement(:uuids, row_number() OVER (ORDER BY src.id DESC)) as id,
+                if(src.rn \\<= length(:uuids),
+                   arrayElement(:uuids, src.rn),
+                   toString(generateUUIDv7())) AS id,
                 src.dataset_item_id,
                 src.dataset_id,
                 :targetVersionId as dataset_version_id,
@@ -1824,19 +1877,24 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 :user_name as last_updated_by,
                 src.workspace_id
             FROM (
-                SELECT *
-                FROM dataset_item_versions
-                WHERE dataset_id = :datasetId
-                AND dataset_version_id = :sourceVersionId
-                AND workspace_id = :workspace_id
-                <if(exclude_filters)>
-                AND NOT (<exclude_filters>)
-                <endif>
-                <if(exclude_ids)>
-                AND dataset_item_id NOT IN :excludedIds
-                <endif>
-                ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
-                LIMIT 1 BY id
+                SELECT
+                    *,
+                    row_number() OVER (ORDER BY id DESC) AS rn
+                FROM (
+                    SELECT *
+                    FROM dataset_item_versions
+                    WHERE dataset_id = :datasetId
+                    AND dataset_version_id = :sourceVersionId
+                    AND workspace_id = :workspace_id
+                    <if(exclude_filters)>
+                    AND NOT (<exclude_filters>)
+                    <endif>
+                    <if(exclude_ids)>
+                    AND dataset_item_id NOT IN :excludedIds
+                    <endif>
+                    ORDER BY (workspace_id, dataset_id, dataset_version_id, id) DESC, last_updated_at DESC
+                    LIMIT 1 BY dataset_item_id
+                ) AS deduped
             ) AS src
             ORDER BY src.id DESC
             """;
@@ -3083,8 +3141,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     .map(UUID::toString)
                     .toArray(String[]::new);
 
-            // Build query using StringTemplate
-            ST template = new ST(COPY_VERSION_ITEMS);
+            // Build query using StringTemplate (OPIK-6390: switched to TemplateUtils.newST so this
+            // hot-path template is not retained in the default STGroup singleton).
+            ST template = TemplateUtils.newST(COPY_VERSION_ITEMS);
             template.add("exclude_ids", true);
             String query = template.render();
 
@@ -3426,6 +3485,48 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             // Bind filter parameters (only if filters exist)
             if (CollectionUtils.isNotEmpty(filters)) {
                 statement = FilterQueryBuilder.bind(statement, filters, FilterStrategy.DATASET_ITEM);
+            }
+
+            return Flux.from(statement.execute())
+                    .flatMap(result -> result.map((row, metadata) -> row.get("count", Long.class)))
+                    .next()
+                    .defaultIfEmpty(0L);
+        });
+    }
+
+    @Override
+    @WithSpan
+    public Mono<Long> countRowsInVersion(@NonNull UUID datasetId, @NonNull UUID versionId,
+            @NonNull Set<UUID> excludedIds, List<DatasetItemFilter> excludeFilters,
+            @NonNull String workspaceId) {
+
+        return asyncTemplate.nonTransaction(connection -> {
+            Optional<String> filterConditionsOpt = CollectionUtils.isEmpty(excludeFilters)
+                    ? Optional.empty()
+                    : FilterQueryBuilder.toAnalyticsDbFilters(excludeFilters, FilterStrategy.DATASET_ITEM);
+
+            ST template = getSTWithLogComment(COUNT_ROWS_IN_VERSION, "count_rows_in_version", workspaceId, "",
+                    datasetId);
+            filterConditionsOpt.ifPresent(filterConditions -> template.add("exclude_filters", filterConditions));
+            if (CollectionUtils.isNotEmpty(excludedIds)) {
+                template.add("exclude_ids", true);
+            }
+            String countQuery = template.render();
+
+            var statement = connection.createStatement(countQuery)
+                    .bind("dataset_id", datasetId.toString())
+                    .bind("version_id", versionId.toString())
+                    .bind("workspace_id", workspaceId);
+
+            if (CollectionUtils.isNotEmpty(excludedIds)) {
+                String[] excludedIdStrings = excludedIds.stream()
+                        .map(UUID::toString)
+                        .toArray(String[]::new);
+                statement.bind("excluded_ids", excludedIdStrings);
+            }
+
+            if (CollectionUtils.isNotEmpty(excludeFilters)) {
+                statement = FilterQueryBuilder.bind(statement, excludeFilters, FilterStrategy.DATASET_ITEM);
             }
 
             return Flux.from(statement.execute())

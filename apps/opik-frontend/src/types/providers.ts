@@ -143,6 +143,7 @@ export enum PROVIDER_MODEL_TYPE {
   ANTHROPIC_CLAUDE_OPUS_4_6 = "anthropic/claude-opus-4.6",
   ANTHROPIC_CLAUDE_OPUS_4_6_FAST = "anthropic/claude-opus-4.6-fast",
   ANTHROPIC_CLAUDE_OPUS_4_7 = "anthropic/claude-opus-4.7",
+  ANTHROPIC_CLAUDE_OPUS_4_7_FAST = "anthropic/claude-opus-4.7-fast",
   ANTHROPIC_CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4",
   ANTHROPIC_CLAUDE_SONNET_4_5 = "anthropic/claude-sonnet-4.5",
   ANTHROPIC_CLAUDE_SONNET_4_6 = "anthropic/claude-sonnet-4.6",
@@ -202,6 +203,7 @@ export enum PROVIDER_MODEL_TYPE {
   DEEPSEEK_DEEPSEEK_V3_2_EXP = "deepseek/deepseek-v3.2-exp",
   DEEPSEEK_DEEPSEEK_V3_2_SPECIALE = "deepseek/deepseek-v3.2-speciale",
   DEEPSEEK_DEEPSEEK_V4_FLASH = "deepseek/deepseek-v4-flash",
+  DEEPSEEK_DEEPSEEK_V4_FLASH_FREE = "deepseek/deepseek-v4-flash:free",
   DEEPSEEK_DEEPSEEK_V4_PRO = "deepseek/deepseek-v4-pro",
   ELEUTHERAI_LLEMMA_7B = "eleutherai/llemma_7b",
   ESSENTIALAI_RNJ_1_INSTRUCT = "essentialai/rnj-1-instruct",
@@ -459,6 +461,7 @@ export enum PROVIDER_MODEL_TYPE {
   OPENROUTER_HUNTER_ALPHA = "openrouter/hunter-alpha",
   OPENROUTER_OWL_ALPHA = "openrouter/owl-alpha",
   OPENROUTER_PARETO_CODE = "openrouter/pareto-code",
+  PERCEPTRON_PERCEPTRON_MK1 = "perceptron/perceptron-mk1",
   PERPLEXITY_SONAR = "perplexity/sonar",
   PERPLEXITY_SONAR_DEEP_RESEARCH = "perplexity/sonar-deep-research",
   PERPLEXITY_SONAR_PRO = "perplexity/sonar-pro",
@@ -714,7 +717,13 @@ export type PartialProviderKeyUpdate = Partial<
   headers?: Record<string, string>;
 };
 
-export type ReasoningEffort = "minimal" | "low" | "medium" | "high" | "xhigh";
+export type ReasoningEffort =
+  | "none"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
 
 export interface LLMOpenAIConfigsType {
   temperature: number;

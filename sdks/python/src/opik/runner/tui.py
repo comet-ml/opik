@@ -80,19 +80,23 @@ class RunnerTUI:
         self,
         project_name: str,
         url: str = "",
+        workspace: Optional[str] = None,
     ) -> None:
         padding = self._PADDING
         lw = self._LABEL_WIDTH
 
         info = Text()
         info.append("   ")
-        info.append("\u2800\u20dd", style="rgb(224,62,45)")
+        info.append("\u25cf", style="rgb(224,62,45)")
         info.append(" opik  ", style="bold")
         info.append("Opik URL".ljust(lw), style="dim")
-        info.append(url if url else "-")
+        info.append(url if url else "-", style="bold")
+        info.append(f"\n{padding}")
+        info.append("Workspace".ljust(lw), style="dim")
+        info.append(workspace if workspace else "-", style="bold")
         info.append(f"\n{padding}")
         info.append("Project".ljust(lw), style="dim")
-        info.append(project_name)
+        info.append(project_name, style="bold")
 
         self._console.print(info)
 

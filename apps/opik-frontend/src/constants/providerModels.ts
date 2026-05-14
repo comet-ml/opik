@@ -134,14 +134,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4_1,
       label: "Claude Opus 4.1",
     },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_OPUS_4,
-      label: "Claude Opus 4",
-    },
-    {
-      value: PROVIDER_MODEL_TYPE.CLAUDE_SONNET_4,
-      label: "Claude Sonnet 4",
-    },
   ],
 
   [PROVIDER_TYPE.OPEN_ROUTER]: [
@@ -284,6 +276,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7,
       label: "anthropic/claude-opus-4.7",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_OPUS_4_7_FAST,
+      label: "anthropic/claude-opus-4.7-fast",
     },
     {
       value: PROVIDER_MODEL_TYPE.ANTHROPIC_CLAUDE_SONNET_4,
@@ -521,6 +517,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH,
       label: "deepseek/deepseek-v4-flash",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_FLASH_FREE,
+      label: "deepseek/deepseek-v4-flash:free",
     },
     {
       value: PROVIDER_MODEL_TYPE.DEEPSEEK_DEEPSEEK_V4_PRO,
@@ -1550,6 +1550,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.OPENROUTER_PARETO_CODE,
       label: "openrouter/pareto-code",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.PERCEPTRON_PERCEPTRON_MK1,
+      label: "perceptron/perceptron-mk1",
     },
     {
       value: PROVIDER_MODEL_TYPE.PERPLEXITY_SONAR,

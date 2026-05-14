@@ -1,0 +1,57 @@
+Here are the most relevant improvements we've made since the last release:
+
+## 🌍 Environment Tracking for Traces, Spans & Threads
+
+You can now tag traces, spans, and threads with an **environment** field — `production`, `staging`, `dev`, or any label you define. This makes it easy to separate signal from noise: filter your project's trace view to only production issues, or compare behavior between environments without spinning up separate projects.
+
+**What's new:**
+
+- **Environment column in the Logs view** - Traces and spans tables now show the environment and support filtering, so you can slice by `production` vs `staging` in a single project
+- **Auto-create environments from ingestion** - Environments are created automatically the first time a trace with a new environment name arrives; no setup required
+- **Python SDK support** - Pass `environment` to `@track`, `opik.trace()`, or `opik.span()` — and it's preserved through `.end()` and `.update()` calls
+- **TypeScript SDK support** - Set `environment` on trace and span creation
+
+```python
+import opik
+
+@opik.track(environment="production")
+def my_agent(input: str) -> str:
+    ...
+```
+
+👉 [Environments Documentation](https://www.comet.com/docs/opik/tracing/log_traces#environments)
+
+## 🧪 Test Suite Assertions Can Now Inspect Sub-Spans
+
+Test suite assertions can now look inside a trace — not just the top-level input/output — to reason about tool calls, intermediate LLM steps, and sub-agent behavior. The evaluator LLM gets access to two on-demand tools: `get_trace_spans` (lists all sub-spans for the trace) and `read` (fetches a specific span by ID) — so it can drill into exactly what happened at each step.
+
+**Why it matters:** Previously, an assertion could only see what went in and came out of the agent. Now it can check whether the right tool was called, which model was used in an intermediate step, or whether a specific span had an error — enabling far more meaningful correctness checks for complex agents.
+
+## ⚡ Dramatically Faster Trace Table Loading
+
+Traces and spans tables no longer download attachment bytes (images, PDFs) when loading a list — attachments are lazy-loaded only when you open an individual trace. In our benchmarks with image and PDF attachments, this reduced the per-page payload from **85 MB → 0.13 MB** and load time from 3.4 s to 0.1 s.
+
+**Why it matters:** If any of your traces include file attachments, the table was silently fetching all that binary data on every page load. The experience is now fast regardless of attachment size or count.
+
+## 🤖 OpenAI Playground: Per-Model reasoning_effort Support
+
+The Playground's `reasoning_effort` control now tracks OpenAI's actual per-model capability matrix. Models like `gpt-5.1` that support a `"none"` option show it; models that don't support reasoning effort have the control hidden automatically. Previously, the UI could get out of sync with what the backend supported.
+
+## 🐍 Python SDK Improvements
+
+Several reliability fixes and small improvements to the Python (and TypeScript) SDKs:
+
+- **Streamer & drain reliability** — Fixed two edge-case bugs in the background message pipeline that could cause a small percentage of traces to be missed when using attachments or high message throughput
+- **Auto-retry on rate limits** — `search_traces()` and `search_spans()` now automatically wait and retry on 429 responses instead of raising an error, so large bulk searches complete reliably under API rate limits
+- **Evaluation task failures surfaced** — When an evaluation task raises an exception, the failure is now recorded on the experiment item (Python and TypeScript SDKs) instead of being silently discarded
+
+## 🔧 Bug Fixes
+
+- **Annotation queue reason persistence** — Two customer-reported bugs: the reason/comment field was being cleared when navigating between queue items, and the navigation order was incorrect. Both are fixed.
+- **LLM failures visible in experiment traces** — When an LLM call failed during an experiment run, the trace appeared as an empty-output item with no indication of what went wrong. Structured error details are now written to the trace output so failures are diagnosable.
+
+---
+
+And much more! 👉 [See full commit log on GitHub](https://github.com/comet-ml/opik/compare/2.0.24...2.0.31)
+
+_Releases_: `2.0.25`, `2.0.26`, `2.0.27`, `2.0.28`, `2.0.29`, `2.0.30`, `2.0.31`

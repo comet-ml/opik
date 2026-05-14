@@ -26,6 +26,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.AppContextConfig;
 import static com.comet.opik.api.resources.utils.TestDropwizardAppExtensionUtils.CustomConfig;
@@ -342,5 +343,49 @@ class RedissonLockServiceIntegrationTest {
         // Verify the fallback action was executed
         assertEquals(1, results.size());
         assertEquals("fallback-action", results.getFirst());
+    }
+
+    /**
+     * Regression guard for the production failure where bestEffortLock with
+     * holdUntilExpiry=false drove the underlying Redis counter to -1 across replicas,
+     * blocking subsequent job cycles until the semaphore key fully expired.
+     */
+    @Test
+    void testBestEffortLock_DoesNotDriveCounterNegative(LockService lockService, RedissonReactiveClient redisClient) {
+        var lock = new LockService.Lock(UUID.randomUUID(), "best-effort-lock-permit-underflow");
+        var semaphore = redisClient.getPermitExpirableSemaphore(lock.key());
+
+        var longLeaseSeconds = 30;
+        // Inject the divergent state: temporarily raise the limit to 2 and acquire both
+        // with a long lease so both permits remain valid for the rest of the test. This
+        // mirrors the production shape where the semaphore ends up holding more permits
+        // than the configured limit and the next bestEffortLock cycle observes that
+        // divergence.
+        assertThat(semaphore.trySetPermits(2).block()).isTrue();
+        var permit1 = semaphore.tryAcquire(0L, longLeaseSeconds, TimeUnit.SECONDS).block();
+        var permit2 = semaphore.tryAcquire(0L, longLeaseSeconds, TimeUnit.SECONDS).block();
+        assertThat(permit1).isNotNull();
+        assertThat(permit2).isNotNull();
+        assertEquals(0, semaphore.availablePermits().block());
+
+        // Run a best-effort acquire while the divergent state is in place. The fix
+        // (trySetPermits) leaves the counter at 0; the pre-fix (setPermits) drops it to -1.
+        StepVerifier.create(lockService.bestEffortLock(
+                lock,
+                Mono.fromCallable(() -> "no-op-action"),
+                Mono.empty(),
+                Duration.ofSeconds(1),
+                Duration.ofMillis(100)))
+                .verifyComplete();
+
+        // availablePermits() opportunistically cleans up expired permits; with the long
+        // lease above, both injected permits are still valid, so it returns the raw
+        // counter value.
+        assertThat(semaphore.availablePermits().block())
+                .as("counter must not underflow when bestEffortLock runs against a divergent state")
+                .isGreaterThanOrEqualTo(0);
+
+        semaphore.release(permit1).block();
+        semaphore.release(permit2).block();
     }
 }

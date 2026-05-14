@@ -1,4 +1,5 @@
 import React, { useCallback, useMemo, useState } from "react";
+import { AxiosError } from "axios";
 
 import useEnvironmentCreateMutation from "@/api/environments/useEnvironmentCreateMutation";
 import useEnvironmentUpdateMutation from "@/api/environments/useEnvironmentUpdateMutation";
@@ -24,6 +25,7 @@ import {
   ENVIRONMENT_NAME_REGEX,
   Environment,
 } from "@/types/environments";
+import { extractErrorMessage } from "@/lib/errors";
 
 type EnvironmentDialogMode = "create" | "edit" | "clone";
 
@@ -37,9 +39,6 @@ type AddEditEnvironmentDialogProps = {
 const AddEditEnvironmentDialog: React.FunctionComponent<
   AddEditEnvironmentDialogProps
 > = ({ open, setOpen, environment, mode = "create" }) => {
-  const { mutate: createMutation } = useEnvironmentCreateMutation();
-  const { mutate: updateMutation } = useEnvironmentUpdateMutation();
-
   const [name, setName] = useState<string>(
     mode === "clone" && environment
       ? `${environment.name}-copy`
@@ -53,6 +52,14 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
       ? environment.color
       : DEFAULT_HEX_COLOR,
   );
+  const [submitError, setSubmitError] = useState<string>("");
+
+  const { mutate: createMutation } = useEnvironmentCreateMutation({
+    showErrorToast: false,
+  });
+  const { mutate: updateMutation } = useEnvironmentUpdateMutation({
+    showErrorToast: false,
+  });
 
   const trimmedName = name.trim();
   const nameError = useMemo(() => {
@@ -77,6 +84,21 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
 
   const isValid = trimmedName.length > 0 && !nameError;
 
+  const handleNameChange = useCallback((value: string) => {
+    setName(value);
+    setSubmitError("");
+  }, []);
+
+  const handleDescriptionChange = useCallback((value: string) => {
+    setDescription(value);
+    setSubmitError("");
+  }, []);
+
+  const handleColorChange = useCallback((value: string) => {
+    setColor(value);
+    setSubmitError("");
+  }, []);
+
   const submitHandler = useCallback(() => {
     if (!isValid) return;
 
@@ -86,16 +108,21 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
       color,
     };
 
-    if (isEdit && environment) {
-      updateMutation({
-        environmentId: environment.id,
-        environment: payload,
-      });
-    } else {
-      createMutation({ environment: payload });
-    }
+    const mutationOptions = {
+      onSuccess: () => setOpen(false),
+      onError: (error: AxiosError) => {
+        setSubmitError(extractErrorMessage(error));
+      },
+    };
 
-    setOpen(false);
+    if (isEdit && environment) {
+      updateMutation(
+        { environmentId: environment.id, environment: payload },
+        mutationOptions,
+      );
+    } else {
+      createMutation({ environment: payload }, mutationOptions);
+    }
   }, [
     isValid,
     trimmedName,
@@ -128,7 +155,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
                   />
                 </PopoverTrigger>
                 <PopoverContent className="w-auto" align="start">
-                  <ColorPicker value={color} onChange={setColor} />
+                  <ColorPicker value={color} onChange={handleColorChange} />
                 </PopoverContent>
               </Popover>
               <Input
@@ -136,12 +163,14 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
                 className="flex-1 rounded-l-none"
                 placeholder="e.g. staging"
                 value={name}
-                onChange={(event) => setName(event.target.value)}
+                onChange={(event) => handleNameChange(event.target.value)}
                 maxLength={ENVIRONMENT_NAME_MAX_LENGTH}
               />
             </div>
-            {nameError ? (
-              <p className="comet-body-xs text-destructive">{nameError}</p>
+            {nameError || submitError ? (
+              <p className="comet-body-xs text-destructive">
+                {nameError || submitError}
+              </p>
             ) : (
               <p className="comet-body-xs text-light-slate">
                 Use letters, numbers, dashes, or underscores. Must be unique
@@ -156,7 +185,7 @@ const AddEditEnvironmentDialog: React.FunctionComponent<
               placeholder="Optional description"
               className="min-h-20"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => handleDescriptionChange(event.target.value)}
               maxLength={ENVIRONMENT_DESCRIPTION_MAX_LENGTH}
             />
           </div>
