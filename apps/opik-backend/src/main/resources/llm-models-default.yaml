@@ -186,6 +186,17 @@ gemini:
   - id: "gemini-2.0-flash-lite"
     label: "Gemini 2.0 Flash-Lite"
     structuredOutput: true
+  - id: "gemma-4-26b-a4b-it"
+    label: "Gemma 4 26B A4B IT"
+  - id: "gemma-4-31b-it"
+    label: "Gemma 4 31B IT"
+  - id: "gemma-3-27b-it"
+    label: "Gemma 3 27b It"
+    structuredOutput: true
+  - id: "gemini-gemma-2-9b-it"
+    label: "Gemini Gemma 2 9b It"
+  - id: "gemini-gemma-2-27b-it"
+    label: "Gemini Gemma 2 27b It"
   - id: "lyria-3-clip-preview"
     label: "Lyria 3 Clip Preview"
   - id: "lyria-3-pro-preview"

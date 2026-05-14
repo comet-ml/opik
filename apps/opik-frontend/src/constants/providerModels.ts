@@ -2183,6 +2183,26 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 2.0 Flash-Lite",
     },
     {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,
+      label: "Gemma 4 26B A4B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
+      label: "Gemma 4 31B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_3_27B_IT,
+      label: "Gemma 3 27b It",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_GEMMA_2_9B_IT,
+      label: "Gemini Gemma 2 9b It",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMINI_GEMMA_2_27B_IT,
+      label: "Gemini Gemma 2 27b It",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
       label: "Lyria 3 Clip Preview",
     },
