@@ -40,42 +40,55 @@ export class UpdateService {
   }
 
   /**
-   * Converts JsonListString to an object suitable for merging.
-   * Handles string (JSON parsing), array, and object types.
+   * Converts JsonListString to an object suitable for merging, or null when
+   * the value cannot be represented as a plain object (arrays, non-JSON strings).
+   * A null return signals "not mergeable" so callers can preserve the original value.
    *
    * @param metadata - Metadata in JsonListString format
-   * @returns Object representation of metadata, or empty object if conversion fails
+   * @returns Object representation of metadata, null if conversion is not possible (arrays, unparseable strings)
    */
   private static normalizeMetadata(
     metadata: OpikApi.JsonListString | undefined
-  ): Record<string, unknown> {
+  ): Record<string, unknown> | null {
     if (!metadata) {
       return {};
     }
 
-    // If it's already an object (not an array), use it directly
     if (typeof metadata === "object" && !Array.isArray(metadata)) {
       return metadata;
     }
 
-    // If it's a string, try to parse it as JSON
     if (typeof metadata === "string") {
       try {
         const parsed = JSON.parse(metadata);
-        // If parsed result is an object (not array), use it
-        if (typeof parsed === "object" && !Array.isArray(parsed)) {
-          return parsed;
+        if (typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
         }
       } catch {
-        // If parsing fails, we can't merge - return empty object
-        // The original string will be lost, but we can't merge into a string
+        // unparseable string — not mergeable
       }
     }
 
-    // For arrays or unparseable strings, we can't merge prompts into them
-    // Return empty object - prompts will be the only metadata
-    // Note: This means non-object metadata will be replaced when prompts are added
-    return {};
+    return null;
+  }
+
+  /**
+   * Returns true when the given prompt is already recorded in metadata OR when
+   * metadata is not a plain object (in which case injection should be skipped to
+   * avoid discarding the original value).
+   */
+  static promptAlreadyInjected(
+    metadata: OpikApi.JsonListString | undefined,
+    promptId: string | undefined,
+    commit: string | undefined
+  ): boolean {
+    const obj = this.normalizeMetadata(metadata);
+    if (obj === null) {
+      // Non-object metadata — skip injection to preserve original value.
+      return true;
+    }
+    const existing = Array.isArray(obj.opik_prompts) ? (obj.opik_prompts as PromptInfoDict[]) : [];
+    return existing.some((p) => p.id === promptId && p.version?.commit === commit);
   }
 
   /**
@@ -98,8 +111,8 @@ export class UpdateService {
       this.serializePromptToInfoDict(p)
     );
 
-    const existingObj = this.normalizeMetadata(existingMetadata);
-    const newObj = this.normalizeMetadata(newMetadata);
+    const existingObj = this.normalizeMetadata(existingMetadata) ?? {};
+    const newObj = this.normalizeMetadata(newMetadata) ?? {};
 
     const existingPrompts = append && Array.isArray(existingObj.opik_prompts)
       ? existingObj.opik_prompts as PromptInfoDict[]
@@ -122,8 +135,8 @@ export class UpdateService {
       // Even without prompts, merge existing metadata with new metadata
       // so that update({ metadata: {...} }) preserves prior metadata
       if (restUpdates.metadata && existingMetadata) {
-        const existingObj = this.normalizeMetadata(existingMetadata);
-        const newObj = this.normalizeMetadata(restUpdates.metadata);
+        const existingObj = this.normalizeMetadata(existingMetadata) ?? {};
+        const newObj = this.normalizeMetadata(restUpdates.metadata) ?? {};
         return { ...restUpdates, metadata: { ...existingObj, ...newObj } };
       }
       return restUpdates as Omit<T, "prompts" | "appendPrompts">;
