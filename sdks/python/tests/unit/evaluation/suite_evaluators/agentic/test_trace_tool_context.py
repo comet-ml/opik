@@ -1,15 +1,14 @@
 import datetime
 
-from opik.message_processing.emulation import (
-    local_emulator_message_processor,
-    models,
-)
+from opik.message_processing.emulation import models
 
 from opik.evaluation.suite_evaluators.agentic.context import (
     TraceToolContext,
     build_trace_tool_context,
 )
 from opik.evaluation.suite_evaluators.agentic.entity_ref import EntityRef, EntityType
+
+from . import _seeding
 
 
 def _now():
@@ -40,14 +39,12 @@ def _span(span_id, start_offset_s=0):
 
 
 def _emulator_with(trace, spans):
-    emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
-        active=True
-    )
-    emulator._trace_observations[trace.id] = trace
+    """Seed a fresh emulator with `trace` and `spans` via the public
+    message API so tests don't reach into private storage."""
+    emulator = _seeding.make_emulator()
+    _seeding.seed_trace(emulator, trace)
     for span in spans:
-        emulator._span_observations[span.id] = span
-        emulator._span_to_trace[span.id] = trace.id
-        emulator._span_to_parent_span[span.id] = None
+        _seeding.seed_span(emulator, span, trace_id=trace.id)
     return emulator
 
 

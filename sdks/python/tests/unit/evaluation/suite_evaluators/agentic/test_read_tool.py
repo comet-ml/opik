@@ -7,12 +7,10 @@ correct compressor, tier reporting, and structured error responses.
 import datetime
 import json
 
-from opik.evaluation.suite_evaluators.agentic.context import TraceToolContext
 from opik.evaluation.suite_evaluators.agentic.tools.read import ReadTool
-from opik.message_processing.emulation import (
-    local_emulator_message_processor,
-    models,
-)
+from opik.message_processing.emulation import models
+
+from . import _seeding
 
 
 def _now():
@@ -47,21 +45,7 @@ def _span(span_id, start_offset_s=0, **overrides):
 
 
 def _ctx(trace, spans, parent_by_child=None):
-    parent_by_child = parent_by_child or {s.id: None for s in spans}
-    emulator = local_emulator_message_processor.LocalEmulatorMessageProcessor(
-        active=True
-    )
-    emulator._trace_observations[trace.id] = trace
-    for span in spans:
-        emulator._span_observations[span.id] = span
-        emulator._span_to_trace[span.id] = trace.id
-        emulator._span_to_parent_span[span.id] = parent_by_child.get(span.id)
-    return TraceToolContext(
-        trace=trace,
-        spans=spans,
-        parent_by_child=parent_by_child,
-        emulator=emulator,
-    )
+    return _seeding.build_ctx(trace, spans, parent_by_child)
 
 
 class TestArgumentParsing:
@@ -183,9 +167,7 @@ class TestReadSpan:
         other_span = _span("s-other")
         ctx = _ctx(trace, [active_span])
         # Add another span to the emulator that wasn't in the active set.
-        ctx.emulator._span_observations[other_span.id] = other_span
-        ctx.emulator._span_to_trace[other_span.id] = trace.id
-        ctx.emulator._span_to_parent_span[other_span.id] = None
+        _seeding.seed_span(ctx.emulator, other_span, trace_id=trace.id)
 
         tool = ReadTool()
         response = json.loads(tool.execute('{"type": "span", "id": "s-other"}', ctx))

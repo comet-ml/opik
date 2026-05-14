@@ -46,7 +46,7 @@ def test_default_registry_exposes_overview_and_read_tools():
 
     registered = judge._registry.names()  # noqa: SLF001 — guarding surface
 
-    assert sorted(registered) == ["get_trace_spans", "read"]
+    assert sorted(registered) == ["get_trace_spans", "read", "scan"]
 
 
 def test_default_registry_specs_well_formed():
@@ -56,7 +56,7 @@ def test_default_registry_specs_well_formed():
 
     # Each spec is an OpenAI-style tool descriptor with a function name.
     spec_names = {spec["function"]["name"] for spec in specs}
-    assert spec_names == {"get_trace_spans", "read"}
+    assert spec_names == {"get_trace_spans", "read", "scan"}
 
 
 def test_read_tool_is_reachable_via_registry_dispatch():

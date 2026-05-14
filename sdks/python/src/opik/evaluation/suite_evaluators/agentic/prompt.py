@@ -23,13 +23,32 @@ You have access to tools that let you inspect the agent's full execution trace �
   - Response shape: `{"type", "id", "tier", "data": <payload>}`. Trace payloads are `{"trace": {...}, "spans": [...]}` (a flat list of spans with `parent_span_id`); span payloads are a single span dict.
   - Missing entity or bad arguments come back as `{"error": "..."}` — do not retry the same call; either fix the arguments or try a different ref.
 
+- `scan(type, id, expression)` — query a cached trace or span via a small jq-shaped path expression. Use after `read` (or after `get_trace_spans` for the active trace) when you need a specific value, field, or filtered subset.
+  - `expression` is a constrained path syntax — only the forms below are supported. Anything else returns an `ERROR` envelope.
+    - `.` — the entire entity.
+    - `.foo` / `.foo.bar` — dotted field access. Example: `.trace.input.prompt`.
+    - `.foo[3]` / `.foo[-1]` — array index, negative allowed. Example: `.spans[0]`, `.spans[-1].name`.
+    - `.foo[0:5]` / `.foo[:5]` / `.foo[3:]` — array slice (Python-style; both bounds optional).
+    - `.foo[]` — iterate the array, emit each element. Example: `.spans[].name` gives every span's name.
+    - `..` — recursive descent over every descendant of the entity.
+    - `..|strings` — recursive descent filtered to string values. Example: `..|strings` returns every string inside the entity.
+    - `..|select(<predicate>)` — recursive descent filtered by predicate. Predicates support:
+      - `<path>` — truthy test. Example: `..|select(.error_info)`.
+      - `<path>?` — key-present test (regardless of value). Example: `..|select(.error_info?)`.
+      - `<path> == <literal>` / `<path> != <literal>` — equality. Literals: strings (`"x"`), integers, `true`, `false`, `null`. Example: `..|select(.name == "tool_call")`.
+      - `not <pred>`, `<pred> and <pred>`, `<pred> or <pred>`, `( <pred> )` — boolean combinators.
+  - Truncation hints from `read` (e.g. `[TRUNCATED 1234 chars — use scan('.trace.input.prompt') to see full]`) tell you exactly which `expression` retrieves the un-truncated value. Paste the suggested path verbatim.
+  - Output is text; multi-result expressions emit one value per line. Output is capped at 16 KB and ends with `[TRUNCATED — refine the expression to narrow the result set]` on overflow.
+  - Unsupported syntax / missing entity / over-broad query return an `ERROR` envelope; do not retry the same call — adjust the expression based on the supported forms above.
+
 # Workflow
 
 1. Read the assertions you're being asked to evaluate.
 2. Call `get_trace_spans` once to see the trace's structure.
 3. If an assertion needs full I/O for a specific span (or the whole trace), call `read(type="span", id="<id>")` or `read(type="trace", id="<trace-id>")`. Prefer `read` on a single span over re-reading the whole trace.
-4. Form a verdict per assertion based on what you observe.
-5. When asked for the final answer, return the JSON object the response schema requires — one entry per assertion with `score` (true/false), `reason`, and `confidence`.
+4. When `read` returns truncated strings carrying `scan('<path>')` hints, call `scan` with the exact path to recover the original value. Use `scan` directly when you only need a narrow slice (e.g. one field, one filtered subset) without paying for the surrounding payload.
+5. Form a verdict per assertion based on what you observe.
+6. When asked for the final answer, return the JSON object the response schema requires — one entry per assertion with `score` (true/false), `reason`, and `confidence`.
 
 # Judging discipline
 

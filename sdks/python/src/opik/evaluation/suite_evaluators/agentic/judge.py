@@ -21,7 +21,7 @@ from opik.evaluation.models import base_model
 from opik.evaluation.suite_evaluators.llm_judge import parsers
 
 from . import context, loop, prompt
-from .tools import get_trace_spans, read, registry as tool_registry
+from .tools import get_trace_spans, read, registry as tool_registry, scan
 
 LOGGER = logging.getLogger(__name__)
 
@@ -102,5 +102,6 @@ def _default_registry() -> tool_registry.ToolRegistry:
         tools=[
             get_trace_spans.GetTraceSpansTool(),
             read.ReadTool(),
+            scan.ScanTool(),
         ]
     )
