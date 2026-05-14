@@ -28,6 +28,11 @@ Then:
 - `GET http://localhost:5175/docs` → Swagger UI (auto-generated)
 - `GET http://localhost:5175/openapi.json` → OpenAPI 3 spec
 
+`uv.lock` is intentionally not checked in — the bridge's job is to surface
+Opik SDK regressions, so every `uv sync` resolves against PyPI for the
+newest matching version of `opik`. Run `uv sync --upgrade` if you want to
+refresh an existing `.venv/` to the latest SDK.
+
 If `uv run uvicorn` raises `ModuleNotFoundError: No module named 'opik_sdk_driver'`,
 the editable install drifted. Run `uv sync --reinstall` and retry.
 
