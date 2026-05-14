@@ -87,6 +87,17 @@ public class ReadTool implements ToolExecutor {
      * ({@code FULL → MEDIUM → SKELETON}) and recompresses, so a {@code tier=FULL} request
      * on a multi-MB trace still fits in the model's window. At ~2 chars/token worst case,
      * this caps any single read at ~20K tokens.
+     *
+     * <p>This is a <strong>best-effort heuristic, not a hard boundary</strong>. If the
+     * payload is still over the cap once the smallest tier (SKELETON) is reached,
+     * {@link #guardOutput} logs a WARN and returns the over-cap result anyway — hard-
+     * truncating the JSON payload would corrupt the envelope and break the agent's tool
+     * round. Additionally, {@link #buildResponse} wraps the payload in an envelope with
+     * a few extra fields ({@code tier}, {@code type}, {@code id}, optional
+     * {@code cache_warning}), so the final response can exceed {@code OUTPUT_SAFETY_CHARS}
+     * by a few hundred chars even in the common path. Operators investigating the WARN
+     * should tighten the per-tier limits in {@link TraceCompressor} or
+     * {@link GenericCompressor} rather than raising this cap.
      */
     static final int OUTPUT_SAFETY_CHARS = 40_000;
 
@@ -480,6 +491,11 @@ public class ReadTool implements ToolExecutor {
      * {@code SKELETON} requests). Tracking the request prevents an infinite loop in that
      * case — once we've asked for SKELETON, the next call returns SKELETON regardless of
      * the {@code tier} field on the result.
+     *
+     * <p><strong>Best-effort cap:</strong> if the smallest tier is still over
+     * {@link #OUTPUT_SAFETY_CHARS}, the over-cap result is returned anyway (with a WARN
+     * log carrying the actual size) — see {@link #OUTPUT_SAFETY_CHARS} for why we don't
+     * hard-truncate.
      */
     private static CompressionResult guardOutput(
             CompressionResult initial,
@@ -492,15 +508,19 @@ public class ReadTool implements ToolExecutor {
         // because Enum.values() allocates a fresh array on each call.
         int maxAttempts = CompressionTier.values().length;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            if (current.payload().toString().length() <= OUTPUT_SAFETY_CHARS) {
+            int currentSize = current.payload().toString().length();
+            if (currentSize <= OUTPUT_SAFETY_CHARS) {
                 return current;
             }
             CompressionTier next = downgradeTierOrSame(lastRequested);
             if (next == lastRequested) {
                 // Single warn per call: we've exhausted the ladder. Emitted at most once even if
                 // the agent issues many read() calls, since this is the terminal branch.
-                log.warn("Read tool output exceeded '{}' chars at smallest tier '{}' — returning anyway",
-                        OUTPUT_SAFETY_CHARS, lastRequested);
+                // currentSize gives operators the actual overshoot so they can decide whether to
+                // tighten the per-tier limits in TraceCompressor / GenericCompressor.
+                log.warn(
+                        "Read tool output '{}' chars exceeded cap '{}' at smallest tier '{}' — returning anyway (cap is best-effort, not hard)",
+                        currentSize, OUTPUT_SAFETY_CHARS, lastRequested);
                 return current;
             }
             // debug, not info: a many-rounds-per-evaluation agent could trigger one downgrade per
