@@ -1,10 +1,8 @@
 import json
-from typing import Any, Dict, TYPE_CHECKING
+from typing import Any, Dict
 
+from .. import context
 from ..compression import span_tree_serializer
-
-if TYPE_CHECKING:
-    from ..context import TraceToolContext
 
 
 GET_TRACE_SPANS_SPEC: Dict[str, Any] = {
@@ -38,7 +36,10 @@ class GetTraceSpansTool:
     name = "get_trace_spans"
     spec = GET_TRACE_SPANS_SPEC
 
-    def execute(self, arguments: str, ctx: "TraceToolContext") -> str:
+    # noinspection PyMethodMayBeStatic
+    # Instance method to satisfy the ToolExecutor protocol; stateless today,
+    # but uniform with future tools that may carry per-instance config.
+    def execute(self, arguments: str, ctx: context.TraceToolContext) -> str:
         overview = span_tree_serializer.serialize_overview(
             ctx.trace, ctx.spans, ctx.parent_by_child
         )

@@ -9,6 +9,7 @@ from opik.message_processing.emulation import (
 )
 
 from . import entity_ref
+from .compression import trace_compressor
 
 LOGGER = logging.getLogger(__name__)
 
@@ -19,7 +20,9 @@ def _isoformat(value: Optional[datetime.datetime]) -> Optional[str]:
     return value.isoformat()
 
 
-def _serialize_span(span: models.SpanModel) -> Dict[str, Any]:
+def _serialize_span(
+    span: models.SpanModel, parent_span_id: Optional[str] = None
+) -> Dict[str, Any]:
     """Serialize a SpanModel to a JSON-shaped dict.
 
     Child spans are intentionally NOT inlined here; the span tree is rendered
@@ -27,11 +30,16 @@ def _serialize_span(span: models.SpanModel) -> Dict[str, Any]:
     holds one entry per span and `read(type=span, id=...)` returns just that
     span. Children references would otherwise produce duplicate data and
     inconsistent caching behavior.
+
+    `parent_span_id` is sourced from the emulator's span-to-parent map at
+    cache time so the SKELETON tier of `read(type=trace, ...)` can rebuild
+    the nested span tree without needing the live emulator.
     """
     return {
         "id": span.id,
         "name": span.name,
         "type": span.type,
+        "parent_span_id": parent_span_id,
         "project_name": span.project_name,
         "start_time": _isoformat(span.start_time),
         "end_time": _isoformat(span.end_time),
@@ -83,12 +91,20 @@ class TraceToolContext:
     )
 
     def __post_init__(self) -> None:
+        # Trace cache holds the COMPOSITE `{"trace": ..., "spans": [...]}`
+        # so `scan(type=trace, expression='.spans[0].input')` works without
+        # a preceding `read`. Matches backend cache semantics
+        # (see TraceCompressor.buildFullJson on the Java side).
+        span_dicts = [
+            _serialize_span(span, self.parent_by_child.get(span.id))
+            for span in self.spans
+        ]
         self._fetched[
             entity_ref.EntityRef(entity_ref.EntityType.TRACE, self.trace.id)
-        ] = _serialize_trace(self.trace)
-        for span in self.spans:
+        ] = trace_compressor.build_full_json(_serialize_trace(self.trace), span_dicts)
+        for span, span_dict in zip(self.spans, span_dicts):
             self._fetched[entity_ref.EntityRef(entity_ref.EntityType.SPAN, span.id)] = (
-                _serialize_span(span)
+                span_dict
             )
 
     def get_cached(self, ref: entity_ref.EntityRef) -> Optional[Dict[str, Any]]:
@@ -102,16 +118,31 @@ class TraceToolContext:
     ) -> Optional[Dict[str, Any]]:
         """Best-effort resolution against the local emulator for non-pre-seeded entities.
 
-        Returns serialized dicts. Other entity types (DATASET, DATASET_ITEM,
-        PROJECT, THREAD) are not yet supported and return None — they will
-        land alongside `read` in Phase 2.
+        Traces resolve to the composite `{"trace": ..., "spans": [...]}`
+        shape used by the pre-seeded cache. Spans resolve to a flat span
+        dict. Only TRACE and SPAN are in scope for v1.
         """
         if ref.type == entity_ref.EntityType.TRACE:
             trace = self.emulator.get_trace(ref.id)
-            return _serialize_trace(trace) if trace is not None else None
+            if trace is None:
+                return None
+            spans = self.emulator.spans_for_trace(ref.id)
+            parent_map = self.emulator.parent_span_ids_for_trace(ref.id)
+            return trace_compressor.build_full_json(
+                _serialize_trace(trace),
+                [_serialize_span(span, parent_map.get(span.id)) for span in spans],
+            )
         if ref.type == entity_ref.EntityType.SPAN:
             span = self.emulator.get_span(ref.id)
-            return _serialize_span(span) if span is not None else None
+            if span is None:
+                return None
+            trace_id = self.emulator.trace_id_for_span(span.id)
+            parent_id = (
+                self.emulator.parent_span_ids_for_trace(trace_id).get(span.id)
+                if trace_id is not None
+                else None
+            )
+            return _serialize_span(span, parent_id)
         return None
 
 

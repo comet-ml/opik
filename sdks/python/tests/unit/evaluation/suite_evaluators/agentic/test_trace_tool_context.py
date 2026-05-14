@@ -61,9 +61,13 @@ class TestTraceToolContextPreseed:
             emulator=_emulator_with(trace, []),
         )
         cached = ctx.get_cached(EntityRef(EntityType.TRACE, trace.id))
+        # Trace cache holds the composite {trace, spans} shape — this is
+        # what `scan` queries against, so paths like `.trace.input` or
+        # `.spans[0].name` resolve from a single cached entry.
         assert cached is not None
-        assert cached["id"] == trace.id
-        assert cached["input"] == {"q": "hi"}
+        assert cached["trace"]["id"] == trace.id
+        assert cached["trace"]["input"] == {"q": "hi"}
+        assert cached["spans"] == []
 
     def test_active_spans_cached(self):
         trace = _trace()

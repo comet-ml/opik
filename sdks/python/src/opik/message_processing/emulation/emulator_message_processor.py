@@ -139,6 +139,15 @@ class EmulatorMessageProcessor(message_processors.BaseMessageProcessor, abc.ABC)
         with self._rlock:
             return self._span_observations.get(span_id)
 
+    def trace_id_for_span(self, span_id: str) -> Optional[str]:
+        """Return the trace id associated with `span_id`, or None.
+
+        The span-to-trace mapping is populated at message-process time,
+        so this is a flat lookup with no tree-build side effect.
+        """
+        with self._rlock:
+            return self._span_to_trace.get(span_id)
+
     def parent_span_ids_for_trace(self, trace_id: str) -> Dict[str, Optional[str]]:
         """Return `{span_id: parent_span_id}` for every span in `trace_id`.
 
