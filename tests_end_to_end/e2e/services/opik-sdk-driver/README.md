@@ -9,8 +9,8 @@ This service is consumed by the TypeScript clients shipped in OPIK-6499 and
 wired into Playwright via `webServer` in OPIK-6500. It is not invoked directly
 by any test in this ticket.
 
-See `docs/superpowers/specs/2026-04-23-opik-2.0-e2e-infrastructure-design.md`
-§7 for the broader architecture rationale.
+See [OPIK-6106](https://comet-ml.atlassian.net/browse/OPIK-6106) for the
+broader Opik 2.0 E2E infrastructure design that motivates this service.
 
 ## Run locally
 
