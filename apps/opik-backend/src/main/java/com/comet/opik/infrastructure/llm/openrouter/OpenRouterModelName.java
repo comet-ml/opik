@@ -113,6 +113,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     DEEPSEEK_DEEPSEEK_V3_2_EXP("deepseek/deepseek-v3.2-exp"),
     DEEPSEEK_DEEPSEEK_V3_2_SPECIALE("deepseek/deepseek-v3.2-speciale"),
     DEEPSEEK_DEEPSEEK_V4_FLASH("deepseek/deepseek-v4-flash"),
+    DEEPSEEK_DEEPSEEK_V4_FLASH_FREE("deepseek/deepseek-v4-flash:free"),
     DEEPSEEK_DEEPSEEK_V4_PRO("deepseek/deepseek-v4-pro"),
     ELEUTHERAI_LLEMMA_7B("eleutherai/llemma_7b"),
     ESSENTIALAI_RNJ_1_INSTRUCT("essentialai/rnj-1-instruct"),
