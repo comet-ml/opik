@@ -570,9 +570,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "false"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
@@ -609,9 +606,6 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
-  # Default: false
-  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; UI no longer reads this.
-  collaboratorsTabEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
