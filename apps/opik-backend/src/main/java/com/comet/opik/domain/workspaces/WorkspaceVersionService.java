@@ -7,6 +7,7 @@ import com.comet.opik.domain.DashboardDAO;
 import com.comet.opik.domain.DatasetDAO;
 import com.comet.opik.domain.DemoData;
 import com.comet.opik.domain.ExperimentDAO;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.OptimizationDAO;
 import com.comet.opik.domain.PromptDAO;
 import com.comet.opik.domain.evaluators.AutomationRuleDAO;
@@ -107,6 +108,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected final TransactionTemplate transactionTemplate;
     protected final ExperimentDAO experimentDAO;
     protected final OptimizationDAO optimizationDAO;
+    protected final FeedbackScoreDAO feedbackScoreDAO;
     protected final ServiceTogglesConfig serviceTogglesConfig;
     protected final CacheManager cacheManager;
     protected final CacheConfiguration cacheConfiguration;
@@ -116,6 +118,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
     protected AbstractWorkspaceVersionService(@NonNull TransactionTemplate transactionTemplate,
             @NonNull ExperimentDAO experimentDAO,
             @NonNull OptimizationDAO optimizationDAO,
+            @NonNull FeedbackScoreDAO feedbackScoreDAO,
             @NonNull ServiceTogglesConfig serviceTogglesConfig,
             @NonNull CacheManager cacheManager,
             @NonNull CacheConfiguration cacheConfiguration,
@@ -124,6 +127,7 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
         this.transactionTemplate = transactionTemplate;
         this.experimentDAO = experimentDAO;
         this.optimizationDAO = optimizationDAO;
+        this.feedbackScoreDAO = feedbackScoreDAO;
         this.serviceTogglesConfig = serviceTogglesConfig;
         this.cacheManager = cacheManager;
         this.cacheConfiguration = cacheConfiguration;
@@ -217,6 +221,16 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 .map(Workspace::lastKnownVersion)
                 .flatMap(OpikVersion::findByValue);
         workspacesService.upsertVersion(workspaceId, newVersion, userName);
+        // Probe the legacy feedback_scores ClickHouse table once per workspace version
+        // determination and persist the result. The stats query path uses this flag to skip
+        // the legacy UNION when no data exists there.
+        try {
+            boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
+            workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
+        } catch (RuntimeException exception) {
+            log.warn("Failed to probe legacy feedback_scores, leaving flag untouched, workspaceId '{}'",
+                    workspaceId, exception);
+        }
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(
                 "workspace_id", workspaceId,

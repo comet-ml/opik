@@ -51,6 +51,22 @@ public interface WorkspacesService {
     List<String> findMigrationSkippedWorkspaceIds();
 
     long countMigrationSkipped();
+
+    /**
+     * Returns whether the workspace is known to have data in the legacy {@code feedback_scores}
+     * ClickHouse table. Defaults to {@code true} when no row exists yet — callers must include the
+     * legacy table in any UNION until explicitly told otherwise. The workspace version
+     * determination flow probes the table once and persists the result via
+     * {@link #upsertHasLegacyScores}.
+     */
+    boolean hasLegacyScores(String workspaceId);
+
+    /**
+     * Idempotent upsert that records the workspace's legacy-feedback-scores status explicitly.
+     * Called from the workspace version determination flow after a one-shot ClickHouse presence
+     * check on the {@code feedback_scores} table.
+     */
+    void upsertHasLegacyScores(String workspaceId, boolean hasLegacyScores, String userName);
 }
 
 @Singleton
@@ -145,5 +161,24 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public long countMigrationSkipped() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).countMigrationSkipped());
+    }
+
+    @Override
+    public boolean hasLegacyScores(@NonNull String workspaceId) {
+        if (StringUtils.isBlank(workspaceId)) {
+            // No workspace context — fall back to safe-include.
+            return true;
+        }
+        return transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).findHasLegacyScores(workspaceId))
+                .orElse(true);
+    }
+
+    @Override
+    public void upsertHasLegacyScores(@NonNull String workspaceId, boolean hasLegacyScores,
+            @NonNull String userName) {
+        transactionTemplate.inTransaction(WRITE,
+                handle -> handle.attach(WorkspacesDAO.class)
+                        .upsertHasLegacyScores(workspaceId, hasLegacyScores, userName));
     }
 }
