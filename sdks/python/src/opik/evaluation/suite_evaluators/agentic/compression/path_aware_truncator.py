@@ -15,6 +15,7 @@ with a path-stack list instead of the Java visitor pattern.
 
 from typing import Any, List
 
+from .. import path_format
 from . import string_truncator
 
 
@@ -33,15 +34,19 @@ def truncate_strings(payload: Any, max_string_chars: int) -> Any:
 
 def _walk(node: Any, max_chars: int, path_stack: List[str]) -> Any:
     if isinstance(node, str):
-        return string_truncator.truncate(node, max_chars, _render_path(path_stack))
+        return string_truncator.truncate(
+            node, max_chars, path_format.render_path(path_stack)
+        )
     if isinstance(node, dict):
         return {
-            key: _descend(value, max_chars, path_stack, _field_step(key))
+            key: _descend(
+                value, max_chars, path_stack, step=path_format.field_step(key)
+            )
             for key, value in node.items()
         }
     if isinstance(node, (list, tuple)):
         return [
-            _descend(item, max_chars, path_stack, _index_step(idx))
+            _descend(item, max_chars, path_stack, step=path_format.index_step(idx))
             for idx, item in enumerate(node)
         ]
     return node
@@ -53,28 +58,3 @@ def _descend(value: Any, max_chars: int, path_stack: List[str], step: str) -> An
         return _walk(value, max_chars, path_stack)
     finally:
         path_stack.pop()
-
-
-def _render_path(path_stack: List[str]) -> str:
-    if not path_stack:
-        return "."
-    return "".join(path_stack)
-
-
-def _field_step(key: Any) -> str:
-    text = str(key)
-    if _is_bare_identifier(text):
-        return "." + text
-    return '["' + text.replace('"', '\\"') + '"]'
-
-
-def _index_step(index: int) -> str:
-    return "[" + str(index) + "]"
-
-
-def _is_bare_identifier(text: str) -> bool:
-    if not text:
-        return False
-    if not (text[0].isalpha() or text[0] == "_"):
-        return False
-    return all(ch.isalnum() or ch == "_" for ch in text)

@@ -41,14 +41,23 @@ You have access to tools that let you inspect the agent's full execution trace �
   - Output is text; multi-result expressions emit one value per line. Output is capped at 16 KB and ends with `[TRUNCATED — refine the expression to narrow the result set]` on overflow.
   - Unsupported syntax / missing entity / over-broad query return an `ERROR` envelope; do not retry the same call — adjust the expression based on the supported forms above.
 
+- `search(type, id, pattern, path?)` — case-insensitive regex over every string value inside a cached trace or span. Use when an assertion mentions a keyword (an error fragment, a tool name, a model id) but you don't yet know which span carries it.
+  - `pattern`: a Python regex; matched against every string in the entity (or the subtree selected by `path`). Case is ignored.
+  - `path` (optional): a `scan`-shaped expression that narrows the search scope. Supports `.foo`, `.foo[3]`, `.foo[]`, and chains thereof — `..` and slices are not allowed here (use `scan` for those).
+  - Returns up to 50 matches, one per line, as `<jq-path>: <value-with-match>`. Each value is truncated at 200 chars; the total response is capped at 16 KB.
+  - The emitted jq paths are anchored at the cached entity, so you can paste any one of them straight into `scan(type, id, expression=<that path>)` to recover the full value (without truncation).
+  - Typical loop: `get_trace_spans` → spot a keyword you care about → `search` to locate it → `scan` the surfaced path to pull the full string.
+  - Bad regex / missing entity / unsupported `path` form return an `ERROR` envelope.
+
 # Workflow
 
 1. Read the assertions you're being asked to evaluate.
 2. Call `get_trace_spans` once to see the trace's structure.
 3. If an assertion needs full I/O for a specific span (or the whole trace), call `read(type="span", id="<id>")` or `read(type="trace", id="<trace-id>")`. Prefer `read` on a single span over re-reading the whole trace.
 4. When `read` returns truncated strings carrying `scan('<path>')` hints, call `scan` with the exact path to recover the original value. Use `scan` directly when you only need a narrow slice (e.g. one field, one filtered subset) without paying for the surrounding payload.
-5. Form a verdict per assertion based on what you observe.
-6. When asked for the final answer, return the JSON object the response schema requires — one entry per assertion with `score` (true/false), `reason`, and `confidence`.
+5. When you know a keyword belongs somewhere in the trace but don't know which span, call `search(type, id, pattern)` to locate it, then `scan` the surfaced path for the full value.
+6. Form a verdict per assertion based on what you observe.
+7. When asked for the final answer, return the JSON object the response schema requires — one entry per assertion with `score` (true/false), `reason`, and `confidence`.
 
 # Judging discipline
 
