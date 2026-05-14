@@ -27,15 +27,6 @@ def install_signal_handlers(shutdown_event: threading.Event) -> bool:
         _shutdown_by_signal = True
         LOGGER.info("Received signal %s, shutting down", signum)
         shutdown_event.set()
-        # Restore default handlers so a second signal force-kills (useful if the
-        # framework wedges on its own KeyboardInterrupt path), then raise
-        # KeyboardInterrupt to unwind the main thread. Without this, agents that
-        # block on `while True: sleep()` or on a server framework's own SIGINT
-        # path never observe the event and only die when the supervisor sends
-        # SIGKILL after the graceful timeout.
-        signal.signal(signal.SIGINT, signal.SIG_DFL)
-        signal.signal(signal.SIGTERM, signal.SIG_DFL)
-        raise KeyboardInterrupt
 
     try:
         signal.signal(signal.SIGTERM, handler)

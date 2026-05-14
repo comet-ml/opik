@@ -21,8 +21,7 @@ def test_install_signal_handlers__sets_shutdown_event_on_sigterm():
     shutdown_event = threading.Event()
     activate_module.install_signal_handlers(shutdown_event)
 
-    with pytest.raises(KeyboardInterrupt):
-        signal.raise_signal(signal.SIGTERM)
+    signal.raise_signal(signal.SIGTERM)
 
     assert shutdown_event.is_set()
 
@@ -31,8 +30,7 @@ def test_install_signal_handlers__sets_shutdown_event_on_sigint():
     shutdown_event = threading.Event()
     activate_module.install_signal_handlers(shutdown_event)
 
-    with pytest.raises(KeyboardInterrupt):
-        signal.raise_signal(signal.SIGINT)
+    signal.raise_signal(signal.SIGINT)
 
     assert shutdown_event.is_set()
 
@@ -60,24 +58,9 @@ def test_signal_handler__sets_shutdown_by_signal_flag():
     shutdown_event = threading.Event()
     activate_module.install_signal_handlers(shutdown_event)
 
-    with pytest.raises(KeyboardInterrupt):
-        signal.raise_signal(signal.SIGTERM)
+    signal.raise_signal(signal.SIGTERM)
 
     assert activate_module._shutdown_by_signal is True
-
-
-def test_signal_handler__restores_default_handlers_after_first_signal():
-    """A second SIGINT/SIGTERM after the first should hit the default handler (force-exit),
-    not our cooperative handler — otherwise an agent that wedges on KeyboardInterrupt
-    can't be killed without SIGKILL."""
-    shutdown_event = threading.Event()
-    activate_module.install_signal_handlers(shutdown_event)
-
-    with pytest.raises(KeyboardInterrupt):
-        signal.raise_signal(signal.SIGINT)
-
-    assert signal.getsignal(signal.SIGINT) == signal.SIG_DFL
-    assert signal.getsignal(signal.SIGTERM) == signal.SIG_DFL
 
 
 def test_signal_then_warn__full_flow_no_warning(capsys):
@@ -85,8 +68,7 @@ def test_signal_then_warn__full_flow_no_warning(capsys):
     shutdown_event = threading.Event()
     activate_module.install_signal_handlers(shutdown_event)
 
-    with pytest.raises(KeyboardInterrupt):
-        signal.raise_signal(signal.SIGTERM)
+    signal.raise_signal(signal.SIGTERM)
 
     assert shutdown_event.is_set()
     activate_module._warn_if_no_blocking_call()
