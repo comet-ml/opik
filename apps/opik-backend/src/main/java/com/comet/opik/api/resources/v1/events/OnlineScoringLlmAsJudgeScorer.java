@@ -21,6 +21,7 @@ import com.comet.opik.infrastructure.OpikConfiguration;
 import com.comet.opik.infrastructure.ServiceTogglesConfig;
 import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
+import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
@@ -163,17 +164,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 UserLog.RULE_ID, message.ruleId().toString());
 
         // Spans are fetched here, in the reactive chain, only when the agentic-tools path could
-        // fire — either the experimentId-driven branch is on (tools always attached) or the
-        // toggle is on and the provider supports tools (the size-based branch may attach tools).
-        // Keeping the fetch reactive and out of evaluate() avoids the .block() pattern that
-        // pinned a workersScheduler thread for the upstream wait (OPIK-6308). When neither
-        // condition holds, an empty list is enough — the size estimate stays below threshold,
-        // useTools resolves to false, and handleToolCalls isn't reached.
+        // fire — i.e. when the provider supports tool-calling AND either the experimentId
+        // branch is on (test-suite assertion) or the size-based toggle is on. If the provider
+        // can't handle tools, shouldUseAgenticTools will fall back to inline regardless, so
+        // pre-fetching spans would just be wasted I/O. Keeping the fetch reactive and out of
+        // evaluate() avoids the .block() pattern that pinned a workersScheduler thread for the
+        // upstream wait (OPIK-6308).
         String modelName = message.llmAsJudgeCode().model().name();
-        boolean spansNeeded = LlmAsJudgeToolsMode.shouldUseTools(message)
-                || (serviceTogglesConfig.isAgenticToolsEnabled()
-                        && OnlineScoringEngine.supportsToolCalling(
-                                llmProviderFactory.getLlmProvider(modelName)));
+        boolean spansNeeded = OnlineScoringEngine.supportsToolCalling(
+                llmProviderFactory.getLlmProvider(modelName))
+                && (LlmAsJudgeToolsMode.shouldUseTools(message)
+                        || serviceTogglesConfig.isAgenticToolsEnabled());
         Mono<List<Span>> spansMono = spansNeeded
                 ? spanService.getByTraceIds(Set.of(trace.id()))
                         .collectList()
@@ -215,7 +216,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         }))
                         .flatMap(initialResponse -> prepared.useTools()
                                 ? handleToolCalls(initialResponse, prepared.scoreRequest(),
-                                        prepared.structuredRequest(), message, spans, mdc)
+                                        prepared.structuredRequest(), message, spans, prepared.fullJson(), mdc)
                                 : Mono.just(initialResponse)))
                 .map(chatResponse -> {
                     try (var logContext = wrapWithMdc(mdc)) {
@@ -252,9 +253,15 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // can seed the read-tool cache without a second query. estimateTraceContextTokens
             // works on the {trace, spans} composite — small trace with huge spans still trips
             // the size-based agentic-tools branch.
+            //
+            // Build the full JSON ONCE here when we'll need the size estimate; if useTools
+            // resolves true, handleToolCalls reuses this same JsonNode to pre-seed the cache
+            // instead of rebuilding. Saves a full trace+spans serialization on every big-trace
+            // run (the most CPU-/GC-expensive part of routing).
             String modelName = message.llmAsJudgeCode().model().name();
-            int estimatedContextTokens = OnlineScoringEngine.estimateTraceContextTokens(
-                    trace, spans, traceCompressor, onlineScoringConfig.getAgenticToolsCharsPerToken());
+            JsonNode fullJson = traceCompressor.buildFullJson(trace, spans);
+            int estimatedContextTokens = OnlineScoringEngine.estimateTokensFromJson(
+                    fullJson, onlineScoringConfig.getAgenticToolsCharsPerToken());
             boolean useTools = shouldUseAgenticTools(message, estimatedContextTokens, modelName);
 
             ChatRequest scoreRequest;
@@ -313,10 +320,16 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // {} placeholder, but the helper invocation itself is still evaluated eagerly.
             if (userFacingLogger.isInfoEnabled()) {
                 userFacingLogger.info("Sending traceId '{}' to LLM: {}",
-                        trace.id(), summarizeRequest(scoreRequest, message));
+                        trace.id(), summarizeRequest(scoreRequest, message, useTools));
             }
 
-            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
+            // fullJson is only useful downstream on the agentic-tools path (handleToolCalls
+            // pre-seeds it into the tool cache). On the inline path we discard it — we already
+            // paid for the build to compute the size estimate; skipping the carry avoids
+            // holding a potentially-multi-MB JsonNode on the chain for an evaluation that
+            // doesn't consume it.
+            return new PreparedEvaluation(scoreRequest, structuredRequest, useTools,
+                    useTools ? fullJson : null);
         }
     }
 
@@ -356,10 +369,19 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop. Tools fire
-     * when either the experimentId-driven branch applies (test-suite assertion) or the
-     * size-based branch applies (toggle on, context above threshold, provider supports tools).
-     * Side-effects: emits one of two user-facing diagnostic logs when the size branch is
-     * non-trivial, so operators can correlate the routing decision with the trace.
+     * when EITHER (a) the experimentId-driven branch applies (test-suite assertion) OR
+     * (b) the size-based branch applies (toggle on, context above threshold) — AND the
+     * provider supports tool-calling. Without the provider check, a non-tool-calling model
+     * (Ollama / Custom / OpikFree) selected via {@code test_suite_model} metadata would
+     * crash inside the LangChain4j chat call when the request carries {@code toolSpecifications}.
+     *
+     * <p>When the experimentId path wants tools but the provider can't handle them, we fall
+     * back to the inline path with a user-facing warn — assertions that depend on tool-driven
+     * span inspection won't be reliable for that model, and surfacing the misconfiguration
+     * loudly is better than the silent crash the old code produced.
+     *
+     * <p>Side-effects: emits user-facing diagnostic logs whenever the decision is non-trivial,
+     * so operators can correlate the routing with the trace.
      */
     // Package-private for unit tests.
     boolean shouldUseAgenticTools(TraceToScoreLlmAsJudge message, int estimatedContextTokens, String modelName) {
@@ -368,9 +390,17 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 llmProviderFactory.getLlmProvider(modelName));
         boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                 && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
-        boolean useTools = experimentIdPath || (overSizeThreshold && providerSupportsTools);
+        boolean wantsTools = experimentIdPath || overSizeThreshold;
+        boolean useTools = wantsTools && providerSupportsTools;
 
-        if (!experimentIdPath && overSizeThreshold && !providerSupportsTools) {
+        if (experimentIdPath && !providerSupportsTools) {
+            userFacingLogger.warn(
+                    "Test-suite assertion for traceId '{}' selected model '{}' which does not support tool"
+                            + " calling; falling back to inline path — assertions that depend on tool-driven"
+                            + " span inspection won't work for this model. Pick a tool-calling provider"
+                            + " (OpenAI / Anthropic / Gemini / OpenRouter / Vertex / Bedrock) for the rule.",
+                    message.trace().id(), modelName);
+        } else if (!experimentIdPath && overSizeThreshold && !providerSupportsTools) {
             userFacingLogger.warn(
                     "Trace context exceeds '{}' tokens but provider for model '{}' does not support tool"
                             + " calling; falling back to inline path — may overflow context window.",
@@ -404,7 +434,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
     // Package-private for unit tests.
     Mono<ChatResponse> handleToolCalls(ChatResponse chatResponse, ChatRequest toolRequest,
             ChatRequest structuredRequest, TraceToScoreLlmAsJudge message, List<Span> spans,
-            Map<String, String> mdc) {
+            JsonNode fullJson, Map<String, String> mdc) {
 
         AiMessage aiMessage = chatResponse.aiMessage();
         if (!aiMessage.hasToolExecutionRequests()) {
@@ -413,9 +443,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
         var trace = message.trace();
         var ctx = new TraceToolContext(trace, spans, message.workspaceId(), message.userName());
-        // Pre-seed the active trace into the cache so read/jq/search can hit it without re-fetching.
+        // Pre-seed the active trace into the cache using the JSON that prepareEvaluation
+        // already built for the size estimate — saves a redundant traceCompressor.buildFullJson
+        // call on big-trace evaluations. Fall back to rebuilding if the caller didn't supply
+        // one (e.g. unit tests that call handleToolCalls directly).
         ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()),
-                traceCompressor.buildFullJson(trace, spans));
+                fullJson != null ? fullJson : traceCompressor.buildFullJson(trace, spans));
 
         // Subsequent rounds use tool_choice=AUTO so the model can decide when it has enough
         // information to stop investigating. The initial call uses REQUIRED to force ≥1 tool
@@ -531,7 +564,14 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         boolean exhaustedLogged = false;
     }
 
-    private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools) {
+    /**
+     * Carry from {@link #prepareEvaluation} to {@link #evaluate}. {@code fullJson} is the
+     * pre-built {@code {trace, spans}} JSON used both for the size estimate and (when
+     * {@code useTools} is true) for pre-seeding the tool context's cache — null on the
+     * inline path so we don't hold a multi-MB JsonNode for evaluations that won't consume it.
+     */
+    private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools,
+            JsonNode fullJson) {
     }
 
     /**
@@ -541,7 +581,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      * in a stored log lands trace content (and any tokens or PII it carries) in clear
      * text downstream of whatever sinks the user-facing log feeds. We log shape only.
      */
-    private static String summarizeRequest(ChatRequest request, TraceToScoreLlmAsJudge message) {
+    private static String summarizeRequest(ChatRequest request, TraceToScoreLlmAsJudge message, boolean useTools) {
         int messageCount = request.messages() == null ? 0 : request.messages().size();
         int totalChars = request.messages() == null
                 ? 0
@@ -549,7 +589,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
         return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
                 message.llmAsJudgeCode().model().name(),
-                messageCount, totalChars, toolSpecCount, shouldUseTools(message));
+                messageCount, totalChars, toolSpecCount, useTools);
     }
 
     /**

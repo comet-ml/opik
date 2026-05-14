@@ -150,14 +150,19 @@ class OnlineScoringLlmAsJudgeScorerTest {
     class RoutingGateTests {
 
         // Truth table: experimentId × toggle × tokens >= threshold × provider supports tools → useTools.
-        // The first row tests the experimentId shortcut (always true). Below that, the size-based
-        // branch — true only when toggle=on AND tokens>=threshold AND provider supports tools.
+        // Tools fire when EITHER (a) the experimentId branch is on OR (b) the size branch is on,
+        // AND the provider supports tool-calling. Without the provider check, a non-tool-calling
+        // model selected via test_suite_model metadata would crash inside the chat call when the
+        // request carries tool specs (Logical bug surfaced by review of the experimentId path).
         @ParameterizedTest(name = "expId={0}, toggle={1}, tokens={2}, threshold={3}, provider={4} → expected useTools={5}")
         @CsvSource({
-                // experimentId path → always tools, regardless of everything else
+                // experimentId path → tools when provider supports them
                 "true,  false, 0,     50000, OPEN_AI, true",
                 "true,  true,  60000, 50000, OPEN_AI, true",
-                "true,  true,  60000, 50000, OLLAMA,  true",
+                // experimentId set BUT provider doesn't support tools → fall back to inline with a warn
+                // (assertions that depend on tool-driven span inspection won't be reliable for this model;
+                // we surface the misconfig loudly rather than crash inside the chat call).
+                "true,  true,  60000, 50000, OLLAMA,  false",
                 // size-based path — all three preconditions must hold
                 "false, true,  60000, 50000, OPEN_AI, true",
                 "false, true,  50000, 50000, OPEN_AI, true",
@@ -230,7 +235,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
         TraceToScoreLlmAsJudge message = newMessage(UUID.randomUUID());
 
         ChatResponse result = scorer
-                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), Map.of())
+                .handleToolCalls(plainResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of())
                 .block();
 
         assertThat(result).isSameAs(plainResponse);
@@ -273,7 +278,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(initialResponse, toolRequest, structuredRequest, message,
-                List.of(), Map.of()).block();
+                List.of(), null, Map.of()).block();
 
         assertThat(result).isSameAs(finalResponse);
 
@@ -345,7 +350,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
 
         org.assertj.core.api.Assertions
                 .assertThatThrownBy(() -> scorer.handleToolCalls(
-                        initialResponse, toolRequest, structuredRequest, message, List.of(), Map.of()).block())
+                        initialResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block())
                 .isSameAs(providerFailure);
 
         // Exactly one provider call attempted; the loop did not swallow + continue.
@@ -398,7 +403,7 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .build();
 
         ChatResponse result = scorer.handleToolCalls(
-                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), Map.of()).block();
+                toolCallingResponse, toolRequest, structuredRequest, message, List.of(), null, Map.of()).block();
 
         // Result is the wrap-up structured response — wrap-up still fires when the cap is hit.
         assertThat(result).isSameAs(finalResponse);

@@ -127,7 +127,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
                             OnlineScoringEngine.toReplacements(message.code().arguments(), trace));
                 }
                 if (userFacingLogger.isInfoEnabled()) {
-                    userFacingLogger.info("Sending traceId '{}' to Python evaluator: {}",
+                    userFacingLogger.info("Sending traceId '{}' to Python evaluator: '{}'",
                             trace.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
                 }
                 return data;

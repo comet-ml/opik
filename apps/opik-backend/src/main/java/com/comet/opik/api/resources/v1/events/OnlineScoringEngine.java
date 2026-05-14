@@ -676,10 +676,21 @@ public class OnlineScoringEngine {
      */
     public static int estimateTraceContextTokens(@NonNull Trace trace, @NonNull List<Span> spans,
             @NonNull TraceCompressor traceCompressor, int charsPerToken) {
+        return estimateTokensFromJson(traceCompressor.buildFullJson(trace, spans), charsPerToken);
+    }
+
+    /**
+     * Same as {@link #estimateTraceContextTokens} but skips the JSON build. Used when the
+     * caller already has the full {@code {trace, spans}} JSON in hand (e.g. when it's going
+     * to be pre-seeded into the tool context's cache anyway) — avoids serializing the trace
+     * twice on big-trace evaluations where every redundant {@code buildFullJson} burns CPU
+     * and GC churn.
+     */
+    public static int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
         if (charsPerToken < 1) {
             throw new IllegalArgumentException("charsPerToken must be >= 1, got " + charsPerToken);
         }
-        return traceCompressor.buildFullJson(trace, spans).toString().length() / charsPerToken;
+        return fullJson.toString().length() / charsPerToken;
     }
 
     /**

@@ -103,7 +103,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 var data = new LinkedHashMap<String, Object>(
                         OnlineScoringEngine.toReplacements(message.code().arguments(), span));
                 if (userFacingLogger.isInfoEnabled()) {
-                    userFacingLogger.info("Sending spanId '{}' to Python evaluator: {}",
+                    userFacingLogger.info("Sending spanId '{}' to Python evaluator: '{}'",
                             span.id(), OnlineScoringEngine.summarizeEvaluatorInput(data));
                 }
                 return data;
