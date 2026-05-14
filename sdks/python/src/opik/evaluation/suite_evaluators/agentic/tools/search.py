@@ -24,13 +24,12 @@ Caps:
 - 16 KB total output (final tail-truncation via the same suffix as scan)
 """
 
-import json
 import logging
 import re
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from .. import context, entity_ref, path_format
-from . import path_evaluator
+from . import _tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -162,42 +161,27 @@ class SearchTool:
 
 
 def _parse_arguments(arguments: str) -> Dict[str, Any]:
-    try:
-        raw = json.loads(arguments) if arguments else {}
-    except json.JSONDecodeError as exc:
-        return {"error": f"Invalid arguments JSON: {exc.msg}"}
-    if not isinstance(raw, dict):
-        return {"error": "Arguments must be a JSON object"}
+    envelope = _tool_args.parse_envelope(arguments)
+    if envelope.error is not None:
+        return {"error": envelope.error}
+    raw, ref = envelope.unwrap()
 
-    entity_type_raw = raw.get("type")
-    entity_id_raw = raw.get("id")
-    pattern_raw = raw.get("pattern")
+    pattern_result = _tool_args.require_string(raw, "pattern")
+    if pattern_result.error is not None:
+        return {"error": pattern_result.error}
+
+    # `path` is optional but must be a string when present — not a
+    # generic require_string concern, so kept inline.
     path_raw = raw.get("path")
-    if not isinstance(entity_type_raw, str) or not entity_type_raw:
-        return {"error": "Missing required 'type'"}
-    if not isinstance(entity_id_raw, str) or not entity_id_raw:
-        return {"error": "Missing required 'id'"}
-    if not isinstance(pattern_raw, str) or not pattern_raw:
-        return {"error": "Missing required 'pattern'"}
     if path_raw is not None and not isinstance(path_raw, str):
         return {"error": "Optional 'path' must be a string"}
 
-    try:
-        entity_type = entity_ref.EntityType(entity_type_raw)
-    except ValueError:
-        return {
-            "error": (
-                f"Unsupported entity type '{entity_type_raw}'. "
-                f"Supported: {[t.value for t in entity_ref.EntityType]}"
-            )
-        }
-
     return {
-        "ref": entity_ref.EntityRef(type=entity_type, id=entity_id_raw),
-        "pattern": pattern_raw,
+        "ref": ref,
+        "pattern": pattern_result.unwrap(),
         "path": path_raw if path_raw else None,
-        "type": entity_type_raw,
-        "id": entity_id_raw,
+        "type": ref.type.value,
+        "id": ref.id,
     }
 
 

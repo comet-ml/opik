@@ -26,7 +26,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from .. import context, entity_ref
-from . import path_evaluator
+from . import _tool_args, path_evaluator
 
 LOGGER = logging.getLogger(__name__)
 
@@ -131,38 +131,20 @@ class ScanTool:
 
 
 def _parse_arguments(arguments: str) -> Dict[str, Any]:
-    try:
-        raw = json.loads(arguments) if arguments else {}
-    except json.JSONDecodeError as exc:
-        return {"error": f"Invalid arguments JSON: {exc.msg}"}
-    if not isinstance(raw, dict):
-        return {"error": "Arguments must be a JSON object"}
+    envelope = _tool_args.parse_envelope(arguments)
+    if envelope.error is not None:
+        return {"error": envelope.error}
+    raw, ref = envelope.unwrap()
 
-    entity_type_raw = raw.get("type")
-    entity_id_raw = raw.get("id")
-    expression_raw = raw.get("expression")
-    if not isinstance(entity_type_raw, str) or not entity_type_raw:
-        return {"error": "Missing required 'type'"}
-    if not isinstance(entity_id_raw, str) or not entity_id_raw:
-        return {"error": "Missing required 'id'"}
-    if not isinstance(expression_raw, str) or not expression_raw:
-        return {"error": "Missing required 'expression'"}
-
-    try:
-        entity_type = entity_ref.EntityType(entity_type_raw)
-    except ValueError:
-        return {
-            "error": (
-                f"Unsupported entity type '{entity_type_raw}'. "
-                f"Supported: {[t.value for t in entity_ref.EntityType]}"
-            )
-        }
+    expression_result = _tool_args.require_string(raw, "expression")
+    if expression_result.error is not None:
+        return {"error": expression_result.error}
 
     return {
-        "ref": entity_ref.EntityRef(type=entity_type, id=entity_id_raw),
-        "expression": expression_raw,
-        "type": entity_type_raw,
-        "id": entity_id_raw,
+        "ref": ref,
+        "expression": expression_result.unwrap(),
+        "type": ref.type.value,
+        "id": ref.id,
     }
 
 
