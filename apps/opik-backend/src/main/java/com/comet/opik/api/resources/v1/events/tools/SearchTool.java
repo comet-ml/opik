@@ -6,12 +6,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.langchain4j.agent.tool.ToolSpecification;
 import dev.langchain4j.model.chat.request.json.JsonObjectSchema;
 import jakarta.inject.Singleton;
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
 import net.thisptr.jackson.jq.BuiltinFunctionLoader;
 import net.thisptr.jackson.jq.JsonQuery;
 import net.thisptr.jackson.jq.Scope;
 import net.thisptr.jackson.jq.Versions;
 import net.thisptr.jackson.jq.exception.JsonQueryException;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.Optional;
@@ -141,22 +143,25 @@ public class SearchTool implements ToolExecutor {
     }
 
     @Override
-    public String execute(String arguments, TraceToolContext ctx) {
-        ParsedArgs args = parseArgs(arguments);
-        if (args.error != null) {
-            log.debug("search tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
-            return args.error;
-        }
-        log.debug("search tool call with valid arguments: '{}' -> '{}'", arguments, args);
+    public Mono<String> execute(String arguments, @NonNull TraceToolContext ctx) {
+        // No I/O — regex/jq evaluation runs in-process on whatever scheduler called us.
+        return Mono.fromCallable(() -> {
+            ParsedArgs args = parseArgs(arguments);
+            if (args.error != null) {
+                log.debug("search tool received invalid arguments: '{}' -> '{}'", arguments, args.error);
+                return args.error;
+            }
+            log.debug("search tool call with valid arguments: '{}' -> '{}'", arguments, args);
 
-        EntityRef ref = new EntityRef(args.type, args.id);
-        Optional<JsonNode> cached = ctx.getCached(ref);
-        if (cached.isEmpty()) {
-            log.debug("search tool cache miss for id={}, ref={}", args.id, ref);
-            return ToolArgs.cacheMiss(args.type, args.id);
-        }
+            EntityRef ref = new EntityRef(args.type, args.id);
+            Optional<JsonNode> cached = ctx.getCached(ref);
+            if (cached.isEmpty()) {
+                log.debug("search tool cache miss for id={}, ref={}", args.id, ref);
+                return ToolArgs.cacheMiss(args.type, args.id);
+            }
 
-        return runSearch(cached.get(), args);
+            return runSearch(cached.get(), args);
+        });
     }
 
     private static String runSearch(JsonNode input, ParsedArgs args) {

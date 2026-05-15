@@ -6,25 +6,20 @@ import lombok.experimental.UtilityClass;
 import java.util.UUID;
 
 /**
- * Single source of truth for whether the agentic tool path
- * (read / jq / search / get_trace_spans) is enabled for an LLM-as-judge
- * scoring run.
+ * Predicate for the experimentId-driven branch of the agentic-tools gate: test-suite
+ * assertion runs ({@code experimentId != null}) always use tools so the judge can drill
+ * into the trace's full execution. The size-based online-scoring branch is computed
+ * locally in {@link OnlineScoringLlmAsJudgeScorer} because it also needs provider
+ * support and config, which don't belong here.
  *
- * <p>Today the rule is "test-suite assertion runs only", expressed as
- * {@code experimentId != null} since assertion sampling is the only flow
- * that populates that field on the message. The same predicate gates two
- * concerns that must stay in lockstep:
+ * <p>The result must stay in lockstep with two things:
  * <ul>
- *   <li>Whether {@link TestSuitePromptConstants#systemPrompt(boolean)}
- *       includes the tool-teaching addendum.</li>
- *   <li>Whether {@code OnlineScoringLlmAsJudgeScorer} attaches tool
- *       specifications and runs the tool-call loop.</li>
+ *   <li>Whether {@link TestSuitePromptConstants#systemPrompt(boolean)} includes the
+ *       tool-teaching addendum.</li>
+ *   <li>Whether the scorer attaches tool specifications and runs the tool-call loop.
+ *       Teaching the LLM about tools while sending no tool specs makes it emit tool
+ *       calls the API has not declared.</li>
  * </ul>
- *
- * <p>Keeping the gate in one place prevents the silent failure mode of
- * teaching the LLM about tools in the system prompt while the request
- * itself carries no tool specifications — the model would emit tool calls
- * the API has not declared.
  */
 @UtilityClass
 public final class LlmAsJudgeToolsMode {
