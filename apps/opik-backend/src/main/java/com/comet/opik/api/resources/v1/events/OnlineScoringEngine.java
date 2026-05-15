@@ -10,6 +10,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
@@ -31,6 +32,8 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -190,6 +193,12 @@ public class OnlineScoringEngine {
      * <p>The {@code context} variable is replaced with the skeleton + drill-down
      * guidance so user-supplied prompt templates referencing {@code {{context}}}
      * keep working without modification.
+     *
+     * <p><strong>Precondition:</strong> all {@code evaluatorCode.messages()} must declare
+     * string content. Multimodal templates aren't supported on this path —
+     * {@link #renderThreadMessagesWithReplacement} throws on the first non-string entry.
+     * Callers should detect multimodal templates upstream via
+     * {@link #hasMultimodalTemplate(List)} and fall back to the inline path.
      */
     public static ChatRequest prepareThreadLlmRequestWithTools(
             @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
@@ -241,8 +250,9 @@ public class OnlineScoringEngine {
      * model with two different schemas for the same entity.
      */
     @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @Builder(toBuilder = true)
     public record ThreadTraceSkeleton(
-            UUID id,
+            @NonNull UUID id,
             String name,
             Instant startTime,
             Instant endTime,
@@ -876,10 +886,58 @@ public class OnlineScoringEngine {
      * even when the context exceeds the size threshold (which may overflow the model's
      * window — in that case the operator should pick a different model for those workloads).
      */
+    /**
+     * Whether any of the template messages declares non-string (multimodal) content. The
+     * agentic-tools render path on threads only substitutes the context variable into string
+     * content — multimodal templates (image / audio / video alongside text) are rejected.
+     * Callers detect this here and fall back to the inline path rather than throwing.
+     */
+    public static boolean hasMultimodalTemplate(@NonNull List<LlmAsJudgeMessage> templateMessages) {
+        return templateMessages.stream().anyMatch(m -> !m.isStringContent());
+    }
+
     public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
         };
+    }
+
+    /**
+     * Build a sanitized one-line description of the LLM response. The full {@link ChatResponse}
+     * carries the assistant text and any tool-call arguments, both of which can echo trace
+     * content the model is reasoning about — surfacing the raw response in a user-facing log
+     * lands trace content (and any tokens or PII it carries) downstream of whatever sinks the
+     * log feeds. Shape-only summary instead.
+     */
+    public static String summarizeResponse(@NonNull ChatResponse response) {
+        var ai = response.aiMessage();
+        int textLength = ai.text() == null ? 0 : ai.text().length();
+        int toolCallCount = ai.toolExecutionRequests() == null ? 0 : ai.toolExecutionRequests().size();
+        var finishReason = response.metadata() == null ? null : response.metadata().finishReason();
+        return String.format("textChars=%d, toolCalls=%d, finishReason=%s",
+                textLength, toolCallCount, finishReason);
+    }
+
+    /**
+     * Attach the tool specs from {@code toolRegistry} and the given {@code toolChoice} to
+     * {@code request}'s parameters. Tool specs live inside {@link ChatRequestParameters}, so
+     * we copy the existing parameters via {@code overrideWith} and layer tool specs on top —
+     * setting {@code toolSpecifications} directly on the {@link ChatRequest} builder would
+     * conflict with parameters. {@code toBuilder()} (rather than a fresh builder + .messages())
+     * preserves any other top-level fields on ChatRequest, present or future, guarding against
+     * a "silently dropped fields" regression between the initial scoring call and the
+     * structured re-issue in the tool-call wrap-up.
+     */
+    public static ChatRequest addToolSpecs(@NonNull ChatRequest request, @NonNull ToolChoice toolChoice,
+            @NonNull ToolRegistry toolRegistry) {
+        var parameters = ChatRequestParameters.builder()
+                .overrideWith(request.parameters())
+                .toolSpecifications(toolRegistry.specs())
+                .toolChoice(toolChoice)
+                .build();
+        return request.toBuilder()
+                .parameters(parameters)
+                .build();
     }
 }

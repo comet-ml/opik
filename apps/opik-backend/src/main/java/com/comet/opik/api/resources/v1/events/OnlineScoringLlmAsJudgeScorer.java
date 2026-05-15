@@ -207,7 +207,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                         .doOnNext(withMdc(mdc, chatResponse -> {
                             if (userFacingLogger.isInfoEnabled()) {
                                 userFacingLogger.info("Received response for traceId '{}': {}",
-                                        trace.id(), summarizeResponse(chatResponse));
+                                        trace.id(), OnlineScoringEngine.summarizeResponse(chatResponse));
                             }
                         }))
                         .flatMap(initialResponse -> prepared.useTools()
@@ -294,8 +294,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing LLM request for traceId '{}': \n\n{}",
-                        trace.id(), exception.getMessage());
+                userFacingLogger.error("Error preparing LLM request for traceId '{}'", trace.id(), exception);
                 throw exception;
             }
 
@@ -308,7 +307,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 // AUTO so the model can decide when it has enough info to stop investigating;
                 // a uniform REQUIRED would loop forever because the wrap-up turn would also
                 // be forced to call a tool.
-                scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+                scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
             }
 
             // Guarded behind isInfoEnabled() because summarizeRequest streams over the message
@@ -338,25 +337,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return Mono.fromCallable(() -> aiProxyService.scoreTrace(
                 request, message.llmAsJudgeCode().model(), message.workspaceId()))
                 .subscribeOn(Schedulers.boundedElastic());
-    }
-
-    // Package-private for unit tests.
-    ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice) {
-        // Tool specs live inside ChatRequestParameters, so we copy the existing parameters via
-        // overrideWith and layer tool specs on top — setting toolSpecifications directly on
-        // ChatRequest's builder would conflict with parameters. Using toBuilder() (rather than
-        // a fresh builder + .messages()) preserves any other top-level fields on ChatRequest,
-        // present or future, guarding against the same "silently dropped fields" regression
-        // that previously gave the initial scoring call a different shape from the final
-        // structured re-issue in handleToolCalls.
-        var parameters = ChatRequestParameters.builder()
-                .overrideWith(request.parameters())
-                .toolSpecifications(toolRegistry.specs())
-                .toolChoice(toolChoice)
-                .build();
-        return request.toBuilder()
-                .parameters(parameters)
-                .build();
     }
 
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
@@ -496,20 +476,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
                 message.llmAsJudgeCode().model().name(),
                 messageCount, totalChars, toolSpecCount, useTools);
-    }
-
-    /**
-     * Build a sanitized one-line description of the LLM response. As with the request,
-     * the full {@code ChatResponse} contains the assistant text and any tool-call
-     * arguments, both of which can echo trace content the model is reasoning about.
-     */
-    private static String summarizeResponse(ChatResponse response) {
-        var ai = response.aiMessage();
-        int textLength = ai.text() == null ? 0 : ai.text().length();
-        int toolCallCount = ai.toolExecutionRequests() == null ? 0 : ai.toolExecutionRequests().size();
-        var finishReason = response.metadata() == null ? null : response.metadata().finishReason();
-        return String.format("textChars=%d, toolCalls=%d, finishReason=%s",
-                textLength, toolCallCount, finishReason);
     }
 
 }

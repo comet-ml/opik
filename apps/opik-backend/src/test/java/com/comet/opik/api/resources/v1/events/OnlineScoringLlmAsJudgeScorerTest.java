@@ -205,7 +205,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = scorer.addToolSpecs(original, ToolChoice.REQUIRED);
+        ChatRequest withTools = OnlineScoringEngine.addToolSpecs(original, ToolChoice.REQUIRED,
+                new ToolRegistry(Set.of(
+                        stubTool(GetTraceSpansTool.NAME, "{}"),
+                        stubTool(ReadTool.NAME, "{}"))));
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())

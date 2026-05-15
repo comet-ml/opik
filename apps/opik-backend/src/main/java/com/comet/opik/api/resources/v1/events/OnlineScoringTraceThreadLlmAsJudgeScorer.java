@@ -226,8 +226,12 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         return Mono.fromCallable(() -> prepareEvaluation(message, traces, threadId, rule, mdc))
                 .subscribeOn(Schedulers.parallel())
                 .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
-                        .doOnNext(withMdc(mdc, chatResponse -> userFacingLogger.info(
-                                "Received response for threadId '{}':\n\n{}", threadId, chatResponse)))
+                        .doOnNext(withMdc(mdc, chatResponse -> {
+                            if (userFacingLogger.isInfoEnabled()) {
+                                userFacingLogger.info("Received response for threadId '{}': {}",
+                                        threadId, OnlineScoringEngine.summarizeResponse(chatResponse));
+                            }
+                        }))
                         .flatMap(initialResponse -> prepared.useTools()
                                 ? handleToolCalls(initialResponse, prepared.scoreRequest(),
                                         prepared.structuredRequest(), message, mdc)
@@ -266,6 +270,19 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             int estimatedContextTokens = OnlineScoringEngine.estimateThreadContextTokens(
                     traces, onlineScoringConfig.getAgenticToolsCharsPerToken());
             boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId);
+            // Multimodal templates (image / audio / video alongside the context variable) aren't
+            // supported on the agentic-tools render path — it only knows how to substitute string
+            // content. Downgrade to inline instead of throwing so the evaluation still completes;
+            // the trade-off is the same "may overflow context window" that we already accept for
+            // the provider-doesn't-support-tools branch above.
+            if (useTools && OnlineScoringEngine.hasMultimodalTemplate(message.code().messages())) {
+                userFacingLogger.warn(
+                        "Thread evaluator '{}' has multimodal template content; falling back to inline path"
+                                + " (agentic-tools render path only supports string-content templates) — may"
+                                + " overflow context window.",
+                        rule.getName());
+                useTools = false;
+            }
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -287,8 +304,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing LLM request for threadId '{}': \n\n{}",
-                        threadId, exception.getMessage());
+                userFacingLogger.error("Error preparing LLM request for threadId '{}'", threadId, exception);
                 throw exception;
             }
 
@@ -296,7 +312,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 // REQUIRED on the first call only — same reasoning as the trace scorer: forces
                 // ≥1 tool call before the model can answer from skeleton alone. Follow-up rounds
                 // switch to AUTO so the wrap-up turn can emit JSON without invoking a tool.
-                scoreRequest = addToolSpecs(scoreRequest, ToolChoice.REQUIRED);
+                scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
             }
 
             userFacingLogger.info("Sending threadId '{}' to LLM using the following input:\n\n{}",
@@ -333,18 +349,6 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 "Thread context exceeds '{}' tokens; switching to agentic-tools mode for threadId '{}'",
                 onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
         return true;
-    }
-
-    // Package-private for unit tests.
-    ChatRequest addToolSpecs(ChatRequest request, ToolChoice toolChoice) {
-        var parameters = ChatRequestParameters.builder()
-                .overrideWith(request.parameters())
-                .toolSpecifications(toolRegistry.specs())
-                .toolChoice(toolChoice)
-                .build();
-        return request.toBuilder()
-                .parameters(parameters)
-                .build();
     }
 
     /**
