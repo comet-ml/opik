@@ -336,14 +336,19 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
             org.assertj.core.api.Assertions.assertThat(sent.get(0).toolSpecifications())
                     .extracting(dev.langchain4j.agent.tool.ToolSpecification::name)
                     .containsExactly("read");
-            // Final: no tool specs + the forcing UserMessage at the end.
+            // Final: no tool specs + the round-1 terminal AiMessage (appended by ToolCallLoop's
+            // no-tool-calls early return) + the forcing UserMessage at the end.
+            // 5 messages: UserMessage + AiMessage(tool calls) + ToolResult + AiMessage(terminal)
+            // + UserMessage(forcing).
             var finalSent = sent.get(1);
             org.assertj.core.api.Assertions.assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
-            org.assertj.core.api.Assertions.assertThat(finalSent.messages()).hasSize(4);
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages()).hasSize(5);
             org.assertj.core.api.Assertions.assertThat(finalSent.messages().get(3))
+                    .isInstanceOf(dev.langchain4j.data.message.AiMessage.class);
+            org.assertj.core.api.Assertions.assertThat(finalSent.messages().get(4))
                     .isInstanceOf(dev.langchain4j.data.message.UserMessage.class);
             org.assertj.core.api.Assertions.assertThat(
-                    ((dev.langchain4j.data.message.UserMessage) finalSent.messages().get(3)).singleText())
+                    ((dev.langchain4j.data.message.UserMessage) finalSent.messages().get(4)).singleText())
                     .contains("Now respond with ONLY the JSON object");
         }
 

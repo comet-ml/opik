@@ -167,9 +167,18 @@ final class ToolCallLoop {
             ArrayList<ChatMessage> messages, TraceToolContext ctx, Budget budget,
             String logIdValue, Map<String, String> mdc) {
         if (round >= MAX_TOOL_CALL_ROUNDS) {
+            // Don't append: the cap-round response may carry unfulfilled tool_executions_requests
+            // (we're abandoning them by hitting the cap). An AiMessage with tool_calls but no
+            // matching ToolExecutionResultMessage produces a malformed sequence that OpenAI /
+            // Anthropic reject. runWithWrapUp will bridge via the forcing user message.
             return Mono.just(currentResponse);
         }
         if (!currentResponse.aiMessage().hasToolExecutionRequests()) {
+            // Model stopped on its own — append its terminal AiMessage so the downstream wrap-up
+            // (runWithWrapUp) re-issues the structured request with the assistant's last turn in
+            // the conversation history. Without this, the wrap-up "emit only JSON" user message
+            // is appended in a vacuum where the model's final reasoning is missing.
+            messages.add(currentResponse.aiMessage());
             return Mono.just(currentResponse);
         }
 

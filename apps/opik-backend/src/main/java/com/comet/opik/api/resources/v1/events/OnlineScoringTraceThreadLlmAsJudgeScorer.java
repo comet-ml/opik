@@ -339,8 +339,9 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         if (!providerSupportsTools) {
             userFacingLogger.warn(
                     "Thread context exceeds '{}' tokens but provider for model '{}' does not support tool"
-                            + " calling; falling back to inline path — may overflow context window.",
-                    onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
+                            + " calling; falling back to inline path for threadId '{}' — may overflow"
+                            + " context window.",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName, threadId);
             return false;
         }
         // The thread agentic-tools render path only substitutes string content; multimodal
@@ -349,8 +350,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
         if (OnlineScoringEngine.hasMultimodalTemplate(templateMessages)) {
             userFacingLogger.warn(
                     "Thread context exceeds '{}' tokens but evaluator template has multimodal content;"
-                            + " falling back to inline path — may overflow context window.",
-                    onlineScoringConfig.getAgenticToolsThresholdTokens());
+                            + " falling back to inline path for threadId '{}' — may overflow context window.",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens(), threadId);
             return false;
         }
         userFacingLogger.info(

@@ -37,8 +37,10 @@ class ToolCallLoopTest {
     @Test
     void earlyReturnWhenInitialResponseHasNoToolCalls() {
         // No tool execution requests on the initial response -> the loop must return it as-is
-        // without invoking scoreTrace or mutating the message list. Used by both scorers: if the
-        // model emits the final JSON immediately (no tool calls), we skip the loop entirely.
+        // without invoking scoreTrace. Used by both scorers: if the model emits the final JSON
+        // immediately (no tool calls), we skip the loop. The terminal AiMessage IS appended to
+        // `messages` so the downstream wrap-up can reuse the assistant's final turn in its
+        // re-issue conversation history.
         ChatResponse initial = ChatResponse.builder()
                 .aiMessage(AiMessage.from("final-answer"))
                 .build();
@@ -57,7 +59,10 @@ class ToolCallLoopTest {
 
         assertThat(result).isSameAs(initial);
         assertThat(scoreInvocations.get()).isZero();
-        assertThat(messages).hasSize(1);
+        // UserMessage("score") + the terminal AiMessage = 2 entries.
+        assertThat(messages).hasSize(2);
+        assertThat(messages.get(1)).isInstanceOf(AiMessage.class);
+        assertThat(((AiMessage) messages.get(1)).text()).isEqualTo("final-answer");
         assertThat(budget.cumulative).isZero();
     }
 
@@ -179,8 +184,9 @@ class ToolCallLoopTest {
 
         // Two follow-up calls fired: one after round 0's tools, one after round 1's.
         assertThat(capturedRequests).hasSize(2);
-        // Final loop state: original UserMessage + 2 rounds × (AiMessage + ToolResult) = 5.
-        assertThat(messages).hasSize(5);
+        // Final loop state: original UserMessage + 2 rounds × (AiMessage + ToolResult) +
+        // the terminal "done" AiMessage appended in the no-tool-calls early return = 6.
+        assertThat(messages).hasSize(6);
 
         // Each captured request must hold a distinct list instance — not an alias of the
         // caller-side `messages` and not an alias of any earlier captured request.
