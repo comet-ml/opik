@@ -252,13 +252,18 @@ class PromptClient:
         prompt_cls: Type[_PromptT],
         no_cache: bool = False,
     ) -> Optional[_PromptT]:
-        def _fetch() -> Optional[_PromptT]:
-            prompt_version = self.get_prompt(
-                name=name,
-                commit=commit,
-                raise_if_not_template_structure=template_structure,
-                project_name=project_name,
-            )
+        def _fetch(mask_id: Optional[str] = None) -> Optional[_PromptT]:
+            if mask_id is not None:
+                prompt_version = self._rest_client.prompts.get_prompt_version_by_id(
+                    version_id=mask_id,
+                )
+            else:
+                prompt_version = self.get_prompt(
+                    name=name,
+                    commit=commit,
+                    raise_if_not_template_structure=template_structure,
+                    project_name=project_name,
+                )
             if prompt_version is None:
                 return None
             return prompt_cls.from_fern_prompt_version(
@@ -268,7 +273,6 @@ class PromptClient:
         if no_cache:
             result = _fetch()
         else:
-            # Step 1: fetch unmasked prompt to get prompt_id
             unmasked = prompt_cache.get_or_fetch(
                 name=name,
                 commit=commit,
@@ -279,7 +283,6 @@ class PromptClient:
 
             result = unmasked
 
-            # Step 2: check for an active mask for this prompt
             prompt_id = (
                 unmasked.__internal_api__prompt_id__ if unmasked is not None else None
             )
@@ -289,13 +292,12 @@ class PromptClient:
                 else None
             )
             if active_mask_id is not None:
-                # Step 3: fetch masked version (separate cache entry, no background refresh)
                 result = prompt_cache.get_or_fetch(
                     name=name,
                     commit=commit,
                     project_name=project_name,
                     template_structure=template_structure,
-                    fetch_fn=_fetch,
+                    fetch_fn=lambda: _fetch(mask_id=active_mask_id),
                     mask_id=active_mask_id,
                 )
 

@@ -21,6 +21,7 @@ class LocalRunnerJob(UniversalBaseModel):
     project_id: typing.Optional[str] = None
     trace_id: typing.Optional[str] = None
     mask_id: typing.Optional[str] = None
+    masks: typing.Optional[typing.Dict[str, str]] = None
     blueprint_name: typing.Optional[str] = None
     metadata: typing.Optional[LocalRunnerJobMetadata] = None
     timeout: typing.Optional[int] = None
