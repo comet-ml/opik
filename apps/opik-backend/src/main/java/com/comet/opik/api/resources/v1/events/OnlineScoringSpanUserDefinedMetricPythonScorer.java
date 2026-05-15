@@ -96,7 +96,7 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
     private Map<String, Object> prepareData(SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         var span = message.span();
         return OnlineScoringEngine.logAndPrepareEvaluatorInput(
-                userFacingLogger, mdc, "spanId", span.id(), message.ruleName(),
+                userFacingLogger, log, mdc, "spanId", span.id(), message.ruleName(),
                 () -> new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), span)));
     }
 
