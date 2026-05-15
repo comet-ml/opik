@@ -1383,6 +1383,14 @@ experimentProjectMigration:
   lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
   # Per-cycle timeout — safety net for stuck cycles, not normal completion
   jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
