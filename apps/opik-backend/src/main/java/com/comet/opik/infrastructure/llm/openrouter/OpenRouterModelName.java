@@ -75,6 +75,7 @@ public enum OpenRouterModelName implements StructuredOutputSupported {
     BAIDU_ERNIE_4_5_300B_A47B("baidu/ernie-4.5-300b-a47b"),
     BAIDU_ERNIE_4_5_VL_28B_A3B("baidu/ernie-4.5-vl-28b-a3b"),
     BAIDU_ERNIE_4_5_VL_424B_A47B("baidu/ernie-4.5-vl-424b-a47b"),
+    BAIDU_QIANFAN_OCR_FAST("baidu/qianfan-ocr-fast"),
     BAIDU_QIANFAN_OCR_FAST_FREE("baidu/qianfan-ocr-fast:free"),
     BYTEDANCE_SEED_SEED_1_6("bytedance-seed/seed-1.6"),
     BYTEDANCE_SEED_SEED_1_6_FLASH("bytedance-seed/seed-1.6-flash"),
