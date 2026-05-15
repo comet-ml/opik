@@ -1,6 +1,5 @@
 package com.comet.opik.api.resources.v1.events;
 
-import com.comet.opik.api.Span;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.resources.v1.events.tools.ToolExecutor;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
@@ -267,7 +266,7 @@ class ToolCallLoopTest {
                 .name("trace")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.<Span>of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private static ToolSpecification stubSpec(String name) {

@@ -47,21 +47,29 @@ public final class TraceToolContext {
      */
     private final Set<EntityRef> truncated = new HashSet<>();
 
-    public TraceToolContext(@NonNull Trace trace,
-            @NonNull List<Span> spans,
-            @NonNull String workspaceId,
-            @NonNull String userName) {
+    /**
+     * Single constructor with nullable {@code trace} / {@code spans} (final fields,
+     * so they're assigned exactly once here regardless of branch). Callers go through
+     * {@link #forActiveTrace} or {@link #forThread} rather than constructing directly;
+     * the explicit nulls live at the {@code forThread} call site where the absence of
+     * an active trace is the point.
+     */
+    private TraceToolContext(Trace trace, List<Span> spans,
+            @NonNull String workspaceId, @NonNull String userName) {
         this.trace = trace;
-        this.spans = List.copyOf(spans);
+        this.spans = spans != null ? List.copyOf(spans) : null;
         this.workspaceId = workspaceId;
         this.userName = userName;
     }
 
-    private TraceToolContext(@NonNull String workspaceId, @NonNull String userName) {
-        this.trace = null;
-        this.spans = null;
-        this.workspaceId = workspaceId;
-        this.userName = userName;
+    /**
+     * Build a context for a trace-scoped evaluation — the model has a single active
+     * trace whose spans are already in memory. {@link GetTraceSpansTool} hits this
+     * shortcut; other tools fall through to {@code read(type=trace, id=X)} as usual.
+     */
+    public static TraceToolContext forActiveTrace(@NonNull Trace trace, @NonNull List<Span> spans,
+            @NonNull String workspaceId, @NonNull String userName) {
+        return new TraceToolContext(trace, spans, workspaceId, userName);
     }
 
     /**
@@ -71,7 +79,7 @@ public final class TraceToolContext {
      * reads land in {@link #fetched} on demand.
      */
     public static TraceToolContext forThread(@NonNull String workspaceId, @NonNull String userName) {
-        return new TraceToolContext(workspaceId, userName);
+        return new TraceToolContext(null, null, workspaceId, userName);
     }
 
     /**
