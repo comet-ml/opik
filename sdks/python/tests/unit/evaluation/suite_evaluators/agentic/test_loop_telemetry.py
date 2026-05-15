@@ -92,8 +92,10 @@ class _StubTool:
         self.name = name
         self.spec = {"type": "function", "function": {"name": name}}
         self._payload = payload
+        self.execute_count = 0
 
     def execute(self, arguments, ctx):
+        self.execute_count += 1
         return self._payload
 
 
@@ -137,7 +139,7 @@ def _run_with_responses(responses, tools, ctx):
         ctx=ctx,
         response_format=_WrapupSchema,
     )
-    return content, model
+    return content, model, tools
 
 
 class TestTelemetryLogging:
@@ -258,3 +260,94 @@ class TestZeroReadOnLargeTraceWarning:
             and "without ever calling `read`" in r.getMessage()
         ]
         assert warnings == []
+
+
+class TestDuplicateToolCallShortCircuit:
+    """The loop short-circuits identical (name, args) tool calls — same
+    args returns a dedup hint instead of re-executing the tool. This is
+    the deterministic fix for the failure mode where a judge model loops
+    on `get_trace_spans()` instead of drilling in (design doc §9; PR
+    review transcript on OPIK-6243)."""
+
+    def test_run_agentic_judge__repeated_identical_call__tool_executes_once(
+        self,
+    ):
+        # Two rounds, both call get_trace_spans({}); the second should
+        # be short-circuited and the tool should execute only once.
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c2", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+        tool = _StubTool("get_trace_spans", payload='{"spans": []}')
+
+        _run_with_responses(responses, [tool], ctx)
+
+        assert tool.execute_count == 1
+
+    def test_run_agentic_judge__different_arguments__both_execute(self):
+        # Same tool, different arguments → not a duplicate; both execute.
+        responses = [
+            {
+                "tool_calls": [
+                    _tool_call("c1", "read", arguments='{"type": "trace", "id": "a"}'),
+                ]
+            },
+            {
+                "tool_calls": [
+                    _tool_call("c2", "read", arguments='{"type": "trace", "id": "b"}'),
+                ]
+            },
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+        tool = _StubTool("read", payload='{"data": {}}')
+
+        _run_with_responses(responses, [tool], ctx)
+
+        assert tool.execute_count == 2
+
+    def test_run_agentic_judge__duplicate_call__telemetry_reports_count(
+        self, loop_log_records
+    ):
+        # By-name histogram counts both call attempts (the model emitted
+        # them); the separate `duplicates=N` field reports how many were
+        # short-circuited. Asserting on both keeps the contract explicit.
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"tool_calls": [_tool_call("c2", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+
+        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+
+        finished = [
+            r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
+        ]
+        assert len(finished) == 1
+        message = finished[0].getMessage()
+        assert "get_trace_spans=2" in message
+        assert "duplicates=1" in message
+
+    def test_run_agentic_judge__no_duplicates__telemetry_reports_zero(
+        self, loop_log_records
+    ):
+        # Sanity: when nothing is deduped, the duplicates counter is 0.
+        responses = [
+            {"tool_calls": [_tool_call("c1", "get_trace_spans")]},
+            {"content": "", "tool_calls": []},
+            {"content": '{"verdict": "ok"}'},
+        ]
+        ctx = _ctx(_trace())
+
+        _run_with_responses(responses, [_StubTool("get_trace_spans")], ctx)
+
+        finished = [
+            r for r in loop_log_records if "Agentic loop finished" in r.getMessage()
+        ]
+        assert "duplicates=0" in finished[0].getMessage()

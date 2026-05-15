@@ -88,12 +88,51 @@ class TestSerializeOverview:
         parent_links = {s["id"]: s["parent_span_id"] for s in result["spans"]}
         assert parent_links == {"root": None, "child": "root"}
 
-    def test_serialize_overview__long_strings__truncated_with_suffix(self):
-        long_input = "x" * 300
+    def test_serialize_overview__long_trace_input__truncated_with_read_hint(self):
+        # Long enough to trip the 500-char overview cap; the suffix must
+        # carry an actionable `read(type='trace', id='<id>')` hint so the
+        # judge knows exactly how to recover the un-truncated value.
+        long_input = "x" * 800
+        trace = _trace(input=long_input)
+
         result = span_tree_serializer.serialize_overview(
-            _trace(input=long_input),
+            trace,
             spans=[],
             parent_by_child={},
         )
-        assert "TRUNCATED" in result["trace"]["input"]
-        assert result["trace"]["input"].startswith("x" * 200)
+
+        truncated = result["trace"]["input"]
+        assert truncated != long_input
+        assert truncated[: span_tree_serializer.OVERVIEW_IO_CHAR_LIMIT] == (
+            "x" * span_tree_serializer.OVERVIEW_IO_CHAR_LIMIT
+        )
+        # Suffix is actionable: names the tool and the entity ref.
+        assert f"read(type='trace', id='{trace.id}')" in truncated
+
+    def test_serialize_overview__long_span_input__truncated_with_span_read_hint(self):
+        # Same check for a span-level field: the hint must anchor at the
+        # span entity, not the trace.
+        long_input = "y" * 800
+        span = _span("s-1")
+        span.input = long_input
+
+        result = span_tree_serializer.serialize_overview(
+            _trace(),
+            spans=[span],
+            parent_by_child={span.id: None},
+        )
+
+        truncated = result["spans"][0]["input"]
+        assert truncated != long_input
+        assert f"read(type='span', id='{span.id}')" in truncated
+
+    def test_serialize_overview__under_cap__no_truncation_or_hint(self):
+        # Sanity: short values must round-trip unchanged with no suffix.
+        result = span_tree_serializer.serialize_overview(
+            _trace(input="short"),
+            spans=[],
+            parent_by_child={},
+        )
+
+        assert result["trace"]["input"] == "short"
+        assert "TRUNCATED" not in result["trace"]["input"]

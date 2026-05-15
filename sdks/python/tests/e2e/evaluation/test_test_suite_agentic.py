@@ -1,0 +1,251 @@
+"""E2E tests for the agentic LLM-judge path on test suites.
+
+The one-shot LLMJudge sees only the dataset item's top-level `input` /
+`output`. The agentic judge — auto-engaged when the local emulator is
+active during `opik.run_tests` — sees the full trace tree via the
+`get_trace_spans` / `read` / `scan` / `search` tools. These tests
+craft assertions that are decidable ONLY from the intermediate span state,
+so a passing verdict is direct evidence the agentic loop ran:
+
+1. A span-structure assertion ("the agent called the `fetch_user_data`
+   helper") — verifiable only by looking at span names in the trace.
+2. A span-error assertion ("no errors occurred without errors") on a
+   trace whose inner span recorded an error caught by the task —
+   verifiable only by looking at span `error_info`.
+3. A buried-keyword assertion — the marker sits past the
+   `get_trace_spans` overview's 500-char truncation, so the judge must
+   call at least one of `read` / `scan` / `search` to recover it.
+
+**Judge-model choice.** These tests deliberately override the SDK's
+default judge model (`gpt-5-nano`) with a stronger one. `gpt-5-nano`
+is the canonical "doesn't engage the tool loop" failure mode the
+backend doc (`SupportedJudgeProvider.java`) warns about — it
+satisfies the REQUIRED-on-first-call gate with `get_trace_spans` and
+then judges from that summary alone, never calling `read`. The SDK
+can't prompt-engineer around that; the design doc §9 explicitly
+classifies model engagement as the operator's call. Here we pick
+`gpt-4o-mini` to match the backend's allow-list second choice — same
+OpenAI dependency story, but actually engages with tools.
+
+All require `OPENAI_API_KEY`; the assertions are deliberately
+unambiguous to keep judge flakiness low even on a competent judge.
+"""
+
+from typing import Any, Dict
+
+import pytest
+
+import opik
+from ...testlib import environment, generate_project_name
+
+PROJECT_NAME = generate_project_name("e2e", __name__)
+
+# Stronger than the SDK default (`gpt-5-nano`) and known to engage the
+# tool loop — backend `SupportedJudgeProvider.java` lists it as the
+# OpenAI allow-list entry. If you change this, re-run all three tests:
+# nano will pass the first two (structural assertions) but reliably
+# fail the third (it never calls `read` on truncated content).
+AGENTIC_JUDGE_MODEL = "gpt-4o-mini"
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_test_suite_agentic__assertion_about_span_name__passes(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """The agentic judge must inspect the trace's span tree to verify
+    that a specifically-named tool span was actually called. The task
+    output deliberately omits the helper's name, so a one-shot judge
+    has no way to verify the assertion from input/output alone.
+    """
+    span_assertion = "The agent called a step named `fetch_user_data`"
+
+    @opik.track(name="fetch_user_data", project_name=PROJECT_NAME)
+    def fetch_user_data(user_id: str) -> Dict[str, Any]:
+        return {"id": user_id, "name": "alice"}
+
+    @opik.track(name="task", project_name=PROJECT_NAME)
+    def run_task(item: Dict[str, Any]) -> Dict[str, Any]:
+        fetch_user_data("u-1")
+        # Output deliberately doesn't mention `fetch_user_data` — the
+        # only evidence the helper was called lives in the span tree.
+        return {"input": item["input"], "output": "ok"}
+
+    suite = opik_client.create_test_suite(
+        name=dataset_name,
+        description="Agentic judge — span-name assertion",
+        project_name=PROJECT_NAME,
+    )
+    suite.insert(
+        [
+            {
+                "data": {"input": {"question": "fetch user u-1"}},
+                "assertions": [span_assertion],
+            }
+        ]
+    )
+
+    suite_result = opik.run_tests(
+        test_suite=suite,
+        task=run_task,
+        experiment_name=experiment_name,
+        verbose=0,
+        model=AGENTIC_JUDGE_MODEL,
+    )
+
+    assert suite_result.pass_rate == 1.0
+    item_result = list(suite_result.item_results.values())[0]
+    assert item_result.passed is True
+    # The one assertion must surface in the feedback scores; agentic
+    # path uses the same ScoreResult shape as the one-shot path.
+    # ItemResult holds per-run TestResults; each TestResult carries its
+    # own list of ScoreResults (one per assertion).
+    assertion_names = {
+        score.name
+        for test_result_ in item_result.test_results
+        for score in test_result_.score_results
+    }
+    assert span_assertion in assertion_names
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_test_suite_agentic__assertion_about_span_error__detects_failure(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """The agentic judge must inspect `error_info` on a nested span to
+    fail an assertion that claims no errors occurred. The task catches
+    the exception so the trace's top-level output looks healthy — a
+    one-shot judge would incorrectly pass the assertion.
+    """
+    no_errors_assertion = "Execution completed without errors in any internal step"
+
+    @opik.track(name="risky_step", project_name=PROJECT_NAME)
+    def risky_step() -> str:
+        # @opik.track captures `error_info` on the inner span when this
+        # raises, even though the caller swallows the exception.
+        raise RuntimeError("internal failure")
+
+    @opik.track(name="task", project_name=PROJECT_NAME)
+    def run_task(item: Dict[str, Any]) -> Dict[str, Any]:
+        try:
+            risky_step()
+        except RuntimeError:
+            pass
+        return {"input": item["input"], "output": "completed"}
+
+    suite = opik_client.create_test_suite(
+        name=dataset_name,
+        description="Agentic judge — span-error assertion",
+        project_name=PROJECT_NAME,
+    )
+    suite.insert(
+        [
+            {
+                "data": {"input": {"question": "do the thing"}},
+                "assertions": [no_errors_assertion],
+            }
+        ]
+    )
+
+    suite_result = opik.run_tests(
+        test_suite=suite,
+        task=run_task,
+        experiment_name=experiment_name,
+        verbose=0,
+        model=AGENTIC_JUDGE_MODEL,
+    )
+
+    # The single assertion is false (an inner step errored), so the
+    # item must fail — proving the agentic judge saw the span's
+    # `error_info`. A one-shot judge would see only `output="completed"`
+    # and pass the assertion.
+    assert suite_result.pass_rate == 0.0
+    item_result = list(suite_result.item_results.values())[0]
+    assert item_result.passed is False
+
+
+@pytest.mark.skipif(
+    not environment.has_openai_api_key(), reason="OPENAI_API_KEY is not set"
+)
+def test_test_suite_agentic__assertion_requires_buried_keyword_lookup__passes(
+    opik_client: opik.Opik, dataset_name: str, experiment_name: str
+):
+    """The marker is placed past the 200-char truncation that
+    `get_trace_spans` applies to every span's I/O. The overview alone
+    physically cannot include it, so the judge MUST reach for at least
+    one of `read` / `scan` / `search` to find the marker and pass the
+    assertion. We don't pin which tool the model picks — that's a
+    model-quality question. What we prove here is the agentic loop
+    engaged beyond the overview, since a one-shot judge or a judge
+    that only called `get_trace_spans` would lack the evidence.
+
+    The marker is a synthetic token (`MARKER-` + opaque tail) chosen so
+    it can't appear anywhere else in the trace or in the model's
+    pretraining. A `score: true` verdict here means the judge actually
+    extracted it from span content.
+    """
+    secret_marker = "MARKER-7f3a8c2e9b1d4f60"
+    keyword_assertion = (
+        f"At least one intermediate step processed a payload containing "
+        f"the literal token '{secret_marker}'"
+    )
+
+    @opik.track(name="process_step", project_name=PROJECT_NAME)
+    def process_step(payload: str) -> str:
+        # The output deliberately doesn't echo the marker — it only
+        # references the payload length so the agent can't shortcut
+        # through `output` alone. The marker lives only in the input,
+        # which is what `get_trace_spans` truncates.
+        return f"step processed {len(payload)} chars"
+
+    @opik.track(name="noop_step", project_name=PROJECT_NAME)
+    def noop_step() -> str:
+        return "noop"
+
+    @opik.track(name="task", project_name=PROJECT_NAME)
+    def run_task(item: Dict[str, Any]) -> Dict[str, Any]:
+        # Pad with filler so the marker lands well past the overview's
+        # OVERVIEW_IO_CHAR_LIMIT (500 chars) in the JSON-rendered span
+        # input `{"payload": "<filler><marker>"}`. `padding ` is 8 chars
+        # × 70 = 560 chars; with the ~13-char JSON prefix the marker
+        # starts past offset 573, so it sits beyond the overview cap by
+        # construction. Mixed-in noop_step guarantees more than one
+        # span exists so the judge can't trivially infer "must be the
+        # only span."
+        filler = "padding " * 70
+        process_step(payload=f"{filler}{secret_marker} trailer")
+        noop_step()
+        return {"input": item["input"], "output": "completed"}
+
+    suite = opik_client.create_test_suite(
+        name=dataset_name,
+        description="Agentic judge — buried-keyword requires read/scan/search",
+        project_name=PROJECT_NAME,
+    )
+    suite.insert(
+        [
+            {
+                "data": {"input": {"question": "process the payload"}},
+                "assertions": [keyword_assertion],
+            }
+        ]
+    )
+
+    suite_result = opik.run_tests(
+        test_suite=suite,
+        task=run_task,
+        experiment_name=experiment_name,
+        verbose=0,
+        model=AGENTIC_JUDGE_MODEL,
+    )
+
+    # If the judge stayed at the overview level, it would have seen the
+    # truncated string (no marker) and could only have guessed at the
+    # assertion. A passing verdict means it drilled into span content
+    # via one of read / scan / search.
+    assert suite_result.pass_rate == 1.0
+    item_result = list(suite_result.item_results.values())[0]
+    assert item_result.passed is True
