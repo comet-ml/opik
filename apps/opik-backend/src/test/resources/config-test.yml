@@ -274,6 +274,13 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: 100
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes
+  #   through the agentic-tools path. Below the threshold the inline path is used.
+  agenticToolsThresholdTokens: 50000
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate trace size from serialized JSON length.
+  agenticToolsCharsPerToken: 4
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -612,6 +619,9 @@ serviceToggles:
   # Default: false
   # Description: Whether or not the Ollie AI assistant integration is enabled.
   ollieEnabled: "false"
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring.
+  agenticToolsEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).

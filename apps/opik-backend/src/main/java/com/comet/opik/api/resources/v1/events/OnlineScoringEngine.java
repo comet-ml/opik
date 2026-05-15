@@ -1,5 +1,6 @@
 package com.comet.opik.api.resources.v1.events;
 
+import com.comet.opik.api.LlmProvider;
 import com.comet.opik.api.PromptType;
 import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Span;
@@ -9,8 +10,10 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
+import com.comet.opik.infrastructure.log.LogContextAware;
 import com.comet.opik.utils.JsonUtils;
 import com.comet.opik.utils.TemplateParseUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -18,6 +21,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.gax.rpc.InvalidArgumentException;
+import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.JsonPath;
 import dev.langchain4j.data.message.AudioContent;
 import dev.langchain4j.data.message.ChatMessage;
@@ -28,9 +32,9 @@ import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.response.ChatResponse;
-import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
+import lombok.NonNull;
 import lombok.experimental.UtilityClass;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -41,12 +45,15 @@ import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -64,10 +71,15 @@ public class OnlineScoringEngine {
     static final String SCORE_FIELD_NAME = "score";
     static final String REASON_FIELD_NAME = "reason";
 
+    private static final String SPANS_VARIABLE_NAME = "spans";
+
     private static final ObjectMapper OBJECT_MAPPER = JsonUtils.getMapper();
 
     private static final Pattern JSON_BLOCK_PATTERN = Pattern.compile(
             "```(?:json)?\\s*(\\{.*?})\\s*```", Pattern.DOTALL);
+
+    private static final Comparator<Span> BY_SPAN_START_TIME = Comparator
+            .comparing(Span::startTime, Comparator.nullsLast(Comparator.naturalOrder()));
 
     /**
      * Prepare a request to a LLM-as-Judge evaluator (a ChatLanguageModel) rendering
@@ -80,13 +92,13 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace, StructuredOutputStrategy structuredOutputStrategy) {
         return prepareLlmRequest(evaluatorCode, trace, structuredOutputStrategy, PromptType.MUSTACHE);
     }
 
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
@@ -101,9 +113,9 @@ public class OnlineScoringEngine {
      * full content via the {@code read} tool when it actually needs it.
      */
     public static ChatRequest prepareLlmRequest(
-            @NotNull LlmAsJudgeCode evaluatorCode, Trace trace,
-            StructuredOutputStrategy structuredOutputStrategy, @NotNull PromptType promptType,
-            int maxReplacementChars, @NotNull String drillDownHint) {
+            @NonNull LlmAsJudgeCode evaluatorCode, Trace trace,
+            StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
+            int maxReplacementChars, @NonNull String drillDownHint) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
@@ -116,7 +128,7 @@ public class OnlineScoringEngine {
                 Map.Entry::getKey,
                 e -> StringTruncator.truncate(e.getValue(), maxReplacementChars, drillDownHint),
                 (a, b) -> b,
-                java.util.LinkedHashMap::new));
+                LinkedHashMap::new));
     }
 
     /**
@@ -128,9 +140,9 @@ public class OnlineScoringEngine {
      * @return a request to trigger to any supported provider with a ChatLanguageModel
      */
     public static ChatRequest prepareSpanLlmRequest(
-            @NotNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
-            @NotNull Span span,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull AutomationRuleEvaluatorSpanLlmAsJudge.SpanLlmAsJudgeCode evaluatorCode,
+            @NonNull Span span,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderMessages(evaluatorCode.messages(), evaluatorCode.variables(), span);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -158,8 +170,8 @@ public class OnlineScoringEngine {
      *         ChatLanguageModel
      */
     public static ChatRequest prepareThreadLlmRequest(
-            @NotNull TraceThreadLlmAsJudgeCode evaluatorCode, @NotNull List<Trace> traces,
-            @NotNull StructuredOutputStrategy structuredOutputStrategy) {
+            @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
         var renderedMessages = renderThreadMessages(evaluatorCode.messages(),
                 Map.of(TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, ""), traces);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
@@ -340,6 +352,31 @@ public class OnlineScoringEngine {
             case OUTPUT -> trace.output();
             case METADATA -> trace.metadata();
         });
+    }
+
+    /**
+     * Variant that injects a built-in {@code spans} variable holding the trace's spans
+     * (sorted by start_time) as a real JSON array. Used by Python metrics whose
+     * {@code score(...)} signature accepts {@code spans}; the user opts in by including a
+     * {@code "spans"} key in their {@code arguments} map. The value the user maps for
+     * {@code spans} is overridden with the typed list — {@code spans} is a reserved
+     * built-in, not a regular path-resolved variable.
+     *
+     * <p>The returned map is typed as {@code Map<String, Object>} so the spans value can
+     * carry a {@code List<Span>} through Jackson serialization to the Python runner as a
+     * JSON array. The Python side receives {@code spans} as a list of dicts after
+     * {@code json.loads(...)} — not as a JSON string that the user would have to re-parse.
+     *
+     * <p>Caller is responsible for only invoking this overload when the user actually
+     * requested spans (i.e. {@code arguments.containsKey("spans")}). The scorer makes this
+     * decision so the span fetch is skipped on metrics that don't need it.
+     */
+    public static Map<String, Object> toReplacements(
+            @NonNull Map<String, String> variables, @NonNull Trace trace, @NonNull List<Span> spans) {
+        var base = toReplacements(variables, trace);
+        var result = new LinkedHashMap<String, Object>(base);
+        result.put(SPANS_VARIABLE_NAME, spans.stream().sorted(BY_SPAN_START_TIME).toList());
+        return result;
     }
 
     public static Map<String, String> toReplacements(Map<String, String> variables, Span span) {
@@ -549,7 +586,7 @@ public class OnlineScoringEngine {
                 name, entityType, entityId));
     }
 
-    public static ParsedFeedbackScores toFeedbackScores(@NotNull ChatResponse chatResponse) {
+    public static ParsedFeedbackScores toFeedbackScores(@NonNull ChatResponse chatResponse) {
         var content = extractJson(chatResponse.aiMessage().text());
         JsonNode structuredResponse;
         try {
@@ -624,5 +661,101 @@ public class OnlineScoringEngine {
     @Builder(toBuilder = true)
     record MessageVariableMapping(
             TraceSection traceSection, String variableName, String jsonPath, String valueToReplace) {
+    }
+
+    /**
+     * Rough character-based token estimate for the {@code {trace, spans}} composite. Used by
+     * {@code OnlineScoringLlmAsJudgeScorer} to decide whether a trace is big enough that the
+     * inline-rendered prompt would risk overflowing the model's window — which flips the
+     * scorer into the read/jq/search agentic-tools path.
+     *
+     * <p>{@code charsPerToken} is the chars-per-token ratio operators configure via
+     * {@code onlineScoring.agenticToolsCharsPerToken} (default 4 = natural-language English).
+     * Workloads that skew toward code/JSON should lower the ratio (~ 2) to pull the size-based
+     * branch in earlier. Accuracy isn't precision-critical because the threshold itself has
+     * slack (default 50K tokens vs typical 128K windows), and the per-call and cumulative
+     * output caps in {@link com.comet.opik.api.resources.v1.events.tools.ReadTool} pick up
+     * any slack on the agentic-tools side.
+     */
+    public static int estimateTraceContextTokens(@NonNull Trace trace, @NonNull List<Span> spans,
+            @NonNull TraceCompressor traceCompressor, int charsPerToken) {
+        return estimateTokensFromJson(traceCompressor.buildFullJson(trace, spans), charsPerToken);
+    }
+
+    /**
+     * Same as {@link #estimateTraceContextTokens} but skips the JSON build. Used when the
+     * caller already has the full {@code {trace, spans}} JSON in hand (e.g. when it's going
+     * to be pre-seeded into the tool context's cache anyway) — avoids serializing the trace
+     * twice on big-trace evaluations where every redundant {@code buildFullJson} burns CPU
+     * and GC churn.
+     */
+    public static int estimateTokensFromJson(@NonNull JsonNode fullJson, int charsPerToken) {
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
+        return fullJson.toString().length() / charsPerToken;
+    }
+
+    /**
+     * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
+     * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
+     * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
+     * log, and the rethrow-with-error-log fallback. Callers supply only what actually differs:
+     * the entity label ({@code "traceId"} / {@code "spanId"}), the id, the rule name, and a
+     * supplier that builds the rendered evaluator input.
+     */
+    public static Map<String, Object> logAndPrepareEvaluatorInput(
+            @NonNull Logger userFacingLogger,
+            @NonNull Map<String, String> mdc,
+            @NonNull String entityLabel,
+            @NonNull Object entityId,
+            String ruleName,
+            @NonNull Supplier<Map<String, Object>> dataSupplier) {
+        try (var logContext = LogContextAware.wrapWithMdc(mdc)) {
+            userFacingLogger.info("Evaluating {} '{}' sampled by rule '{}'", entityLabel, entityId, ruleName);
+            try {
+                Map<String, Object> data = dataSupplier.get();
+                if (userFacingLogger.isInfoEnabled()) {
+                    userFacingLogger.info("Sending {} '{}' to Python evaluator: '{}'",
+                            entityLabel, entityId, summarizeEvaluatorInput(data));
+                }
+                return data;
+            } catch (Exception exception) {
+                userFacingLogger.error("Error preparing Python request for {} '{}': \n\n{}",
+                        entityLabel, entityId, exception.getMessage());
+                throw exception;
+            }
+        }
+    }
+
+    /**
+     * Shape-only summary of the rendered Python evaluator input for user-facing logs.
+     * Values are rendered trace/span content (input/output/metadata/spans); logging them
+     * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
+     * so we surface key names and sizes only.
+     */
+    public static String summarizeEvaluatorInput(@NonNull Map<String, Object> data) {
+        var parts = data.entrySet().stream()
+                .map(e -> {
+                    var v = e.getValue();
+                    if (v instanceof List<?> list) {
+                        return String.format("%s=list(%d)", e.getKey(), list.size());
+                    }
+                    var s = v == null ? "" : v.toString();
+                    return String.format("%s=%dc", e.getKey(), s.length());
+                })
+                .collect(Collectors.joining(", "));
+        return String.format("arguments=[%s]", parts);
+    }
+
+    /**
+     * Whether the given provider is known to support tool-calling. Used to gate the
+     * agentic-tools path: providers that don't support tools fall back to the inline path
+     * even when the context exceeds the size threshold (which may overflow the model's
+     * window — in that case the operator should pick a different model for those workloads).
+     */
+    public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
+        return switch (provider) {
+            case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
+            case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
+        };
     }
 }
