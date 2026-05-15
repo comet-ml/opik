@@ -44,6 +44,7 @@ import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.DatasetVersionDAO;
 import com.comet.opik.domain.DatasetVersionService;
 import com.comet.opik.domain.SpanEnrichmentOptions;
 import com.comet.opik.domain.TraceEnrichmentOptions;
@@ -76,6 +77,7 @@ import uk.co.jemos.podam.api.PodamFactory;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -5057,6 +5059,116 @@ class DatasetVersionResourceTest {
                     datasetId, 1, 10, DatasetVersionService.LATEST_TAG, API_KEY, TEST_WORKSPACE).content();
             assertThat(latestItems).hasSize(1);
             assertThat(latestItems.getFirst().description()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Lightweight version-id lookups (DAO):")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class LightweightVersionIdLookups {
+
+        private Optional<UUID> findVersionIdByTag(UUID datasetId, String tag, String workspaceId) {
+            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .findVersionIdByTag(datasetId, tag, workspaceId));
+        }
+
+        private Optional<UUID> findVersionIdByHash(UUID datasetId, String versionHash, String workspaceId) {
+            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+                    .findVersionIdByHash(datasetId, versionHash, workspaceId));
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns latest version's id for the 'latest' tag")
+        void findVersionIdByTag__whenLatestTag__thenReturnsVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var expected = getLatestVersion(datasetId);
+
+            var actual = findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID);
+
+            assertThat(actual).contains(expected.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: tracks the latest version across multiple writes")
+        void findVersionIdByTag__whenNewVersionCreated__thenReturnsNewestId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var v1 = getLatestVersion(datasetId);
+            createDatasetItems(datasetId, 1);
+            var v2 = getLatestVersion(datasetId);
+            assertThat(v1.id()).isNotEqualTo(v2.id());
+
+            var actual = findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID);
+
+            assertThat(actual).contains(v2.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns the version a custom tag points to")
+        void findVersionIdByTag__whenCustomTag__thenReturnsTaggedVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var v1 = getLatestVersion(datasetId);
+            datasetResourceClient.createVersionTag(datasetId, v1.versionHash(),
+                    DatasetVersionTag.builder().tag("stable").build(), API_KEY, TEST_WORKSPACE);
+            createDatasetItems(datasetId, 1);
+            var v2 = getLatestVersion(datasetId);
+
+            assertThat(findVersionIdByTag(datasetId, "stable", WORKSPACE_ID)).contains(v1.id());
+            assertThat(findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, WORKSPACE_ID))
+                    .contains(v2.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns empty for unknown tag")
+        void findVersionIdByTag__whenTagUnknown__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByTag(datasetId, "nonexistent", WORKSPACE_ID)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByTag: returns empty for another workspace (workspace isolation)")
+        void findVersionIdByTag__whenDifferentWorkspace__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByTag(datasetId, DatasetVersionService.LATEST_TAG, UUID.randomUUID().toString()))
+                    .isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns version id for an existing hash")
+        void findVersionIdByHash__whenHashExists__thenReturnsVersionId() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var expected = getLatestVersion(datasetId);
+
+            var actual = findVersionIdByHash(datasetId, expected.versionHash(), WORKSPACE_ID);
+
+            assertThat(actual).contains(expected.id());
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns empty for unknown hash")
+        void findVersionIdByHash__whenHashUnknown__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+
+            assertThat(findVersionIdByHash(datasetId, "deadbeef", WORKSPACE_ID)).isEmpty();
+        }
+
+        @Test
+        @DisplayName("findVersionIdByHash: returns empty for another workspace (workspace isolation)")
+        void findVersionIdByHash__whenDifferentWorkspace__thenEmpty() {
+            var datasetId = createDataset(UUID.randomUUID().toString());
+            createDatasetItems(datasetId, 1);
+            var version = getLatestVersion(datasetId);
+
+            assertThat(findVersionIdByHash(datasetId, version.versionHash(), UUID.randomUUID().toString()))
+                    .isEmpty();
         }
     }
 }
