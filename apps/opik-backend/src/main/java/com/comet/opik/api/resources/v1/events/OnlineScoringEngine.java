@@ -846,6 +846,26 @@ public class OnlineScoringEngine {
      * window — in that case the operator should pick a different model for those workloads).
      */
     /**
+     * Shared error-logging helper for the {@code prepareEvaluation} catch blocks on the trace
+     * and thread scorers. The two loggers are intentional:
+     * <ul>
+     *   <li>{@code userFacingLogger} carries a sanitized one-liner with the entity id only —
+     *       no Throwable, so the stack trace (with internal class names / paths) doesn't leak
+     *       into the user-facing log sink.</li>
+     *   <li>{@code internalLogger} (the scorer's slf4j logger) carries the full stack trace
+     *       so an operator can diagnose what actually broke.</li>
+     * </ul>
+     * <p>The {@code idLabel} parameter ({@code "traceId"} / {@code "threadId"}) and {@code id}
+     * are formatted with single-quoted placeholders per the backend logging convention.
+     */
+    public static void logPreparingLlmRequestError(@NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger, @NonNull String idLabel, @NonNull Object id,
+            @NonNull Exception exception) {
+        userFacingLogger.error("Error preparing LLM request for {} '{}'", idLabel, id);
+        internalLogger.error("Error preparing LLM request for {} '{}'", idLabel, id, exception);
+    }
+
+    /**
      * Whether any of the template messages declares non-string (multimodal) content. The
      * agentic-tools render path on threads only substitutes the context variable into string
      * content — multimodal templates (image / audio / video alongside text) are rejected.

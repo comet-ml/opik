@@ -229,7 +229,7 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
                         .doOnNext(withMdc(mdc, chatResponse -> {
                             if (userFacingLogger.isInfoEnabled()) {
-                                userFacingLogger.info("Received response for threadId '{}': {}",
+                                userFacingLogger.info("Received response for threadId '{}': '{}'",
                                         threadId, OnlineScoringEngine.summarizeResponse(chatResponse));
                             }
                         }))
@@ -293,7 +293,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing LLM request for threadId '{}'", threadId, exception);
+                OnlineScoringEngine.logPreparingLlmRequestError(userFacingLogger, log, "threadId",
+                        threadId, exception);
                 throw exception;
             }
 

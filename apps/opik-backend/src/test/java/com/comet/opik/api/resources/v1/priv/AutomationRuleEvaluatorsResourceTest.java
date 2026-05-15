@@ -1678,7 +1678,7 @@ class AutomationRuleEvaluatorsResourceTest {
         // format, so both are accepted here.
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "Received response for traceId '.*': textChars=\\d+, toolCalls=\\d+, finishReason=.*")
+                        "Received response for traceId '.*': 'textChars=\\d+, toolCalls=\\d+, finishReason=.*'")
                         || log.message().matches("(?s)Received response for traceId '.*':\\n\\n.*"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(

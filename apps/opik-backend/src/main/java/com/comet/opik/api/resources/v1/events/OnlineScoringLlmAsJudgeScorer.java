@@ -206,7 +206,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 .flatMap(prepared -> scoreTraceReactive(prepared.scoreRequest(), message)
                         .doOnNext(withMdc(mdc, chatResponse -> {
                             if (userFacingLogger.isInfoEnabled()) {
-                                userFacingLogger.info("Received response for traceId '{}': {}",
+                                userFacingLogger.info("Received response for traceId '{}': '{}'",
                                         trace.id(), OnlineScoringEngine.summarizeResponse(chatResponse));
                             }
                         }))
@@ -294,7 +294,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                     structuredRequest = scoreRequest;
                 }
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing LLM request for traceId '{}'", trace.id(), exception);
+                OnlineScoringEngine.logPreparingLlmRequestError(userFacingLogger, log, "traceId",
+                        trace.id(), exception);
                 throw exception;
             }
 
