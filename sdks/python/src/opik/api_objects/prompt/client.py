@@ -271,37 +271,10 @@ class PromptClient:
             fetch_fn=_fetch,
         )
         if result is not None:
-            from opik import context_storage, exceptions as opik_exceptions
+            from opik import opik_context
 
-            prompt_info = result.__internal_api__to_info_dict__()
-
-            def _append_prompt(observation_data: Optional[Any]) -> None:
-                try:
-                    if observation_data is not None:
-                        existing = (observation_data.metadata or {}).get(
-                            "opik_prompts", []
-                        )
-                        dedup_key = (
-                            prompt_info.get("id"),
-                            (prompt_info.get("version") or {}).get("commit"),
-                        )
-                        existing_keys = {
-                            (p.get("id"), (p.get("version") or {}).get("commit"))
-                            for p in existing
-                        }
-                        if dedup_key not in existing_keys:
-                            observation_data.update(
-                                metadata={"opik_prompts": existing + [prompt_info]}
-                            )
-                except opik_exceptions.OpikException:
-                    pass
-                except Exception:
-                    LOGGER.debug(
-                        "Failed to inject config metadata into trace", exc_info=True
-                    )
-
-            _append_prompt(context_storage.get_trace_data())
-            _append_prompt(context_storage.top_span_data())
+            opik_context.attach_prompt_to_current_trace(result)
+            opik_context.attach_prompt_to_current_span(result)
         return result
 
     # TODO: Need to add support for prompt name in the BE so we don't
