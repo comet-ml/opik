@@ -24,7 +24,6 @@ import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
@@ -316,7 +315,8 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             // {} placeholder, but the helper invocation itself is still evaluated eagerly.
             if (userFacingLogger.isInfoEnabled()) {
                 userFacingLogger.info("Sending traceId '{}' to LLM: {}",
-                        trace.id(), summarizeRequest(scoreRequest, message, useTools));
+                        trace.id(), OnlineScoringEngine.summarizeRequest(scoreRequest,
+                                message.llmAsJudgeCode().model().name(), useTools));
             }
 
             // fullJson is only useful downstream on the agentic-tools path (handleToolCalls
@@ -427,27 +427,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
             var messages = new ArrayList<ChatMessage>(toolRequest.messages());
             var budget = new ToolCallLoop.Budget();
 
-            return ToolCallLoop.run(
-                    chatResponse, toolRequest, followUpParameters, toolRegistry,
+            return ToolCallLoop.runWithWrapUp(
+                    chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
                     request -> scoreTraceReactive(request, message),
-                    messages, ctx, budget, trace.id().toString(), mdc)
-                    .flatMap(loopFinalResponse -> {
-                        // Force closure of the tool-using phase. Without this, the model can return prose
-                        // that continues the investigation ("Now let me check...") instead of the required
-                        // JSON, even when the request carries no tool specs. Combined with the provider-native
-                        // structured-output strategy on `structuredRequest`, this gives both a soft and a
-                        // hard signal: "stop calling tools, emit only JSON now".
-                        messages.add(UserMessage.from(
-                                "You have completed your investigation using the available tools."
-                                        + " Now respond with ONLY the JSON object specified in the original instructions."
-                                        + " Do not call any more tools. Do not include any prose, commentary, or markdown"
-                                        + " fences — emit only the raw JSON object."));
-
-                        var finalRequest = structuredRequest.toBuilder()
-                                .messages(new ArrayList<>(messages))
-                                .build();
-                        return scoreTraceReactive(finalRequest, message);
-                    });
+                    messages, ctx, budget, trace.id().toString(), mdc);
         });
     }
 
@@ -459,24 +442,6 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
      */
     private record PreparedEvaluation(ChatRequest scoreRequest, ChatRequest structuredRequest, boolean useTools,
             JsonNode fullJson) {
-    }
-
-    /**
-     * Build a sanitized one-line description of the outgoing request for the user-facing
-     * log. The full {@code ChatRequest} contains the rendered system prompt, the user
-     * message with the trace's input/output, and request parameters — surfacing all of it
-     * in a stored log lands trace content (and any tokens or PII it carries) in clear
-     * text downstream of whatever sinks the user-facing log feeds. We log shape only.
-     */
-    private static String summarizeRequest(ChatRequest request, TraceToScoreLlmAsJudge message, boolean useTools) {
-        int messageCount = request.messages() == null ? 0 : request.messages().size();
-        int totalChars = request.messages() == null
-                ? 0
-                : request.messages().stream().mapToInt(m -> m.toString().length()).sum();
-        int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
-        return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
-                message.llmAsJudgeCode().model().name(),
-                messageCount, totalChars, toolSpecCount, useTools);
     }
 
 }

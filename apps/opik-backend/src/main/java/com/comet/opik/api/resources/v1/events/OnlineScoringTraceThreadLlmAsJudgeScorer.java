@@ -23,7 +23,6 @@ import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.log.UserFacingLoggingFactory;
 import dev.langchain4j.data.message.AiMessage;
 import dev.langchain4j.data.message.ChatMessage;
-import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.request.ToolChoice;
@@ -268,8 +267,13 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             userFacingLogger.info("Evaluating threadId '{}' sampled by rule '{}'", threadId, rule.getName());
 
             String modelName = message.code().model().name();
-            int estimatedContextTokens = OnlineScoringEngine.estimateThreadContextTokens(
-                    traces, onlineScoringConfig.getAgenticToolsCharsPerToken());
+            // Skip the JSON serialization that drives the token estimate when the toggle is off —
+            // we'd just throw the number away. shouldUseAgenticTools re-checks the toggle, so the
+            // estimate is only consulted on the agentic-tools path.
+            int estimatedContextTokens = serviceTogglesConfig.isAgenticToolsEnabled()
+                    ? OnlineScoringEngine.estimateThreadContextTokens(traces,
+                            onlineScoringConfig.getAgenticToolsCharsPerToken())
+                    : 0;
             boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId,
                     message.code().messages());
 
@@ -305,8 +309,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
             }
 
-            userFacingLogger.info("Sending threadId '{}' to LLM using the following input:\n\n{}",
-                    threadId, scoreRequest);
+            if (userFacingLogger.isInfoEnabled()) {
+                userFacingLogger.info("Sending threadId '{}' to LLM: {}",
+                        threadId, OnlineScoringEngine.summarizeRequest(scoreRequest, modelName, useTools));
+            }
             return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
         }
     }
@@ -389,21 +395,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             var messages = new ArrayList<ChatMessage>(toolRequest.messages());
             var budget = new ToolCallLoop.Budget();
 
-            return ToolCallLoop.run(
-                    chatResponse, toolRequest, followUpParameters, toolRegistry,
+            return ToolCallLoop.runWithWrapUp(
+                    chatResponse, toolRequest, structuredRequest, followUpParameters, toolRegistry,
                     request -> scoreTraceReactive(request, message),
-                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc)
-                    .flatMap(loopFinalResponse -> {
-                        messages.add(UserMessage.from(
-                                "You have completed your investigation using the available tools."
-                                        + " Now respond with ONLY the JSON object specified in the original instructions."
-                                        + " Do not call any more tools. Do not include any prose, commentary, or markdown"
-                                        + " fences — emit only the raw JSON object."));
-                        var finalRequest = structuredRequest.toBuilder()
-                                .messages(new ArrayList<>(messages))
-                                .build();
-                        return scoreTraceReactive(finalRequest, message);
-                    });
+                    messages, ctx, budget, "threadId/ruleId=" + message.ruleId(), mdc);
         });
     }
 

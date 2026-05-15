@@ -883,6 +883,24 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Build a sanitized one-line description of the outgoing LLM request for user-facing logs.
+     * The full {@link ChatRequest} contains the rendered prompt, the user message with the
+     * trace's input/output, request parameters, and tool specs — surfacing all of it in a
+     * stored log lands trace content (and any tokens or PII it carries) in clear text
+     * downstream of whatever sinks the log feeds. Shape-only summary instead.
+     */
+    public static String summarizeRequest(@NonNull ChatRequest request, @NonNull String modelName,
+            boolean useTools) {
+        int messageCount = request.messages() == null ? 0 : request.messages().size();
+        int totalChars = request.messages() == null
+                ? 0
+                : request.messages().stream().mapToInt(m -> m.toString().length()).sum();
+        int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
+        return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
+                modelName, messageCount, totalChars, toolSpecCount, useTools);
+    }
+
+    /**
      * Build a sanitized one-line description of the LLM response. The full {@link ChatResponse}
      * carries the assistant text and any tool-call arguments, both of which can echo trace
      * content the model is reasoning about — surfacing the raw response in a user-facing log

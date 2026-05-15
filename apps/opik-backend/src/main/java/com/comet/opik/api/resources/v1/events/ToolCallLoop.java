@@ -5,6 +5,7 @@ import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
 import dev.langchain4j.agent.tool.ToolExecutionRequest;
 import dev.langchain4j.data.message.ChatMessage;
 import dev.langchain4j.data.message.ToolExecutionResultMessage;
+import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.model.chat.request.ChatRequest;
 import dev.langchain4j.model.chat.request.ChatRequestParameters;
 import dev.langchain4j.model.chat.response.ChatResponse;
@@ -65,6 +66,18 @@ final class ToolCallLoop {
             + " budget (%d chars) exhausted for this judgment; further tool calls return this"
             + " error. Respond now with your best assessment from the data already gathered.\"}";
 
+    /**
+     * Force closure of the tool-using phase. Without this, the model can return prose that
+     * continues the investigation ("Now let me check...") instead of the required JSON, even
+     * when the request carries no tool specs. Combined with the provider-native structured-
+     * output strategy on {@code structuredRequest}, gives both a soft and a hard signal:
+     * "stop calling tools, emit only JSON now".
+     */
+    private static final String WRAP_UP_USER_MESSAGE = "You have completed your investigation"
+            + " using the available tools. Now respond with ONLY the JSON object specified in"
+            + " the original instructions. Do not call any more tools. Do not include any"
+            + " prose, commentary, or markdown fences — emit only the raw JSON object.";
+
     private ToolCallLoop() {
     }
 
@@ -113,6 +126,39 @@ final class ToolCallLoop {
             @NonNull Map<String, String> mdc) {
         return toolCallLoop(0, initialResponse, toolRequest, followUpParameters, toolRegistry,
                 scoreTrace, messages, ctx, budget, logIdValue, mdc);
+    }
+
+    /**
+     * Wraps {@link #run} with the post-loop closure that both scorers need: append a forcing
+     * user-message ({@link #WRAP_UP_USER_MESSAGE}), rebuild a request from
+     * {@code structuredRequest} (no tool specs) with the snapshotted message list, and re-issue
+     * via {@code scoreTrace} to get the final structured JSON.
+     *
+     * <p>{@code structuredRequest} is the no-tools shape from {@code prepareEvaluation} used
+     * for the final structured re-issue; {@code toolRequest} (carrying tool specs) is reused
+     * for the in-loop rounds.
+     */
+    static Mono<ChatResponse> runWithWrapUp(
+            @NonNull ChatResponse initialResponse,
+            @NonNull ChatRequest toolRequest,
+            @NonNull ChatRequest structuredRequest,
+            @NonNull ChatRequestParameters followUpParameters,
+            @NonNull ToolRegistry toolRegistry,
+            @NonNull Function<ChatRequest, Mono<ChatResponse>> scoreTrace,
+            @NonNull ArrayList<ChatMessage> messages,
+            @NonNull TraceToolContext ctx,
+            @NonNull Budget budget,
+            @NonNull String logIdValue,
+            @NonNull Map<String, String> mdc) {
+        return run(initialResponse, toolRequest, followUpParameters, toolRegistry, scoreTrace,
+                messages, ctx, budget, logIdValue, mdc)
+                .flatMap(loopFinalResponse -> {
+                    messages.add(UserMessage.from(WRAP_UP_USER_MESSAGE));
+                    var finalRequest = structuredRequest.toBuilder()
+                            .messages(new ArrayList<>(messages))
+                            .build();
+                    return scoreTrace.apply(finalRequest);
+                });
     }
 
     private static Mono<ChatResponse> toolCallLoop(int round, ChatResponse currentResponse,
