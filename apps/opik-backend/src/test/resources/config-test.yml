@@ -609,6 +609,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
+  # Default: false
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -742,6 +745,14 @@ experimentProjectMigration:
   lockWaitTime: 100ms
   # Per-cycle timeout — short for tests so hangs fail fast
   jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
