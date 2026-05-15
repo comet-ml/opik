@@ -6,6 +6,7 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersion.PromptVersionPage;
 import com.comet.opik.api.PromptVersionBatchUpdate;
+import com.comet.opik.api.PromptVersionType;
 import com.comet.opik.api.PromptVersionLink;
 import com.comet.opik.api.TemplateStructure;
 import com.comet.opik.api.error.ConflictException;
@@ -466,7 +467,9 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             promptVersionDAO.save(workspaceId, promptVersion);
-            promptDAO.updateLastUpdatedAt(promptVersion.promptId(), workspaceId, promptVersion.createdBy());
+            if (promptVersion.versionType() != PromptVersionType.MASK) {
+                promptDAO.updateLastUpdatedAt(promptVersion.promptId(), workspaceId, promptVersion.createdBy());
+            }
 
             return null;
         });
@@ -826,6 +829,9 @@ class PromptServiceImpl implements PromptService {
 
     private void postPromptCommittedEvent(PromptVersion promptVersion, String workspaceId, String workspaceName,
             String userName, UUID projectId) {
+        if (promptVersion.versionType() == PromptVersionType.MASK) {
+            return;
+        }
         eventBus.post(AlertEvent.builder()
                 .eventType(PROMPT_COMMITTED)
                 .workspaceId(workspaceId)
