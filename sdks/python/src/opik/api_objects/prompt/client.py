@@ -249,6 +249,7 @@ class PromptClient:
         project_name: Optional[str],
         template_structure: str,
         prompt_cls: Type[_PromptT],
+        no_cache: bool = False,
     ) -> Optional[_PromptT]:
         def _fetch() -> Optional[_PromptT]:
             prompt_version = self.get_prompt(
@@ -263,13 +264,16 @@ class PromptClient:
                 name, prompt_version, project_name=project_name
             )
 
-        result = prompt_cache.get_or_fetch(
-            name=name,
-            commit=commit,
-            project_name=project_name,
-            template_structure=template_structure,
-            fetch_fn=_fetch,
-        )
+        if no_cache:
+            result = _fetch()
+        else:
+            result = prompt_cache.get_or_fetch(
+                name=name,
+                commit=commit,
+                project_name=project_name,
+                template_structure=template_structure,
+                fetch_fn=_fetch,
+            )
         if result is not None:
             from opik import opik_context
 

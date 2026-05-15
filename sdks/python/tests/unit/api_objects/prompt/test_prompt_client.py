@@ -6,7 +6,9 @@ from typing import Optional
 import pytest
 
 from opik.api_objects.prompt import client as prompt_client
+from opik.api_objects.prompt import prompt_cache
 from opik.api_objects.prompt import types as prompt_types
+from opik.api_objects.prompt.text import prompt as text_prompt_module
 from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 
@@ -180,3 +182,99 @@ class TestPromptClientEndpointSelection:
 
         mock_rest_client.prompts.create_prompt.assert_called_once()
         mock_rest_client.prompts.create_prompt_version.assert_not_called()
+
+
+class TestGetPromptWithCacheBypass:
+    """Tests for no_cache parameter in get_prompt_with_cache."""
+
+    @pytest.fixture(autouse=True)
+    def clear_global_cache(self):
+        yield
+        prompt_cache.get_global_cache().clear()
+
+    @pytest.mark.parametrize(
+        "no_cache, expected_extra_calls",
+        [
+            (False, 0),
+            (True, 1),
+        ],
+        ids=["no_cache_false__uses_cache", "no_cache_true__hits_backend"],
+    )
+    def test_second_call_after_cache_warm(
+        self, client, mock_rest_client, no_cache, expected_extra_calls
+    ):
+        version = _make_mock_version()
+        mock_rest_client.prompts.retrieve_prompt_version.return_value = version
+
+        client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=False,
+        )
+        call_count_after_warm = (
+            mock_rest_client.prompts.retrieve_prompt_version.call_count
+        )
+
+        client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=no_cache,
+        )
+
+        assert (
+            mock_rest_client.prompts.retrieve_prompt_version.call_count
+            == call_count_after_warm + expected_extra_calls
+        )
+
+    def test_no_cache_true__returns_fresh_value(self, client, mock_rest_client):
+        old_version = _make_mock_version(template="old template")
+        new_version = _make_mock_version(template="new template")
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = [
+            old_version,
+            new_version,
+        ]
+
+        # Warm the cache with the old version
+        client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=False,
+        )
+
+        # Bypass should return the new value fetched from the backend
+        result = client.get_prompt_with_cache(
+            name="my-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=True,
+        )
+
+        assert result is not None
+        assert result.prompt == "new template"
+
+    def test_no_cache_true__backend_returns_none__returns_none(
+        self, client, mock_rest_client
+    ):
+        mock_rest_client.prompts.retrieve_prompt_version.side_effect = _make_404_error()
+
+        result = client.get_prompt_with_cache(
+            name="missing-prompt",
+            commit=None,
+            project_name=None,
+            template_structure="text",
+            prompt_cls=text_prompt_module.Prompt,
+            no_cache=True,
+        )
+
+        assert result is None

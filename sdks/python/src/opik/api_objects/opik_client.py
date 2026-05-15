@@ -2270,6 +2270,7 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
     ) -> Optional[prompt_module.Prompt]:
         """
         Retrieve a text prompt by name and optional commit version.
@@ -2283,6 +2284,7 @@ class Opik:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
 
         Returns:
             Prompt: The details of the specified text prompt, or None if not found.
@@ -2296,6 +2298,7 @@ class Opik:
             project_name=self._resolve_project_name(project_name),
             template_structure="text",
             prompt_cls=text_prompt_module.Prompt,
+            no_cache=no_cache,
         )
 
     def get_chat_prompt(
@@ -2303,6 +2306,7 @@ class Opik:
         name: str,
         commit: Optional[str] = None,
         project_name: Optional[str] = None,
+        no_cache: bool = False,
     ) -> Optional[prompt_module.ChatPrompt]:
         """
         Retrieve a chat prompt by name and optional commit version.
@@ -2316,6 +2320,7 @@ class Opik:
             name: The name of the prompt.
             commit: An optional commit version of the prompt. If not provided, the latest version is retrieved.
             project_name: The name of the project to retrieve the prompt from. If not provided, falls back to the active project context (from @track or opik.project_context), then to the client's default.
+            no_cache: If True, skip the local cache and fetch directly from the backend, guaranteeing a fresh value.
 
         Returns:
             ChatPrompt: The details of the specified chat prompt, or None if not found.
@@ -2329,6 +2334,7 @@ class Opik:
             project_name=self._resolve_project_name(project_name),
             template_structure="chat",
             prompt_cls=chat_prompt_module.ChatPrompt,
+            no_cache=no_cache,
         )
 
     def get_prompt_history(
