@@ -13,7 +13,6 @@ export interface LocalRunnerJob {
     projectId?: string;
     traceId?: string;
     maskId?: string;
-    masks?: Record<string, string>;
     blueprintName?: string;
     metadata?: OpikApi.LocalRunnerJobMetadata;
     timeout?: number;

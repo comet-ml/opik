@@ -8,15 +8,11 @@ export const ErrorMessageDetail: core.serialization.ObjectSchema<
     serializers.ErrorMessageDetail.Raw,
     OpikApi.ErrorMessageDetail
 > = core.serialization.object({
-    code: core.serialization.number().optional(),
-    message: core.serialization.string().optional(),
-    details: core.serialization.string().optional(),
+    errors: core.serialization.list(core.serialization.string()).optional(),
 });
 
 export declare namespace ErrorMessageDetail {
     export interface Raw {
-        code?: number | null;
-        message?: string | null;
-        details?: string | null;
+        errors?: string[] | null;
     }
 }

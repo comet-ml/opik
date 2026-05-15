@@ -521,6 +521,7 @@ from .prompt_version import PromptVersion
 from .prompt_version_detail import PromptVersionDetail
 from .prompt_version_detail_template_structure import PromptVersionDetailTemplateStructure
 from .prompt_version_detail_type import PromptVersionDetailType
+from .prompt_version_detail_version_type import PromptVersionDetailVersionType
 from .prompt_version_link import PromptVersionLink
 from .prompt_version_link_public import PromptVersionLinkPublic
 from .prompt_version_link_write import PromptVersionLinkWrite
@@ -528,9 +529,11 @@ from .prompt_version_page_public import PromptVersionPagePublic
 from .prompt_version_public import PromptVersionPublic
 from .prompt_version_public_template_structure import PromptVersionPublicTemplateStructure
 from .prompt_version_public_type import PromptVersionPublicType
+from .prompt_version_public_version_type import PromptVersionPublicVersionType
 from .prompt_version_template_structure import PromptVersionTemplateStructure
 from .prompt_version_type import PromptVersionType
 from .prompt_version_update import PromptVersionUpdate
+from .prompt_version_version_type import PromptVersionVersionType
 from .provider_api_key import ProviderApiKey
 from .provider_api_key_page_public import ProviderApiKeyPagePublic
 from .provider_api_key_provider import ProviderApiKeyProvider
@@ -1154,6 +1157,7 @@ __all__ = [
     "PromptVersionDetail",
     "PromptVersionDetailTemplateStructure",
     "PromptVersionDetailType",
+    "PromptVersionDetailVersionType",
     "PromptVersionLink",
     "PromptVersionLinkPublic",
     "PromptVersionLinkWrite",
@@ -1161,9 +1165,11 @@ __all__ = [
     "PromptVersionPublic",
     "PromptVersionPublicTemplateStructure",
     "PromptVersionPublicType",
+    "PromptVersionPublicVersionType",
     "PromptVersionTemplateStructure",
     "PromptVersionType",
     "PromptVersionUpdate",
+    "PromptVersionVersionType",
     "ProviderApiKey",
     "ProviderApiKeyPagePublic",
     "ProviderApiKeyProvider",
