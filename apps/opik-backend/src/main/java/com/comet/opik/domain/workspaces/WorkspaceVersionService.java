@@ -217,19 +217,29 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
 
     private void persistAndEmitBlocking(String workspaceId, WorkspaceVersion response, String userName) {
         var newVersion = response.opikVersion();
-        var previousVersion = workspacesService.findById(workspaceId)
+        var existingWorkspace = workspacesService.findById(workspaceId);
+        var previousVersion = existingWorkspace
                 .map(Workspace::lastKnownVersion)
                 .flatMap(OpikVersion::findByValue);
         workspacesService.upsertVersion(workspaceId, newVersion, userName);
-        // Probe the legacy feedback_scores ClickHouse table once per workspace version
-        // determination and persist the result. The stats query path uses this flag to skip
-        // the legacy UNION when no data exists there.
-        try {
-            boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
-            workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
-        } catch (RuntimeException exception) {
-            log.warn("Failed to probe legacy feedback_scores, leaving flag untouched, workspaceId '{}'",
-                    workspaceId, exception);
+        // Probe the legacy feedback_scores ClickHouse table only when MySQL hasn't already
+        // recorded that this workspace has no legacy data. Once the flag is false the legacy
+        // table only ever shrinks (no new writes land there), so re-probing on every cache
+        // miss is wasted CH work + a redundant MySQL upsert. Re-upsert only when the result
+        // differs from the stored value.
+        boolean storedHasLegacyScores = existingWorkspace
+                .map(Workspace::hasLegacyScores)
+                .orElse(true);
+        if (storedHasLegacyScores) {
+            try {
+                boolean hasLegacyScores = Boolean.TRUE.equals(feedbackScoreDAO.hasLegacyScores(workspaceId).block());
+                if (existingWorkspace.isEmpty() || hasLegacyScores != storedHasLegacyScores) {
+                    workspacesService.upsertHasLegacyScores(workspaceId, hasLegacyScores, userName);
+                }
+            } catch (RuntimeException exception) {
+                log.warn("Failed to probe legacy feedback_scores, leaving flag untouched, workspaceId '{}'",
+                        workspaceId, exception);
+            }
         }
         var versionChanged = previousVersion.map(prev -> prev != newVersion).orElse(true);
         analyticsService.trackEvent("workspace_version_determined", Map.of(

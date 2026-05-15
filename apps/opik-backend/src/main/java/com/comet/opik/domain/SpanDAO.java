@@ -2641,8 +2641,7 @@ public class SpanDAO {
                             })
                             .flatMap(result -> result.map(
                                     (row, rowMetadata) -> StatsMapper.mapProjectStats(row, "span_count")))
-                            .singleOrEmpty()
-                            .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
+                            .singleOrEmpty();
 
                     Mono<ProjectStats> feedbackMono = Mono.from(connectionFactory.create())
                             .flatMapMany(connection -> {
@@ -2663,11 +2662,9 @@ public class SpanDAO {
                                         .doFinally(signalType -> endSegment(segment));
                             })
                             .flatMap(result -> result.map((row, rowMetadata) -> mapProjectScoresStats(row)))
-                            .singleOrEmpty()
-                            .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
+                            .singleOrEmpty();
 
-                    return Mono.zip(spansMono, feedbackMono)
-                            .map(tuple -> StatsMerger.merge(tuple.getT1(), tuple.getT2()));
+                    return StatsMerger.zipAndMerge(spansMono, feedbackMono);
                 }));
     }
 

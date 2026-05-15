@@ -3844,8 +3844,7 @@ class TraceDAOImpl implements TraceDAO {
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(result -> result.map(
                                         (row, rowMetadata) -> StatsMapper.mapProjectStats(row, "trace_count")))
-                                .singleOrEmpty()
-                                .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
+                                .singleOrEmpty();
                     });
 
                     Mono<ProjectStats> feedbackMono = asyncTemplate.nonTransaction(connection -> {
@@ -3856,12 +3855,10 @@ class TraceDAOImpl implements TraceDAO {
                         return Flux.from(statement.execute())
                                 .doFinally(signalType -> endSegment(segment))
                                 .flatMap(result -> result.map((row, rowMetadata) -> mapProjectScoresStats(row)))
-                                .singleOrEmpty()
-                                .switchIfEmpty(Mono.just(new ProjectStats(List.of())));
+                                .singleOrEmpty();
                     });
 
-                    return Mono.zip(tracesSpansMono, feedbackMono)
-                            .map(tuple -> StatsMerger.merge(tuple.getT1(), tuple.getT2()));
+                    return StatsMerger.zipAndMerge(tracesSpansMono, feedbackMono);
                 }));
     }
 

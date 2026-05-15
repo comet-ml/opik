@@ -4,8 +4,10 @@ import com.comet.opik.api.ProjectStats;
 import lombok.experimental.UtilityClass;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.MapUtils;
+import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -80,5 +82,21 @@ public class StatsMerger {
 
     private static final Set<String> TRAILING_STATS = Set.of(
             GUARDRAILS_FAILED_COUNT, RECENT_ERROR_COUNT, PAST_PERIOD_ERROR_COUNT, ERROR_COUNT);
+
+    /**
+     * Zips the split-A (aggregates) and split-B (feedback) branches the way every single-project
+     * {@code getStats} call site needs them. Both branches get an empty-{@link ProjectStats}
+     * default so {@link Mono#zip} never silently drops one side when the other emits empty
+     * (a real possibility for both queries since they end with {@code GROUP BY project_id}).
+     * The zipped result is then spliced via {@link #merge(ProjectStats, ProjectStats)} so the
+     * feedback aggregates land at the canonical position in the stats list.
+     */
+    public static Mono<ProjectStats> zipAndMerge(Mono<ProjectStats> aggregates, Mono<ProjectStats> feedback) {
+        var empty = new ProjectStats(List.of());
+        return Mono.zip(
+                aggregates.switchIfEmpty(Mono.just(empty)),
+                feedback.switchIfEmpty(Mono.just(empty)))
+                .map(tuple -> merge(tuple.getT1(), tuple.getT2()));
+    }
 
 }
