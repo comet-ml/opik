@@ -69,7 +69,11 @@ public interface PromptService {
 
     Prompt getById(UUID id);
 
+    Prompt getById(UUID id, UUID maskId);
+
     List<Prompt> getByIds(Set<UUID> ids);
+
+    List<PromptVersion> retrieveVersionsByIds(List<UUID> ids);
 
     PromptVersionPage getVersionsByPromptId(
             UUID promptId,
@@ -487,26 +491,39 @@ class PromptServiceImpl implements PromptService {
 
     @Override
     public Prompt getById(@NonNull UUID id) {
+        return getById(id, null);
+    }
+
+    @Override
+    public Prompt getById(@NonNull UUID id, UUID maskId) {
         String workspaceId = requestContext.get().getWorkspaceId();
 
         return transactionTemplate.inTransaction(READ_ONLY, handle -> {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
-            Prompt prompt = promptDAO.findById(id, workspaceId);
+            Prompt prompt = promptDAO.findById(id, workspaceId, maskId);
 
             if (prompt == null) {
                 throw new NotFoundException(PROMPT_NOT_FOUND);
             }
 
+            if (maskId != null && prompt.requestedVersion() == null) {
+                throw new NotFoundException(PROMPT_VERSION_NOT_FOUND);
+            }
+
             return prompt.toBuilder()
-                    .latestVersion(
-                            Optional.ofNullable(prompt.latestVersion())
-                                    .map(promptVersion -> promptVersion.toBuilder()
-                                            .variables(getVariables(promptVersion.template(), promptVersion.type()))
-                                            .build())
-                                    .orElse(null))
+                    .latestVersion(enrichWithVariables(prompt.latestVersion()))
+                    .requestedVersion(enrichWithVariables(prompt.requestedVersion()))
                     .build();
         });
+    }
+
+    private PromptVersion enrichWithVariables(PromptVersion version) {
+        return Optional.ofNullable(version)
+                .map(v -> v.toBuilder()
+                        .variables(getVariables(v.template(), v.type()))
+                        .build())
+                .orElse(null);
     }
 
     @Override
@@ -517,6 +534,23 @@ class PromptServiceImpl implements PromptService {
             PromptDAO promptDAO = handle.attach(PromptDAO.class);
 
             return promptDAO.findByIds(ids, workspaceId);
+        });
+    }
+
+    @Override
+    public List<PromptVersion> retrieveVersionsByIds(@NonNull List<UUID> ids) {
+        if (ids.isEmpty()) {
+            return List.of();
+        }
+
+        String workspaceId = requestContext.get().getWorkspaceId();
+
+        return transactionTemplate.inTransaction(READ_ONLY, handle -> {
+            PromptVersionDAO promptVersionDAO = handle.attach(PromptVersionDAO.class);
+
+            return promptVersionDAO.findByIds(ids, workspaceId).stream()
+                    .map(this::enrichWithVariables)
+                    .toList();
         });
     }
 
