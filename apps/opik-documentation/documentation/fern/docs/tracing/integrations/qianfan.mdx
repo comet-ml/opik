@@ -1,0 +1,125 @@
+---
+description: Start here to integrate Opik into your Qianfan-based genai application
+  for end-to-end LLM observability, unit testing, and optimization.
+headline: Qianfan | Opik Documentation
+og:description: Learn to integrate Opik with Baidu Qianfan using the OpenAI SDK
+  compatibility layer and track_openai for end-to-end tracing.
+og:site_name: Opik Documentation
+og:title: Integrate Opik with Baidu Qianfan
+title: Observability for Qianfan with Opik
+---
+
+[Baidu Qianfan](https://cloud.baidu.com/product/wenxinworkshop) is Baidu AI Cloud's model platform for building and deploying generative AI applications. Qianfan provides an OpenAI-compatible API in its V2 inference service, which lets you instrument Qianfan calls with Opik by using the standard OpenAI Python SDK.
+
+This guide explains how to integrate Opik with Qianfan using the OpenAI SDK and `track_openai()`. This is the fastest path if you already call Qianfan through its OpenAI-compatible endpoint.
+
+## Getting started
+
+First, ensure you have both `opik` and `openai` packages installed:
+
+```bash
+pip install opik openai
+```
+
+You also need:
+
+- An Opik project configured locally
+- A Qianfan API key for the OpenAI-compatible V2 inference service
+- A Qianfan application with a model enabled for inference
+
+<Note>
+  Qianfan's OpenAI-compatible flow uses an API key tied to your application identity.
+  If your request is authenticated correctly but the application or model is not enabled,
+  Qianfan may reject the call even when the `base_url` is correct.
+</Note>
+
+## Configure Opik
+
+Configure the Opik Python SDK for your deployment type. See the [Python SDK Configuration guide](/v1/tracing/sdk_configuration) for all available options.
+
+```bash
+opik configure
+```
+
+## Track Qianfan API calls
+
+```python
+from openai import OpenAI
+from opik.integrations.openai import track_openai
+
+client = OpenAI(
+    api_key="YOUR_QIANFAN_API_KEY",
+    base_url="https://qianfan.baidubce.com/v2",
+)
+client = track_openai(client)
+
+response = client.chat.completions.create(
+    model="YOUR_QIANFAN_MODEL",
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Explain what Opik traces capture."},
+    ],
+    temperature=0.7,
+)
+
+print(response.choices[0].message.content)
+```
+
+Opik will automatically capture the request inputs, response content, model name, token usage, and timing information for each Qianfan call.
+
+## Advanced usage
+
+### Combine Qianfan tracing with `@track`
+
+If you want Opik to show both your application steps and the underlying Qianfan request, wrap your business logic with `@track` and keep the tracked OpenAI client inside that flow:
+
+```python
+from opik import track
+from openai import OpenAI
+from opik.integrations.openai import track_openai
+
+client = OpenAI(
+    api_key="YOUR_QIANFAN_API_KEY",
+    base_url="https://qianfan.baidubce.com/v2",
+)
+client = track_openai(client)
+
+@track
+def summarize_customer_feedback(feedback: str) -> str:
+    response = client.chat.completions.create(
+        model="YOUR_QIANFAN_MODEL",
+        messages=[
+            {
+                "role": "user",
+                "content": f"Summarize the main themes in this feedback: {feedback}",
+            }
+        ],
+    )
+    return response.choices[0].message.content
+
+summary = summarize_customer_feedback("Users want faster search and clearer pricing.")
+```
+
+This gives you a parent application span plus a child LLM span for the Qianfan request.
+
+## Troubleshooting
+
+### Common issues
+
+1. **Authentication errors**: Ensure you are using a Qianfan API key for the V2 inference service and that the target application is configured correctly.
+2. **Model not found**: Verify the model name is enabled in your Qianfan application and matches the currently supported model list.
+3. **Base URL issues**: Use `https://qianfan.baidubce.com/v2` for the OpenAI-compatible V2 endpoint.
+4. **Gateway mismatch**: If you call Qianfan through another proxy or gateway, use that gateway's base URL and review the [custom AI provider settings](/v1/administration/workspace-settings/ai_providers) if you also want Opik UI-side provider configuration.
+
+### Getting help
+
+- Review the [Qianfan V2 inference API documentation](https://cloud.baidu.com/doc/qianfan/s/qmh4sv5vi)
+- Review the [Qianfan OpenAI SDK compatibility guide](https://cloud.baidu.com/doc/qianfan/s/Hmh4suq26)
+- Review the [Opik OpenAI integration guide](/v1/integrations/openai)
+
+## Next steps
+
+- [Evaluate your LLM applications](/v1/evaluation/overview) using Opik's evaluation framework
+- [Create datasets](/v1/evaluation/manage_datasets) to test and improve your prompts
+- [Set up feedback collection](/v1/tracing/annotate_traces) to gather human evaluation
+- [Monitor performance](/v1/tracing/concepts) across Qianfan models and prompt versions

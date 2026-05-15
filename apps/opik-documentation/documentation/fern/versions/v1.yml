@@ -549,6 +549,9 @@ navigation:
               - page: Predibase
                 path: ../docs/tracing/integrations/predibase.mdx
                 slug: predibase
+              - page: Qianfan
+                path: ../docs/tracing/integrations/qianfan.mdx
+                slug: qianfan
               - page: Together AI
                 path: ../docs/tracing/integrations/together-ai.mdx
                 slug: together-ai

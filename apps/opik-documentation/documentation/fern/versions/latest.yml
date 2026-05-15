@@ -719,6 +719,9 @@ navigation:
               - page: Predibase
                 path: ../docs-v2/integrations/predibase.mdx
                 slug: predibase
+              - page: Qianfan
+                path: ../docs-v2/integrations/qianfan.mdx
+                slug: qianfan
               - page: Together AI
                 path: ../docs-v2/integrations/together-ai.mdx
                 slug: together-ai
