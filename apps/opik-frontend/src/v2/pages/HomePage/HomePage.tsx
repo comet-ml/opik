@@ -5,12 +5,15 @@ import {
   useActiveProjectId,
   useIsProjectLoading,
 } from "@/store/AppStore";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import Loader from "@/shared/Loader/Loader";
 
 const HomePage = () => {
   const workspaceName = useActiveWorkspaceName();
   const activeProjectId = useActiveProjectId();
   const isLoading = useIsProjectLoading();
+  const ollieEnabled = useIsFeatureEnabled(FeatureToggleKeys.OLLIE_ENABLED);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -18,7 +21,9 @@ const HomePage = () => {
 
     if (activeProjectId) {
       navigate({
-        to: "/$workspaceName/projects/$projectId/home",
+        to: ollieEnabled
+          ? "/$workspaceName/projects/$projectId/home"
+          : "/$workspaceName/projects/$projectId/logs",
         params: { workspaceName, projectId: activeProjectId },
         replace: true,
       });
@@ -29,7 +34,7 @@ const HomePage = () => {
         replace: true,
       });
     }
-  }, [activeProjectId, isLoading, workspaceName, navigate]);
+  }, [activeProjectId, isLoading, workspaceName, ollieEnabled, navigate]);
 
   return <Loader />;
 };
