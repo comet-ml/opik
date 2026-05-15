@@ -765,6 +765,27 @@ def verify_chat_prompt_version(
     assert commit == chat_prompt.commit, f"{chat_prompt.commit} != {commit}"
 
 
+def verify_opik_prompt_entry(
+    entry: Dict[str, Any],
+    *,
+    name: str,
+    template_structure: str,
+) -> None:
+    """Verify a single entry inside metadata['opik_prompts']."""
+    assert entry["name"] == name, f"Expected name {name!r}, got {entry.get('name')!r}"
+    assert entry.get("template_structure") == template_structure, (
+        f"Expected template_structure {template_structure!r}, got {entry.get('template_structure')!r}"
+    )
+    assert "id" in entry, f"Missing 'id' in opik_prompts entry for {name}"
+    version = entry.get("version", {})
+    assert "template" in version, (
+        f"Missing 'version.template' in opik_prompts entry for {name}"
+    )
+    assert "commit" in version, (
+        f"Missing 'version.commit' in opik_prompts entry for {name}"
+    )
+
+
 def verify_dataset_filtered_items(
     opik_client: opik.Opik,
     dataset_name: str,

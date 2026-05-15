@@ -23,3 +23,4 @@ export {
   PromptValidationError,
   PromptTemplateStructureMismatch,
 } from "./errors";
+export { PromptCache, getGlobalCache, getOrFetch, buildCacheKey } from "./promptCache";
