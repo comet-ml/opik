@@ -695,12 +695,6 @@ public class OnlineScoringEngine {
     }
 
     /**
-     * Shape-only summary of the rendered Python evaluator input for user-facing logs.
-     * Values are rendered trace/span content (input/output/metadata/spans); logging them
-     * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
-     * so we surface key names and sizes only.
-     */
-    /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
      * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
@@ -732,6 +726,12 @@ public class OnlineScoringEngine {
         }
     }
 
+    /**
+     * Shape-only summary of the rendered Python evaluator input for user-facing logs.
+     * Values are rendered trace/span content (input/output/metadata/spans); logging them
+     * verbatim would land user data downstream of whatever sinks the user-facing log feeds,
+     * so we surface key names and sizes only.
+     */
     public static String summarizeEvaluatorInput(@NonNull Map<String, Object> data) {
         var parts = data.entrySet().stream()
                 .map(e -> {
