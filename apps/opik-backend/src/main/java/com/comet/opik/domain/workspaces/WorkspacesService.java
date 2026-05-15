@@ -6,8 +6,11 @@ import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.jdbi.v3.core.statement.UnableToExecuteStatementException;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 import ru.vyarus.guicey.jdbi3.tx.TransactionTemplate;
 
 import java.sql.SQLException;
@@ -51,8 +54,25 @@ public interface WorkspacesService {
     List<String> findMigrationSkippedWorkspaceIds();
 
     long countMigrationSkipped();
+
+    /**
+     * Returns whether the workspace has data in the legacy {@code feedback_scores} ClickHouse
+     * table. Runs the blocking JDBI lookup on a bounded-elastic worker; defaults to {@code true}
+     * when no row exists yet, and on any error so a degraded state DB doesn't break the stats
+     * endpoint. The version determination flow probes the table once and persists the result
+     * via {@link #upsertHasLegacyScores}.
+     */
+    Mono<Boolean> hasLegacyScores(String workspaceId);
+
+    /**
+     * Idempotent upsert that records the workspace's legacy-feedback-scores status explicitly.
+     * Called from the workspace version determination flow after a one-shot ClickHouse presence
+     * check on the {@code feedback_scores} table.
+     */
+    void upsertHasLegacyScores(String workspaceId, boolean hasLegacyScores, String userName);
 }
 
+@Slf4j
 @Singleton
 @RequiredArgsConstructor(onConstructor_ = @Inject)
 class WorkspacesServiceImpl implements WorkspacesService {
@@ -145,5 +165,29 @@ class WorkspacesServiceImpl implements WorkspacesService {
     public long countMigrationSkipped() {
         return transactionTemplate.inTransaction(READ_ONLY,
                 handle -> handle.attach(WorkspacesDAO.class).countMigrationSkipped());
+    }
+
+    @Override
+    public Mono<Boolean> hasLegacyScores(@NonNull String workspaceId) {
+        if (StringUtils.isBlank(workspaceId)) {
+            return Mono.just(true);
+        }
+        return Mono.fromCallable(() -> transactionTemplate.inTransaction(READ_ONLY,
+                handle -> handle.attach(WorkspacesDAO.class).findHasLegacyScores(workspaceId))
+                .orElse(true))
+                .subscribeOn(Schedulers.boundedElastic())
+                .onErrorResume(throwable -> {
+                    log.warn("Failed to resolve has_legacy_scores for workspace '{}', defaulting to true",
+                            workspaceId, throwable);
+                    return Mono.just(true);
+                });
+    }
+
+    @Override
+    public void upsertHasLegacyScores(@NonNull String workspaceId, boolean hasLegacyScores,
+            @NonNull String userName) {
+        transactionTemplate.inTransaction(WRITE,
+                handle -> handle.attach(WorkspacesDAO.class)
+                        .upsertHasLegacyScores(workspaceId, hasLegacyScores, userName));
     }
 }
