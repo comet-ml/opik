@@ -309,51 +309,10 @@ public class OnlineScoringEngine {
                 })
                 .collect(
                         Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
-
-        // render the message templates from evaluator rule
-        return templateMessages.stream()
-                .map(templateMessage -> {
-                    // Check if content is string (text) or array (multimodal)
-                    if (templateMessage.isStringContent()) {
-                        // String format: plain text content
-                        var renderedMessage = TemplateParseUtils.render(
-                                templateMessage.asString(), replacements, PromptType.MUSTACHE);
-                        return switch (templateMessage.role()) {
-                            case USER -> UserMessage.from(renderedMessage);
-                            case SYSTEM -> SystemMessage.from(renderedMessage);
-                            default -> {
-                                log.info("No mapping for message role type {}", templateMessage.role());
-                                yield null;
-                            }
-                        };
-                    } else if (templateMessage.isStructuredContent()) {
-                        // Array format: structured content parts
-                        return switch (templateMessage.role()) {
-                            case USER -> buildUserMessageFromContentParts(
-                                    templateMessage.asContentList(), replacements);
-                            case SYSTEM -> {
-                                // For SYSTEM messages with array content, extract first text part
-                                var textContent = templateMessage.asContentList().stream()
-                                        .filter(part -> "text".equals(part.type()))
-                                        .map(LlmAsJudgeMessageContent::text)
-                                        .filter(Objects::nonNull)
-                                        .map(text -> TemplateParseUtils.render(text, replacements, PromptType.MUSTACHE))
-                                        .findFirst()
-                                        .orElse("");
-                                yield SystemMessage.from(textContent);
-                            }
-                            default -> {
-                                log.info("No mapping for message role type {}", templateMessage.role());
-                                yield null;
-                            }
-                        };
-                    } else {
-                        log.warn("Unknown content type for message role {}", templateMessage.role());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .toList();
+        // Rendering itself is identical to trace / span flows once replacements are built —
+        // delegate so role-fan-out, multimodal handling, and prompt-type defaults stay in
+        // one place. The thread-specific bit is just the replacements assembly above.
+        return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
     /**
