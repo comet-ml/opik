@@ -138,6 +138,34 @@ class Streamer:
 
         return self._message_queue.empty()
 
+    def drain_to_processors(self, timeout: Optional[float] = None) -> bool:
+        """Lightweight drain: ensure every message submitted so far has
+        been applied to in-process chained processors (notably the
+        `LocalEmulatorMessageProcessor`).
+
+        Differs from `flush(...)` by skipping the file-upload manager
+        and the fallback replay manager — both are concerned with
+        backend delivery, not local processor state. Designed to be
+        called frequently from the evaluation engine before invoking
+        the agentic LLM judge, which reads the emulator's view of
+        spans/error_info for the most-recently-run task. Without this
+        drain, the queue consumer may still be processing the batch
+        when scoring begins and the judge would see stale data.
+
+        Returns True if everything drained within `timeout`; False
+        if the timeout fired with messages still pending. The agentic
+        path treats False as "best-effort applied" and proceeds with
+        whatever state is currently in the emulator.
+        """
+        self._batch_preprocessor.flush()
+        synchronization.wait_for_done(
+            check_function=lambda: self._all_done(),
+            timeout=timeout,
+            sleep_time=0.05,
+            progress_callback=self._batch_preprocessor.flush,
+        )
+        return self._all_done()
+
     def flush(self, timeout: Optional[float], upload_sleep_time: int = 5) -> bool:
         # wait for current pending messages processing to be completed
         # this should be done before flushing batch preprocessor because some

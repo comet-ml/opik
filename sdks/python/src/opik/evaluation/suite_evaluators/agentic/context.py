@@ -153,7 +153,10 @@ def build_trace_tool_context(
     """Construct a context for `trace_id` if the emulator has the trace.
 
     Returns None when the trace isn't in the emulator cache — caller falls
-    back to the one-shot judge path.
+    back to the one-shot judge path. Used by re-scoring code paths
+    where the trace is already in the emulator from an earlier run.
+    For the live LLM-task flow, prefer `build_trace_tool_context_from_trace_data`
+    — see the docstring there for why.
     """
     trace = emulator.get_trace(trace_id)
     if trace is None:
@@ -170,4 +173,76 @@ def build_trace_tool_context(
         spans=spans,
         parent_by_child=parent_by_child,
         emulator=emulator,
+    )
+
+
+# Forward alias for the helper signature: callers pass an
+# `opik.api_objects.trace.TraceData` here. We don't import the concrete
+# type to keep this module free of api_objects imports (the dependency
+# direction is engine → agentic, not the reverse).
+TraceDataLike = Any
+
+
+def build_trace_tool_context_from_trace_data(
+    trace_data: TraceDataLike,
+    emulator: emulator_message_processor.EmulatorMessageProcessor,
+) -> TraceToolContext:
+    """Construct a context from an in-memory `TraceData` plus emulator-derived spans.
+
+    Why this exists: during a live LLM-task evaluation, the engine
+    creates `TraceData` at the top of the per-item flow but the
+    corresponding `CreateTraceMessage` is only emitted in the
+    `evaluate_llm_task_context.__exit__` (see
+    `evaluation/engine/helpers.py`). Scoring runs **inside** that
+    context manager, so when `_compute_test_result_for_test_case` asks
+    the engine to build an agentic context, the trace isn't in the
+    emulator yet — the lookup-based `build_trace_tool_context` would
+    return None and the agentic path would silently bypass.
+
+    Spans, by contrast, are emitted inline by `@opik.track` as each
+    decorated function enters/exits, so they DO reach the emulator
+    before scoring. This helper synthesizes a `TraceModel` from the
+    in-memory `TraceData` and pulls span data from the emulator the
+    same way the lookup-based path does — single coherent context, no
+    dependency on trace-message ordering.
+
+    Caller must ensure the emulator has had a chance to process span
+    messages (call `emulator.trace_trees` once before this if needed)
+    so `spans_for_trace` returns the complete set.
+    """
+    synthesized_trace = _trace_model_from_trace_data(trace_data)
+    spans = emulator.spans_for_trace(trace_data.id)
+    parent_by_child = emulator.parent_span_ids_for_trace(trace_data.id)
+    return TraceToolContext(
+        trace=synthesized_trace,
+        spans=spans,
+        parent_by_child=parent_by_child,
+        emulator=emulator,
+    )
+
+
+def _trace_model_from_trace_data(trace_data: TraceDataLike) -> models.TraceModel:
+    """Project a `TraceData` (from `opik.api_objects.trace`) onto the
+    `TraceModel` shape the agentic tools consume.
+
+    The two types carry the same fields under the same names — we copy
+    only the fields the agentic path serializes (see `_serialize_trace`
+    above). Anything not in the projection (feedback_scores,
+    attachments, last_updated_at) defaults to the TraceModel's own
+    factory values, which match what an emulator-stored trace would
+    look like at this point in the flow anyway.
+    """
+    return models.TraceModel(
+        id=trace_data.id,
+        start_time=trace_data.start_time,
+        name=trace_data.name,
+        project_name=trace_data.project_name,
+        source=trace_data.source,
+        input=trace_data.input,
+        output=trace_data.output,
+        tags=trace_data.tags,
+        metadata=trace_data.metadata,
+        end_time=trace_data.end_time,
+        error_info=trace_data.error_info,
+        thread_id=trace_data.thread_id,
     )

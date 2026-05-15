@@ -598,6 +598,11 @@ def _evaluate_test_suite_task(
     # inactive at idle. We toggle for the duration of the suite run and
     # restore prior state in `finally` so concurrent (foreign) uses of
     # the emulator aren't disturbed.
+    # `getattr` with a default keeps this MagicMock-friendly:
+    # MagicMock auto-rejects attribute names that look like dunders
+    # (start and end with `__`), so plain attribute access raises
+    # AttributeError on mocked clients used by unit tests. Production
+    # clients always have this attribute, so the default never fires.
     chain = getattr(client, "__internal_api__message_processor__", None)
     emulator_was_active = False
     if chain is not None:

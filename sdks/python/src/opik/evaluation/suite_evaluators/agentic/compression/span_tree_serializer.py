@@ -13,15 +13,44 @@ from typing import Any, Dict, List, Optional
 
 from opik.message_processing.emulation import models
 
-OVERVIEW_IO_CHAR_LIMIT = 200
-TRUNCATED_SUFFIX_TEMPLATE = "[TRUNCATED {n} chars]"
+# Matches the backend's `SpanTreeSerializer.OVERVIEW_TRUNCATION_LENGTH`
+# (500). Earlier value was 200, which was small enough that even modest
+# real-world payloads tripped truncation and forced the judge to drill
+# in for every span — a per-token tax with no benefit, and a known
+# engagement hazard (a `gpt-4o-mini`-class judge interprets truncated
+# content as evidence of absence rather than "go fetch the full value").
+# 500 gives the overview enough headroom for the common case while
+# still bounding worst-case overview size.
+OVERVIEW_IO_CHAR_LIMIT = 500
+
+# Truncation suffix carries an *actionable* hint pointing at the
+# specific `read(...)` call that recovers the un-truncated value.
+# Mirrors the `[TRUNCATED N chars — use scan('<path>') to see full]`
+# pattern emitted by `read`-MEDIUM (see `string_truncator.py`) — same
+# rendering convention, different tool because the overview's
+# entity-anchor is `(type, id)` rather than a jq path. Without this
+# hint, models that see only `[TRUNCATED N chars]` tend to treat the
+# truncated content as if it were absent. See the E2E transcript on
+# OPIK-6243 for the failure mode.
+TRUNCATED_SUFFIX_TEMPLATE = (
+    "[TRUNCATED {n} chars — use read(type='{entity_type}', id='{entity_id}') "
+    "to see full]"
+)
 
 
-def _truncate_text(value: Any, limit: int = OVERVIEW_IO_CHAR_LIMIT) -> Any:
+def _truncate_text(
+    value: Any,
+    entity_type: str,
+    entity_id: str,
+    limit: int = OVERVIEW_IO_CHAR_LIMIT,
+) -> Any:
     """Truncate strings or string-rendered dict/list to `limit` chars.
 
     Returned as-is when None / non-text / under limit. Larger values are
-    rendered to JSON, head-trimmed, and suffixed with [TRUNCATED N chars].
+    rendered to JSON, head-trimmed, and suffixed with an actionable
+    `read(...)` hint anchored at the specific entity that owns this
+    field. The hint syntax matches the `read` tool's argument shape so
+    the judge can paste it directly.
     """
     if value is None:
         return None
@@ -35,7 +64,9 @@ def _truncate_text(value: Any, limit: int = OVERVIEW_IO_CHAR_LIMIT) -> Any:
     if len(text) <= limit:
         return text
     dropped = len(text) - limit
-    return text[:limit] + TRUNCATED_SUFFIX_TEMPLATE.format(n=f"{dropped:,}")
+    return text[:limit] + TRUNCATED_SUFFIX_TEMPLATE.format(
+        n=f"{dropped:,}", entity_type=entity_type, entity_id=entity_id
+    )
 
 
 def _duration_ms(
@@ -59,8 +90,8 @@ def _serialize_span_node(
         "start_time": span.start_time.isoformat(),
         "duration_ms": _duration_ms(span.start_time, span.end_time),
         "has_error": has_error,
-        "input": _truncate_text(span.input),
-        "output": _truncate_text(span.output),
+        "input": _truncate_text(span.input, entity_type="span", entity_id=span.id),
+        "output": _truncate_text(span.output, entity_type="span", entity_id=span.id),
         "model": span.model,
         "provider": span.provider,
     }
@@ -100,8 +131,12 @@ def serialize_overview(
             "has_error": trace.error_info is not None,
             "span_count": len(flat_nodes),
             "error_count": error_count,
-            "input": _truncate_text(trace.input),
-            "output": _truncate_text(trace.output),
+            "input": _truncate_text(
+                trace.input, entity_type="trace", entity_id=trace.id
+            ),
+            "output": _truncate_text(
+                trace.output, entity_type="trace", entity_id=trace.id
+            ),
         },
         "spans": flat_nodes,
     }

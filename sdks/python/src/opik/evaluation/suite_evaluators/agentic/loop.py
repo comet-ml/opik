@@ -18,7 +18,7 @@ import collections
 import dataclasses
 import json
 import logging
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Set, Tuple, Type
 
 import pydantic
 
@@ -44,6 +44,25 @@ MAX_TOOL_CALL_ROUNDS = 10
 LARGE_TRACE_BYTES = trace_compressor.FULL_TOKEN_LIMIT * 4
 
 
+# Rewritten from an earlier version that included an "or return your
+# verdict now" off-ramp. That branch conflicted with the system prompt's
+# "MUST call the indicated tool when you see a truncation hint" rule —
+# weaker judge models (gpt-4o-mini class) exploited the conflict by
+# duplicating `get_trace_spans` to trigger this hint, then taking the
+# verdict-now license to skip the drill-in. The rewrite removes that
+# license and instead points at the most common forward path (`read` on
+# a truncation hint) so the path of least resistance is "call a
+# different tool", not "give up." See OPIK-6243 PR review transcript.
+_DEDUP_HINT_TEMPLATE = (
+    "Duplicate call: `{tool_name}` with the same arguments has already been "
+    "executed in this loop and the result is unchanged. To make progress, "
+    "call a different tool — typically `read(type=..., id=...)` to fetch "
+    "content surfaced in a `[TRUNCATED ... — use read(...)]` hint, `scan` "
+    "for a specific path, or `search` for a keyword. Repeating this call "
+    "cannot produce new information."
+)
+
+
 @dataclasses.dataclass
 class LoopTelemetry:
     """Per-loop-run counters surfaced to logs after the wrap-up turn."""
@@ -52,6 +71,13 @@ class LoopTelemetry:
     tool_calls_by_name: Dict[str, int] = dataclasses.field(
         default_factory=lambda: collections.defaultdict(int)
     )
+    # Counts how many tool calls were short-circuited because the model
+    # repeated an identical (name, arguments) pair. Useful telemetry for
+    # spotting judge models that loop on the overview without drilling in
+    # — the failure mode the design doc §9 calls out for `gpt-5-nano`-class
+    # models. Counted separately from `tool_calls_by_name` so the
+    # registered-execution histogram stays clean.
+    duplicate_calls: int = 0
 
 
 def run_agentic_judge(
@@ -76,6 +102,14 @@ def run_agentic_judge(
     """
     tool_specs: List[Any] = registry.specs()
     telemetry = LoopTelemetry()
+    # Tracks every (tool_name, arguments) pair seen during this loop run.
+    # Second and subsequent occurrences are short-circuited with a hint
+    # (see `_DEDUP_HINT_TEMPLATE`) instead of re-executing the tool, which
+    # forces forward progress when a judge model loops on the same call.
+    # Arguments are compared as raw strings — models emit stable JSON for
+    # the same intent, and the worst case of a missed dedup is one extra
+    # tool execution, not incorrect behavior.
+    seen_calls: Set[Tuple[str, str]] = set()
 
     messages: List[base_model.ConversationDict] = [
         {"role": "system", "content": system_prompt},
@@ -104,7 +138,20 @@ def run_agentic_judge(
             tool_name = call["function"]["name"]
             arguments = call["function"].get("arguments", "{}")
             telemetry.tool_calls_by_name[tool_name] += 1
-            result = registry.execute(tool_name, arguments, ctx)
+
+            call_key = (tool_name, arguments)
+            if call_key in seen_calls:
+                # Same call already executed this loop — short-circuit
+                # with a hint so the model stops re-querying and either
+                # drills in with a different tool/args or finalizes.
+                # Counted separately so the by-name histogram stays an
+                # honest "tool-executed-N-times" record.
+                telemetry.duplicate_calls += 1
+                result = _DEDUP_HINT_TEMPLATE.format(tool_name=tool_name)
+            else:
+                seen_calls.add(call_key)
+                result = registry.execute(tool_name, arguments, ctx)
+
             messages.append(
                 {
                     "role": "tool",
@@ -162,9 +209,10 @@ def _emit_telemetry(telemetry: LoopTelemetry, ctx: context.TraceToolContext) -> 
         for name, count in sorted(telemetry.tool_calls_by_name.items())
     )
     LOGGER.info(
-        "Agentic loop finished: rounds=%d, tool_calls=[%s]",
+        "Agentic loop finished: rounds=%d, tool_calls=[%s], duplicates=%d",
         telemetry.rounds,
         tool_breakdown,
+        telemetry.duplicate_calls,
     )
 
     if telemetry.tool_calls_by_name.get("read", 0) == 0:
