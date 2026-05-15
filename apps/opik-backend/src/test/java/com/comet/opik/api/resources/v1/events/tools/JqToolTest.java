@@ -177,7 +177,7 @@ class JqToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private static TraceToolContext newCtxWithCachedSpan(UUID spanId, String spanBodyJson) {
@@ -194,6 +194,6 @@ class JqToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 }
