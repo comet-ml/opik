@@ -7,7 +7,9 @@ import com.comet.opik.api.PromptType;
 import com.comet.opik.api.PromptVersion;
 import com.comet.opik.api.PromptVersionBatchUpdate;
 import com.comet.opik.api.PromptVersionCommitsRequest;
+import com.comet.opik.api.PromptVersionIdsRequest;
 import com.comet.opik.api.PromptVersionRetrieve;
+import com.comet.opik.api.PromptVersionType;
 import com.comet.opik.api.PromptVersionUpdate;
 import com.comet.opik.api.ReactServiceErrorResponse;
 import com.comet.opik.api.TemplateStructure;
@@ -4697,6 +4699,276 @@ class PromptResourceTest {
                     sharedCommit, dupApiKey, dupWorkspaceName, HttpStatus.SC_CONFLICT);
 
             return Stream.of(malformed, notFound, wrongWorkspace, conflict);
+        }
+    }
+
+    @Nested
+    @DisplayName("Prompt Masks")
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    class PromptMasks {
+
+        @Test
+        @DisplayName("Success: create mask via POST /prompts/versions with version_type=mask")
+        void shouldCreateMask() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER)
+                    .versionType(PromptVersionType.MASK)
+                    .build();
+
+            PromptVersion created = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            assertThat(created.versionType()).isEqualTo(PromptVersionType.MASK);
+            assertThat(created.promptId()).isEqualTo(promptId);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from latestVersion and versionCount on GET /prompts/{id}")
+        void masksAreExcludedFromLatestVersionAndVersionCount() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            Prompt fetched = getPrompt(promptId, API_KEY, TEST_WORKSPACE);
+            assertThat(fetched.versionCount()).isEqualTo(1L);
+            assertThat(fetched.latestVersion()).isNotNull();
+            assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
+            assertThat(fetched.latestVersion().versionType()).isEqualTo(PromptVersionType.PROMPT_VERSION);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from GET /prompts/{id}/versions list")
+        void masksAreExcludedFromVersionsList() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var page = promptVersionResourceClient.getPromptVersionsByPromptId(
+                    promptId, API_KEY, TEST_WORKSPACE, null, null);
+
+            assertThat(page.total()).isEqualTo(1L);
+            assertThat(page.content()).hasSize(1);
+            assertThat(page.content().getFirst().id()).isEqualTo(savedReal.id());
+            assertThat(page.content().getFirst().versionType()).isEqualTo(PromptVersionType.PROMPT_VERSION);
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from GET /prompts/by-commit/{commit}")
+        void masksAreExcludedFromByCommit() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/by-commit/" + savedMask.commit())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("Masks are excluded from POST /prompts/retrieve-by-commits")
+        void masksAreExcludedFromRetrieveByCommits() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var result = promptResourceClient.getPromptsByCommits(
+                    List.of(savedMask.commit()), API_KEY, TEST_WORKSPACE);
+
+            assertThat(result).hasSize(1);
+            assertThat(result.getFirst().commit()).isEqualTo(savedMask.commit());
+            assertThat(result.getFirst().promptId()).isNull();
+            assertThat(result.getFirst().promptVersionId()).isNull();
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id=... populates requestedVersion with the mask and keeps latestVersion")
+        void getPromptByIdWithMaskId() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var realVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).build();
+            var savedReal = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), realVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var savedMask = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
+                    .queryParam("mask_id", savedMask.id())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                Prompt fetched = response.readEntity(Prompt.class);
+                assertThat(fetched.id()).isEqualTo(promptId);
+                assertThat(fetched.requestedVersion()).isNotNull();
+                assertThat(fetched.requestedVersion().id()).isEqualTo(savedMask.id());
+                assertThat(fetched.requestedVersion().versionType()).isEqualTo(PromptVersionType.MASK);
+                assertThat(fetched.latestVersion()).isNotNull();
+                assertThat(fetched.latestVersion().id()).isEqualTo(savedReal.id());
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id=missing returns 404")
+        void getPromptByIdWithMissingMaskIdReturnsNotFound() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            UUID unknownMaskId = factory.manufacturePojo(UUID.class);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptId)
+                    .queryParam("mask_id", unknownMaskId)
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+                assertThat(response.readEntity(io.dropwizard.jersey.errors.ErrorMessage.class))
+                        .isEqualTo(new io.dropwizard.jersey.errors.ErrorMessage(HttpStatus.SC_NOT_FOUND,
+                                "Prompt version not found"));
+            }
+        }
+
+        @Test
+        @DisplayName("GET /prompts/{id}?mask_id belonging to another prompt returns 404")
+        void getPromptByIdWithMaskFromAnotherPromptReturnsNotFound() {
+            var promptA = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptAId = createPrompt(promptA, API_KEY, TEST_WORKSPACE);
+
+            var promptB = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(promptB, API_KEY, TEST_WORKSPACE);
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var maskOfB = createPromptVersion(
+                    createPromptVersionRequest(promptB.name(), maskVersion, promptB.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/" + promptAId)
+                    .queryParam("mask_id", maskOfB.id())
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .get()) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_NOT_FOUND);
+            }
+        }
+
+        @Test
+        @DisplayName("POST /prompts/retrieve returns the requested versions by id")
+        void retrieveVersionsByIds() {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            var maskA = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var savedA = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskA, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var maskB = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            var savedB = createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskB, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            var request = PromptVersionIdsRequest.builder()
+                    .ids(List.of(savedA.id(), savedB.id())).build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_OK);
+                List<PromptVersion> versions = response
+                        .readEntity(new jakarta.ws.rs.core.GenericType<List<PromptVersion>>() {
+                        });
+                assertThat(versions).hasSize(2);
+                assertThat(versions).extracting(PromptVersion::id)
+                        .containsExactlyInAnyOrder(savedA.id(), savedB.id());
+                assertThat(versions).extracting(PromptVersion::versionType)
+                        .containsOnly(PromptVersionType.MASK);
+            }
+        }
+
+        @Test
+        @DisplayName("POST /prompts/retrieve with empty ids returns 422")
+        void retrieveVersionsByIdsEmptyReturnsValidationError() {
+            var request = PromptVersionIdsRequest.builder().ids(List.of()).build();
+
+            try (var response = client.target(RESOURCE_PATH.formatted(baseURI) + "/retrieve")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, API_KEY)
+                    .header(WORKSPACE_HEADER, TEST_WORKSPACE)
+                    .post(Entity.json(request))) {
+                assertThat(response.getStatus()).isEqualTo(HttpStatus.SC_UNPROCESSABLE_ENTITY);
+            }
+        }
+
+        @Test
+        @DisplayName("Creating a mask does not bump prompt lastUpdatedAt")
+        void creatingMaskDoesNotBumpLastUpdatedAt() throws InterruptedException {
+            var prompt = buildPrompt().lastUpdatedBy(USER).createdBy(USER).template(null).build();
+            UUID promptId = createPrompt(prompt, API_KEY, TEST_WORKSPACE);
+
+            Instant initial = getPrompt(promptId, API_KEY, TEST_WORKSPACE).lastUpdatedAt();
+            Thread.sleep(10);
+
+            var maskVersion = factory.manufacturePojo(PromptVersion.class).toBuilder()
+                    .createdBy(USER).versionType(PromptVersionType.MASK).build();
+            createPromptVersion(
+                    createPromptVersionRequest(prompt.name(), maskVersion, prompt.templateStructure()),
+                    API_KEY, TEST_WORKSPACE);
+
+            Instant afterMask = getPrompt(promptId, API_KEY, TEST_WORKSPACE).lastUpdatedAt();
+            assertThat(afterMask).isEqualTo(initial);
         }
     }
 
