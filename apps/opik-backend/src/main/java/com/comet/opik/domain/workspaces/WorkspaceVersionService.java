@@ -222,11 +222,8 @@ abstract class AbstractWorkspaceVersionService implements WorkspaceVersionServic
                 .map(Workspace::lastKnownVersion)
                 .flatMap(OpikVersion::findByValue);
         workspacesService.upsertVersion(workspaceId, newVersion, userName);
-        // Probe the legacy feedback_scores ClickHouse table only when MySQL hasn't already
-        // recorded that this workspace has no legacy data. Once the flag is false the legacy
-        // table only ever shrinks (no new writes land there), so re-probing on every cache
-        // miss is wasted CH work + a redundant MySQL upsert. Re-upsert only when the result
-        // differs from the stored value.
+        // Skip the CH probe + MySQL write once the flag is false — the legacy table only
+        // shrinks (no new writes land there), so the answer can't flip back to true.
         boolean storedHasLegacyScores = existingWorkspace
                 .map(Workspace::hasLegacyScores)
                 .orElse(true);

@@ -110,8 +110,7 @@ public class StatsMapper {
         addMapStats(row, USAGE, stats);
         addMapStats(row, USAGE_SUM, stats);
 
-        // Thread stats queries inline feedback_scores in the same row; project stats split it
-        // into a separate query handled by mapProjectScoresStats. Emit only when present.
+        // Thread stats inline feedback_scores in the row; split-A trace/span rows don't.
         if (row.getMetadata().contains(FEEDBACK_SCORE)) {
             addMapStats(row, FEEDBACK_SCORE, stats);
         }

@@ -7,7 +7,6 @@ import org.apache.commons.collections4.MapUtils;
 import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -18,18 +17,8 @@ import static com.comet.opik.domain.stats.StatsMapper.PAST_PERIOD_ERROR_COUNT;
 import static com.comet.opik.domain.stats.StatsMapper.RECENT_ERROR_COUNT;
 import static java.util.stream.Collectors.toMap;
 
-/**
- * Merges per-project trace+span stats (from SELECT_TRACES_SPANS_STATS) with per-project
- * feedback-score stats (from SELECT_FEEDBACK_SCORES_STATS).
- * <p>
- * Merge rule: the traces map is the source of truth for which projects appear in the output.
- * Feedback stats are enrichment; projects absent from the traces side are never resurrected
- * by feedback data, even if feedback rows exist for them. Trace-side filters define the
- * result scope.
- * <p>
- * This class only concatenates already-mapped stats — row-to-stats conversion lives in
- * {@link StatsMapper}.
- */
+// Merges trace+span stats (split-A) with feedback-score stats (split-B). The trace side
+// defines result scope: projects absent from it are not resurrected by feedback rows.
 @UtilityClass
 public class StatsMerger {
 
@@ -51,12 +40,8 @@ public class StatsMerger {
                                 feedbackByProject.getOrDefault(entry.getKey(), ProjectStats.empty()))));
     }
 
-    /**
-     * Single-project variant — splices the feedback stats into the trace+span stats at the
-     * canonical position (just before guardrails / error-count entries) so the merged output
-     * matches what the pre-split single-query mapper produced. Returns {@code base} unchanged
-     * when there's nothing to attach.
-     */
+    // Splices feedback into base at the canonical slot (before guardrails / error-count) so the
+    // merged list matches the pre-split mapper's order.
     public static ProjectStats merge(ProjectStats base, ProjectStats feedback) {
         if (base == null) {
             return null;
@@ -83,20 +68,13 @@ public class StatsMerger {
     private static final Set<String> TRAILING_STATS = Set.of(
             GUARDRAILS_FAILED_COUNT, RECENT_ERROR_COUNT, PAST_PERIOD_ERROR_COUNT, ERROR_COUNT);
 
-    /**
-     * Zips the split-A (aggregates) and split-B (feedback) branches the way every single-project
-     * {@code getStats} call site needs them. Both branches get an empty-{@link ProjectStats}
-     * default so {@link Mono#zip} never silently drops one side when the other emits empty
-     * (a real possibility for both queries since they end with {@code GROUP BY project_id}).
-     * The zipped result is then spliced via {@link #merge(ProjectStats, ProjectStats)} so the
-     * feedback aggregates land at the canonical position in the stats list.
-     */
+    // When aggregates is empty, return empty — feedback alone is never surfaced (matches the
+    // traces-driven scope of the map overload).
     public static Mono<ProjectStats> zipAndMerge(Mono<ProjectStats> aggregates, Mono<ProjectStats> feedback) {
-        var empty = new ProjectStats(List.of());
-        return Mono.zip(
-                aggregates.switchIfEmpty(Mono.just(empty)),
-                feedback.switchIfEmpty(Mono.just(empty)))
-                .map(tuple -> merge(tuple.getT1(), tuple.getT2()));
+        return aggregates
+                .flatMap(agg -> feedback.switchIfEmpty(Mono.fromSupplier(ProjectStats::empty))
+                        .map(fb -> merge(agg, fb)))
+                .switchIfEmpty(Mono.fromSupplier(ProjectStats::empty));
     }
 
 }
