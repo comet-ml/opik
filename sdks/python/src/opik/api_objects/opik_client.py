@@ -9,7 +9,6 @@ from typing import (
     Dict,
     List,
     Optional,
-    Type,
     TypeVar,
     Union,
     Literal,
@@ -47,7 +46,6 @@ from .experiment import helpers as experiment_helpers
 from .experiment import rest_operations as experiment_rest_operations
 from . import prompt as prompt_module
 from .prompt import client as prompt_client
-from .prompt import prompt_cache
 from .prompt.text import prompt as text_prompt_module
 from .prompt.chat import chat_prompt as chat_prompt_module
 from ..validation.chat_prompt_messages import ChatPromptMessagesValidator
@@ -103,7 +101,6 @@ LOGGER = logging.getLogger(__name__)
 
 T = TypeVar("T")
 _ConfigT = TypeVar("_ConfigT", bound=Config)
-_PromptT = TypeVar("_PromptT", text_prompt_module.Prompt, chat_prompt_module.ChatPrompt)
 QueueT = TypeVar("QueueT", TracesAnnotationQueue, ThreadsAnnotationQueue)
 
 
@@ -2293,10 +2290,10 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a chat prompt (template structure mismatch).
         """
-        return self._get_prompt_with_cache(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            project_name=project_name,
+            project_name=self._resolve_project_name(project_name),
             template_structure="text",
             prompt_cls=text_prompt_module.Prompt,
         )
@@ -2326,78 +2323,13 @@ class Opik:
         Raises:
             PromptTemplateStructureMismatch: If the prompt exists but is a text prompt (template structure mismatch).
         """
-        return self._get_prompt_with_cache(
+        return prompt_client.PromptClient(self._rest_client).get_prompt_with_cache(
             name=name,
             commit=commit,
-            project_name=project_name,
+            project_name=self._resolve_project_name(project_name),
             template_structure="chat",
             prompt_cls=chat_prompt_module.ChatPrompt,
         )
-
-    def _get_prompt_with_cache(
-        self,
-        name: str,
-        commit: Optional[str],
-        project_name: Optional[str],
-        template_structure: str,
-        prompt_cls: Type[_PromptT],
-    ) -> Optional[_PromptT]:
-        project_name = self._resolve_project_name(project_name)
-        _prompt_client = prompt_client.PromptClient(self._rest_client)
-
-        def _fetch() -> Optional[_PromptT]:
-            prompt_version = _prompt_client.get_prompt(
-                name=name,
-                commit=commit,
-                raise_if_not_template_structure=template_structure,
-                project_name=project_name,
-            )
-            if prompt_version is None:
-                return None
-            return prompt_cls.from_fern_prompt_version(
-                name, prompt_version, project_name=project_name
-            )
-
-        result = prompt_cache.get_or_fetch(
-            name=name,
-            commit=commit,
-            project_name=project_name,
-            template_structure=template_structure,
-            fetch_fn=_fetch,
-        )
-        if result is not None:
-            from opik import context_storage
-
-            prompt_info = result.__internal_api__to_info_dict__()
-
-            def _append_prompt(observation_data: Optional[Any]) -> None:
-                try:
-                    if observation_data is not None:
-                        existing = (observation_data.metadata or {}).get(
-                            "opik_prompts", []
-                        )
-                        dedup_key = (
-                            prompt_info.get("id"),
-                            (prompt_info.get("version") or {}).get("commit"),
-                        )
-                        existing_keys = {
-                            (p.get("id"), (p.get("version") or {}).get("commit"))
-                            for p in existing
-                        }
-                        if dedup_key not in existing_keys:
-                            observation_data.update(
-                                metadata={"opik_prompts": existing + [prompt_info]}
-                            )
-                except exceptions.OpikException:
-                    pass
-                except Exception:
-                    LOGGER.debug(
-                        "Failed to inject config metadata into trace", exc_info=True
-                    )
-
-            _append_prompt(context_storage.get_trace_data())
-            _append_prompt(context_storage.top_span_data())
-        return result
 
     def get_prompt_history(
         self,

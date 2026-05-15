@@ -1,6 +1,7 @@
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 import json
 import dataclasses
+import logging
 
 import opik.exceptions
 from opik.rest_api import client as rest_client, PromptVersionUpdate
@@ -8,6 +9,12 @@ from opik.rest_api import core as rest_api_core
 from opik.rest_api.types import prompt_version_detail
 from opik.api_objects import opik_query_language, rest_helpers
 from . import types as prompt_types
+from . import prompt_cache
+from .base_prompt import BasePrompt
+
+LOGGER = logging.getLogger(__name__)
+
+_PromptT = TypeVar("_PromptT", bound=BasePrompt)
 
 
 @dataclasses.dataclass
@@ -234,6 +241,68 @@ class PromptClient:
                 raise e
             # 400, 404 - not found
         return None
+
+    def get_prompt_with_cache(
+        self,
+        name: str,
+        commit: Optional[str],
+        project_name: Optional[str],
+        template_structure: str,
+        prompt_cls: Type[_PromptT],
+    ) -> Optional[_PromptT]:
+        def _fetch() -> Optional[_PromptT]:
+            prompt_version = self.get_prompt(
+                name=name,
+                commit=commit,
+                raise_if_not_template_structure=template_structure,
+                project_name=project_name,
+            )
+            if prompt_version is None:
+                return None
+            return prompt_cls.from_fern_prompt_version(
+                name, prompt_version, project_name=project_name
+            )
+
+        result = prompt_cache.get_or_fetch(
+            name=name,
+            commit=commit,
+            project_name=project_name,
+            template_structure=template_structure,
+            fetch_fn=_fetch,
+        )
+        if result is not None:
+            from opik import context_storage, exceptions as opik_exceptions
+
+            prompt_info = result.__internal_api__to_info_dict__()
+
+            def _append_prompt(observation_data: Optional[Any]) -> None:
+                try:
+                    if observation_data is not None:
+                        existing = (observation_data.metadata or {}).get(
+                            "opik_prompts", []
+                        )
+                        dedup_key = (
+                            prompt_info.get("id"),
+                            (prompt_info.get("version") or {}).get("commit"),
+                        )
+                        existing_keys = {
+                            (p.get("id"), (p.get("version") or {}).get("commit"))
+                            for p in existing
+                        }
+                        if dedup_key not in existing_keys:
+                            observation_data.update(
+                                metadata={"opik_prompts": existing + [prompt_info]}
+                            )
+                except opik_exceptions.OpikException:
+                    pass
+                except Exception:
+                    LOGGER.debug(
+                        "Failed to inject config metadata into trace", exc_info=True
+                    )
+
+            _append_prompt(context_storage.get_trace_data())
+            _append_prompt(context_storage.top_span_data())
+        return result
 
     # TODO: Need to add support for prompt name in the BE so we don't
     # need to retrieve the prompt id

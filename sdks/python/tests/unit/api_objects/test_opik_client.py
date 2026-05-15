@@ -1430,7 +1430,7 @@ class TestGetPromptAutoInjectionDedup:
     def _get_prompt(self, client_, mock_prompt):
         """Call get_prompt with the cache layer bypassed."""
         with patch(
-            "opik.api_objects.opik_client.prompt_cache.get_or_fetch",
+            "opik.api_objects.prompt.client.prompt_cache.get_or_fetch",
             return_value=mock_prompt,
         ):
             return client_.get_prompt(
