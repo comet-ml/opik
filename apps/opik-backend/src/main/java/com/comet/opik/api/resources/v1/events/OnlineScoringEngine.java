@@ -254,7 +254,7 @@ public class OnlineScoringEngine {
     public record ThreadTraceSkeleton(
             @NonNull UUID id,
             String name,
-            Instant startTime,
+            @NonNull Instant startTime,
             Instant endTime,
             Double duration,
             int spanCount,
