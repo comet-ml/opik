@@ -22,6 +22,8 @@ export interface ServiceTogglesConfig {
     bedrockProviderEnabled: boolean;
     customllmProviderEnabled: boolean;
     ollamaProviderEnabled: boolean;
+    ollieEnabled: boolean;
+    agenticToolsEnabled?: boolean;
     v2WorkspaceAllowlistIds: string[];
     v1WorkspaceAllowlistIds: string[];
     forceWorkspaceVersion: string;
