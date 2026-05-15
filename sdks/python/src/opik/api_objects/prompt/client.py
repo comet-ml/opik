@@ -10,6 +10,7 @@ from opik.rest_api.types import prompt_version_detail
 from opik.api_objects import opik_query_language, rest_helpers
 from . import types as prompt_types
 from . import prompt_cache
+from . import mask_context as prompt_mask_context_module
 from .base_prompt import BasePrompt
 
 LOGGER = logging.getLogger(__name__)
@@ -267,13 +268,37 @@ class PromptClient:
         if no_cache:
             result = _fetch()
         else:
-            result = prompt_cache.get_or_fetch(
+            # Step 1: fetch unmasked prompt to get prompt_id
+            unmasked = prompt_cache.get_or_fetch(
                 name=name,
                 commit=commit,
                 project_name=project_name,
                 template_structure=template_structure,
                 fetch_fn=_fetch,
             )
+
+            result = unmasked
+
+            # Step 2: check for an active mask for this prompt
+            prompt_id = (
+                unmasked.__internal_api__prompt_id__ if unmasked is not None else None
+            )
+            active_mask_id = (
+                prompt_mask_context_module.get_mask_for_prompt(prompt_id)
+                if prompt_id is not None
+                else None
+            )
+            if active_mask_id is not None:
+                # Step 3: fetch masked version (separate cache entry, no background refresh)
+                result = prompt_cache.get_or_fetch(
+                    name=name,
+                    commit=commit,
+                    project_name=project_name,
+                    template_structure=template_structure,
+                    fetch_fn=_fetch,
+                    mask_id=active_mask_id,
+                )
+
         if result is not None:
             from opik import opik_context
 

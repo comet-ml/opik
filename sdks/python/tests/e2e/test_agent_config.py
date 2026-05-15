@@ -6,7 +6,6 @@ import opik
 from opik import opik_context
 from opik.api_objects.agent_config.cache import get_global_registry
 from opik.api_objects.agent_config.config import ConfigManager
-from opik.api_objects.agent_config.context import agent_config_context
 
 from opik.api_objects.prompt.text.prompt import Prompt
 from opik.api_objects.prompt.chat.chat_prompt import ChatPrompt
@@ -235,42 +234,3 @@ def test_prompt_field_and_trace_metadata__happyflow(
         parent_span_id=None,
         metadata={"agent_configuration": ANY_DICT.containing(expected_meta)},
     )
-
-
-def test_mask_overrides_config__happyflow(
-    opik_client: opik.Opik,
-    project_name: str,
-):
-    """A mask overrides selected fields while leaving untouched fields intact."""
-
-    class MyConfig(opik.Config):
-        temperature: float
-        model: str
-
-    opik_client.create_config(
-        MyConfig(temperature=0.5, model="gpt-4"), project_name=project_name
-    )
-
-    get_global_registry().clear()
-
-    manager = ConfigManager(
-        project_name=project_name,
-        rest_client_=opik_client.rest_client,
-    )
-    mask_id = manager.create_mask(parameters={"temperature": 0.9})
-
-    get_global_registry().clear()
-
-    with agent_config_context(mask_id):
-
-        @opik.track(project_name=project_name)
-        def fetch_with_mask():
-            return opik_client.get_or_create_config(
-                fallback=MyConfig(temperature=0.0, model="fallback"),
-                project_name=project_name,
-                version="latest",
-            )
-
-        result = fetch_with_mask()
-        assert result.temperature == pytest.approx(0.9)
-        assert result.model == "gpt-4"

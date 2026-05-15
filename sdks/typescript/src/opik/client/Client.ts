@@ -41,6 +41,7 @@ import {
   shouldCreateNewVersion,
 } from "@/prompt/versionHelpers";
 import { getOrFetch as promptCacheGetOrFetch, getGlobalCache } from "@/prompt/promptCache";
+import { getActiveMaskForPrompt } from "@/prompt/maskContext";
 import { OpikQueryLanguage } from "@/query";
 import {
   searchTracesWithFilters,
@@ -1486,14 +1487,34 @@ export class OpikClient {
       }
     };
 
-    const result = await promptCacheGetOrFetch<T>(
+    const unmasked = await promptCacheGetOrFetch<T>(
       options.name,
       options.commit,
       resolvedProjectName,
       expectedStructure,
       fetchFn,
-      this.config.promptCacheTtlSeconds
+      this.config.promptCacheTtlSeconds,
     );
+
+    let result = unmasked;
+
+    const promptId = unmasked?.id ?? null;
+    const activeMaskId = promptId !== null ? getActiveMaskForPrompt(promptId) : null;
+    if (activeMaskId !== null) {
+      const maskedFetchFn = async (): Promise<T | null> => {
+        // TODO: pass maskId to backend API when supported
+        return fetchFn();
+      };
+      result = await promptCacheGetOrFetch<T>(
+        options.name,
+        options.commit,
+        resolvedProjectName,
+        expectedStructure,
+        maskedFetchFn,
+        this.config.promptCacheTtlSeconds,
+        activeMaskId,
+      );
+    }
 
     if (result !== null) {
       const ctx = getTrackContext();

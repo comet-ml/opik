@@ -24,13 +24,14 @@ export interface ConstructorOpikConfig extends Omit<OpikConfig, "environment"> {
 
 const CONFIG_FILE_PATH_DEFAULT = path.join(os.homedir(), ".opik.config");
 
-export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment" | "promptCacheTtlSeconds">> = {
+export const DEFAULT_CONFIG: Required<Omit<OpikConfig, "requestOptions" | "environment">> = {
   apiKey: "",
   apiUrl: "https://www.comet.com/opik/api",
   projectName: "Default Project",
   workspaceName: "default",
   batchDelayMs: 300,
   holdUntilFlush: false,
+  promptCacheTtlSeconds: 300,
 };
 
 function filterUndefined<T extends object>(obj: Partial<T>): Partial<T> {

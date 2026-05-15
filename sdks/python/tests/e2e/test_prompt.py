@@ -1309,11 +1309,12 @@ def test_chat_prompt__update_version_tags(opik_client: opik.Opik):
     assert set(v2_in_history.tags) == set(new_tags)
 
 
-def test_prompt__auto_inject_into_trace__happyflow(opik_client: opik.Opik):
+def test_prompt__auto_inject_into_trace__happyflow(
+    opik_client: opik.Opik, prompt_name: str
+):
     """Fetching text and chat prompts inside @track auto-injects opik_prompts into trace metadata."""
-    suffix = _generate_random_suffix()
-    text_prompt_name = f"auto-text-{suffix}"
-    chat_prompt_name = f"auto-chat-{suffix}"
+    text_prompt_name = f"{prompt_name}-text"
+    chat_prompt_name = f"{prompt_name}-chat"
 
     opik_client.create_prompt(name=text_prompt_name, prompt="Summarize: {{text}}")
     opik_client.create_chat_prompt(
