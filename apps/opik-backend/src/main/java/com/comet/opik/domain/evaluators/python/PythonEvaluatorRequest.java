@@ -10,5 +10,5 @@ import java.util.Map;
 
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @Builder(toBuilder = true)
-public record PythonEvaluatorRequest(@NotEmpty String code, @NotNull Map<String, String> data) {
+public record PythonEvaluatorRequest(@NotEmpty String code, @NotNull Map<String, Object> data) {
 }
