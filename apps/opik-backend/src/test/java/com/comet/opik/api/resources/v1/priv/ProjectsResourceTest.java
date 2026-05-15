@@ -41,16 +41,21 @@ import com.comet.opik.api.resources.utils.resources.GuardrailsResourceClient;
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.EntityType;
+import com.comet.opik.domain.FeedbackScoreDAO;
 import com.comet.opik.domain.GuardrailResult;
 import com.comet.opik.domain.GuardrailsMapper;
 import com.comet.opik.domain.IdGenerator;
 import com.comet.opik.domain.ProjectService;
+import com.comet.opik.domain.workspaces.WorkspacesService;
 import com.comet.opik.extensions.DropwizardAppExtensionProvider;
 import com.comet.opik.extensions.RegisterApp;
 import com.comet.opik.infrastructure.DatabaseAnalyticsFactory;
+import com.comet.opik.infrastructure.auth.RequestContext;
 import com.comet.opik.infrastructure.auth.WorkspaceUserPermission;
 import com.comet.opik.podam.PodamFactoryUtils;
 import com.comet.opik.utils.JsonUtils;
@@ -188,6 +193,7 @@ class ProjectsResourceTest {
     private ProjectResourceClient projectResourceClient;
     private GuardrailsResourceClient guardrailsResourceClient;
     private GuardrailsGenerator guardrailsGenerator;
+    private WorkspaceResourceClient workspaceResourceClient;
 
     @BeforeAll
     void setUpAll(ClientSupport client, ProjectService projectService) {
@@ -205,6 +211,7 @@ class ProjectsResourceTest {
         this.projectResourceClient = new ProjectResourceClient(this.client, baseURI, factory);
         this.guardrailsResourceClient = new GuardrailsResourceClient(this.client, baseURI);
         this.guardrailsGenerator = new GuardrailsGenerator();
+        this.workspaceResourceClient = new WorkspaceResourceClient(this.client, baseURI, factory);
     }
 
     private void mockTargetWorkspace(String apiKey, String workspaceName, String workspaceId) {
@@ -1388,6 +1395,103 @@ class ProjectsResourceTest {
                     .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
                     .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
                     .isEqualTo(expectedProjectStats);
+        }
+
+        @Test
+        @DisplayName("when has_legacy_scores is flipped, stats endpoint stays consistent")
+        void getProjects__whenHasLegacyScoresFlipped__thenStatsStayConsistent(WorkspacesService workspacesService) {
+            // Test infra writes feedback scores through the authenticated path, so data lands in
+            // authored_feedback_scores (not the legacy feedback_scores table). This test can't
+            // observe the legacy-UNION gate directly — that surface is covered by the existing
+            // FilterTest variants and by manual benchmarking against real legacy data. What this
+            // test does verify: flipping the workspace flag does not break the endpoint and the
+            // response stays correct for data that lives in authored_feedback_scores.
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            Comparator<Project> comparator = Comparator.comparing(Project::id).reversed();
+            var expectedStats = getProjectStatsSummaryItems(apiKey, workspaceName, comparator);
+
+            workspacesService.upsertHasLegacyScores(workspaceId, false, USER);
+
+            var response = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get();
+
+            assertThat(response.getStatusInfo().getStatusCode()).isEqualTo(org.apache.http.HttpStatus.SC_OK);
+            var actual = response.readEntity(ProjectStatsSummary.class);
+
+            assertThat(actual.content())
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expectedStats);
+        }
+
+        @Test
+        @DisplayName("when the legacy feedback_scores table has rows for the workspace, the project stats UNION surfaces them")
+        void getProjects__whenLegacyScoresHasData__thenStatsIncludeThem(FeedbackScoreDAO feedbackScoreDAO) {
+            String workspaceName = UUID.randomUUID().toString();
+            String apiKey = UUID.randomUUID().toString();
+            String workspaceId = UUID.randomUUID().toString();
+
+            mockTargetWorkspace(apiKey, workspaceName, workspaceId);
+
+            var project = factory.manufacturePojo(Project.class);
+            UUID projectId = createProject(project, apiKey, workspaceName);
+            var seeded = buildProjectStats(project.toBuilder().id(projectId).build(), apiKey, workspaceName);
+
+            // Write directly into the legacy `feedback_scores` table via the author=null DAO
+            // path — the public API always routes to authored_feedback_scores, so this is the
+            // only way to exercise the legacy-UNION branch from a backend test.
+            var traces = traceResourceClient.getTraces(project.name(), null, apiKey, workspaceName, null, null, 1,
+                    Map.of());
+            UUID traceId = traces.content().getFirst().id();
+            var legacyScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                    .name("legacy-" + UUID.randomUUID())
+                    .build();
+            feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null)
+                    .contextWrite(ctx -> ctx
+                            .put(RequestContext.USER_NAME, USER)
+                            .put(RequestContext.WORKSPACE_ID, workspaceId))
+                    .block();
+
+            // Trigger the natural workspace-version determination flow so the legacy-scores
+            // probe runs against actual ClickHouse state and persists the workspace flag.
+            workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
+
+            var expectedFeedback = new ArrayList<>(seeded.feedbackScores());
+            expectedFeedback.add(FeedbackScoreAverage.builder()
+                    .name(legacyScore.name())
+                    .value(legacyScore.value())
+                    .build());
+            var expected = mapFromProjectToSummary(
+                    seeded.toBuilder().feedbackScores(expectedFeedback).build());
+
+            var actual = client.target(URL_TEMPLATE.formatted(baseURI))
+                    .path("/stats")
+                    .request()
+                    .header(HttpHeaders.AUTHORIZATION, apiKey)
+                    .header(WORKSPACE_HEADER, workspaceName)
+                    .get(ProjectStatsSummary.class)
+                    .content().stream()
+                    .filter(item -> projectId.equals(item.projectId()))
+                    .findFirst()
+                    .orElseThrow();
+
+            assertThat(actual)
+                    .usingRecursiveComparison()
+                    .ignoringCollectionOrder()
+                    .withComparatorForType(StatsUtils::bigDecimalComparator, BigDecimal.class)
+                    .withComparatorForFields(StatsUtils::closeToEpsilonComparator, "totalEstimatedCost")
+                    .isEqualTo(expected);
         }
 
         @Test
