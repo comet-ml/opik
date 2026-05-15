@@ -28,5 +28,5 @@ response = client.chat.completions.create(
     max_tokens=100,
 )
 
-if response.choices:
+if getattr(response, "choices", None):
     print(response.choices[0].message.content)

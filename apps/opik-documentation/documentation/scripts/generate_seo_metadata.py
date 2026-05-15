@@ -185,7 +185,7 @@ Return ONLY the JSON object, no explanation."""
             max_tokens=200
         )
         
-        if not response.choices:
+        if not getattr(response, "choices", None):
             return None
         result_text = response.choices[0].message.content.strip()
         
