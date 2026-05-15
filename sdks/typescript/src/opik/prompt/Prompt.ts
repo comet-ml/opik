@@ -36,6 +36,13 @@ export class Prompt extends BasePrompt {
     );
     this.prompt = data.prompt;
 
+    if (!data.synced && !data.promptId) {
+      logger.warn(
+        "new Prompt() is deprecated. Use client.createPrompt() to create or " +
+          "client.getPrompt() to retrieve text prompts instead."
+      );
+    }
+
     if (opik === undefined && !data.synced) {
       this._pendingSync = this._performSync();
     }
