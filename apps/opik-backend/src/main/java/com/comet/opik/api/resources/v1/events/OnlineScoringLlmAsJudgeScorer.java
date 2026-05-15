@@ -310,14 +310,12 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
             }
 
-            // Guarded behind isInfoEnabled() because summarizeRequest streams over the message
-            // list to total up character counts; SLF4J's parameter substitution defers the
-            // {} placeholder, but the helper invocation itself is still evaluated eagerly.
-            if (userFacingLogger.isInfoEnabled()) {
-                userFacingLogger.info("Sending traceId '{}' to LLM: {}",
-                        trace.id(), OnlineScoringEngine.summarizeRequest(scoreRequest,
-                                message.llmAsJudgeCode().model().name(), useTools));
-            }
+            // summarizeRequest is cheap (no per-message toString streaming since the chars-count
+            // field was removed). At INFO so operators watching their rule's UI logs see a
+            // matching "Sending" line between "Evaluating" and "Received response".
+            userFacingLogger.info("Sending traceId '{}' to LLM: {}",
+                    trace.id(), OnlineScoringEngine.summarizeRequest(scoreRequest,
+                            message.llmAsJudgeCode().model().name(), useTools));
 
             // fullJson is only useful downstream on the agentic-tools path (handleToolCalls
             // pre-seeds it into the tool cache). On the inline path we discard it — we already

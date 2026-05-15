@@ -268,28 +268,23 @@ public class OnlineScoringEngine {
      * already-rendered {@code context} string directly, skipping the
      * Jackson-serialize-the-traces step. Used by the tools path where the variable
      * value (the skeleton + drill-down hint) is computed by the caller.
+     *
+     * <p>The caller (the thread scorer's {@code shouldUseAgenticTools} gate) detects
+     * multimodal templates upstream via {@link #hasMultimodalTemplate(List)} and falls
+     * back to the inline path, so by the time we get here {@code templateMessages} is
+     * guaranteed string-only. The assertion below is a defensive net rather than the
+     * primary safety mechanism — actual rendering delegates to
+     * {@link #renderMessagesWithReplacements} so role-switch / template-engine logic
+     * stays in one place.
      */
     private static List<ChatMessage> renderThreadMessagesWithReplacement(
             List<LlmAsJudgeMessage> templateMessages, String variableName, String contextValue) {
+        if (hasMultimodalTemplate(templateMessages)) {
+            throw new UnsupportedOperationException(
+                    "Multimodal thread message content is not supported on the agentic-tools path");
+        }
         Map<String, String> replacements = Map.of(variableName, contextValue);
-        return templateMessages.stream()
-                .map(templateMessage -> {
-                    if (templateMessage.isStringContent()) {
-                        var renderedMessage = TemplateParseUtils.render(
-                                templateMessage.asString(), replacements, PromptType.MUSTACHE);
-                        return switch (templateMessage.role()) {
-                            case USER -> (ChatMessage) UserMessage.from(renderedMessage);
-                            case SYSTEM -> (ChatMessage) SystemMessage.from(renderedMessage);
-                            default -> {
-                                log.info("No mapping for message role type {}", templateMessage.role());
-                                yield (ChatMessage) UserMessage.from(renderedMessage);
-                            }
-                        };
-                    }
-                    throw new UnsupportedOperationException(
-                            "Multimodal thread message content is not supported on the agentic-tools path");
-                })
-                .toList();
+        return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
     static List<ChatMessage> renderThreadMessages(

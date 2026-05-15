@@ -309,10 +309,10 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                 scoreRequest = OnlineScoringEngine.addToolSpecs(scoreRequest, ToolChoice.REQUIRED, toolRegistry);
             }
 
-            if (userFacingLogger.isInfoEnabled()) {
-                userFacingLogger.info("Sending threadId '{}' to LLM: {}",
-                        threadId, OnlineScoringEngine.summarizeRequest(scoreRequest, modelName, useTools));
-            }
+            // summarizeRequest is cheap (no per-message toString streaming). At INFO to mirror
+            // the trace scorer's symmetric Evaluating / Sending / Received chain.
+            userFacingLogger.info("Sending threadId '{}' to LLM: {}",
+                    threadId, OnlineScoringEngine.summarizeRequest(scoreRequest, modelName, useTools));
             return new PreparedEvaluation(scoreRequest, structuredRequest, useTools);
         }
     }
