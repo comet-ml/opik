@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-from ..cli.pairing import RunnerType
+from ..cli.local_runner.pairing import RunnerType
 from ..rest_api.core.api_error import ApiError
 from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler

@@ -54,7 +54,8 @@ public class GeminiClientGenerator implements LlmProviderClientGenerator<GoogleA
                 .modelName(modelParameters.name())
                 .apiKey(config.apiKey())
                 .logRequests(llmProviderClientConfig.getLogRequests())
-                .logResponses(llmProviderClientConfig.getLogResponses());
+                .logResponses(llmProviderClientConfig.getLogResponses())
+                .returnThinking(false);
 
         Optional.ofNullable(llmProviderClientConfig.getConnectTimeout())
                 .ifPresent(connectTimeout -> modelBuilder.timeout(connectTimeout.toJavaDuration()));

@@ -62,6 +62,7 @@ import com.comet.opik.api.resources.utils.traces.TraceDBUtils;
 import com.comet.opik.api.sorting.Direction;
 import com.comet.opik.api.sorting.SortableFields;
 import com.comet.opik.api.sorting.SortingField;
+import com.comet.opik.domain.EnvironmentService;
 import com.comet.opik.domain.FeedbackScoreMapper;
 import com.comet.opik.domain.SpanType;
 import com.comet.opik.domain.cost.CostService;
@@ -2494,7 +2495,7 @@ class TracesResourceTest {
         private static final int ENVIRONMENT_CAP = 5;
 
         @Test
-        @DisplayName("when trace is created with a new environment, then it is auto-created")
+        @DisplayName("when trace is created with a new environment, then it is auto-created with a palette color")
         void create__whenTraceWithNewEnvironment__thenEnvironmentAutoCreated() {
             String apiKey = UUID.randomUUID().toString();
             String workspaceName = UUID.randomUUID().toString();
@@ -2517,8 +2518,13 @@ class TracesResourceTest {
                     .untilAsserted(() -> {
                         try (var response = environmentsResourceClient.callFind(apiKey, workspaceName)) {
                             var page = response.readEntity(Environment.EnvironmentPage.class);
-                            assertThat(page.content().stream().map(Environment::name))
-                                    .contains(envName);
+                            Environment autoCreated = page.content().stream()
+                                    .filter(env -> envName.equals(env.name()))
+                                    .findFirst()
+                                    .orElse(null);
+                            assertThat(autoCreated).isNotNull();
+                            assertThat(autoCreated.color())
+                                    .isEqualTo(EnvironmentService.pickAutoColor(envName));
                         }
                     });
         }

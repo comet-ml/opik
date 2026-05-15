@@ -3,6 +3,8 @@ import useLocalStorageState from "use-local-storage-state";
 import { ArrowRight, MonitorPlay, Undo2 } from "lucide-react";
 import { useFeatureFlagVariantKey } from "posthog-js/react";
 import { Button } from "@/ui/button";
+import { useIsFeatureEnabled } from "@/contexts/feature-toggles-provider";
+import { FeatureToggleKeys } from "@/types/feature-toggles";
 import { Separator } from "@/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/ui/tabs";
 import Slack from "@/icons/slack.svg?react";
@@ -40,6 +42,9 @@ const ConnectAgentStep: React.FC = () => {
   const { goToStep, agentName } = useAgentOnboarding();
   const InviteDevButton = usePluginsStore((state) => state.InviteDevButton);
   const apiKey = useUserApiKey();
+  const demoDataEnabled = useIsFeatureEnabled(
+    FeatureToggleKeys.DEMO_DATA_ENABLED,
+  );
 
   // Variants: "control" = AI-assisted tab shows "Install with AI" (Opik skills prompt); "connect-to-ollie" = AI-assisted tab shows "Connect to Ollie"; "manual" = bypasses this modal entirely and renders the full integrations page (handled in NewQuickstart). Undefined falls back to "connect-to-ollie".
   const variant =
@@ -248,7 +253,7 @@ const ConnectAgentStep: React.FC = () => {
       }
       showFooterSeparator
       footer={
-        primaryReady ? (
+        primaryReady || !demoDataEnabled ? (
           <Button
             onClick={handleViewTraces}
             id="onboarding-step2-view-traces"

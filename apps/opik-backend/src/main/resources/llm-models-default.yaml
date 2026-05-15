@@ -150,13 +150,11 @@ anthropic:
   - id: "claude-opus-4-1-20250805"
     label: "Claude Opus 4.1"
     structuredOutput: true
+  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-opus-4-20250514"
-    label: "Claude Opus 4"
     structuredOutput: true
   - id: "claude-sonnet-4-20250514"
-    label: "Claude Sonnet 4"
     structuredOutput: true
-  - id: "claude-3-7-sonnet-20250219"
   - id: "claude-sonnet-4-5-20250929"
     structuredOutput: true
 gemini:
@@ -464,6 +462,8 @@ openrouter:
     label: "deepseek/deepseek-v3.2-speciale"
   - id: "deepseek/deepseek-v4-flash"
     label: "deepseek/deepseek-v4-flash"
+  - id: "deepseek/deepseek-v4-flash:free"
+    label: "deepseek/deepseek-v4-flash:free"
   - id: "deepseek/deepseek-v4-pro"
     label: "deepseek/deepseek-v4-pro"
   - id: "eleutherai/llemma_7b"

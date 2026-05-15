@@ -50,6 +50,12 @@ def _validate_command(command: Tuple[str, ...]) -> None:
     default=False,
     help="Skip browser pairing and self-activate. For programmatic use.",
 )
+@click.option(
+    "--non-interactive",
+    is_flag=True,
+    default=False,
+    help="Skip the automatic `opik configure` prompt when no config file exists.",
+)
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def endpoint(
@@ -60,6 +66,7 @@ def endpoint(
     api_key: Optional[str],
     watch: Optional[bool],
     headless: bool,
+    non_interactive: bool,
     command: Tuple[str, ...],
 ) -> None:
     """Run a local endpoint process connected to Opik."""
@@ -86,4 +93,5 @@ def endpoint(
         watch=watch,
         headless=headless,
         workspace=workspace,
+        non_interactive=non_interactive,
     )

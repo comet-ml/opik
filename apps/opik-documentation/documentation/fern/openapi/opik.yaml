@@ -2027,12 +2027,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
-        "404":
-          description: Not Found - CSV upload feature is disabled
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorMessage"
   /v1/private/datasets/{dataset_id}/items/from-spans:
     post:
       tags:
@@ -18666,11 +18660,10 @@ components:
       - alertsEnabled
       - anthropicProviderEnabled
       - bedrockProviderEnabled
-      - collaboratorsTabEnabled
-      - csvUploadEnabled
       - customllmProviderEnabled
       - datasetExportEnabled
       - datasetVersioningEnabled
+      - demoDataEnabled
       - exportEnabled
       - forceWorkspaceVersion
       - geminiProviderEnabled
@@ -18706,8 +18699,6 @@ components:
           type: boolean
         welcomeWizardEnabled:
           type: boolean
-        csvUploadEnabled:
-          type: boolean
         exportEnabled:
           type: boolean
         optimizationStudioEnabled:
@@ -18715,6 +18706,8 @@ components:
         datasetVersioningEnabled:
           type: boolean
         datasetExportEnabled:
+          type: boolean
+        demoDataEnabled:
           type: boolean
         openaiProviderEnabled:
           type: boolean
@@ -18731,8 +18724,6 @@ components:
         customllmProviderEnabled:
           type: boolean
         ollamaProviderEnabled:
-          type: boolean
-        collaboratorsTabEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true

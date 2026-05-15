@@ -570,9 +570,6 @@ serviceToggles:
   # Default: false
   # Description: Whether or not Alert feature is enabled
   alertsEnabled: "false"
-  # Default: false
-  # Description: Whether or not CSV upload feature is enabled for dataset items
-  csvUploadEnabled: "false"
   # Default: true
   # Description: Whether or not export/download functionality is enabled
   exportEnabled: "true"
@@ -582,6 +579,9 @@ serviceToggles:
   # Default: true
   # Description: Whether or not dataset export to CSV feature is enabled
   datasetExportEnabled: "true"
+  # Default: true
+  # Description: Whether the deployment is expected to produce demo project data on signup
+  demoDataEnabled: "true"
   # Default: false
   # Description: Whether or not Optimization Studio feature is enabled
   optimizationStudioEnabled: "false"
@@ -610,8 +610,8 @@ serviceToggles:
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: "true"
   # Default: false
-  # Deprecated (OPIK-6434): kept for SDK response-shape compatibility; UI no longer reads this.
-  collaboratorsTabEnabled: "false"
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: "false"
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -745,6 +745,14 @@ experimentProjectMigration:
   lockWaitTime: 100ms
   # Per-cycle timeout — short for tests so hangs fail fast
   jobTimeout: 30s
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: 2
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: 50
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: 10s
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list
