@@ -87,6 +87,7 @@ import java.util.stream.Stream;
 import static com.comet.opik.api.resources.utils.ClickHouseContainerUtils.DATABASE_NAME;
 import static com.comet.opik.api.resources.utils.WireMockUtils.WireMockRuntime;
 import static com.comet.opik.api.resources.v1.priv.DatasetsResourceTest.IGNORED_FIELDS_DATA_ITEM;
+import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.READ_ONLY;
 import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -5068,12 +5069,12 @@ class DatasetVersionResourceTest {
     class LightweightVersionIdLookups {
 
         private Optional<UUID> findVersionIdByTag(UUID datasetId, String tag, String workspaceId) {
-            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+            return mySqlTemplate.inTransaction(READ_ONLY, handle -> handle.attach(DatasetVersionDAO.class)
                     .findVersionIdByTag(datasetId, tag, workspaceId));
         }
 
         private Optional<UUID> findVersionIdByHash(UUID datasetId, String versionHash, String workspaceId) {
-            return mySqlTemplate.inTransaction(WRITE, handle -> handle.attach(DatasetVersionDAO.class)
+            return mySqlTemplate.inTransaction(READ_ONLY, handle -> handle.attach(DatasetVersionDAO.class)
                     .findVersionIdByHash(datasetId, versionHash, workspaceId));
         }
 
