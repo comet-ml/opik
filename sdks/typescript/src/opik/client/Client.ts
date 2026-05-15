@@ -1213,6 +1213,7 @@ export class OpikClient {
 
       const promptData = await this.api.prompts.getPromptById(
         versionResponse.promptId,
+        {},
         this.api.requestOptions
       );
 
@@ -1502,8 +1503,15 @@ export class OpikClient {
     const activeMaskId = promptId !== null ? getActiveMaskForPrompt(promptId) : null;
     if (activeMaskId !== null) {
       const maskedFetchFn = async (): Promise<T | null> => {
-        // TODO: pass maskId to backend API when supported
-        return fetchFn();
+        const maskVersion = await this.api.prompts.getPromptVersionById(
+          activeMaskId,
+          {},
+          this.api.requestOptions,
+        );
+        const promptData: OpikApi.PromptPublic = {
+          name: options.name,
+        };
+        return createInstance(promptData, maskVersion, resolvedProjectName);
       };
       result = await promptCacheGetOrFetch<T>(
         options.name,
