@@ -48,7 +48,7 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ChatResponse result = ToolCallLoop.run(
-                initial, baseRequest(), followUpParams(), registry(stubTool("ok")),
+                initial, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
                 req -> {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(initial);
@@ -76,7 +76,7 @@ class ToolCallLoopTest {
         var budget = new ToolCallLoop.Budget();
 
         ChatResponse result = ToolCallLoop.run(
-                toolCallingResponse, baseRequest(), followUpParams(), registry(stubTool("ok")),
+                toolCallingResponse, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "ok")),
                 req -> {
                     scoreInvocations.incrementAndGet();
                     return Mono.just(toolCallingResponse);
@@ -174,7 +174,7 @@ class ToolCallLoopTest {
             return Mono.just(responses.removeFirst());
         };
 
-        ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool("res")),
+        ToolCallLoop.run(round0, baseRequest(), followUpParams(), registry(stubTool(TOOL_NAME, "res")),
                 scoreTrace, messages, ctx(), budget, "trace-id", Map.of()).block();
 
         // Two follow-up calls fired: one after round 0's tools, one after round 1's.
@@ -190,7 +190,7 @@ class ToolCallLoopTest {
                 .isNotSameAs(capturedRequests.get(1).messages());
 
         // The first captured request was sent after round 0 only, so its snapshot must be
-        // strictly smaller than the second one's snapshot. (3 vs 5 in the current shape.)
+        // strictly smaller than the second one's snapshot.
         assertThat(capturedRequests.get(0).messages())
                 .hasSizeLessThan(capturedRequests.get(1).messages().size());
 
@@ -219,7 +219,8 @@ class ToolCallLoopTest {
         ChatResponse done = ChatResponse.builder()
                 .aiMessage(AiMessage.from("ok")).build();
 
-        Set<ToolExecutor> tools = Set.of(stubToolNamed("a"), stubToolNamed("b"), stubToolNamed("c"));
+        Set<ToolExecutor> tools = Set.of(stubTool("a", "result-a"), stubTool("b", "result-b"),
+                stubTool("c", "result-c"));
         var messages = new ArrayList<ChatMessage>(List.of(UserMessage.from("score")));
         var budget = new ToolCallLoop.Budget();
 
@@ -270,26 +271,7 @@ class ToolCallLoopTest {
                 .build();
     }
 
-    private static ToolExecutor stubTool(String result) {
-        return new ToolExecutor() {
-            @Override
-            public String name() {
-                return TOOL_NAME;
-            }
-
-            @Override
-            public ToolSpecification spec() {
-                return stubSpec(TOOL_NAME);
-            }
-
-            @Override
-            public Mono<String> execute(String arguments, TraceToolContext c) {
-                return Mono.just(result);
-            }
-        };
-    }
-
-    private static ToolExecutor stubToolNamed(String toolName) {
+    private static ToolExecutor stubTool(String toolName, String result) {
         return new ToolExecutor() {
             @Override
             public String name() {
@@ -303,7 +285,7 @@ class ToolCallLoopTest {
 
             @Override
             public Mono<String> execute(String arguments, TraceToolContext c) {
-                return Mono.just("result-" + toolName);
+                return Mono.just(result);
             }
         };
     }
