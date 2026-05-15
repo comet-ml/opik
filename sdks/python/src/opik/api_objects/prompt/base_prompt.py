@@ -98,14 +98,15 @@ class BasePrompt(ABC):
         pass
 
     @classmethod
-    @abstractmethod
     def from_fern_prompt_version(
         cls,
         name: str,
         prompt_version: rest_api_types.PromptVersionDetail,
         project_name: Optional[str] = None,
     ) -> Self:
-        pass
+        raise NotImplementedError(
+            f"{cls.__name__} does not implement from_fern_prompt_version"
+        )
 
     @abstractmethod
     def __internal_api__to_info_dict__(self) -> Dict[str, Any]:
