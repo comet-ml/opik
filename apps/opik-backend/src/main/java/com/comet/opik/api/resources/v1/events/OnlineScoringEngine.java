@@ -794,9 +794,15 @@ public class OnlineScoringEngine {
      * log, and the rethrow-with-error-log fallback. Callers supply only what actually differs:
      * the entity label ({@code "traceId"} / {@code "spanId"}), the id, the rule name, and a
      * supplier that builds the rendered evaluator input.
+     *
+     * <p>Error-path logging is split: {@code userFacingLogger} gets a sanitized one-liner
+     * (no Throwable, so internal class names / paths from the stack trace don't leak into the
+     * user-facing log sink), and {@code internalLogger} (the scorer's slf4j logger) gets the
+     * full stack trace.
      */
     public static Map<String, Object> logAndPrepareEvaluatorInput(
             @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
             @NonNull Map<String, String> mdc,
             @NonNull String entityLabel,
             @NonNull Object entityId,
@@ -812,8 +818,9 @@ public class OnlineScoringEngine {
                 }
                 return data;
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for {} '{}': \n\n{}",
-                        entityLabel, entityId, exception.getMessage());
+                userFacingLogger.error("Error preparing Python request for {} '{}'", entityLabel, entityId);
+                internalLogger.error("Error preparing Python request for {} '{}'",
+                        entityLabel, entityId, exception);
                 throw exception;
             }
         }
