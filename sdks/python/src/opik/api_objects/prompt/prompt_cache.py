@@ -1,34 +1,16 @@
 import atexit
 import collections
 import logging
-import os
 import threading
 import time
 import typing
 
+from opik import config as opik_config
 from .base_prompt import BasePrompt
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_TTL_SECONDS = 300
 _MIN_REFRESH_INTERVAL_SECONDS = 1.0
-
-
-def _int_env(name: str, default: int, minimum: int = 1) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        value = int(raw)
-    except ValueError:
-        return default
-    return max(value, minimum)
-
-
-# Resolved once at import time. Override via OPIK_PROMPT_CACHE_TTL_SECONDS (integer seconds, >= 1).
-_PROMPT_CACHE_TTL_SECONDS: int = _int_env(
-    "OPIK_PROMPT_CACHE_TTL_SECONDS", DEFAULT_TTL_SECONDS
-)
 
 _CacheKey = typing.Tuple[str, typing.Optional[str], typing.Optional[str], str]
 
@@ -126,9 +108,8 @@ class PromptCache:
     def _refresh_loop(self) -> None:
         while not self._stop_event.is_set():
             self._refresh_stale_entries()
-            interval = max(
-                float(_PROMPT_CACHE_TTL_SECONDS), _MIN_REFRESH_INTERVAL_SECONDS
-            )
+            ttl = opik_config.OpikConfig().prompt_cache_ttl_seconds
+            interval = max(float(ttl), _MIN_REFRESH_INTERVAL_SECONDS)
             self._stop_event.wait(interval)
 
     def _refresh_stale_entries(self) -> None:
@@ -198,9 +179,10 @@ def get_or_fetch(
     the background-refresh callback so the cache stays fresh.
     """
     key: _CacheKey = (name, commit, project_name, template_structure)
+    ttl = opik_config.OpikConfig().prompt_cache_ttl_seconds
     result = _cache.get_or_fetch(
         key=key,
         fetch_fn=fetch_fn,
-        ttl_seconds=None if commit is not None else _PROMPT_CACHE_TTL_SECONDS,
+        ttl_seconds=None if commit is not None else ttl,
     )
     return typing.cast(typing.Optional[_PromptT], result)

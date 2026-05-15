@@ -6,19 +6,6 @@ const MIN_REFRESH_INTERVAL_SECONDS = 1.0;
 const MAX_CACHE_SIZE = 128;
 const MAX_CONCURRENT_REFRESHES = 100;
 
-function intEnv(name: string, defaultValue: number, minimum = 1): number {
-  const raw = process.env[name];
-  if (raw === undefined) return defaultValue;
-  const parsed = parseInt(raw, 10);
-  if (isNaN(parsed)) return defaultValue;
-  return Math.max(parsed, minimum);
-}
-
-const PROMPT_CACHE_TTL_SECONDS = intEnv(
-  "OPIK_PROMPT_CACHE_TTL_SECONDS",
-  DEFAULT_TTL_SECONDS
-);
-
 type RefreshCallback = () => Promise<BasePrompt | null>;
 
 interface CachedPrompt {
@@ -111,7 +98,7 @@ export class PromptCache {
     this.evict();
 
     if (ttlSeconds !== null) {
-      this.ensureRefreshTimerStarted();
+      this.ensureRefreshTimerStarted(ttlSeconds);
     }
 
     return prompt;
@@ -141,11 +128,11 @@ export class PromptCache {
     }
   }
 
-  private ensureRefreshTimerStarted(): void {
+  private ensureRefreshTimerStarted(ttlSeconds: number): void {
     if (this.stopped || this.refreshTimer !== null) return;
 
     const intervalMs =
-      Math.max(PROMPT_CACHE_TTL_SECONDS, MIN_REFRESH_INTERVAL_SECONDS) * 1000;
+      Math.max(ttlSeconds, MIN_REFRESH_INTERVAL_SECONDS) * 1000;
 
     this.refreshTimer = setInterval(() => {
       this.refreshStaleEntries().catch((err) => {
@@ -224,9 +211,10 @@ export async function getOrFetch<T extends BasePrompt>(
   commit: string | undefined,
   projectName: string | undefined,
   templateStructure: string,
-  fetchFn: () => Promise<T | null>
+  fetchFn: () => Promise<T | null>,
+  ttlSeconds: number = DEFAULT_TTL_SECONDS
 ): Promise<T | null> {
   const key = buildCacheKey(name, commit, projectName, templateStructure);
-  const result = await globalCache.getOrFetch(key, fetchFn, commit != null ? null : PROMPT_CACHE_TTL_SECONDS);
+  const result = await globalCache.getOrFetch(key, fetchFn, commit != null ? null : ttlSeconds);
   return result as T | null;
 }

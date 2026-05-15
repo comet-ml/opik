@@ -1491,7 +1491,8 @@ export class OpikClient {
       options.commit,
       resolvedProjectName,
       expectedStructure,
-      fetchFn
+      fetchFn,
+      this.config.promptCacheTtlSeconds
     );
 
     if (result !== null) {
