@@ -7,7 +7,10 @@ Defines abstract interface that both string and chat prompt variants must implem
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from typing_extensions import Self
+
 from . import types as prompt_types
+from opik.rest_api import types as rest_api_types
 
 
 class BasePrompt(ABC):
@@ -92,6 +95,16 @@ class BasePrompt(ABC):
             - Prompt returns str
             - ChatPrompt returns List[Dict[str, MessageContent]]
         """
+        pass
+
+    @classmethod
+    @abstractmethod
+    def from_fern_prompt_version(
+        cls,
+        name: str,
+        prompt_version: rest_api_types.PromptVersionDetail,
+        project_name: Optional[str] = None,
+    ) -> Self:
         pass
 
     @abstractmethod
