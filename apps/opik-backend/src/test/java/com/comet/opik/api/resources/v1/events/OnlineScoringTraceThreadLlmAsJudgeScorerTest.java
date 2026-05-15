@@ -187,9 +187,46 @@ class OnlineScoringTraceThreadLlmAsJudgeScorerTest {
                     .thenReturn(thresholdTokens);
             org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName)).thenReturn(provider);
 
-            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, modelName, "thread-x");
+            boolean useTools = scorer.shouldUseAgenticTools(estimatedTokens, modelName, "thread-x",
+                    java.util.List.of(stringContentMessage()));
 
             org.assertj.core.api.Assertions.assertThat(useTools).isEqualTo(expectedUseTools);
+        }
+
+        @org.junit.jupiter.api.Test
+        void multimodalTemplateForcesInlineFallbackEvenWhenAllOtherPreconditionsHold() {
+            // Every other gate is satisfied (toggle on, over threshold, provider supports tools)
+            // but the template carries a non-string-content message. The agentic-tools render
+            // path can't substitute into multimodal templates, so we must downgrade to inline
+            // rather than letting renderThreadMessagesWithReplacement throw downstream.
+            String modelName = "gpt-test";
+            org.mockito.Mockito.when(serviceTogglesConfig.isAgenticToolsEnabled()).thenReturn(true);
+            org.mockito.Mockito.lenient().when(onlineScoringConfig.getAgenticToolsThresholdTokens())
+                    .thenReturn(50_000);
+            org.mockito.Mockito.lenient().when(llmProviderFactory.getLlmProvider(modelName))
+                    .thenReturn(com.comet.opik.api.LlmProvider.OPEN_AI);
+
+            boolean useTools = scorer.shouldUseAgenticTools(60_000, modelName, "thread-x",
+                    java.util.List.of(multimodalContentMessage()));
+
+            org.assertj.core.api.Assertions.assertThat(useTools).isFalse();
+        }
+
+        private com.comet.opik.api.evaluators.LlmAsJudgeMessage stringContentMessage() {
+            return com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                    .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                    .content("evaluate {{context}}")
+                    .build();
+        }
+
+        private com.comet.opik.api.evaluators.LlmAsJudgeMessage multimodalContentMessage() {
+            // Non-null contentArray => isStringContent() == false (the multimodal branch
+            // hasMultimodalTemplate looks for). An empty list is enough for the predicate;
+            // we don't exercise the renderer in this test.
+            return com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                    .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                    .contentArray(java.util.List.of())
+                    .build();
         }
     }
 

@@ -5,6 +5,7 @@ import com.comet.opik.api.ScoreSource;
 import com.comet.opik.api.Trace;
 import com.comet.opik.api.Visibility;
 import com.comet.opik.api.evaluators.AutomationRuleEvaluator;
+import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.events.TraceThreadToScoreLlmAsJudge;
 import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceToolContext;
@@ -269,20 +270,8 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
             String modelName = message.code().model().name();
             int estimatedContextTokens = OnlineScoringEngine.estimateThreadContextTokens(
                     traces, onlineScoringConfig.getAgenticToolsCharsPerToken());
-            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId);
-            // Multimodal templates (image / audio / video alongside the context variable) aren't
-            // supported on the agentic-tools render path — it only knows how to substitute string
-            // content. Downgrade to inline instead of throwing so the evaluation still completes;
-            // the trade-off is the same "may overflow context window" that we already accept for
-            // the provider-doesn't-support-tools branch above.
-            if (useTools && OnlineScoringEngine.hasMultimodalTemplate(message.code().messages())) {
-                userFacingLogger.warn(
-                        "Thread evaluator '{}' has multimodal template content; falling back to inline path"
-                                + " (agentic-tools render path only supports string-content templates) — may"
-                                + " overflow context window.",
-                        rule.getName());
-                useTools = false;
-            }
+            boolean useTools = shouldUseAgenticTools(estimatedContextTokens, modelName, threadId,
+                    message.code().messages());
 
             ChatRequest scoreRequest;
             ChatRequest structuredRequest;
@@ -324,11 +313,13 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
     /**
      * Routing decision for whether to attach tool specs + run the tool-call loop for a thread.
      * Threads don't have the experimentId-driven branch (no test-suite-assertion equivalent),
-     * so the decision is purely size-based: toggle on + estimated thread context above threshold
-     * + provider supports tool-calling. Falls back to inline + a user-facing warn when toggle
-     * is on and size is over but the provider can't handle tools.
+     * so the decision is size-driven: toggle on + estimated thread context above threshold +
+     * provider supports tool-calling + template is string-content only. Falls back to inline +
+     * a user-facing warn when toggle is on and size is over but either the provider can't
+     * handle tools or the template carries multimodal parts.
      */
-    boolean shouldUseAgenticTools(int estimatedContextTokens, String modelName, String threadId) {
+    boolean shouldUseAgenticTools(int estimatedContextTokens, String modelName, String threadId,
+            List<LlmAsJudgeMessage> templateMessages) {
         boolean overSizeThreshold = serviceTogglesConfig.isAgenticToolsEnabled()
                 && estimatedContextTokens >= onlineScoringConfig.getAgenticToolsThresholdTokens();
         // Skip the provider lookup when the toggle is off — most evaluations are toggle-off and
@@ -343,6 +334,16 @@ public class OnlineScoringTraceThreadLlmAsJudgeScorer extends OnlineScoringBaseS
                     "Thread context exceeds '{}' tokens but provider for model '{}' does not support tool"
                             + " calling; falling back to inline path — may overflow context window.",
                     onlineScoringConfig.getAgenticToolsThresholdTokens(), modelName);
+            return false;
+        }
+        // The thread agentic-tools render path only substitutes string content; multimodal
+        // templates (image / audio / video parts alongside text) would otherwise hit the
+        // safety throw in renderThreadMessagesWithReplacement and fail the evaluation.
+        if (OnlineScoringEngine.hasMultimodalTemplate(templateMessages)) {
+            userFacingLogger.warn(
+                    "Thread context exceeds '{}' tokens but evaluator template has multimodal content;"
+                            + " falling back to inline path — may overflow context window.",
+                    onlineScoringConfig.getAgenticToolsThresholdTokens());
             return false;
         }
         userFacingLogger.info(
