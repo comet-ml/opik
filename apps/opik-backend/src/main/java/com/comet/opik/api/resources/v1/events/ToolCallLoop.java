@@ -218,7 +218,10 @@ final class ToolCallLoop {
             Budget budget, String logIdValue, Map<String, String> mdc) {
         // Re-apply MDC so the slf4j tags (workspace_id, trace/thread id, rule_id) follow the
         // tool-loop log lines — the reactive chain may have hopped threads since the scorer's
-        // sync prep step set MDC.
+        // sync prep step set MDC. The toolRegistry.execute() call lives INSIDE this scope so
+        // its synchronous logs (e.g. ToolRegistry's "Unknown tool requested by judge" warn)
+        // carry the same tags. Async logs emitted from inside the tool's subscribed Mono still
+        // won't have MDC — that needs reactor-context propagation (a larger fix).
         try (var logContext = wrapWithMdc(mdc)) {
             log.debug("Tool call round '{}' for '{}': tool '{}'",
                     round, logIdValue, toolExecRequest.name());
@@ -232,11 +235,11 @@ final class ToolCallLoop {
                 return Mono.just(ToolExecutionResultMessage.from(toolExecRequest,
                         BUDGET_EXHAUSTED_MESSAGE.formatted(CUMULATIVE_TOOL_OUTPUT_BUDGET_CHARS)));
             }
+            return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
+                    .map(result -> {
+                        budget.cumulative += result.length();
+                        return ToolExecutionResultMessage.from(toolExecRequest, result);
+                    });
         }
-        return toolRegistry.execute(toolExecRequest.name(), toolExecRequest.arguments(), ctx)
-                .map(result -> {
-                    budget.cumulative += result.length();
-                    return ToolExecutionResultMessage.from(toolExecRequest, result);
-                });
     }
 }

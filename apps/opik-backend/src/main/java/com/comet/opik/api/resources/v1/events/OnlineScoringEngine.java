@@ -21,6 +21,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.JsonPath;
@@ -249,7 +251,7 @@ public class OnlineScoringEngine {
      * {@code read(type=trace, id=X)} response. Camel-case here would surprise the
      * model with two different schemas for the same entity.
      */
-    @com.fasterxml.jackson.databind.annotation.JsonNaming(com.fasterxml.jackson.databind.PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     @Builder(toBuilder = true)
     public record ThreadTraceSkeleton(
             @NonNull UUID id,
@@ -898,13 +900,14 @@ public class OnlineScoringEngine {
      */
     public static String summarizeRequest(@NonNull ChatRequest request, @NonNull String modelName,
             boolean useTools) {
+        // Intentionally NOT computing total chars: m.toString() on a multi-MB rendered prompt
+        // allocates the full string just to measure its length, which would add ~2x prompt-size
+        // heap churn per evaluation. Message count + tool count are enough to identify what's
+        // happening; an operator who needs byte-level detail can hit the rule's debug log.
         int messageCount = request.messages() == null ? 0 : request.messages().size();
-        int totalChars = request.messages() == null
-                ? 0
-                : request.messages().stream().mapToInt(m -> m.toString().length()).sum();
         int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
-        return String.format("model='%s', messages=%d (~%d chars), tools=%d, toolsEnabled=%s",
-                modelName, messageCount, totalChars, toolSpecCount, useTools);
+        return String.format("model='%s', messages=%d, tools=%d, toolsEnabled=%s",
+                modelName, messageCount, toolSpecCount, useTools);
     }
 
     /**
