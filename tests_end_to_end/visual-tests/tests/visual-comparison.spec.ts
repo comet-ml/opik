@@ -19,6 +19,12 @@ function dynamicMasks(page: Page) {
     page.locator('td').filter({ hasText: /\d+ (second|minute|hour|day)s? ago/ }),
     page.locator('td').filter({ hasText: /\d{4}-\d{2}-\d{2}/ }),
     page.locator('td').filter({ hasText: /\d+ mins? ago/ }),
+    // mask absolute date cells — format "D MMM YYYY, h:mm A" used by TimeCell (e.g., "15 May 2026, 3:26 PM")
+    page.locator('td').filter({ hasText: /\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4},/ }),
+    // mask UUID columns
+    page.locator('td').filter({ hasText: /[0-9a-f]{8}-[0-9a-f]{4}/ }),
+    // mask breadcrumb — shows dynamic project/dataset names on sub-pages
+    page.locator('nav[aria-label="breadcrumb"]'),
   ];
 }
 
@@ -41,58 +47,63 @@ async function screenshot(page: Page, name: string) {
 
 test.setTimeout(300000);
 
-test('Visual Comparison - Opik UI', async ({ page }) => {
-  const { baseUrl, workspace } = getEnvironmentConfig().getConfig();
-  const projectName = process.env.VISUAL_PROJECT_NAME!;
-  const experimentName = process.env.VISUAL_EXPERIMENT_NAME!;
+test.describe('Visual Comparison - Opik UI', () => {
   let projectId = '';
+  const { baseUrl, workspace } = getEnvironmentConfig().getConfig();
+  const projectName = () => process.env.VISUAL_PROJECT_NAME!;
+  const experimentName = () => process.env.VISUAL_EXPERIMENT_NAME!;
 
-  await test.step('Screenshot: Projects page', async () => {
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
     const projectsPage = new ProjectsPage(page, baseUrl, workspace);
     await projectsPage.goto();
-    await projectsPage.searchAndWait(projectName);
-    await projectsPage.waitForProject(projectName);
+    await projectsPage.searchAndWait(projectName());
+    await projectsPage.waitForProject(projectName());
+    projectId = await projectsPage.clickProjectAndGetId(projectName());
+    await page.close();
+  });
+
+  test('01: Projects page', async ({ page }) => {
+    const projectsPage = new ProjectsPage(page, baseUrl, workspace);
+    await projectsPage.goto();
+    await projectsPage.searchAndWait(projectName());
+    await projectsPage.waitForProject(projectName());
     await screenshot(page, '01-projects-page');
   });
 
-  await test.step('Screenshot: Logs page - Traces view', async () => {
-    const projectsPage = new ProjectsPage(page, baseUrl, workspace);
-    await projectsPage.goto();
-    await projectsPage.searchAndWait(projectName);
-    await projectsPage.waitForProject(projectName);
-    projectId = await projectsPage.clickProjectAndGetId(projectName);
-
+  test('02: Logs - Traces view', async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
-    await logsPage.waitForTracesReady();
+    await logsPage.goto(projectId);
+    await logsPage.waitForTracesReady('input-0');
     await screenshot(page, '02-logs-traces');
   });
 
-  await test.step('Screenshot: Logs page - Threads view', async () => {
+  test('03: Logs - Threads view', async ({ page }) => {
     const logsPage = new LogsPage(page, baseUrl, workspace);
     await logsPage.goto(projectId);
     await logsPage.switchToThreads();
-    await logsPage.waitForThreadsReady();
+    await logsPage.waitForThreadsReady('Hello, what is Opik?');
     await screenshot(page, '03-logs-threads');
   });
 
-  await test.step('Screenshot: Datasets page', async () => {
+  test('04: Datasets page', async ({ page }) => {
     const datasetsPage = new DatasetsPage(page, baseUrl, workspace);
     await datasetsPage.goto(projectId);
-    await datasetsPage.waitForReady();
+    await datasetsPage.waitForReady('visual-dataset');
     await screenshot(page, '04-datasets-page');
   });
 
-  await test.step('Screenshot: Test Suites page', async () => {
+  test('05: Test Suites page', async ({ page }) => {
     const testSuitesPage = new TestSuitesPage(page, baseUrl, workspace);
     await testSuitesPage.goto(projectId);
-    await testSuitesPage.waitForReady();
+    await testSuitesPage.waitForReady('visual-testsuite');
     await screenshot(page, '05-testsuites-page');
   });
 
-  await test.step('Screenshot: Experiments page', async () => {
+  test('06: Experiments page', async ({ page }) => {
     const experimentsPage = new ExperimentsPage(page, baseUrl, workspace);
     await experimentsPage.goto(projectId);
-    await experimentsPage.waitForExperiment(experimentName);
+    await experimentsPage.waitForExperiment(experimentName());
     await screenshot(page, '06-experiments-page');
   });
 });

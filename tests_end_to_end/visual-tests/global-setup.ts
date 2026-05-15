@@ -8,58 +8,16 @@ export const AUTH_STATE_FILE = '.auth/user.json';
 const STATE_FILE = path.join(__dirname, '.test-state.json');
 const authFile = path.join(__dirname, AUTH_STATE_FILE);
 
+// Fixed names — no timestamp suffix so screenshots are identical across runs
+const PROJECT_NAME = 'visual-project';
+const DATASET_NAME = 'visual-dataset';
+const TEST_SUITE_NAME = 'visual-testsuite';
+const EXPERIMENT_NAME = 'visual-experiment';
+const TEST_SUITE_EXP_NAME = 'visual-testsuite-exp';
+
 interface TestState {
-  projectName: string;
-  datasetName: string;
-  testSuiteName: string;
-  experimentName: string;
   experimentId: string;
   testSuiteExperimentId: string;
-}
-
-async function createTestData(): Promise<TestState> {
-  const client = new TestHelperClient();
-  const ts = Date.now();
-  const projectName = `visual-project-${ts}`;
-  const datasetName = `visual-dataset-${ts}`;
-  const testSuiteName = `visual-testsuite-${ts}`;
-  const experimentName = `visual-experiment-${ts}`;
-
-  await client.createProject(projectName);
-  await client.waitForProjectVisible(projectName, 15);
-
-  await client.createTracesWithSpansClient(
-    projectName,
-    { count: 3, prefix: 'visual-trace-', tags: ['visual'], metadata: { env: 'visual-test' } },
-    { count: 2, prefix: 'visual-span-', tags: ['visual'], metadata: { step: '1' } },
-  );
-
-  await client.createThreadsClient(projectName, [
-    { thread_id: 'visual-thread-1', inputs: ['Hello, what is Opik?'], outputs: ['Opik is an LLM observability platform.'] },
-    { thread_id: 'visual-thread-2', inputs: ['How do traces work?'], outputs: ['Traces capture the full execution of an LLM call.'] },
-  ]);
-
-  await client.createDatasetForProject(datasetName, projectName);
-  await client.insertDatasetItems(datasetName, [
-    { input: 'What is 2 + 2?', output: '4' },
-    { input: 'What is the capital of France?', output: 'Paris' },
-    { input: 'Name a primary color.', output: 'Red' },
-  ]);
-  await client.waitForDatasetItemsCount(datasetName, 3, 15);
-
-  await client.createTestSuiteDataset(testSuiteName, projectName);
-  await client.insertDatasetItems(testSuiteName, [
-    { input: 'Test input A', output: 'Test output A' },
-    { input: 'Test input B', output: 'Test output B' },
-  ]);
-  await client.waitForDatasetItemsCount(testSuiteName, 2, 15);
-
-  const experiment = await client.createExperimentForProject(experimentName, datasetName, projectName);
-
-  const testSuiteExperimentName = `visual-testsuite-exp-${ts}`;
-  const testSuiteExperiment = await client.createTestSuiteExperiment(testSuiteExperimentName, testSuiteName, projectName);
-
-  return { projectName, datasetName, testSuiteName, experimentName, experimentId: experiment.id, testSuiteExperimentId: testSuiteExperiment.id };
 }
 
 async function globalSetup(_config: FullConfig) {
@@ -108,21 +66,57 @@ async function globalSetup(_config: FullConfig) {
   process.env.OPIK_URL_OVERRIDE = envConfig.getApiUrl();
   process.env.OPIK_TEST_WORKSPACE = envData.workspace;
 
-  let state: TestState;
-  if (fs.existsSync(STATE_FILE)) {
-    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
-    console.log(`Reusing test data: ${state.projectName}`);
-  } else {
-    state = await createTestData();
-    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-    console.log(`Created test data: ${state.projectName}`);
-  }
+  const client = new TestHelperClient();
 
-  process.env.VISUAL_PROJECT_NAME = state.projectName;
-  process.env.VISUAL_DATASET_NAME = state.datasetName;
-  process.env.VISUAL_TEST_SUITE_NAME = state.testSuiteName;
-  process.env.VISUAL_EXPERIMENT_NAME = state.experimentName;
-  process.env.VISUAL_EXPERIMENT_ID = state.experimentId;
+  // Clean up any leftover data from a previous run
+  console.log('Cleaning up any existing test data...');
+  try { await client.deleteDataset(DATASET_NAME); } catch { /* ignore */ }
+  try { await client.deleteDataset(TEST_SUITE_NAME); } catch { /* ignore */ }
+  try { await client.deleteProject(PROJECT_NAME); } catch { /* ignore */ }
+
+  console.log('Creating test data...');
+  await client.createProject(PROJECT_NAME);
+  await client.waitForProjectVisible(PROJECT_NAME, 15);
+
+  await client.createTracesWithSpansClient(
+    PROJECT_NAME,
+    { count: 3, prefix: 'visual-trace-', tags: ['visual'], metadata: { env: 'visual-test' } },
+    { count: 2, prefix: 'visual-span-', tags: ['visual'], metadata: { step: '1' } },
+  );
+
+  await client.createThreadsClient(PROJECT_NAME, [
+    { thread_id: 'visual-thread-1', inputs: ['Hello, what is Opik?'], outputs: ['Opik is an LLM observability platform.'] },
+    { thread_id: 'visual-thread-2', inputs: ['How do traces work?'], outputs: ['Traces capture the full execution of an LLM call.'] },
+  ]);
+
+  await client.createDatasetForProject(DATASET_NAME, PROJECT_NAME);
+  await client.insertDatasetItems(DATASET_NAME, [
+    { input: 'What is 2 + 2?', output: '4' },
+    { input: 'What is the capital of France?', output: 'Paris' },
+    { input: 'Name a primary color.', output: 'Red' },
+  ]);
+  await client.waitForDatasetItemsCount(DATASET_NAME, 3, 15);
+
+  await client.createTestSuiteDataset(TEST_SUITE_NAME, PROJECT_NAME);
+  await client.insertDatasetItems(TEST_SUITE_NAME, [
+    { input: 'Test input A', output: 'Test output A' },
+    { input: 'Test input B', output: 'Test output B' },
+  ]);
+  await client.waitForDatasetItemsCount(TEST_SUITE_NAME, 2, 15);
+
+  const experiment = await client.createExperimentForProject(EXPERIMENT_NAME, DATASET_NAME, PROJECT_NAME);
+  const testSuiteExperiment = await client.createTestSuiteExperiment(TEST_SUITE_EXP_NAME, TEST_SUITE_NAME, PROJECT_NAME);
+
+  const state: TestState = {
+    experimentId: experiment.id,
+    testSuiteExperimentId: testSuiteExperiment.id,
+  };
+  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+
+  process.env.VISUAL_PROJECT_NAME = PROJECT_NAME;
+  process.env.VISUAL_EXPERIMENT_NAME = EXPERIMENT_NAME;
+
+  console.log(`Test data ready: ${PROJECT_NAME}`);
 }
 
 export default globalSetup;
