@@ -24,12 +24,15 @@ def test_track_openai__non_openai_base_url__provider_is_forwarded_to_chat_and_re
         lambda original: original
     )
 
-    with mock.patch(
-        "opik.integrations.openai.openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator",
-        return_value=chat_decorator_factory,
-    ), mock.patch(
-        "opik.integrations.openai.openai_responses_decorator.OpenaiResponsesTrackDecorator",
-        return_value=responses_decorator_factory,
+    with (
+        mock.patch(
+            "opik.integrations.openai.openai_chat_completions_decorator.OpenaiChatCompletionsTrackDecorator",
+            return_value=chat_decorator_factory,
+        ),
+        mock.patch(
+            "opik.integrations.openai.openai_responses_decorator.OpenaiResponsesTrackDecorator",
+            return_value=responses_decorator_factory,
+        ),
     ):
         track_openai(client)
 
