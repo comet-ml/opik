@@ -247,6 +247,23 @@ class TestPresetTraceId:
         assert "runner" in trace_tree.tags
         assert trace_tree.spans[0].metadata == {"source": "runner"}
 
+    def test_track__environment_with_span_opik_args__environment_is_preserved(
+        self, fake_backend
+    ):
+        @tracker.track(environment="production")
+        def my_agent(x: str):
+            return "result"
+
+        my_agent("input", opik_args={"span": {"tags": ["runner"]}})
+        tracker.flush_tracker()
+
+        assert len(fake_backend.trace_trees) == 1
+        trace_tree = fake_backend.trace_trees[0]
+        assert trace_tree.environment == "production"
+        assert trace_tree.spans[0].environment == "production"
+        assert "runner" in trace_tree.tags
+        assert "runner" in trace_tree.spans[0].tags
+
 
 class TestOpikArgs:
     """Test the opik_args parameter functionality."""
@@ -373,6 +390,12 @@ class TestOpikArgs:
             type="general",
             tags=["original_tag"],
             metadata={"original": "value"},
+            input={"prompt": "hello"},
+            project_name="test-project",
+            model="test-model",
+            provider="test-provider",
+            thread_id="test-thread",
+            environment="production",
         )
         span_args = opik_args.api_classes.OpikArgsSpan(
             tags=["new_tag"], metadata={"new": "value"}
@@ -385,6 +408,12 @@ class TestOpikArgs:
         assert result.type == params.type
         assert result.tags == ["original_tag", "new_tag"]
         assert result.metadata == {"original": "value", "new": "value"}
+        assert result.input == params.input
+        assert result.project_name == params.project_name
+        assert result.model == params.model
+        assert result.provider == params.provider
+        assert result.thread_id == params.thread_id
+        assert result.environment == params.environment
 
     def test_extract_opik_args__happy_path(self):
         """Test that opik_args is properly extracted from kwargs."""
