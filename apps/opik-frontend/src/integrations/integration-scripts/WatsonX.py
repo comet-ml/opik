@@ -41,6 +41,8 @@ def generate_story(prompt):
             },
         },
     )
+    if not getattr(response, "choices", None) or response.choices[0].message is None:
+        return None
     return response.choices[0].message.content
 
 

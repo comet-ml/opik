@@ -14,5 +14,5 @@ response = openai_client.chat.completions.create(
     model="gpt-3.5-turbo",
     messages=[{"role": "user", "content": prompt}],
 )
-if getattr(response, "choices", None):
+if getattr(response, "choices", None) and response.choices[0].message is not None:
     print(response.choices[0].message.content)
