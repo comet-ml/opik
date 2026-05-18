@@ -7,7 +7,6 @@ import { usePromptIdFromURL } from "@/v2/pages/PromptPage/usePromptIdFromURL";
 import usePromptById from "@/api/prompts/usePromptById";
 import DateTag from "@/shared/DateTag/DateTag";
 import PromptTab from "@/v2/pages/PromptPage/PromptTab/PromptTab";
-import CommitsTab from "@/v2/pages/PromptPage/CommitsTab/CommitsTab";
 import { EXPLAINER_ID, EXPLAINERS_MAP } from "@/v2/constants/explainers";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
 import PromptTagsList from "@/v2/pages/PromptPage/PromptTagsList";
@@ -101,13 +100,6 @@ const PromptPage: React.FunctionComponent = () => {
                 />
               </TabsTrigger>
             )}
-            <TabsTrigger variant="underline" value="commits">
-              Commits
-              <ExplainerIcon
-                className="ml-1"
-                {...EXPLAINERS_MAP[EXPLAINER_ID.what_are_commits]}
-              />
-            </TabsTrigger>
           </TabsList>
         </PageBodyStickyContainer>
         <TabsContent value="prompt">
@@ -118,9 +110,6 @@ const PromptPage: React.FunctionComponent = () => {
             <ExperimentsTab promptId={promptId} />
           </TabsContent>
         )}
-        <TabsContent value="commits">
-          <CommitsTab prompt={prompt} />
-        </TabsContent>
       </Tabs>
     </PageBodyScrollContainer>
   );

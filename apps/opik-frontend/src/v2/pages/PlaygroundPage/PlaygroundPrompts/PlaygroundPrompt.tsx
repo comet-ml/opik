@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { Trash, Save } from "lucide-react";
 import last from "lodash/last";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { LLM_MESSAGE_ROLE, LLMMessage } from "@/types/llm";
 import {
@@ -47,13 +48,10 @@ import {
 } from "@/hooks/useLLMProviderModelsData";
 import { useActiveProjectId } from "@/store/AppStore";
 import { usePermissions } from "@/contexts/PermissionsContext";
-import BlueprintPromptsSelectBox from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/BlueprintPromptsSelectBox";
-import SaveExistingPromptDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveExistingPromptDialog";
-import SaveAsNewBlueprintFieldDialog from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/SaveAsNewBlueprintFieldDialog";
-import useSavePromptToBlueprint from "@/v2/pages-shared/llm/BlueprintPromptsSelectBox/useSavePromptToBlueprint";
+import PromptsSelectBox from "@/v2/pages-shared/llm/PromptsSelectBox/PromptsSelectBox";
+import AddNewPromptVersionDialog from "@/v2/pages-shared/llm/LLMPromptMessages/AddNewPromptVersionDialog";
 import { PROMPT_TEMPLATE_STRUCTURE } from "@/types/prompts";
-import useLoadBlueprintPrompt from "@/hooks/useLoadBlueprintPrompt";
-import { BlueprintPromptRef } from "@/types/playground";
+import useLoadChatPrompt from "@/hooks/useLoadChatPrompt";
 import PlaygroundRunButton from "@/v2/pages/PlaygroundPage/PlaygroundRunButton";
 
 interface PlaygroundPromptProps {
@@ -81,6 +79,7 @@ const PlaygroundPrompt = ({
 }: PlaygroundPromptProps) => {
   const checkedIfModelIsValidRef = useRef(false);
   const activeProjectId = useActiveProjectId();
+  const queryClient = useQueryClient();
 
   const prompt = usePromptById(promptId);
   const promptCount = usePromptCount();
@@ -102,33 +101,32 @@ const PlaygroundPrompt = ({
     permissions: { canCreatePrompts },
   } = usePermissions();
 
-  const [showSaveExistingDialog, setShowSaveExistingDialog] = useState(false);
-  const [showSaveAsNewFieldDialog, setShowSaveAsNewFieldDialog] =
+  const [showSaveChatPromptDialog, setShowSaveChatPromptDialog] =
     useState(false);
+  const [lastImportedPromptName, setLastImportedPromptName] =
+    useState<string>("");
 
-  const selectedBlueprintRef = prompt?.loadedBlueprintRef;
+  const selectedChatPromptId = prompt?.loadedChatPromptId;
 
-  const handleBlueprintPromptLoaded = useCallback(
-    (newMessages: LLMMessage[]) => {
+  const handleChatPromptMessagesLoaded = useCallback(
+    (newMessages: LLMMessage[], promptName: string) => {
+      setLastImportedPromptName(promptName);
       updatePrompt(promptId, { messages: newMessages });
     },
     [promptId, updatePrompt],
   );
 
   const {
-    prompt: blueprintPromptData,
-    loadedRef: loadedBlueprintRef,
-    template: blueprintPromptTemplate,
-    hasUnsavedChanges: hasUnsavedBlueprintChanges,
-  } = useLoadBlueprintPrompt({
-    selectedRef: selectedBlueprintRef,
+    chatPromptData,
+    loadedChatPromptRef,
+    chatPromptTemplate,
+    hasUnsavedChatPromptChanges,
+  } = useLoadChatPrompt({
+    selectedChatPromptId,
     messages,
-    onMessagesLoaded: handleBlueprintPromptLoaded,
+    onMessagesLoaded: handleChatPromptMessagesLoaded,
     skipInitialLoad: prompt?.skipInitialPromptLoad,
   });
-
-  const { existingFieldNames, saveExistingVersion, saveAsNewField, isSaving } =
-    useSavePromptToBlueprint(activeProjectId!);
 
   // Clear the one-time flag so it doesn't persist to localStorage
   useEffect(() => {
@@ -270,65 +268,16 @@ const PlaygroundPrompt = ({
     model,
   ]);
 
-  const handleImportBlueprintPrompt = useCallback(
-    (ref: BlueprintPromptRef) => {
-      updatePrompt(promptId, { loadedBlueprintRef: ref });
+  const handleImportChatPrompt = useCallback(
+    (loadedPromptId?: string) => {
+      updatePrompt(promptId, { loadedChatPromptId: loadedPromptId });
     },
     [promptId, updatePrompt],
   );
 
-  const handleDetachPrompt = useCallback(() => {
-    updatePrompt(promptId, { loadedBlueprintRef: undefined });
-  }, [promptId, updatePrompt]);
-
-  const handleClickSave = useCallback(() => {
-    if (selectedBlueprintRef) {
-      setShowSaveExistingDialog(true);
-    } else {
-      setShowSaveAsNewFieldDialog(true);
-    }
-  }, [selectedBlueprintRef]);
-
-  const handleSaveExistingVersion = useCallback(
-    async (changeDescription: string) => {
-      if (!selectedBlueprintRef || !blueprintPromptData) return;
-      const result = await saveExistingVersion({
-        ref: selectedBlueprintRef,
-        promptName: blueprintPromptData.name,
-        template: blueprintPromptTemplate,
-        changeDescription: changeDescription || undefined,
-      });
-      if (!result) return;
-
-      updatePrompt(promptId, { loadedBlueprintRef: result.newRef });
-      loadedBlueprintRef.current = `${result.newRef.blueprintId}-${result.newRef.key}-${result.newRef.commitId}-${result.version.id}`;
-      setShowSaveExistingDialog(false);
-    },
-    [
-      selectedBlueprintRef,
-      blueprintPromptData,
-      blueprintPromptTemplate,
-      saveExistingVersion,
-      updatePrompt,
-      promptId,
-      loadedBlueprintRef,
-    ],
-  );
-
-  const handleSaveAsNewField = useCallback(
-    async (fieldName: string, changeDescription: string) => {
-      const newRef = await saveAsNewField({
-        fieldName,
-        template: blueprintPromptTemplate,
-        changeDescription: changeDescription || undefined,
-      });
-      if (!newRef) return;
-
-      updatePrompt(promptId, { loadedBlueprintRef: newRef });
-      setShowSaveAsNewFieldDialog(false);
-    },
-    [saveAsNewField, blueprintPromptTemplate, updatePrompt, promptId],
-  );
+  const handleSaveChatPrompt = useCallback(() => {
+    setShowSaveChatPromptDialog(true);
+  }, []);
 
   const handleImproveAccept = useCallback(
     (messageId: string, improvedContent: LLMMessage["content"]) => {
@@ -393,12 +342,14 @@ const PlaygroundPrompt = ({
         </div>
 
         <div className="flex min-w-0 items-center overflow-hidden pl-4 [@media(hover:hover)]:max-w-0 [@media(hover:hover)]:pl-0 [@media(hover:hover)]:group-hover/prompt:max-w-none [@media(hover:hover)]:group-hover/prompt:pl-4">
-          <BlueprintPromptsSelectBox
+          <PromptsSelectBox
+            compact
             projectId={activeProjectId!}
-            value={selectedBlueprintRef}
-            onValueChange={handleImportBlueprintPrompt}
-            onClear={handleDetachPrompt}
-            hasUnsavedChanges={hasUnsavedBlueprintChanges}
+            value={selectedChatPromptId}
+            onValueChange={handleImportChatPrompt}
+            onClear={() => handleImportChatPrompt(undefined)}
+            hasUnsavedChanges={hasUnsavedChatPromptChanges}
+            promptName={chatPromptData?.name}
             filterByTemplateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
           />
 
@@ -406,16 +357,17 @@ const PlaygroundPrompt = ({
             {hasMessageContent && (
               <TooltipWrapper
                 content={
-                  selectedBlueprintRef
-                    ? "Update prompt in agent configuration"
-                    : "Save as new field in agent configuration"
+                  hasUnsavedChatPromptChanges
+                    ? "This prompt version hasn't been saved"
+                    : "Save as chat prompt"
                 }
               >
                 <Button
                   variant="minimal"
                   size="icon-sm"
-                  onClick={handleClickSave}
-                  disabled={!canCreatePrompts || isSaving}
+                  onClick={handleSaveChatPrompt}
+                  disabled={!canCreatePrompts && !selectedChatPromptId}
+                  badge={hasUnsavedChatPromptChanges}
                 >
                   <Save />
                 </Button>
@@ -461,26 +413,31 @@ const PlaygroundPrompt = ({
         />
       )}
 
-      {selectedBlueprintRef && blueprintPromptData && (
-        <SaveExistingPromptDialog
-          open={showSaveExistingDialog}
-          onOpenChange={setShowSaveExistingDialog}
-          promptName={blueprintPromptData.name}
-          fieldName={selectedBlueprintRef.key}
-          isSaving={isSaving}
-          onSave={handleSaveExistingVersion}
-        />
-      )}
+      <AddNewPromptVersionDialog
+        open={showSaveChatPromptDialog}
+        setOpen={setShowSaveChatPromptDialog}
+        prompt={chatPromptData}
+        template={chatPromptTemplate}
+        templateStructure={PROMPT_TEMPLATE_STRUCTURE.CHAT}
+        defaultName={lastImportedPromptName}
+        onSave={(version, _promptName, savedPromptId) => {
+          setShowSaveChatPromptDialog(false);
 
-      {showSaveAsNewFieldDialog && (
-        <SaveAsNewBlueprintFieldDialog
-          open={showSaveAsNewFieldDialog}
-          onOpenChange={setShowSaveAsNewFieldDialog}
-          existingFieldNames={existingFieldNames}
-          isSaving={isSaving}
-          onSave={handleSaveAsNewField}
-        />
-      )}
+          if (savedPromptId) {
+            updatePrompt(promptId, { loadedChatPromptId: savedPromptId });
+
+            const newChatPromptKey = `${savedPromptId}-${version.id}`;
+            loadedChatPromptRef.current = newChatPromptKey;
+
+            queryClient.invalidateQueries({
+              queryKey: ["prompt", { promptId: savedPromptId }],
+            });
+            queryClient.invalidateQueries({
+              queryKey: ["prompt-version", { versionId: version.id }],
+            });
+          }
+        }}
+      />
     </div>
   );
 };
