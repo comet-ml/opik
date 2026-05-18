@@ -463,7 +463,13 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 ON lookup_div.workspace_id = eia.workspace_id
                 AND lookup_div.id = eia.dataset_item_id
             WHERE eia.workspace_id = :workspace_id
-            <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
+            AND eia.experiment_id IN (
+                SELECT id
+                FROM experiment_aggregates
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+                  <if(experiment_ids)>AND id IN :experiment_ids<endif>
+            )
             SETTINGS log_comment = '<log_comment>'
             <else>
             WITH experiment_aggregated_scope_ids AS (
