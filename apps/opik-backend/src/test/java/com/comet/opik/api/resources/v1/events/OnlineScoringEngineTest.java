@@ -1095,6 +1095,36 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("prepareLlmRequest renders {{spans}} as [] when the trace has no spans, not the literal sentinel")
+    void testPrepareLlmRequestRendersEmptySpansAsJsonArray() {
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Spans for this trace: {{mySpans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("mySpans", "spans")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of());
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        // Empty list renders as [], not the literal sentinel "spans" — guards against
+        // the bare "spans" value leaking through toVariableMapping when the trace has
+        // no children.
+        assertThat(allText).contains("Spans for this trace: []");
+        assertThat(allText).doesNotContain("Spans for this trace: spans");
+        assertThat(allText).doesNotContain("{{mySpans}}");
+    }
+
+    @Test
     @DisplayName("prepareLlmRequest leaves non-spans variables alone when spans are passed")
     void testPrepareLlmRequestIgnoresSpansWhenNoSentinel() {
         var evaluatorCode = JsonUtils.readValue(TEST_EVALUATOR, LlmAsJudgeCode.class);

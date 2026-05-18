@@ -151,13 +151,15 @@ public class OnlineScoringEngine {
     /**
      * Replace any variable whose source path is the {@code "spans"} sentinel with the JSON-
      * serialized spans list (sorted by start_time, matching the Python-metric convention).
-     * Mutates {@code replacements} in place. No-op when {@code spans} is empty or no variable
-     * references the sentinel — wasted JSONPath resolution on the bare {@code "spans"} value
-     * is left in place to keep the override path simple; the bad value gets overwritten.
+     * Mutates {@code replacements} in place. No-op when no variable references the sentinel.
+     *
+     * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}) — without
+     * it, {@code toReplacements} leaves the bare {@code "spans"} value as a literal and the
+     * prompt renders the word "spans" instead of an empty array.
      */
     private static void injectSpansIntoReplacements(
             Map<String, String> replacements, Map<String, String> variables, List<Span> spans) {
-        if (spans.isEmpty() || !templateReferencesSpans(variables)) {
+        if (!templateReferencesSpans(variables)) {
             return;
         }
         String spansJson;
