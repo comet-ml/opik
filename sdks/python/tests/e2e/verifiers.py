@@ -104,6 +104,7 @@ def verify_trace(
     guardrails_validations: Optional[List[Dict[str, Any]]] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
     environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         trace = opik_client.get_trace_content(id=trace_id)
@@ -169,6 +170,12 @@ def verify_trace(
             ):
                 testlib.assert_dicts_equal(actual_guardrail, expected_guardrail)
 
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (trace.comments or [])]
+            assert actual_comments == comments, (
+                f"trace comments differ: expected {comments}, got {actual_comments}"
+            )
+
     _retry_until_assertions_pass(_check)
 
 
@@ -191,6 +198,7 @@ def verify_span(
     total_cost: Optional[float] = mock.ANY,  # type: ignore
     source: Optional[TraceSource] = mock.ANY,  # type: ignore
     environment: Optional[str] = mock.ANY,  # type: ignore
+    comments: List[str] = mock.ANY,  # type: ignore
 ):
     def _check() -> None:
         span = opik_client.get_span_content(id=span_id)
@@ -239,6 +247,12 @@ def verify_span(
                 item_id=span_id,
                 feedback_scores=span.feedback_scores,
                 expected_feedback_scores=feedback_scores,
+            )
+
+        if comments is not mock.ANY:
+            actual_comments = [c.text for c in (span.comments or [])]
+            assert actual_comments == comments, (
+                f"span comments differ: expected {comments}, got {actual_comments}"
             )
 
     _retry_until_assertions_pass(_check)
