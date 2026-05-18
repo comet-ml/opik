@@ -209,18 +209,18 @@ class Streamer:
         return flushed
 
     def _all_done(self) -> bool:
+        # `all_tasks_done()` is True only when every message accepted by
+        # `put()` has been terminally handled by a consumer (its
+        # `message_processor.process(...)` returned or raised a non-rate-limit
+        # error). This closes the race where a message was popped off the
+        # queue but not yet processed.
         return (
-            self.workers_idling()
-            and self._message_queue.empty()
-            and self._batch_preprocessor.is_empty()
+            self._message_queue.all_tasks_done() and self._batch_preprocessor.is_empty()
         )
 
     def __internal_api__failed_uploads__(self, timeout: Optional[float]) -> int:
         """Returns the number of failed file uploads. Blocking - waits for all uploads to complete."""
         return self._file_upload_manager.failed_uploads(timeout=timeout)
-
-    def workers_idling(self) -> bool:
-        return all([consumer.idling for consumer in self._queue_consumers])
 
     def queue_size(self) -> int:
         return self._message_queue.size()

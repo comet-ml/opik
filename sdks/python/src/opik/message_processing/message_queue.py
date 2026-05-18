@@ -28,43 +28,81 @@ class MessageQueue(Generic[T]):
 
     def __init__(self, max_length: Optional[int] = None):
         self._deque: collections.deque[T] = collections.deque(maxlen=max_length)
-        self._not_empty = threading.Condition()
+        self._cond = threading.Condition()
+        self._unfinished_tasks = 0
         self.max_size = max_length
 
     def put(self, message: T) -> None:
-        with self._not_empty:
+        with self._cond:
+            before = len(self._deque)
             self._deque.appendleft(message)
-            self._not_empty.notify()
+            # When the deque is at maxlen, appendleft silently evicts from the
+            # other end. Only count a new in-flight task when the queue actually
+            # grew — otherwise the displaced message's task carries over.
+            if len(self._deque) > before:
+                self._unfinished_tasks += 1
+            self._cond.notify()
 
     def put_back(self, message: T) -> None:
-        with self._not_empty:
+        # Re-enqueuing a previously-popped message (rate-limit retry / deferred
+        # delivery): the task is still in flight, so do not increment.
+        with self._cond:
             self._deque.append(message)
-            self._not_empty.notify()
+            self._cond.notify()
 
     def get(self, timeout: float) -> T:
-        with self._not_empty:
+        with self._cond:
             if timeout is None or timeout < 0:
                 raise ValueError("'timeout' must be a non-negative number")
 
-            self._not_empty.wait_for(lambda: len(self._deque) > 0, timeout=timeout)
+            self._cond.wait_for(lambda: len(self._deque) > 0, timeout=timeout)
 
             if len(self._deque) == 0:
                 raise Empty
 
             return self._deque.pop()
 
+    def task_done(self) -> None:
+        """Mark a previously-popped message as terminally handled (processed
+        or dropped). Must NOT be called when the message has been re-enqueued
+        via ``put_back``."""
+        with self._cond:
+            if self._unfinished_tasks <= 0:
+                raise ValueError("task_done() called more times than there were items")
+            self._unfinished_tasks -= 1
+            if self._unfinished_tasks == 0:
+                self._cond.notify_all()
+
+    def all_tasks_done(self) -> bool:
+        with self._cond:
+            return self._unfinished_tasks == 0
+
+    def join(self, timeout: Optional[float] = None) -> bool:
+        """Block until every accepted message has been marked done via
+        ``task_done()``. Returns True if quiescence was reached within
+        ``timeout``, False otherwise."""
+        with self._cond:
+            return self._cond.wait_for(
+                lambda: self._unfinished_tasks == 0, timeout=timeout
+            )
+
     def empty(self) -> bool:
         return len(self._deque) == 0
 
     def clear(self) -> None:
         """Drop all pending messages. Intended for fire-and-forget teardowns."""
-        with self._not_empty:
+        with self._cond:
             self._deque.clear()
+            # Discarded messages will never see task_done; reset the counter
+            # so future join()/all_tasks_done() callers aren't stuck waiting
+            # on phantom in-flight tasks.
+            self._unfinished_tasks = 0
+            self._cond.notify_all()
 
     def accept_put_without_discarding(self) -> bool:
         if self.max_size is None:
             return True
-        with self._not_empty:
+        with self._cond:
             return len(self._deque) < self.max_size
 
     def size(self) -> int:
