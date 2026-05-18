@@ -186,6 +186,7 @@ Return ONLY the JSON object, no explanation."""
         )
         
         if not getattr(response, "choices", None) or response.choices[0].message is None:
+            print("  Warning: LLM returned no choices or null message; skipping")
             return None
         result_text = response.choices[0].message.content.strip()
         
