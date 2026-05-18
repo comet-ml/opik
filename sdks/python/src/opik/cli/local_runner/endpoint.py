@@ -7,8 +7,7 @@ from typing import Optional, Tuple
 
 import click
 
-from ._run import run_cli_session
-from .pairing import RunnerType
+from . import _group, _run, pairing, stop
 
 
 def _validate_command(command: Tuple[str, ...]) -> None:
@@ -26,7 +25,34 @@ def _validate_command(command: Tuple[str, ...]) -> None:
         raise SystemExit(2)
 
 
-@click.command(context_settings={"ignore_unknown_options": True})
+@click.group(
+    cls=_group.RunnerGroup,
+    invoke_without_command=True,
+    context_settings={"ignore_unknown_options": True},
+    accepts_positional_after_run=True,
+)
+@click.pass_context
+def endpoint(ctx: click.Context) -> None:
+    """Run or stop a local endpoint process connected to Opik.
+
+    \b
+    Run an agent:
+      opik endpoint --project X -- python my_agent.py
+
+    \b
+    Stop a running endpoint started in another terminal:
+      opik endpoint stop --project X
+      opik endpoint stop --all
+    """
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@endpoint.command(
+    _group.FALLBACK_SUBCOMMAND,
+    hidden=True,
+    context_settings={"ignore_unknown_options": True},
+)
 @click.option("--project", "project_name", required=True, help="Opik project name.")
 @click.option("--name", default=None, help="Runner name.")
 @click.option(
@@ -58,7 +84,7 @@ def _validate_command(command: Tuple[str, ...]) -> None:
 )
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
-def endpoint(
+def endpoint_run(
     ctx: click.Context,
     project_name: str,
     name: Optional[str],
@@ -69,7 +95,7 @@ def endpoint(
     non_interactive: bool,
     command: Tuple[str, ...],
 ) -> None:
-    """Run a local endpoint process connected to Opik."""
+    """Run a local endpoint process connected to Opik (default action)."""
     if api_key:
         ctx.obj["api_key"] = api_key
     _validate_command(command)
@@ -84,14 +110,49 @@ def endpoint(
             "before running 'opik endpoint'."
         )
 
-    run_cli_session(
+    _run.run_cli_session(
         ctx=ctx,
         project_name=project_name,
         name=name,
-        runner_type=RunnerType.ENDPOINT,
+        runner_type=pairing.RunnerType.ENDPOINT,
         command=list(command),
         watch=watch,
         headless=headless,
         workspace=workspace,
         non_interactive=non_interactive,
+    )
+
+
+@endpoint.command("stop")
+@click.option(
+    "--project",
+    "project_name",
+    default=None,
+    help="Stop the endpoint runner bound to this project.",
+)
+@click.option(
+    "--all",
+    "stop_all",
+    is_flag=True,
+    default=False,
+    help="Stop every local endpoint runner.",
+)
+@click.option(
+    "--runner",
+    "runner_id",
+    default=None,
+    help=(
+        "Stop the endpoint runner with this id. "
+        "Use when a project has more than one runner attached to it."
+    ),
+)
+def endpoint_stop(
+    project_name: Optional[str], stop_all: bool, runner_id: Optional[str]
+) -> None:
+    """Stop a local endpoint runner started in another terminal."""
+    stop.do_stop(
+        runner_type=pairing.RunnerType.ENDPOINT,
+        project_name=project_name,
+        all_flag=stop_all,
+        runner_id_filter=runner_id,
     )
