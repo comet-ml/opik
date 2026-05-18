@@ -29,6 +29,7 @@ def _validate_command(command: Tuple[str, ...]) -> None:
     cls=_group.RunnerGroup,
     invoke_without_command=True,
     context_settings={"ignore_unknown_options": True},
+    accepts_positional_after_run=True,
 )
 @click.pass_context
 def endpoint(ctx: click.Context) -> None:
@@ -140,7 +141,10 @@ def endpoint_run(
     "--runner",
     "runner_id",
     default=None,
-    help="Stop the endpoint runner with this id (use to disambiguate when multiple runners share a project).",
+    help=(
+        "Stop the endpoint runner with this id. "
+        "Use when a project has more than one runner attached to it."
+    ),
 )
 def endpoint_stop(
     project_name: Optional[str], stop_all: bool, runner_id: Optional[str]

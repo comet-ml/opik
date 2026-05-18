@@ -51,7 +51,7 @@ def _write_runner_file(
 
 
 class TestDoStopFilters:
-    def test_requires_a_filter(self, tmp_runners_dir: Path) -> None:
+    def test_do_stop__no_filter__usage_error(self, tmp_runners_dir: Path) -> None:
         # No --project / --runner / --all → usage error before any signaling.
         with pytest.raises(Exception) as exc_info:
             do_stop(
@@ -63,7 +63,7 @@ class TestDoStopFilters:
         # click.UsageError prints "Error: ..." and is a Click exception.
         assert "specify" in str(exc_info.value).lower()
 
-    def test_no_match_does_not_raise(
+    def test_do_stop__no_match__prints_no_match_message(
         self, tmp_runners_dir: Path, capsys: pytest.CaptureFixture
     ) -> None:
         do_stop(
@@ -75,7 +75,9 @@ class TestDoStopFilters:
         out = capsys.readouterr().out
         assert "No local 'connect' runners found" in out
 
-    def test_matches_by_project(self, tmp_runners_dir: Path) -> None:
+    def test_do_stop__project_filter__signals_matching_only(
+        self, tmp_runners_dir: Path
+    ) -> None:
         _write_runner_file(tmp_runners_dir, "r-1", "connect", "alpha", os.getpid())
         _write_runner_file(tmp_runners_dir, "r-2", "connect", "beta", os.getpid())
 
@@ -99,7 +101,9 @@ class TestDoStopFilters:
         # Non-matched is left alone.
         assert (tmp_runners_dir / "connect-r-2.json").exists()
 
-    def test_matches_by_all(self, tmp_runners_dir: Path) -> None:
+    def test_do_stop__all_flag__signals_only_target_runner_type(
+        self, tmp_runners_dir: Path
+    ) -> None:
         _write_runner_file(tmp_runners_dir, "r-1", "connect", "alpha", os.getpid())
         _write_runner_file(tmp_runners_dir, "r-2", "connect", "beta", os.getpid())
         # An endpoint runner must NOT be touched by `connect stop --all`.
@@ -120,7 +124,9 @@ class TestDoStopFilters:
         assert sorted(seen) == ["r-1", "r-2"]
         assert (tmp_runners_dir / "endpoint-r-3.json").exists()
 
-    def test_matches_by_runner_id(self, tmp_runners_dir: Path) -> None:
+    def test_do_stop__runner_id_filter__signals_matching_only(
+        self, tmp_runners_dir: Path
+    ) -> None:
         _write_runner_file(tmp_runners_dir, "r-1", "connect", "alpha", os.getpid())
         _write_runner_file(tmp_runners_dir, "r-2", "connect", "alpha", os.getpid())
 
@@ -159,7 +165,7 @@ class TestSignalUntilGone:
             path=tmp_runners_dir / "connect-r-1.json",
         )
 
-    def test_sigterm_succeeds_when_target_exits(
+    def test_signal_until_gone__target_exits_after_sigterm__returns_ok(
         self, tmp_runners_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(stop_module, "_POLL_INTERVAL_SECONDS", 0.01)
@@ -177,7 +183,7 @@ class TestSignalUntilGone:
         assert ok
         assert sent_signals == [(12345, signal.SIGTERM)]
 
-    def test_sigkill_escalation_when_sigterm_ignored(
+    def test_signal_until_gone__sigterm_ignored__escalates_to_sigkill(
         self, tmp_runners_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(stop_module, "_SIGTERM_GRACE_SECONDS", 0.05)
@@ -199,7 +205,7 @@ class TestSignalUntilGone:
         assert ok
         assert [sig for _, sig in sent_signals] == [signal.SIGTERM, signal.SIGKILL]
 
-    def test_already_dead_pid_returns_ok(
+    def test_signal_until_gone__already_dead_pid__returns_ok(
         self, tmp_runners_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fake_kill(_pid: int, _sig: int) -> None:
@@ -210,7 +216,7 @@ class TestSignalUntilGone:
         assert ok
         assert "exited" in reason
 
-    def test_permission_error_fails(
+    def test_signal_until_gone__permission_error__returns_failure(
         self, tmp_runners_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def fake_kill(_pid: int, _sig: int) -> None:
@@ -223,7 +229,9 @@ class TestSignalUntilGone:
 
 
 class TestStopExitCode:
-    def test_failed_stop_raises_systemexit_1(self, tmp_runners_dir: Path) -> None:
+    def test_do_stop__signal_failed__raises_systemexit_1(
+        self, tmp_runners_dir: Path
+    ) -> None:
         _write_runner_file(tmp_runners_dir, "r-1", "connect", "alpha", os.getpid())
         with patch.object(
             stop_module, "_signal_until_gone", return_value=(False, "denied")
@@ -239,13 +247,15 @@ class TestStopExitCode:
 
 
 class TestConnectStopCli:
-    def test_no_filter_returns_usage_error(self) -> None:
+    def test_cli_connect_stop__no_filter__exits_with_usage_error(self) -> None:
         runner = CliRunner()
         result = runner.invoke(cli, ["connect", "stop"])
         assert result.exit_code == 2
         assert "Specify" in result.output or "specify" in result.output
 
-    def test_routes_to_do_stop(self, tmp_runners_dir: Path) -> None:
+    def test_cli_connect_stop__with_project__routes_to_do_stop(
+        self, tmp_runners_dir: Path
+    ) -> None:
         runner = CliRunner()
         with patch("opik.cli.local_runner.stop.do_stop") as mock_stop:
             result = runner.invoke(cli, ["connect", "stop", "--project", "p"])
@@ -258,14 +268,18 @@ class TestConnectStopCli:
                 runner_id_filter=None,
             )
 
-    def test_all_flag(self, tmp_runners_dir: Path) -> None:
+    def test_cli_connect_stop__all_flag__sets_all_flag_kwarg(
+        self, tmp_runners_dir: Path
+    ) -> None:
         runner = CliRunner()
         with patch("opik.cli.local_runner.stop.do_stop") as mock_stop:
             result = runner.invoke(cli, ["connect", "stop", "--all"])
             assert result.exit_code == 0, result.output
             assert mock_stop.call_args.kwargs["all_flag"] is True
 
-    def test_runner_flag(self, tmp_runners_dir: Path) -> None:
+    def test_cli_connect_stop__runner_flag__sets_runner_id_filter(
+        self, tmp_runners_dir: Path
+    ) -> None:
         runner = CliRunner()
         with patch("opik.cli.local_runner.stop.do_stop") as mock_stop:
             result = runner.invoke(cli, ["connect", "stop", "--runner", "r-1"])
@@ -274,7 +288,9 @@ class TestConnectStopCli:
 
 
 class TestEndpointStopCli:
-    def test_routes_to_do_stop(self, tmp_runners_dir: Path) -> None:
+    def test_cli_endpoint_stop__with_project__routes_to_do_stop(
+        self, tmp_runners_dir: Path
+    ) -> None:
         runner = CliRunner()
         with patch("opik.cli.local_runner.stop.do_stop") as mock_stop:
             result = runner.invoke(cli, ["endpoint", "stop", "--project", "p"])
@@ -287,7 +303,9 @@ class TestEndpointStopCli:
                 runner_id_filter=None,
             )
 
-    def test_all_flag(self, tmp_runners_dir: Path) -> None:
+    def test_cli_endpoint_stop__all_flag__sets_all_flag_kwarg(
+        self, tmp_runners_dir: Path
+    ) -> None:
         runner = CliRunner()
         with patch("opik.cli.local_runner.stop.do_stop") as mock_stop:
             result = runner.invoke(cli, ["endpoint", "stop", "--all"])

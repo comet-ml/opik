@@ -51,10 +51,12 @@ def do_stop(
     failed: List[Tuple[pid_file.RunnerInfo, str]] = []
     for info in matched:
         ok, reason = _signal_until_gone(info)
-        # Always drop the pid file: the supervisor's own cleanup runs in its
-        # `finally`, but a SIGKILL'd or already-dead process won't get there.
-        pid_file.remove(runner_type=info.runner_type, runner_id=info.runner_id)
         if ok:
+            # Drop the pid file ourselves: a SIGKILL'd or already-dead process
+            # never reaches the supervisor's own `finally`-block cleanup.
+            # On failure we leave the file in place so a subsequent
+            # `opik <type> stop` can rediscover the still-alive supervisor.
+            pid_file.remove(runner_type=info.runner_type, runner_id=info.runner_id)
             stopped.append(info)
         else:
             failed.append((info, reason))

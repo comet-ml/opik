@@ -92,7 +92,10 @@ def connect_run(
     "--runner",
     "runner_id",
     default=None,
-    help="Stop the connect runner with this id (use to disambiguate when multiple runners share a project).",
+    help=(
+        "Stop the connect runner with this id. "
+        "Use when a project has more than one runner attached to it."
+    ),
 )
 def connect_stop(
     project_name: Optional[str], stop_all: bool, runner_id: Optional[str]
