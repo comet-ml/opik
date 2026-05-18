@@ -370,6 +370,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "baidu/ernie-4.5-vl-424b-a47b",
     },
     {
+      value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST,
+      label: "baidu/qianfan-ocr-fast",
+    },
+    {
       value: PROVIDER_MODEL_TYPE.BAIDU_QIANFAN_OCR_FAST_FREE,
       label: "baidu/qianfan-ocr-fast:free",
     },
@@ -721,6 +725,10 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_LING_2_6_FLASH_FREE,
       label: "inclusionai/ling-2.6-flash:free",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T,
+      label: "inclusionai/ring-2.6-1t",
     },
     {
       value: PROVIDER_MODEL_TYPE.INCLUSIONAI_RING_2_6_1T_FREE,
@@ -2147,10 +2155,6 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
       label: "Gemini 3.1 Pro Preview",
     },
     {
-      value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_TTS_PREVIEW,
-      label: "Gemini 3.1 Flash TTS Preview",
-    },
-    {
       value: PROVIDER_MODEL_TYPE.GEMINI_3_1_FLASH_LITE,
       label: "Gemini 3.1 Flash Lite",
     },
@@ -2181,6 +2185,14 @@ export const PROVIDER_MODELS: PROVIDER_MODELS_TYPE = {
     {
       value: PROVIDER_MODEL_TYPE.GEMINI_2_0_FLASH_LITE,
       label: "Gemini 2.0 Flash-Lite",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_26B_A4B_IT,
+      label: "Gemma 4 26B A4B IT",
+    },
+    {
+      value: PROVIDER_MODEL_TYPE.GEMMA_4_31B_IT,
+      label: "Gemma 4 31B IT",
     },
     {
       value: PROVIDER_MODEL_TYPE.LYRIA_3_CLIP_PREVIEW,
