@@ -17,7 +17,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentConfigEnv(
-        @JsonView( {
+        @JsonView({
                 AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID projectId,
         @JsonView({AgentConfig.View.Public.class,
@@ -28,5 +28,5 @@ public record AgentConfigEnv(
         @JsonView({
                 AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
-                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant endedAt){
+                AgentConfig.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant endedAt) {
 }
