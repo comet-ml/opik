@@ -32,8 +32,13 @@ public class TestStreamConfiguration implements StreamConfiguration {
     @Builder.Default
     private Duration poolingInterval = Duration.milliseconds(100);
 
+    // BaseRedisSubscriber.stop() uses this as the .block() timeout when removing the consumer from
+    // the group. If it expires before Redis responds, stop() disposes the consumerScheduler and
+    // cancels the in-flight removeConsumer call, leaving the consumer behind. 100ms is tighter than
+    // Redis-container response under load and made shouldRemoveConsumerOnStop fail 8/8 locally; 2s
+    // is still well under any test wait and matches the headroom prod has at 5s.
     @Builder.Default
-    private Duration longPollingDuration = Duration.milliseconds(100);
+    private Duration longPollingDuration = Duration.seconds(2);
 
     @Builder.Default
     private int claimIntervalRatio = 10;
