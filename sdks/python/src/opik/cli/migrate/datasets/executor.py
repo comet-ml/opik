@@ -308,6 +308,31 @@ def _cascade_experiments(
         # any experiment was skipped (e.g. ``recreate_experiment`` returned
         # False because all items missed the trace_id remap).
 
+    # Surface cascade counters on a separate audit record (additive --
+    # the existing ``cascade_experiments`` action record is unchanged
+    # from Slice 3, so callers reading the action's pre/post state keep
+    # working). The action-loop framework calls ``_action_details``
+    # BEFORE ``apply_fn`` so the per-action ``ok`` record can't carry
+    # post-apply counters; a summary record after the cascade is the
+    # cleanest additive surface.
+    audit.record(
+        type="cascade_experiments_summary",
+        status="ok",
+        details={
+            "source_dataset_id": action.source_dataset_id,
+            "to_dataset": action.dest_name,
+            "to_project": action.dest_project_name,
+            "experiments_migrated": result.experiments_migrated,
+            "experiments_skipped": result.experiments_skipped,
+            "traces_migrated": result.traces_migrated,
+            "spans_migrated": result.spans_migrated,
+            "trace_comments_migrated": result.trace_comments_migrated,
+            "span_comments_migrated": result.span_comments_migrated,
+            "items_skipped_missing_trace": result.items_skipped_missing_trace,
+            "items_skipped_missing_item": result.items_skipped_missing_item,
+        },
+    )
+
     plan.trace_id_remap.update(result.trace_id_remap)
 
 

@@ -43,6 +43,7 @@ import com.comet.opik.api.resources.utils.resources.ProjectMetricsResourceClient
 import com.comet.opik.api.resources.utils.resources.ProjectResourceClient;
 import com.comet.opik.api.resources.utils.resources.SpanResourceClient;
 import com.comet.opik.api.resources.utils.resources.TraceResourceClient;
+import com.comet.opik.api.resources.utils.resources.WorkspaceResourceClient;
 import com.comet.opik.api.resources.utils.spans.SpanAssertions;
 import com.comet.opik.api.resources.utils.traces.TraceAssertions;
 import com.comet.opik.domain.EntityType;
@@ -131,6 +132,7 @@ class MultiValueFeedbackScoresE2ETest {
     private DatasetResourceClient datasetResourceClient;
     private OptimizationResourceClient optimizationResourceClient;
     private ProjectMetricsResourceClient projectMetricsResourceClient;
+    private WorkspaceResourceClient workspaceResourceClient;
     private FeedbackScoreDAO feedbackScoreDAO;
 
     @BeforeAll
@@ -148,6 +150,7 @@ class MultiValueFeedbackScoresE2ETest {
         this.datasetResourceClient = new DatasetResourceClient(client, baseURI);
         this.optimizationResourceClient = new OptimizationResourceClient(client, baseURI, factory);
         this.projectMetricsResourceClient = new ProjectMetricsResourceClient(client, baseURI);
+        this.workspaceResourceClient = new WorkspaceResourceClient(client, baseURI, factory);
         this.feedbackScoreDAO = feedbackScoreDAO;
     }
 
@@ -950,6 +953,98 @@ class MultiValueFeedbackScoresE2ETest {
                 .orElseThrow(() -> new AssertionError("Thread with id " + threadId + " not found"));
         assertThat(getThreadScore(actualMultiScoresByFind).reason())
                 .isEqualTo("%s, %s".formatted(EMPTY_REASON_PLACEHOLDER, EMPTY_REASON_PLACEHOLDER));
+    }
+
+    @Test
+    @DisplayName("trace stats include legacy feedback_scores when the workspace has data in the legacy table")
+    void testTraceStats_legacyFeedbackScoresSurfacedWhenPresent() {
+        var workspaceName = randomUUID().toString();
+        var workspaceId = randomUUID().toString();
+        var apiKey = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER1);
+
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        var trace = factory.manufacturePojo(Trace.class).toBuilder()
+                .id(null)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .startTime(Instant.now().truncatedTo(ChronoUnit.HOURS))
+                .endTime(Instant.now().truncatedTo(ChronoUnit.HOURS).plusMillis(100))
+                .build();
+        var traceId = traceResourceClient.createTrace(trace, apiKey, workspaceName);
+
+        var authoredScore = factory.manufacturePojo(FeedbackScore.class);
+        traceResourceClient.feedbackScore(traceId, authoredScore, workspaceName, apiKey);
+
+        var legacyScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name("legacy-" + randomUUID())
+                .build();
+        feedbackScoreDAO.scoreEntity(EntityType.TRACE, traceId, legacyScore, projectId, null)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER1)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        // Trigger the natural workspace-version determination flow so the legacy-scores probe
+        // runs against actual ClickHouse state and the workspace flag is set accordingly.
+        workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
+
+        var expected = traceResourceClient.getById(traceId, workspaceName, apiKey).toBuilder()
+                .feedbackScores(List.of(
+                        FeedbackScore.builder().name(authoredScore.name()).value(authoredScore.value()).build(),
+                        FeedbackScore.builder().name(legacyScore.name()).value(legacyScore.value()).build()))
+                .build();
+
+        var actualStats = traceResourceClient.getTraceStats(projectName, null, apiKey, workspaceName, null, Map.of());
+        TraceAssertions.assertStats(actualStats.stats(), StatsUtils.getProjectTraceStatItems(List.of(expected)));
+    }
+
+    @Test
+    @DisplayName("span stats include legacy feedback_scores when the workspace has data in the legacy table")
+    void testSpanStats_legacyFeedbackScoresSurfacedWhenPresent() {
+        var workspaceName = randomUUID().toString();
+        var workspaceId = randomUUID().toString();
+        var apiKey = randomUUID().toString();
+        AuthTestUtils.mockTargetWorkspace(wireMock.server(), apiKey, workspaceName, workspaceId, USER1);
+
+        var projectName = RandomStringUtils.secure().nextAlphanumeric(10);
+        var projectId = projectResourceClient.createProject(projectName, apiKey, workspaceName);
+
+        var span = factory.manufacturePojo(Span.class).toBuilder()
+                .id(null)
+                .projectName(projectName)
+                .usage(null)
+                .feedbackScores(null)
+                .totalEstimatedCost(null)
+                .build();
+        var spanId = spanResourceClient.createSpan(span, apiKey, workspaceName);
+
+        var authoredScore = factory.manufacturePojo(FeedbackScore.class);
+        spanResourceClient.feedbackScore(spanId, authoredScore, workspaceName, apiKey);
+
+        var legacyScore = factory.manufacturePojo(FeedbackScore.class).toBuilder()
+                .name("legacy-" + randomUUID())
+                .build();
+        feedbackScoreDAO.scoreEntity(EntityType.SPAN, spanId, legacyScore, projectId, null)
+                .contextWrite(ctx -> ctx
+                        .put(RequestContext.USER_NAME, USER1)
+                        .put(RequestContext.WORKSPACE_ID, workspaceId))
+                .block();
+
+        workspaceResourceClient.getWorkspaceVersion(apiKey, workspaceName);
+
+        var expected = spanResourceClient.getById(spanId, workspaceName, apiKey).toBuilder()
+                .feedbackScores(List.of(
+                        FeedbackScore.builder().name(authoredScore.name()).value(authoredScore.value()).build(),
+                        FeedbackScore.builder().name(legacyScore.name()).value(legacyScore.value()).build()))
+                .build();
+
+        var actualStats = spanResourceClient.getSpansStats(projectName, null, null, apiKey, workspaceName, Map.of());
+        SpanAssertions.assertionStatusPage(actualStats.stats(),
+                StatsUtils.getProjectSpanStatItems(List.of(expected)));
     }
 
     private FeedbackScore getTraceScore(Trace trace) {

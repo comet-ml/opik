@@ -205,7 +205,10 @@ class OnlineScoringLlmAsJudgeScorerTest {
                 .parameters(params)
                 .build();
 
-        ChatRequest withTools = scorer.addToolSpecs(original, ToolChoice.REQUIRED);
+        ChatRequest withTools = OnlineScoringEngine.addToolSpecs(original, ToolChoice.REQUIRED,
+                new ToolRegistry(Set.of(
+                        stubTool(GetTraceSpansTool.NAME, "{}"),
+                        stubTool(ReadTool.NAME, "{}"))));
 
         // Tool specs come from the registry (sorted alphabetically by ToolRegistry).
         assertThat(withTools.toolSpecifications())
@@ -308,12 +311,16 @@ class OnlineScoringLlmAsJudgeScorerTest {
         // Final re-issue: uses structuredRequest's shape (no tool specs) and includes the
         // forcing UserMessage as the last accumulated message — soft signal "stop calling
         // tools, emit only JSON now" that complements the provider-native structured output.
-        // 4 elements: round-1's three + the forcing UserMessage appended after the loop.
+        // 5 elements: round-1's three + the terminal AiMessage from round-1's response (the
+        // loop's no-tool-calls early return now appends it so the wrap-up keeps the assistant's
+        // last turn in the conversation history) + the forcing UserMessage appended after.
         ChatRequest finalSent = sent.get(1);
         assertThat(finalSent.toolSpecifications()).isNullOrEmpty();
-        assertThat(finalSent.messages()).hasSize(4);
-        assertThat(finalSent.messages().get(3)).isInstanceOf(UserMessage.class);
-        assertThat(((UserMessage) finalSent.messages().get(3)).singleText())
+        assertThat(finalSent.messages()).hasSize(5);
+        assertThat(finalSent.messages().get(3)).isInstanceOf(AiMessage.class);
+        assertThat(((AiMessage) finalSent.messages().get(3)).text()).isEqualTo("ok");
+        assertThat(finalSent.messages().get(4)).isInstanceOf(UserMessage.class);
+        assertThat(((UserMessage) finalSent.messages().get(4)).singleText())
                 .contains("Now respond with ONLY the JSON object");
     }
 

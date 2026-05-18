@@ -44,6 +44,13 @@ export class ChatPrompt extends BasePrompt {
     this.messages = data.messages;
     this.chatTemplate = new ChatPromptTemplate(data.messages, this.type);
 
+    if (!data.synced && !data.promptId) {
+      logger.warn(
+        "new ChatPrompt() is deprecated. Use client.createChatPrompt() to create or " +
+          "client.getChatPrompt() to retrieve chat prompts instead."
+      );
+    }
+
     if (opik === undefined && !data.synced) {
       this._pendingSync = this._performSync();
     }
