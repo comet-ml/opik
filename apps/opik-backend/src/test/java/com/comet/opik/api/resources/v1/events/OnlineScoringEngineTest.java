@@ -1059,6 +1059,44 @@ class OnlineScoringEngineTest {
     }
 
     @Test
+    @DisplayName("templateReferencesSpans detects {{spans}} inside a multimodal message's contentArray text part")
+    void testTemplateReferencesSpansInMultimodalContentArray() {
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        var multimodalMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .contentArray(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("text")
+                                .text("Spans: {{spans}}")
+                                .build(),
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("image_url")
+                                .imageUrl(com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.ImageUrl.builder()
+                                        .url("https://example.com/x.png").build())
+                                .build()))
+                .build());
+        // The text part inside contentArray references {{spans}} — detection must walk
+        // structured-content messages, not just the simple `content` string field.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalMessage, Map.of(), mustache)).isTrue();
+
+        // Variables explicitly maps "spans" to something else — explicit override wins
+        // even when {{spans}} sits in a multimodal text part.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalMessage,
+                Map.of("spans", "input.spans"), mustache)).isFalse();
+
+        // No text part references {{spans}} — false.
+        var multimodalNoSpans = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .contentArray(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessageContent.builder()
+                                .type("text")
+                                .text("Summary: {{summary}}")
+                                .build()))
+                .build());
+        assertThat(OnlineScoringEngine.templateReferencesSpans(multimodalNoSpans, Map.of(), mustache)).isFalse();
+    }
+
+    @Test
     @DisplayName("templateReferencesSpans detects implicit {{spans}} references in messages when variables omits the binding")
     void testTemplateReferencesSpansFromMessageTemplate() {
         var mustache = com.comet.opik.api.PromptType.MUSTACHE;

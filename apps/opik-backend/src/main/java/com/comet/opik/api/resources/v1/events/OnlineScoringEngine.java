@@ -165,6 +165,11 @@ public class OnlineScoringEngine {
      * path. The second clause respects explicit user mappings — e.g. a rule that maps
      * {@code spans} to {@code input.something} keeps that mapping instead of being silently
      * overridden by the spans-list injection.
+     *
+     * <p>Walks both message shapes: the simple-string {@code content} field, and the
+     * multimodal {@code contentArray} where each part exposes its own {@code text}. Scanning
+     * only {@code content} would miss {@code {{spans}}} in multimodal prompts, leaving the
+     * rendered text part unsubstituted because the spans fetch never fires.
      */
     private static boolean messagesReferenceSpansDirectly(
             List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType) {
@@ -172,10 +177,30 @@ public class OnlineScoringEngine {
             return false;
         }
         return messages.stream()
-                .map(LlmAsJudgeMessage::content)
                 .filter(Objects::nonNull)
-                .anyMatch(content -> TemplateParseUtils.extractVariables(content, promptType)
+                .flatMap(OnlineScoringEngine::renderableTextOf)
+                .anyMatch(text -> TemplateParseUtils.extractVariables(text, promptType)
                         .contains(SPANS_VARIABLE_NAME));
+    }
+
+    /**
+     * Stream of all variable-substitutable text in a message: the simple {@code content}
+     * string when present, otherwise each non-null {@code text} part inside {@code contentArray}.
+     * Mirrors what the renderer would substitute into — anything we should scan for
+     * {@code {{spans}}} references must also be scanned by this helper, or detection
+     * drifts from rendering.
+     */
+    private static Stream<String> renderableTextOf(LlmAsJudgeMessage message) {
+        if (message.isStringContent()) {
+            return Stream.of(message.content());
+        }
+        if (message.isStructuredContent()) {
+            return message.contentArray().stream()
+                    .filter(Objects::nonNull)
+                    .map(LlmAsJudgeMessageContent::text)
+                    .filter(Objects::nonNull);
+        }
+        return Stream.empty();
     }
 
     /**

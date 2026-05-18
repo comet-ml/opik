@@ -165,18 +165,7 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
         // string "spans"). Skip the I/O otherwise. Keeping the fetch reactive and out of
         // evaluate() avoids the .block() pattern that pinned a workersScheduler thread for the
         // upstream wait (OPIK-6308).
-        String modelName = message.llmAsJudgeCode().model().name();
-        boolean agenticToolsPathPossible = OnlineScoringEngine.supportsToolCalling(
-                llmProviderFactory.getLlmProvider(modelName))
-                && (LlmAsJudgeToolsMode.shouldUseTools(message)
-                        || serviceTogglesConfig.isAgenticToolsEnabled());
-        boolean templateNeedsSpans = OnlineScoringEngine
-                .templateReferencesSpans(
-                        message.llmAsJudgeCode().messages(),
-                        message.llmAsJudgeCode().variables(),
-                        message.promptType());
-        boolean spansNeeded = agenticToolsPathPossible || templateNeedsSpans;
-        Mono<List<Span>> spansMono = spansNeeded
+        Mono<List<Span>> spansMono = shouldFetchSpans(message)
                 ? spanService.getByTraceIds(Set.of(trace.id()))
                         .collectList()
                         .contextWrite(ctx -> ctx
@@ -346,6 +335,35 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
 
     private static boolean shouldUseTools(TraceToScoreLlmAsJudge message) {
         return LlmAsJudgeToolsMode.shouldUseTools(message);
+    }
+
+    /**
+     * Routing decision for whether to fetch the trace's spans before running the LLM call.
+     * Spans are needed in two cases:
+     * <ul>
+     *   <li>The agentic-tools path is possible (provider supports tools AND the experimentId
+     *       branch is on OR the size-based toggle is enabled) — spans pre-seed the read-tool
+     *       cache so the in-loop {@code get_trace_spans} call doesn't redo the fetch.
+     *   <li>The inline prompt template references {@code {{spans}}} — see
+     *       {@link OnlineScoringEngine#templateReferencesSpans} for both opt-in shapes
+     *       (sentinel-valued variable AND implicit template reference).
+     * </ul>
+     *
+     * <p>Skipping the fetch otherwise avoids a {@code spanService.getByTraceIds} call per
+     * scored trace on rules that don't need spans.
+     */
+    // Package-private for unit tests.
+    boolean shouldFetchSpans(TraceToScoreLlmAsJudge message) {
+        String modelName = message.llmAsJudgeCode().model().name();
+        boolean agenticToolsPathPossible = OnlineScoringEngine.supportsToolCalling(
+                llmProviderFactory.getLlmProvider(modelName))
+                && (LlmAsJudgeToolsMode.shouldUseTools(message)
+                        || serviceTogglesConfig.isAgenticToolsEnabled());
+        boolean templateNeedsSpans = OnlineScoringEngine.templateReferencesSpans(
+                message.llmAsJudgeCode().messages(),
+                message.llmAsJudgeCode().variables(),
+                message.promptType());
+        return agenticToolsPathPossible || templateNeedsSpans;
     }
 
     /**
