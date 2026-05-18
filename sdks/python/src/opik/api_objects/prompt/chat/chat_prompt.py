@@ -63,6 +63,11 @@ class ChatPrompt(base_prompt.BasePrompt):
             ValidationError: If messages structure is invalid.
         """
 
+        LOGGER.warning(
+            "opik.ChatPrompt() is deprecated. Use client.create_chat_prompt() to create or "
+            "client.get_chat_prompt() to retrieve chat prompts instead."
+        )
+
         # Validate messages structure
         self._validate_inputs(messages=messages)
 

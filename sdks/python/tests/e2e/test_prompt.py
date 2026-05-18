@@ -2,7 +2,9 @@ import json
 import uuid
 import pytest
 import opik
+from opik import opik_context
 from opik.api_objects.prompt import PromptType
+from opik.api_objects.prompt.prompt_cache import get_global_cache
 from . import verifiers
 
 
@@ -1305,3 +1307,50 @@ def test_chat_prompt__update_version_tags(opik_client: opik.Opik):
     v2_in_history = next((v for v in history if v.version_id == v2.version_id), None)
     assert set(v1_in_history.tags) == set(new_tags)
     assert set(v2_in_history.tags) == set(new_tags)
+
+
+def test_prompt__auto_inject_into_trace__happyflow(opik_client: opik.Opik):
+    """Fetching text and chat prompts inside @track auto-injects opik_prompts into trace metadata."""
+    suffix = _generate_random_suffix()
+    text_prompt_name = f"auto-text-{suffix}"
+    chat_prompt_name = f"auto-chat-{suffix}"
+
+    opik_client.create_prompt(name=text_prompt_name, prompt="Summarize: {{text}}")
+    opik_client.create_chat_prompt(
+        name=chat_prompt_name,
+        messages=[
+            {"role": "system", "content": "You are helpful"},
+            {"role": "user", "content": "Help with {{task}}"},
+        ],
+    )
+
+    get_global_cache().clear()
+
+    trace_id_storage = {}
+
+    @opik.track()
+    def my_tracked_fn():
+        trace_id_storage["id"] = opik_context.get_current_trace_data().id
+        opik_client.get_prompt(name=text_prompt_name)
+        opik_client.get_chat_prompt(name=chat_prompt_name)
+        return "done"
+
+    my_tracked_fn()
+    opik.flush_tracker()
+
+    trace = opik_client.get_trace_content(id=trace_id_storage["id"])
+    metadata = trace.metadata or {}
+    opik_prompts = metadata.get("opik_prompts")
+
+    assert opik_prompts is not None, "Expected opik_prompts in trace metadata"
+    assert len(opik_prompts) == 2, f"Expected 2 prompt entries, got {len(opik_prompts)}"
+
+    text_entry = next(e for e in opik_prompts if e["name"] == text_prompt_name)
+    verifiers.verify_opik_prompt_entry(
+        text_entry, name=text_prompt_name, template_structure="text"
+    )
+
+    chat_entry = next(e for e in opik_prompts if e["name"] == chat_prompt_name)
+    verifiers.verify_opik_prompt_entry(
+        chat_entry, name=chat_prompt_name, template_structure="chat"
+    )
