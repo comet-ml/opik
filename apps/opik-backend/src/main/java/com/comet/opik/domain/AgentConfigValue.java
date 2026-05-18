@@ -20,7 +20,7 @@ import java.util.Arrays;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AgentConfigValue(
-        @JsonView( {
+        @JsonView({
                 AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotBlank @Size(max = 255, message = "key cannot exceed 255 characters") String key,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
@@ -28,7 +28,7 @@ public record AgentConfigValue(
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
                 AgentConfig.View.Write.class}) @NotNull ValueType type,
         @JsonView({AgentConfig.View.Public.class, AgentConfig.View.History.class,
-                AgentConfig.View.Write.class}) String description){
+                AgentConfig.View.Write.class}) String description) {
 
     @Getter
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)

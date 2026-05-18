@@ -25,7 +25,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @ProviderApiKeyValidation
 public record ProviderApiKey(
-        @JsonView( {
+        @JsonView({
                 View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({View.Public.class, View.Write.class}) @NotNull LlmProvider provider,
         @JsonView({View.Public.class,
@@ -46,7 +46,7 @@ public record ProviderApiKey(
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy,
         @JsonView({
-                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "If true, this provider is system-managed and cannot be edited or deleted") boolean readOnly){
+                View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY, description = "If true, this provider is system-managed and cannot be edited or deleted") boolean readOnly) {
 
     @Override
     public String toString() {
@@ -76,14 +76,14 @@ public record ProviderApiKey(
 
     @Builder(toBuilder = true)
     public record ProviderApiKeyPage(
-            @JsonView( {
+            @JsonView({
                     Project.View.Public.class}) int page,
             @JsonView({View.Public.class}) int size,
             @JsonView({View.Public.class}) long total,
             @JsonView({View.Public.class}) List<ProviderApiKey> content,
             @JsonView({View.Public.class}) List<String> sortableBy)
             implements
-                com.comet.opik.api.Page<ProviderApiKey>{
+                com.comet.opik.api.Page<ProviderApiKey> {
 
         public static ProviderApiKeyPage empty(int page) {
             return new ProviderApiKeyPage(page, 0, 0, List.of(), List.of());

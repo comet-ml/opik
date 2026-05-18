@@ -25,7 +25,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Optimization(
-        @JsonView( {
+        @JsonView({
                 Optimization.View.Public.class, Optimization.View.Write.class}) UUID id,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) String name,
         @JsonView({Optimization.View.Public.class, Optimization.View.Write.class}) @NotBlank String datasetName,
@@ -64,7 +64,7 @@ public record Optimization(
         @JsonView({
                 Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal bestCost,
         @JsonView({
-                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalOptimizationCost){
+                Optimization.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) BigDecimal totalOptimizationCost) {
 
     @Builder(toBuilder = true)
     public record OptimizationPage(

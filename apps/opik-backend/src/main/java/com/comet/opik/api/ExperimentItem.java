@@ -23,7 +23,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ExperimentItem(
-        @JsonView( {
+        @JsonView({
                 ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) UUID id,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID experimentId,
         @JsonView({ExperimentItem.View.Public.class, ExperimentItem.View.Write.class}) @NotNull UUID datasetItemId,
@@ -63,7 +63,7 @@ public record ExperimentItem(
         @JsonView({
                 ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) List<AssertionResult> assertionResults,
         @JsonView({
-                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status){
+                ExperimentItem.View.Compare.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) RunStatus status) {
 
     public static class View {
         public static class Write {

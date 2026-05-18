@@ -1,2 +1,5 @@
 # OPIK-5097: FE v1/v2 structural reorganization (file moves + import rewrites)
 118933eb7554bf8c7ebe632afda5af692d0e24a7
+
+# NA: Backend Spotless reformat sweep (whitespace-only, ~53 files under apps/opik-backend)
+6fcfa6f8a8c03dd5ccab6614b7b2a38395127b8d

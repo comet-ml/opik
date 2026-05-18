@@ -16,7 +16,7 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record ProviderApiKeyUpdate(
-        @JsonView( {
+        @JsonView({
                 ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) @JsonDeserialize(using = EncryptionDeserializer.class) String apiKey,
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) @Size(max = 150) String name,
@@ -27,7 +27,7 @@ public record ProviderApiKeyUpdate(
         @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) Map<String, String> headers,
         @JsonView({ProviderApiKey.View.Public.class,
                 ProviderApiKey.View.Write.class}) Map<String, String> configuration,
-        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl){
+        @JsonView({ProviderApiKey.View.Public.class, ProviderApiKey.View.Write.class}) String baseUrl) {
 
     @Override
     public String toString() {

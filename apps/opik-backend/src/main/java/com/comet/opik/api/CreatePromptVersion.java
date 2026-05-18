@@ -18,7 +18,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @Builder(toBuilder = true)
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-public record CreatePromptVersion(@JsonView( {
+public record CreatePromptVersion(@JsonView({
         PromptVersion.View.Detail.class}) @NotBlank String name,
         @JsonView({PromptVersion.View.Detail.class}) @NotNull @Valid PromptVersion version,
         @JsonView({
@@ -26,7 +26,7 @@ public record CreatePromptVersion(@JsonView( {
         @JsonView({
                 PromptVersion.View.Detail.class}) @Schema(description = "Project ID. Takes precedence over project_name when both are provided.") UUID projectId,
         @JsonView({
-                PromptVersion.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If provided, scopes the prompt to the specified project. Ignored when project_id is provided.") String projectName){
+                PromptVersion.View.Detail.class}) @Pattern(regexp = NULL_OR_NOT_BLANK, message = "must not be blank") @Schema(description = "If provided, scopes the prompt to the specified project. Ignored when project_id is provided.") String projectName) {
 
     /**
      * Returns the template structure, defaulting to TEXT if not provided.

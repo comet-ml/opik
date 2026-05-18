@@ -15,7 +15,7 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record DatasetExportJob(
-        @JsonView( {
+        @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID datasetId,
@@ -38,7 +38,7 @@ public record DatasetExportJob(
         @JsonView({
                 DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({
-                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                DatasetExportJob.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     public static class View {
         public static class Public {

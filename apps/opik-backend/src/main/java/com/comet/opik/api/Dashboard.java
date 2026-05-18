@@ -23,7 +23,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record Dashboard(
-        @JsonView( {
+        @JsonView({
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) UUID id,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String workspaceId,
         @JsonView({Dashboard.View.Public.class,
@@ -46,7 +46,7 @@ public record Dashboard(
                 Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) @Nullable String lastUpdatedBy,
         @JsonView({Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant createdAt,
         @JsonView({
-                Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt){
+                Dashboard.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt) {
 
     public static class View {
         public static class Public {
@@ -60,12 +60,12 @@ public record Dashboard(
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record DashboardPage(
-            @JsonView( {
+            @JsonView({
                     Dashboard.View.Public.class}) List<Dashboard> content,
             @JsonView({Dashboard.View.Public.class}) int page,
             @JsonView({Dashboard.View.Public.class}) int size,
             @JsonView({Dashboard.View.Public.class}) long total,
-            @JsonView({Dashboard.View.Public.class}) List<String> sortableBy) implements Page<Dashboard>{
+            @JsonView({Dashboard.View.Public.class}) List<String> sortableBy) implements Page<Dashboard> {
 
         public static DashboardPage empty(int page, List<String> sortableBy) {
             return new DashboardPage(List.of(), page, 0, 0, sortableBy);

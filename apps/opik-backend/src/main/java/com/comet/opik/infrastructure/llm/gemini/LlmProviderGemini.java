@@ -80,6 +80,7 @@ public class LlmProviderGemini implements LlmProviderService {
     ///   }
     /// }
     ///  ```
+    ///
     @Override
     public Optional<ErrorMessage> getLlmProviderError(@NonNull Throwable throwable) {
         return LlmProviderLangChainMapper.INSTANCE.getGeminiErrorObject(throwable, log);
