@@ -37,6 +37,22 @@ export const LLM_MESSAGE_ROLE_NAME_MAP = {
   [LLM_MESSAGE_ROLE.tool_execution_result]: "Tool execution result",
 };
 
+/**
+ * LLM-as-judge variables whose source path is a reserved sentinel rather than a
+ * JSONPath against the trace. When the user types `{{spans}}` in a trace-scoped
+ * prompt, the variable mapping auto-fills to `spans → spans` and the backend
+ * (OnlineScoringEngine.injectSpansIntoReplacements) substitutes the JSON-
+ * serialized spans list at render time — same convention as the Python-metric
+ * path. No manual path entry required.
+ *
+ * Trace-scope only. Span scope doesn't have sub-spans to inject; thread scope
+ * uses `{{context}}` for the traces list and would need a different design for
+ * spans (whose spans?).
+ */
+export const RESERVED_LLM_JUDGE_TRACE_VARIABLES: Record<string, string> = {
+  spans: "spans",
+};
+
 export const DEFAULT_OPEN_AI_CONFIGS = {
   TEMPERATURE: 0,
   MAX_COMPLETION_TOKENS: 4000,

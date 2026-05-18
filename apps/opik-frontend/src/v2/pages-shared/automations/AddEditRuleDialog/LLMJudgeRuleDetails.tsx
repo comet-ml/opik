@@ -29,6 +29,7 @@ import {
 } from "@/lib/llm";
 import { COMPOSED_PROVIDER_TYPE, PROVIDER_MODEL_TYPE } from "@/types/providers";
 import { safelyGetPromptMustacheTags } from "@/lib/prompt";
+import { RESERVED_LLM_JUDGE_TRACE_VARIABLES } from "@/constants/llm";
 import { EvaluationRuleFormType } from "@/v2/pages-shared/automations/AddEditRuleDialog/schema";
 import useLLMProviderModelsData from "@/hooks/useLLMProviderModelsData";
 import ExplainerIcon from "@/shared/ExplainerIcon/ExplainerIcon";
@@ -120,6 +121,8 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
 
       // recalculate variables
       const variables = formInstance.getValues("llmJudgeDetails.variables");
+      const currentScope = formInstance.getValues("scope");
+      const isTraceScope = currentScope === EVALUATORS_RULE_SCOPE.trace;
       const localVariables: Record<string, string> = {};
       let parsingVariablesError: boolean = false;
       messages
@@ -138,7 +141,16 @@ const LLMJudgeRuleDetails: React.FC<LLMJudgeRuleDetailsProps> = ({
           return acc.concat(allTags);
         }, [])
         .filter((v) => v !== "")
-        .forEach((v: string) => (localVariables[v] = variables[v] ?? ""));
+        .forEach((v: string) => {
+          // Auto-fill reserved trace variables (e.g. `{{spans}}`) with their sentinel
+          // path so the user doesn't have to pick one in the variable mapping dropdown.
+          // Preserve any existing user-supplied path if they already mapped this name
+          // to something else.
+          const reservedDefault = isTraceScope
+            ? RESERVED_LLM_JUDGE_TRACE_VARIABLES[v]
+            : undefined;
+          localVariables[v] = variables[v] || reservedDefault || "";
+        });
 
       formInstance.setValue("llmJudgeDetails.variables", localVariables);
       formInstance.setValue(
