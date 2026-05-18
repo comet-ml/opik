@@ -1671,20 +1671,20 @@ class AutomationRuleEvaluatorsResourceTest {
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "(?s)Scores for traceId '.*' stored successfully:\\n\\n.*"));
-        // The LLM-as-Judge scorer was refactored to emit a sanitized one-line summary
-        // (no rendered prompt / response text in user-facing logs — see
-        // OnlineScoringLlmAsJudgeScorer#summarizeRequest / summarizeResponse). The Python
-        // user-defined-metric scorer still emits the legacy "...using the following input:
-        // \n\n{...}" / "Received response for traceId '...':\n\n[...]" format. Either is
-        // acceptable here so this helper can serve both scorer tests.
+        // Both scorer families now emit sanitized one-line summaries for user-facing logs:
+        // - LLM-as-Judge: summarizeRequest / summarizeResponse on OnlineScoringLlmAsJudgeScorer
+        // - Python user-defined-metric: summarizeEvaluatorInput on OnlineScoringEngine
+        // The "Received response" path on the Python side still emits the legacy multiline
+        // format, so both are accepted here.
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "Received response for traceId '.*': textChars=\\d+, toolCalls=\\d+, finishReason=.*")
+                        "Received response for traceId '.*': 'textChars=\\d+, toolCalls=\\d+, finishReason=.*'")
                         || log.message().matches("(?s)Received response for traceId '.*':\\n\\n.*"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
-                        "Sending traceId '.*' to LLM: model='.*', messages=\\d+ \\(~\\d+ chars\\), tools=\\d+, toolsEnabled=.*")
-                        || log.message().matches("(?s)Sending traceId '.*' to .* using the following input:\\n\\n.*"));
+                        "Sending traceId '.*' to LLM: model='.*', messages=\\d+, tools=\\d+, toolsEnabled=.*")
+                        || log.message().matches(
+                                "Sending traceId '.*' to Python evaluator: 'arguments=\\[.*\\]'"));
         assertThat(logPage.content())
                 .anyMatch(log -> log.message().matches(
                         "Evaluating traceId '.*' sampled by rule '.*'"));

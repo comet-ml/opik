@@ -18,3 +18,4 @@ services/opik-sdk-driver/.venv/
 services/opik-sdk-driver/__pycache__/
 services/opik-sdk-driver/**/__pycache__/
 services/opik-sdk-driver/*.egg-info/
+services/opik-sdk-driver/uv.lock

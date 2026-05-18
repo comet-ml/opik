@@ -23,7 +23,12 @@ class RunnerGroup(click.Group):
     def resolve_command(
         self, ctx: click.Context, args: List[str]
     ) -> Tuple[Optional[str], Optional[click.Command], List[str]]:
+        # Click >= 8.3 mutates `args` inside `Group.resolve_command` when the
+        # first token looks like an option (it re-runs `parse_args` to produce
+        # a nicer error). Snapshot the original args so the fallback receives
+        # the unmodified list.
+        original_args = list(args)
         try:
             return super().resolve_command(ctx, args)
         except click.UsageError:
-            return super().resolve_command(ctx, [FALLBACK_SUBCOMMAND, *args])
+            return super().resolve_command(ctx, [FALLBACK_SUBCOMMAND, *original_args])

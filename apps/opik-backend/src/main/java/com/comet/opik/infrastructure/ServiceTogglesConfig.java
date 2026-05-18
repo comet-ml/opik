@@ -44,6 +44,8 @@ public class ServiceTogglesConfig {
     @NotNull boolean datasetVersioningEnabled;
     @JsonProperty
     @NotNull boolean datasetExportEnabled;
+    @JsonProperty
+    @NotNull boolean demoDataEnabled;
     // LLM Provider feature flags
     @JsonProperty
     @NotNull boolean openaiProviderEnabled;
@@ -61,6 +63,10 @@ public class ServiceTogglesConfig {
     @NotNull boolean customllmProviderEnabled;
     @JsonProperty
     @NotNull boolean ollamaProviderEnabled;
+    @JsonProperty
+    @NotNull boolean ollieEnabled;
+    @JsonProperty
+    boolean agenticToolsEnabled;
 
     @NotNull Set<@NotBlank String> v2WorkspaceAllowlistIds = Set.of();
 
