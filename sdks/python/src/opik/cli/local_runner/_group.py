@@ -31,6 +31,4 @@ class RunnerGroup(click.Group):
         try:
             return super().resolve_command(ctx, args)
         except click.UsageError:
-            return super().resolve_command(
-                ctx, [FALLBACK_SUBCOMMAND, *original_args]
-            )
+            return super().resolve_command(ctx, [FALLBACK_SUBCOMMAND, *original_args])
