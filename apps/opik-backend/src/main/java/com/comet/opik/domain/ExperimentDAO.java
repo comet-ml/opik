@@ -1184,18 +1184,12 @@ public class ExperimentDAO {
                 <if(prompt_ids)>AND hasAny(arrayConcat([prompt_id], mapKeys(prompt_versions)), :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
             ),
-            -- For experiments where experiments.project_id is empty (legacy rows), pick up
-            -- project_id from the aggregates table — it's populated by the aggregation pipeline
-            -- and indexed by (workspace_id, experiment_id, id).
             eia_projects AS (
                 SELECT id, project_id
                 FROM experiment_aggregates FINAL
                 WHERE workspace_id = :workspace_id
                   AND id IN (SELECT id FROM experiments_final WHERE project_id = '')
             ),
-            -- Legacy fallback: experiments with no project_id on the row AND no aggregates yet.
-            -- For those (and only those) we still need the experiment_items -> traces hop.
-            -- Empty for modern workspaces, which is why the whole query collapses.
             legacy_scope AS (
                 SELECT id
                 FROM experiments_final
