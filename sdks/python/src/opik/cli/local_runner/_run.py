@@ -11,15 +11,7 @@ from opik import Opik
 from opik.rest_api.core.api_error import ApiError
 from opik.runner.tui import RunnerTUI
 
-from .error_view import build_config_error_block
-from .pairing import (
-    RunnerType,
-    generate_runner_name,
-    launch_supervisor,
-    run_headless,
-    run_pairing,
-)
-from .preflight import maybe_auto_configure, should_create_project
+from . import error_view, pairing, preflight
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,7 +22,7 @@ def _raise_runtime_error(header: str, reason: str, client: Opik) -> None:
     Lives here (not in error_view) because the data-collection side is _run's
     job: it reads from the client config and decides what reason text to show.
     """
-    raise build_config_error_block(
+    raise error_view.build_config_error_block(
         header,
         reason=reason,
         workspace=client.config.workspace,
@@ -57,7 +49,7 @@ def run_cli_session(
     ctx: click.Context,
     project_name: str,
     name: Optional[str],
-    runner_type: RunnerType,
+    runner_type: pairing.RunnerType,
     command: Optional[List[str]] = None,
     watch: Optional[bool] = None,
     headless: bool = False,
@@ -68,7 +60,7 @@ def run_cli_session(
 
     # Auto-launch `opik configure` before constructing the client so the
     # client picks up the freshly-written settings.
-    maybe_auto_configure(api_key, non_interactive, headless)
+    preflight.maybe_auto_configure(api_key, non_interactive, headless)
 
     client = Opik(
         project_name=project_name,
@@ -84,14 +76,14 @@ def run_cli_session(
 
     # Prompt before the Live TUI takes over the terminal — click.confirm and
     # Rich Live can't safely share stdout.
-    create_if_missing, project_known_missing = should_create_project(
+    create_if_missing, project_known_missing = preflight.should_create_project(
         api, project_name, client.config.workspace, headless
     )
 
     tui = RunnerTUI()
 
     try:
-        runner_name = generate_runner_name(name)
+        runner_name = pairing.generate_runner_name(name)
         tui.start()
         tui.print_banner(
             project_name,
@@ -100,7 +92,7 @@ def run_cli_session(
         )
 
         if headless:
-            result = run_headless(
+            result = pairing.run_headless(
                 api=api,
                 project_name=project_name,
                 runner_name=runner_name,
@@ -111,8 +103,18 @@ def run_cli_session(
                 base_url=client.config.url_override,
                 config_file_exists=client.config.config_file_exists,
             )
+            # `run_pairing` shows the "connected" panel via the FE poll loop;
+            # headless has no poll loop so we surface the destination URL here so
+            # the user (and Ollie) can see what they attached to.
+            project_url = pairing.post_pairing_url(
+                runner_type=runner_type,
+                base_url=client.config.url_override,
+                project_id=result.project_id,
+                workspace=client.config.workspace,
+            )
+            tui.pairing_completed(project_url=project_url)
         else:
-            result = run_pairing(
+            result = pairing.run_pairing(
                 api=api,
                 project_name=project_name,
                 runner_name=runner_name,
@@ -131,8 +133,14 @@ def run_cli_session(
             except OSError:
                 LOGGER.warning("Failed to save config file", exc_info=True)
 
-        launch_supervisor(
-            result, api, tui, runner_type=runner_type, command=command, watch=watch
+        pairing.launch_supervisor(
+            result,
+            api,
+            tui,
+            runner_type=runner_type,
+            command=command,
+            watch=watch,
+            workspace=client.config.workspace,
         )
     except KeyboardInterrupt:
         raise SystemExit(130)

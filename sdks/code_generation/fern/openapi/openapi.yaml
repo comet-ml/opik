@@ -18669,6 +18669,7 @@ components:
       - geminiProviderEnabled
       - guardrailsEnabled
       - ollamaProviderEnabled
+      - ollieEnabled
       - openaiProviderEnabled
       - openrouterProviderEnabled
       - opikAIEnabled
@@ -18724,6 +18725,10 @@ components:
         customllmProviderEnabled:
           type: boolean
         ollamaProviderEnabled:
+          type: boolean
+        ollieEnabled:
+          type: boolean
+        agenticToolsEnabled:
           type: boolean
         v2WorkspaceAllowlistIds:
           uniqueItems: true

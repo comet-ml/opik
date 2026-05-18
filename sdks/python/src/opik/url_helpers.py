@@ -75,6 +75,13 @@ def get_project_url_by_id(base_url: str, project_id: str, workspace: str) -> str
     return f"{domain_root}opik/{workspace}/projects/{project_id}/"
 
 
+def get_agent_playground_url_by_project_id(
+    base_url: str, project_id: str, workspace: str
+) -> str:
+    domain_root = get_base_url(base_url)
+    return f"{domain_root}opik/{workspace}/projects/{project_id}/agent-playground"
+
+
 def get_base_url(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     base_url = f"{parsed.scheme}://{parsed.netloc}/"

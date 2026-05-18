@@ -30,7 +30,7 @@
         <testcontainers.version>2.0.2</testcontainers.version>
         <uuid.java.generator.version>5.2.0</uuid.java.generator.version>
         <wiremock.version>3.13.1</wiremock.version>
-        <redisson.version>4.3.1</redisson.version>
+        <redisson.version>4.4.0</redisson.version>
         <opentelmetry.version>2.27.0</opentelmetry.version>
         <aws.java.sdk.version>2.44.0</aws.java.sdk.version>
         <json-path.version>3.0.0</json-path.version>
@@ -64,7 +64,7 @@
             <dependency>
                 <groupId>dev.langchain4j</groupId>
                 <artifactId>langchain4j-bom</artifactId>
-                <version>1.14.0</version>
+                <version>1.15.0</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -493,7 +493,7 @@
             <plugin>
                 <groupId>com.diffplug.spotless</groupId>
                 <artifactId>spotless-maven-plugin</artifactId>
-                <version>3.4.0</version>
+                <version>3.5.1</version>
                 <executions>
                     <execution>
                         <phase>validate</phase>
