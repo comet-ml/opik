@@ -290,6 +290,10 @@ describe("OpikClient - Chat Prompts", () => {
         { role: "system", content: "You are a helpful assistant" },
       ];
 
+      vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+        new Error("Project not found")
+      );
+
       vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
         content: [
           {
@@ -319,6 +323,10 @@ describe("OpikClient - Chat Prompts", () => {
     });
 
     it("should return null if chat prompt not found", async () => {
+      vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+        new Error("Project not found")
+      );
+
       vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
         content: [],
       } as OpikApi.PromptPagePublic);
@@ -331,6 +339,10 @@ describe("OpikClient - Chat Prompts", () => {
     });
 
     it("should throw PromptTemplateStructureMismatch if text prompt exists", async () => {
+      vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+        new Error("Project not found")
+      );
+
       vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
         content: [
           {
@@ -354,6 +366,10 @@ describe("OpikClient - Chat Prompts", () => {
     });
 
     it("should throw PromptTemplateStructureMismatch if templateStructure is undefined", async () => {
+      vi.spyOn(client.api.projects, "retrieveProject").mockRejectedValue(
+        new Error("Project not found")
+      );
+
       vi.spyOn(client.api.prompts, "getPrompts").mockResolvedValue({
         content: [
           {

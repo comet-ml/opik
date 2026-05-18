@@ -27,7 +27,10 @@ from .stability_guard import StabilityGuard
 LOGGER = logging.getLogger(__name__)
 
 _HEARTBEAT_INTERVAL_SECONDS = 5.0
-_GRACEFUL_TIMEOUT_SECONDS = 10
+# Bounded so Ctrl+C feels responsive. The child has already received SIGINT via the
+# foreground process group, so this is purely a backstop for slow-cleaning children
+# before we escalate to SIGKILL.
+_GRACEFUL_TIMEOUT_SECONDS = 5
 _RESTART_DEBOUNCE_SECONDS = 1.0
 _STDERR_MAX_LINES = 500
 
@@ -164,6 +167,10 @@ class Supervisor:
                 self._shutdown_event.wait()
         finally:
             self._shutdown_event.set()
+            # Notify the backend first so the FE flips the runner card off without
+            # waiting for child teardown — the disconnect call is bounded (2s) and
+            # independent of how long the user's process takes to exit.
+            self._notify_runner_closing()
             self._bg_tracker.shutdown()
             if self._command is not None:
                 self._stop_child()
@@ -401,6 +408,21 @@ class Supervisor:
                 LOGGER.debug("Heartbeat error", exc_info=True)
 
             self._shutdown_event.wait(self._heartbeat_interval_seconds)
+
+    def _notify_runner_closing(self) -> None:
+        # Tell the backend we're closing so the FE flips off the runner card on the next
+        # poll, instead of waiting out the heartbeat TTL. Best-effort: server-side cleanup
+        # is idempotent and the reaper picks up anything we miss.
+        #
+        # Called at the top of run()'s finally — before _stop_child — so the FE learns
+        # we're gone immediately, even if the child takes the full graceful timeout to
+        # exit. Reached on Ctrl+C, SIGTERM, clean child exit, 410 eviction, and unhandled
+        # exceptions. SIGKILL / segfault skip Python cleanup entirely; the heartbeat-TTL
+        # reaper is the backstop for those.
+        try:
+            self._api.runners.disconnect_runner(self._runner_id)
+        except Exception:
+            LOGGER.debug("Failed to notify backend of runner shutdown", exc_info=True)
 
     def _install_signal_handlers(self) -> None:
         def handler(signum: int, frame: object) -> None:

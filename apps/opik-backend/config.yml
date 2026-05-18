@@ -535,6 +535,16 @@ onlineScoring:
   # Default: 100
   # Description: Max number of entries to evict when publishing to the Redis stream (0 = no limit) if over max length
   streamTrimLimit: ${REDIS_SCORING_STREAM_TRIM_LIMIT:-100}
+  # Default: 50000
+  # Description: Estimated-tokens threshold above which the LLM-as-judge online scorer routes through the
+  #   agentic-tools path (skeleton initial prompt + read/jq/search tools). Below the threshold the inline
+  #   path is used.
+  agenticToolsThresholdTokens: ${ONLINE_SCORING_AGENTIC_TOOLS_THRESHOLD_TOKENS:-50000}
+  # Default: 4
+  # Description: Characters-per-token ratio used to estimate a trace's token count from its serialized JSON
+  #   length. 4 ≈ natural-language English. Lower for code/JSON-heavy workloads (≈ 2) — yields a more
+  #   pessimistic estimate so the agentic-tools path engages earlier.
+  agenticToolsCharsPerToken: ${ONLINE_SCORING_AGENTIC_TOOLS_CHARS_PER_TOKEN:-4}
   ## scorer: options from AutomationRuleEvaluatorType
   ## streamName: the name of the stream in redis
   ## codec: 'json' when there are non-java consumers, 'java' for java consumers only
@@ -1038,6 +1048,13 @@ serviceToggles:
   # Default: true
   # Description: Whether or not Ollama provider is enabled
   ollamaProviderEnabled: ${TOGGLE_OLLAMA_PROVIDER_ENABLED:-"true"}
+  # Default: false
+  # Description: Whether or not the Ollie AI assistant integration is enabled.
+  ollieEnabled: ${TOGGLE_OLLIE_ENABLED:-"false"}
+  # Default: false
+  # Description: Master switch for the agentic-tools path on LLM-as-judge online scoring. When false, the
+  #   inline path is used regardless of context size. Threshold lives under onlineScoring.agenticToolsThresholdTokens.
+  agenticToolsEnabled: ${TOGGLE_AGENTIC_TOOLS_ENABLED:-"false"}
   # Default: "" (empty, no allowlisted workspaces)
   # Description: Comma-separated list of workspace IDs that should always receive V2 navigation.
   # Valid values: comma-separated workspace IDs (e.g. "ws-id-1,ws-id-2"), or "" (empty, disabled).
@@ -1383,6 +1400,14 @@ experimentProjectMigration:
   lockWaitTime: ${EXPERIMENT_PROJECT_MIGRATION_LOCK_WAIT_TIME:-100ms}
   # Per-cycle timeout — safety net for stuck cycles, not normal completion
   jobTimeout: ${EXPERIMENT_PROJECT_MIGRATION_JOB_TIMEOUT:-1h}
+  # Dedicated reactor scheduler isolating this job from the shared boundedElastic.
+  # Max threads in the pool — the job runs sequentially per replica; a small cap suffices.
+  schedulerThreadCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_CAP:-4}
+  # Max tasks queued when all threads are busy — backpressure buffer for the sequential flow.
+  schedulerQueuedTaskCap: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_QUEUED_TASK_CAP:-100}
+  # Idle-thread TTL — should typically exceed `interval` so threads survive the between-cycle
+  # idle window and don't churn on every tick.
+  schedulerThreadTtl: ${EXPERIMENT_PROJECT_MIGRATION_SCHEDULER_THREAD_TTL:-60s}
 
 # Shared configuration for V1 → V2 entity project migration jobs
 # Centralised so all migration jobs (experiments, datasets, etc.) share the same exclusion list

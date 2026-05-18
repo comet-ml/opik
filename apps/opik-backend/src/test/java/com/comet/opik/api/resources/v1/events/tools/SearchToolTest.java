@@ -29,7 +29,7 @@ class SearchToolTest {
     void missingPatternReturnsError() {
         var ctx = newCtxWithCachedSpan(UUID.randomUUID(), "{}");
 
-        var raw = tool.execute("{\"type\": \"span\", \"id\": \"abc\"}", ctx);
+        var raw = tool.execute("{\"type\": \"span\", \"id\": \"abc\"}", ctx).block();
         var result = JsonUtils.getJsonNodeFromString(raw);
 
         assertThat(result.get("error").asText()).contains("Missing required argument: pattern");
@@ -40,7 +40,7 @@ class SearchToolTest {
         var ctx = newCtxWithCachedSpan(UUID.randomUUID(), "{}");
 
         var raw = tool.execute(
-                "{\"type\": \"unicorn\", \"id\": \"abc\", \"pattern\": \"x\"}", ctx);
+                "{\"type\": \"unicorn\", \"id\": \"abc\", \"pattern\": \"x\"}", ctx).block();
         var result = JsonUtils.getJsonNodeFromString(raw);
 
         assertThat(result.get("error").asText()).contains("Unknown type");
@@ -53,7 +53,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"x\"}").formatted(id),
-                ctx);
+                ctx).block();
 
         assertThat(output)
                 .contains("not in cache")
@@ -69,7 +69,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         var lines = output.split("\n", -1);
         assertThat(lines).hasSizeGreaterThanOrEqualTo(2);
@@ -85,7 +85,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).startsWith("[search: span:" + spanId + " | pattern='timeout' | 1 matches]");
         assertThat(output).contains("input: \"please retry on timeout\"");
@@ -98,7 +98,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("err: \"Connection TIMEOUT\"");
         assertThat(output).contains("1 matches");
@@ -113,7 +113,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("spans[1].input: \"timeout exceeded\"");
     }
@@ -130,7 +130,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("[TRUNCATED");
         // Total length minus first 200 chars dropped, with thousands separator.
@@ -152,7 +152,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"needle\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).startsWith(
                 "[search: span:" + spanId + " | pattern='needle' | 75 matches (showing 50)]");
@@ -173,7 +173,7 @@ class SearchToolTest {
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"timeout\", \"path\": \".scope\"}")
                         .formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("path='.scope'");
         assertThat(output).contains("1 matches");
@@ -190,7 +190,7 @@ class SearchToolTest {
         var raw = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"hi\", \"path\": \". | error(\\\"leak\\\")\"}")
                         .formatted(spanId),
-                ctx);
+                ctx).block();
         var result = JsonUtils.getJsonNodeFromString(raw);
 
         assertThat(result.get("error").asText())
@@ -208,7 +208,7 @@ class SearchToolTest {
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"needle\", \"path\": \".spans[1].input\"}")
                         .formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("1 matches");
         assertThat(output).doesNotContain("ERROR");
@@ -221,7 +221,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"[invalid\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         assertThat(output).contains("ERROR");
         assertThat(output).contains("Regex failure");
@@ -237,7 +237,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"42\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         // Only the .text string value contains "42" and should match.
         assertThat(output).contains("1 matches");
@@ -253,7 +253,7 @@ class SearchToolTest {
 
         var output = tool.execute(
                 ("{\"type\": \"span\", \"id\": \"%s\", \"pattern\": \"\\\"oops\\\"\"}").formatted(spanId),
-                ctx);
+                ctx).block();
 
         // Should not crash (no ERROR), and should match the value containing the quoted word.
         assertThat(output).doesNotContain("ERROR");
@@ -269,7 +269,7 @@ class SearchToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        return new TraceToolContext(trace, List.of(), "ws", "user");
+        return TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
     }
 
     private static TraceToolContext newCtxWithCachedSpan(UUID spanId, String spanBodyJson) {

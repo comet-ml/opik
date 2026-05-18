@@ -60,6 +60,32 @@ public class OnlineScoringConfig {
     @Valid @JsonProperty
     @NotEmpty private List<@NotNull @Valid StreamConfiguration> streams;
 
+    /**
+     * Estimated-tokens threshold above which the LLM-as-judge online scorer routes through
+     * the agentic-tools path (read/jq/search tools). Sized for 128 K-token model windows;
+     * bump higher on larger windows to keep more rules on the cheaper inline path.
+     *
+     * <p>Floor at 1000 tokens — below that any non-trivial trace would flip onto the
+     * tools path, so a typo'd env var (e.g. {@code =1}) would silently put the whole
+     * online-scoring fleet on the agentic path. Dropwizard fails fast on startup instead.
+     *
+     * <p>Field initializer (not {@code @Builder.Default}) so the default applies during
+     * Dropwizard's YAML deserialization (no-args constructor), not only via the builder.
+     */
+    @JsonProperty
+    @Min(1000) private int agenticToolsThresholdTokens = 50_000;
+
+    /**
+     * Characters-per-token ratio used by {@code estimateTraceContextTokens} to translate
+     * the {@code {trace, spans}} serialized JSON length into a token estimate. 4 is the
+     * widely cited natural-language English approximation; random/code content runs closer
+     * to 2, but the agentic-tools threshold itself has slack so this isn't precision-critical.
+     * Configurable so operators can tune for workloads that skew toward code/JSON (lower
+     * ratio = more pessimistic estimate = earlier switch to the agentic-tools path).
+     */
+    @JsonProperty
+    @Min(1) private int agenticToolsCharsPerToken = 4;
+
     @Data
     @Builder(toBuilder = true)
     @NoArgsConstructor
