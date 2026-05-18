@@ -22,14 +22,14 @@ import static com.comet.opik.api.ExperimentItemBulkUpload.View;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @ExperimentItemBulkRecordValidation
 public record ExperimentItemBulkRecord(
-        @JsonView( {
+        @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @NotNull UUID datasetItemId,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @Schema(implementation = JsonListString.class, description = DESCRIPTION) JsonNode evaluateTaskResult,
         @JsonView({
                 View.ExperimentItemBulkWriteView.class}) @Schema(description = DESCRIPTION) @Valid Trace trace,
         @JsonView({View.ExperimentItemBulkWriteView.class}) @Size(max = 100) List<@Valid Span> spans,
-        @Size(max = 100) List<@Valid FeedbackScore> feedbackScores){
+        @Size(max = 100) List<@Valid FeedbackScore> feedbackScores) {
 
     private static final String DESCRIPTION = "Please provide either none, only one of evaluate_task_result or trace, but never both";
 }

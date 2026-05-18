@@ -10,8 +10,8 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record AnnotationQueueReviewer(
-        @JsonView( {
+        @JsonView({
                 AnnotationQueue.View.Public.class}) String username,
 
-        @JsonView({AnnotationQueue.View.Public.class}) Long status){
+        @JsonView({AnnotationQueue.View.Public.class}) Long status) {
 }

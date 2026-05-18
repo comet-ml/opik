@@ -26,7 +26,7 @@ import static com.comet.opik.utils.ValidationUtils.NULL_OR_NOT_BLANK;
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 @SourceValidation
 public record DatasetItem(
-        @JsonView( {
+        @JsonView({
                 DatasetItem.View.Public.class,
                 DatasetItem.View.Write.class}) @Schema(description = """
                         Stable item identifier.
@@ -62,17 +62,17 @@ public record DatasetItem(
                 DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) Instant lastUpdatedAt,
         @JsonView({DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String createdBy,
         @JsonView({
-                DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy){
+                DatasetItem.View.Public.class}) @Schema(accessMode = Schema.AccessMode.READ_ONLY) String lastUpdatedBy) {
 
     @Builder(toBuilder = true)
     public record DatasetItemPage(
-            @JsonView( {
+            @JsonView({
                     DatasetItem.View.Public.class}) List<DatasetItem> content,
             @JsonView({DatasetItem.View.Public.class}) int page,
             @JsonView({DatasetItem.View.Public.class}) int size,
             @JsonView({DatasetItem.View.Public.class}) long total,
             @JsonView({DatasetItem.View.Public.class}) Set<Column> columns,
-            @JsonView({DatasetItem.View.Public.class}) List<String> sortableBy) implements Page<DatasetItem>{
+            @JsonView({DatasetItem.View.Public.class}) List<String> sortableBy) implements Page<DatasetItem> {
 
         public static DatasetItemPage empty(int page, List<String> sortableBy) {
             return new DatasetItemPage(List.of(), page, 0, 0, Set.of(), sortableBy);

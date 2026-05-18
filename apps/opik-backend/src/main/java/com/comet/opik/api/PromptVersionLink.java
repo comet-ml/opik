@@ -12,9 +12,9 @@ import java.util.UUID;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record PromptVersionLink(
-        @JsonView( {
+        @JsonView({
                 Prompt.View.Public.class}) UUID promptVersionId,
         @JsonView({Prompt.View.Public.class}) String commit,
         @JsonView({Prompt.View.Public.class}) UUID promptId,
-        @JsonView({Prompt.View.Public.class}) String promptName){
+        @JsonView({Prompt.View.Public.class}) String promptName) {
 }

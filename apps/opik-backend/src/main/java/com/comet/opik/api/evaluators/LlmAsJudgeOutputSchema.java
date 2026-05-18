@@ -11,11 +11,11 @@ import lombok.Builder;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
 public record LlmAsJudgeOutputSchema(
-        @JsonView( {
+        @JsonView({
                 AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull String name,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
                 AutomationRuleEvaluator.View.Write.class}) @NotNull LlmAsJudgeOutputSchemaType type,
         @JsonView({AutomationRuleEvaluator.View.Public.class,
-                AutomationRuleEvaluator.View.Write.class}) @NotNull String description){
+                AutomationRuleEvaluator.View.Write.class}) @NotNull String description) {
 }
