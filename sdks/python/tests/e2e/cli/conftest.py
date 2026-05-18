@@ -338,6 +338,7 @@ def seed_experiment_with_trace_tree(
     spans_per_trace: int = 2,
     feedback_scores_per_trace: Optional[List[Dict[str, Any]]] = None,
     per_item_extras: Optional[List[Dict[str, Any]]] = None,
+    optimization_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Create a source experiment + one trace per ``item_id`` + a small span
     tree per trace, then attach everything via ``create_experiment_items``.
@@ -463,17 +464,20 @@ def seed_experiment_with_trace_tree(
     import opik.id_helpers as _id_helpers
 
     new_experiment_id = _id_helpers.generate_id()
-    rest_client.experiments.create_experiment(
-        id=new_experiment_id,
-        name=experiment_name,
-        dataset_name=dataset_name,
-        type=experiment_type,
-        evaluation_method=evaluation_method,
-        tags=experiment_tags,
-        metadata=experiment_config,
-        dataset_version_id=dataset_version_id,
-        project_name=project_name,
-    )
+    create_experiment_kwargs: Dict[str, Any] = {
+        "id": new_experiment_id,
+        "name": experiment_name,
+        "dataset_name": dataset_name,
+        "type": experiment_type,
+        "evaluation_method": evaluation_method,
+        "tags": experiment_tags,
+        "metadata": experiment_config,
+        "dataset_version_id": dataset_version_id,
+        "project_name": project_name,
+    }
+    if optimization_id is not None:
+        create_experiment_kwargs["optimization_id"] = optimization_id
+    rest_client.experiments.create_experiment(**create_experiment_kwargs)
 
     extras_list = per_item_extras or [{} for _ in item_ids]
     if len(extras_list) != len(item_ids):

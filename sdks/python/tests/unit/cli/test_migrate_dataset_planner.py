@@ -90,13 +90,16 @@ class TestMigrateHelp:
 
 
 class TestPlanBuilding:
-    def test_build_dataset_plan__default_flow__orders_rename_create_replay_cascade(
+    def test_build_dataset_plan__default_flow__orders_rename_create_replay_optimizations_experiments(
         self,
     ) -> None:
         # The plan emits: rename source -> create destination -> replay
-        # versions -> cascade experiments. Each action depends on the
-        # previous one having completed (ReplayVersions populates the
-        # version_remap that CascadeExperiments reads).
+        # versions -> cascade optimizations -> cascade experiments. The
+        # order is load-bearing: CascadeOptimizations populates
+        # plan.optimization_id_remap which CascadeExperiments reads when
+        # re-pointing each experiment's optimization_id FK. Pin the
+        # sequence so a future reorder can't break that contract
+        # silently.
         rest_client = _planner_rest_client(
             [
                 _Page([_DatasetRow(id="src-1", name="MyDataset", description="d")]),
@@ -116,12 +119,15 @@ class TestPlanBuilding:
             "RenameSource",
             "CreateDestination",
             "ReplayVersions",
+            "CascadeOptimizations",
             "CascadeExperiments",
         ]
         rename = plan.actions[0]
         assert rename.from_name == "MyDataset"
         assert rename.to_name == "MyDataset_v1"
         assert plan.target_name == "MyDataset"
+        # New remap dict starts empty; _cascade_optimizations populates it.
+        assert plan.optimization_id_remap == {}
 
     def test_build_dataset_plan__test_suite__type_forwarded_to_destination(
         self,
@@ -151,6 +157,7 @@ class TestPlanBuilding:
             "RenameSource",
             "CreateDestination",
             "ReplayVersions",
+            "CascadeOptimizations",
             "CascadeExperiments",
         ]
         replay = plan.actions[2]
