@@ -25,6 +25,8 @@ function dynamicMasks(page: Page) {
     page.locator('td').filter({ hasText: /[0-9a-f]{8}-[0-9a-f]{4}/ }),
     // mask breadcrumb — shows dynamic project/dataset names on sub-pages
     page.locator('nav[aria-label="breadcrumb"]'),
+    // mask demo project banner — may appear in some environments
+    page.locator('div').filter({ hasText: 'You are viewing a demo project' }).first(),
   ];
 }
 
