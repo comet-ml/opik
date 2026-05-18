@@ -1,0 +1,71 @@
+name: 📣 Notify Slack — External Contributor PR
+
+on:
+  pull_request_target:
+    types: [opened, ready_for_review]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  notify:
+    name: Notify #code-review on external contributor PR
+    if: >-
+      !github.event.pull_request.draft &&
+      contains(fromJSON('["NONE","FIRST_TIME_CONTRIBUTOR","FIRST_TIMER","CONTRIBUTOR"]'),
+               github.event.pull_request.author_association)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      pull-requests: write
+      contents: read
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MARKER: <!-- opik-contributor-slack-notified -->
+
+    steps:
+      - name: Check for prior notification marker comment
+        id: marker_check
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          COMMENTS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body')
+          if printf '%s' "$COMMENTS" | grep -Fq "$MARKER"; then
+            echo "already_notified=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Slack already notified for PR #${PR_NUMBER} (marker present); skipping."
+          else
+            echo "already_notified=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout
+        if: steps.marker_check.outputs.already_notified == 'false'
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/scripts
+          sparse-checkout-cone-mode: false
+
+      - name: Send Slack notification
+        id: send_slack
+        if: steps.marker_check.outputs.already_notified == 'false'
+        continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_CODE_REVIEW }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
+          AUTHOR_DISPLAY: ${{ github.event.pull_request.user.name }}
+        run: .github/scripts/notify-slack-contributor-pr.sh
+
+      - name: Leave marker comment
+        if: >-
+          steps.marker_check.outputs.already_notified == 'false' &&
+          steps.send_slack.outcome == 'success'
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            -f body="$MARKER" >/dev/null
+          echo "Marker comment posted on PR #${PR_NUMBER}"
