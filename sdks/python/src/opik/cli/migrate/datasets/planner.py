@@ -140,7 +140,6 @@ def build_dataset_plan(
     client: opik.Opik,
     name: str,
     to_project: str,
-    from_project: Optional[str],
 ) -> MigrationPlan:
     """Build the ordered action list for migrating one dataset.
 
@@ -163,7 +162,7 @@ def build_dataset_plan(
     # rename/create/copy work, and prevents auto-creating a stray project.
     ensure_destination_project_exists(client, to_project)
 
-    source = resolve_source(client, name, from_project)
+    source = resolve_source(client, name)
 
     if source.type not in SUPPORTED_DATASET_TYPES:
         raise UnsupportedDatasetTypeError(

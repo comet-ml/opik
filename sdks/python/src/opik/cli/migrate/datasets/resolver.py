@@ -1,10 +1,10 @@
 """Name resolution for ``opik migrate``.
 
-Datasets are addressed by name in the UI, but the workspace allows the same
-dataset name across different projects. ``resolve_source`` enforces names-as-
-identifiers UX: a single hit wins, zero hits raise ``DatasetNotFoundError``,
-multiple hits (workspace-scoped lookup) raise ``AmbiguityError`` listing the
-project paths so the user can disambiguate with ``--from-project``.
+Dataset names are workspace-unique (BE liquibase migration
+``000001_init_script.sql`` enforces ``UNIQUE (workspace_id, name)`` on
+the ``datasets`` table, with no soft-delete carve-out), so a workspace
+lookup either yields one row or zero — no ambiguity disambiguation
+needed, no ``--from-project`` flag at the CLI surface.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import opik
 from opik.api_objects import rest_helpers
 from opik.rest_api.core.api_error import ApiError
 
-from ..errors import AmbiguityError, DatasetNotFoundError, ProjectNotFoundError
+from ..errors import ConflictError, DatasetNotFoundError, ProjectNotFoundError
 
 LOGGER = logging.getLogger(__name__)
 
@@ -50,9 +50,8 @@ def _iter_dataset_pages(
     client: opik.Opik,
     *,
     name: Optional[str] = None,
-    project_id: Optional[str] = None,
 ) -> Iterable[Any]:
-    """Yield every dataset row matching the filters, paginating to exhaustion.
+    """Yield every dataset row matching the name filter, paginating to exhaustion.
 
     Single source of truth for ``find_datasets`` pagination inside this
     module. Avoids the silent truncation bug where a single
@@ -70,7 +69,6 @@ def _iter_dataset_pages(
             lambda p=page_idx: rest_client.datasets.find_datasets(
                 page=p,
                 size=_FIND_DATASETS_PAGE_SIZE,
-                project_id=project_id,
                 name=name,
             )
         )
@@ -117,34 +115,20 @@ def _project_name_for_row(client: opik.Opik, row: Any) -> Optional[str]:
         return None
 
 
-def resolve_source(
-    client: opik.Opik,
-    name: str,
-    from_project: Optional[str],
-) -> ResolvedDataset:
-    """Resolve ``name`` (optionally scoped to ``from_project``) to a single dataset.
+def resolve_source(client: opik.Opik, name: str) -> ResolvedDataset:
+    """Resolve ``name`` to a single dataset.
 
-    ``from_project=None`` means workspace-scoped lookup — datasets created
-    without an explicit project. Multiple workspace-scoped matches with the
-    same name shouldn't normally happen (the BE enforces uniqueness within a
-    project), but workspace-scoped + project-scoped collisions are possible
-    and we surface them as ``AmbiguityError``.
+    Dataset names are workspace-unique (BE constraint), so we walk every
+    ``find_datasets`` page filtering by name and expect at most one
+    match. Zero matches raise ``DatasetNotFoundError``.
 
-    Pagination: walks every ``find_datasets`` page (not just the first) so
-    matches on later pages are not silently dropped.
-
-    ``project_name`` on the returned ``ResolvedDataset`` is derived from the
-    matched row's ``project_id`` (resolved to a name), not from the
-    ``--from-project`` flag — so workspace-scoped lookups still produce the
-    correct project context for downstream ``Opik.get_dataset`` /
-    ``delete_dataset`` calls.
+    The matched row's ``project_id`` is resolved to a name so downstream
+    ``Opik.get_dataset`` / ``delete_dataset`` calls get the correct
+    project context (workspace-scoped legacy datasets return None here,
+    which the dataset helpers tolerate).
     """
-    project_id = rest_helpers.resolve_project_id_by_name_optional(
-        client.rest_client, project_name=from_project
-    )
-
     matches: List[ResolvedDataset] = []
-    for row in _iter_dataset_pages(client, name=name, project_id=project_id):
+    for row in _iter_dataset_pages(client, name=name):
         if row.name != name:
             continue
         matches.append(
@@ -160,13 +144,15 @@ def resolve_source(
         )
 
     if not matches:
-        scope = f"project '{from_project}'" if from_project else "the workspace"
-        raise DatasetNotFoundError(f"Dataset '{name}' not found in {scope}.")
+        raise DatasetNotFoundError(f"Dataset '{name}' not found in the workspace.")
 
+    # Workspace uniqueness means >1 matches would imply a BE invariant
+    # violation; surface it explicitly rather than silently picking one.
     if len(matches) > 1:
-        raise AmbiguityError(
-            f"Dataset name '{name}' matched {len(matches)} datasets. "
-            "Re-run with --from-project to disambiguate."
+        raise ConflictError(
+            f"Dataset name '{name}' matched {len(matches)} rows — the workspace "
+            "uniqueness invariant appears to be violated. Aborting; investigate "
+            "via the UI before retrying."
         )
 
     return matches[0]
@@ -235,10 +221,12 @@ def name_taken_in_workspace(
 ) -> Optional[str]:
     """Return a description of the colliding project, or ``None``.
 
-    Opik enforces dataset names workspace-wide (not per-project), so the
-    pre-flight has to scan without a ``project_id`` filter. ``ignore_dataset_id``
-    lets callers exclude the source dataset from the check (it'll get renamed
-    before the destination is created, so its current name doesn't conflict).
+    Opik enforces dataset names workspace-wide (BE constraint
+    ``UNIQUE (workspace_id, name)`` on the ``datasets`` table), so the
+    pre-flight scans the workspace for any row holding the name.
+    ``ignore_dataset_id`` lets callers exclude the source dataset from
+    the check (it'll get renamed before the destination is created, so
+    its current name doesn't conflict).
 
     Pagination: iterates every page until we either find a true collision
     (early-exit) or exhaust the results — so collisions don't slip through
@@ -248,7 +236,7 @@ def name_taken_in_workspace(
     (its name when resolvable, else ``"another project"``) suitable for
     ``ConflictError`` messages.
     """
-    for row in _iter_dataset_pages(client, name=name, project_id=None):
+    for row in _iter_dataset_pages(client, name=name):
         if row.name != name:
             continue
         if ignore_dataset_id is not None and row.id == ignore_dataset_id:

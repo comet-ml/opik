@@ -193,12 +193,6 @@ def _finalize_and_fail(
     help="Destination project name (required).",
 )
 @click.option(
-    "--from-project",
-    type=str,
-    default=None,
-    help="Source project name. Omit to look up workspace-scoped datasets.",
-)
-@click.option(
     "--dry-run",
     is_flag=True,
     help="Preview the migration without applying any changes.",
@@ -214,7 +208,6 @@ def migrate_dataset_command(
     ctx: click.Context,
     name: str,
     to_project: str,
-    from_project: Optional[str],
     dry_run: bool,
     audit_log: Optional[Path],
 ) -> None:
@@ -226,11 +219,14 @@ def migrate_dataset_command(
         2. Create the destination dataset under --to-project
         3. Replay every source version onto the destination (full history)
         4. Cascade experiments + traces + spans into the destination project
+
+    Dataset names are workspace-unique (BE constraint
+    ``UNIQUE (workspace_id, name)``), so the source is resolved by name
+    alone — no ``--from-project`` flag is needed.
     """
     args = {
         "name": name,
         "to_project": to_project,
-        "from_project": from_project,
         "dry_run": dry_run,
     }
     audit = AuditLog(command="opik migrate dataset", args=args)
@@ -244,7 +240,6 @@ def migrate_dataset_command(
             client=client,
             name=name,
             to_project=to_project,
-            from_project=from_project,
         )
 
         _print_plan(plan)
