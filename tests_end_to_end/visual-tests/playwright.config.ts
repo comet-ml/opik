@@ -16,6 +16,11 @@ export default defineConfig({
     ['html', { open: 'never', outputFolder: 'visual-report' }],
     ['list'],
     ['json', { outputFile: 'test-results/results.json' }],
+    ['allure-playwright', {
+      outputFolder: process.env.ALLURE_RESULTS || 'allure-results',
+      detail: true,
+      suiteTitle: true
+    }],
   ],
 
   timeout: 120000,
