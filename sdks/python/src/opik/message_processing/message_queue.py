@@ -45,9 +45,22 @@ class MessageQueue(Generic[T]):
 
     def put_back(self, message: T) -> None:
         # Re-enqueuing a previously-popped message (rate-limit retry / deferred
-        # delivery): the task is still in flight, so do not increment.
+        # delivery): the message itself is already accounted for in
+        # `_unfinished_tasks` from its original `put()`, so we do not
+        # increment.
+        #
+        # On a bounded full queue, however, `append()` silently evicts the
+        # leftmost message — which *was* counted at its original `put()` time
+        # and will now never see `task_done()`. Detect that case and
+        # decrement so `join()` / `all_tasks_done()` don't stall on a
+        # phantom task.
         with self._cond:
+            before = len(self._deque)
             self._deque.append(message)
+            if len(self._deque) == before and self._unfinished_tasks > 0:
+                self._unfinished_tasks -= 1
+                if self._unfinished_tasks == 0:
+                    self._cond.notify_all()
             self._cond.notify()
 
     def get(self, timeout: float) -> T:
