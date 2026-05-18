@@ -436,8 +436,36 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
      * <p>OPIK-6177: same stable-id resolution shape as
      * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
      * for the rationale on the lookup_for_count CTE and the direct-table lookup_div LEFT JOIN.
+     *
+     * <p>OPIK-6311 {@code slim_count} fast path: when the data side takes the
+     * {@code push_top_limit} fast path AND the criteria carry no filters / no search, the count
+     * collapses to a direct DISTINCT count over {@code experiment_item_aggregates} (which already
+     * holds one row per (experiment, dataset_item)). The {@code dataset_item_versions FINAL}
+     * lookup is preserved for legacy {@code stable_dataset_item_id} resolution but pre-pruned by
+     * {@code (workspace_id, dataset_id)} — the first two columns of DIV's primary key — so
+     * ClickHouse can prune the FINAL merge instead of scanning the whole DIV table. Result is
+     * exact, not approximate.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
+            <if(slim_count)>
+            SELECT count(DISTINCT
+                if(notEmpty(lookup_div.dataset_item_id),
+                   lookup_div.dataset_item_id,
+                   eia.dataset_item_id)
+            ) AS count
+            FROM experiment_item_aggregates AS eia FINAL
+            LEFT JOIN (
+                SELECT id, workspace_id, dataset_item_id
+                FROM dataset_item_versions FINAL
+                WHERE workspace_id = :workspace_id
+                  AND dataset_id = :datasetId
+            ) AS lookup_div
+                ON lookup_div.workspace_id = eia.workspace_id
+                AND lookup_div.id = eia.dataset_item_id
+            WHERE eia.workspace_id = :workspace_id
+            <if(experiment_ids)>AND eia.experiment_id IN :experiment_ids<endif>
+            SETTINGS log_comment = '<log_comment>'
+            <else>
             WITH experiment_aggregated_scope_ids AS (
                 SELECT
                     id,
@@ -737,6 +765,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 <endif>
                 <endif>
             )
+            <endif>
             """;
 
     // Query to extract columns from trace output for experiment items view
@@ -2859,53 +2888,83 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        return asyncTemplate.nonTransaction(connection -> {
-            ST template = TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
+        // OPIK-6311 slim_count: when the data side takes the push_top_limit fast path AND there
+        // are no filters or search, the heavy CTE chain is unnecessary — a direct DISTINCT count
+        // on experiment_item_aggregates produces the exact same value.
+        boolean slimCount = hasAggregated && !hasRaw
+                && CollectionUtils.isEmpty(criteria.filters())
+                && StringUtils.isBlank(criteria.search());
 
-            template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
-            template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
+        return Mono.deferContextual(ctx -> {
+            String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
+            String userName = ctx.get(RequestContext.USER_NAME);
 
-            // Add experiment IDs if present
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                template.add("experiment_ids", true);
-            }
+            return asyncTemplate.nonTransaction(connection -> {
+                ST template = slimCount
+                        ? getSTWithLogComment(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT,
+                                "count_dataset_item_versions_with_experiment_items_slim",
+                                workspaceId, userName, criteria.datasetId().toString())
+                        : TemplateUtils.newST(SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT);
 
-            // Add branch flags to conditionally include/exclude UNION ALL branches
-            template.add("has_aggregated", hasAggregated);
-            template.add("has_raw", hasRaw);
+                if (slimCount) {
+                    template.add("slim_count", true);
+                }
 
-            // Add filters and search criteria using helper method
-            addFiltersToTemplate(template, criteria);
+                template = ImageUtils.addTruncateToTemplate(template, criteria.truncate());
+                template.add("truncationSize", config.getResponseFormatting().getTruncationSize());
 
-            // Add target project IDs flag to template (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                template.add("has_target_projects", true);
-            }
+                // Add experiment IDs if present
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    template.add("experiment_ids", true);
+                }
 
-            var statement = connection.createStatement(template.render())
-                    .bind("datasetId", criteria.datasetId())
-                    .bind("versionId", versionId);
+                // Add branch flags to conditionally include/exclude UNION ALL branches
+                template.add("has_aggregated", hasAggregated);
+                template.add("has_raw", hasRaw);
 
-            // Bind target project IDs (from separate query to reduce traces table scans)
-            if (CollectionUtils.isNotEmpty(targetProjectIds)) {
-                statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
-            }
+                // Add filters and search criteria using helper method
+                addFiltersToTemplate(template, criteria);
 
-            if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
-                statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
-            }
+                // Add target project IDs flag to template (from separate query to reduce traces table scans)
+                if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                    template.add("has_target_projects", true);
+                }
 
-            // Bind search and filter parameters using helper method
-            statement = bindSearchAndFilters(statement, criteria);
+                var statement = connection.createStatement(template.render())
+                        .bind("datasetId", criteria.datasetId());
 
-            Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
-                    "count_dataset_item_versions_with_experiment_filters");
+                // The slim branch only references :workspace_id, :datasetId and optionally
+                // :experiment_ids — skip the rest of the binds to keep the statement clean.
+                if (!slimCount) {
+                    statement.bind("versionId", versionId);
 
-            return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
-                    .doFinally(signalType -> endSegment(segment))
-                    .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
-                    .reduce(0L, Long::sum)
-                    .onErrorResume(e -> handleSqlError(e, 0L));
+                    // Bind target project IDs (from separate query to reduce traces table scans)
+                    if (CollectionUtils.isNotEmpty(targetProjectIds)) {
+                        statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
+                    }
+                }
+
+                if (CollectionUtils.isNotEmpty(criteria.experimentIds())) {
+                    statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
+                }
+
+                // Bind search and filter parameters using helper method (no-op on the slim branch
+                // since filters / search are empty when slimCount is true).
+                if (!slimCount) {
+                    statement = bindSearchAndFilters(statement, criteria);
+                }
+
+                Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
+                        slimCount
+                                ? "count_dataset_item_versions_with_experiment_items_slim"
+                                : "count_dataset_item_versions_with_experiment_filters");
+
+                return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
+                        .doFinally(signalType -> endSegment(segment))
+                        .flatMap(result -> result.map((row, meta) -> row.get("count", Long.class)))
+                        .reduce(0L, Long::sum)
+                        .onErrorResume(e -> handleSqlError(e, 0L));
+            });
         });
     }
 

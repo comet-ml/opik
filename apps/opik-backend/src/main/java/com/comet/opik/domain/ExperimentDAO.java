@@ -1152,11 +1152,21 @@ public class ExperimentDAO {
      * Query to get target project IDs for experiment queries.
      * Used to optimize FIND, FIND_COUNT, FIND_GROUPS, and FIND_GROUPS_AGGREGATIONS queries
      * by pre-computing project IDs, reducing traces, spans, and feedback_scores table scans.
+     *
+     * <p>OPIK-6311 fast path: prefer {@code experiments.project_id} (populated for modern
+     * experiments) and fall back to {@code experiment_aggregates.project_id} for experiments
+     * that don't have it on the experiment row yet but already have aggregates. Only experiments
+     * missing from BOTH go through the legacy {@code experiment_items -> traces} traversal,
+     * which is the expensive step (10 GiB / 35 M rows scanned in production for workspaces with
+     * many experiments). On observed prod workspaces this legacy branch is empty, so the query
+     * collapses from ~23 s to sub-second.
      */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_final AS (
                 SELECT
-                    id, arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
+                    id,
+                    project_id,
+                    arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM (
                     SELECT *
                     FROM experiments
@@ -1173,16 +1183,44 @@ public class ExperimentDAO {
                 <if(name)> AND ilike(name, CONCAT('%', :name, '%')) <endif>
                 <if(prompt_ids)>AND hasAny(arrayConcat([prompt_id], mapKeys(prompt_versions)), :prompt_ids)<endif>
                 <if(filters)> AND <filters> <endif>
-            ), experiment_items_trace_scope AS (
+            ),
+            -- For experiments where experiments.project_id is empty (legacy rows), pick up
+            -- project_id from the aggregates table — it's populated by the aggregation pipeline
+            -- and indexed by (workspace_id, experiment_id, id).
+            eia_projects AS (
+                SELECT id, project_id
+                FROM experiment_aggregates FINAL
+                WHERE workspace_id = :workspace_id
+                  AND id IN (SELECT id FROM experiments_final WHERE project_id = '')
+            ),
+            -- Legacy fallback: experiments with no project_id on the row AND no aggregates yet.
+            -- For those (and only those) we still need the experiment_items -> traces hop.
+            -- Empty for modern workspaces, which is why the whole query collapses.
+            legacy_scope AS (
+                SELECT id
+                FROM experiments_final
+                WHERE project_id = ''
+                  AND id NOT IN (SELECT id FROM eia_projects)
+            ),
+            legacy_trace_scope AS (
                 SELECT DISTINCT ei.trace_id
                 FROM experiment_items ei
                 WHERE ei.workspace_id = :workspace_id
-                AND ei.experiment_id IN (SELECT id FROM experiments_final)
+                  AND ei.experiment_id IN (SELECT id FROM legacy_scope)
+            ),
+            legacy_projects AS (
+                SELECT DISTINCT project_id
+                FROM traces
+                WHERE workspace_id = :workspace_id
+                  AND id IN (SELECT trace_id FROM legacy_trace_scope)
             )
             SELECT DISTINCT project_id
-            FROM traces
-            WHERE workspace_id = :workspace_id
-            AND id IN (SELECT trace_id FROM experiment_items_trace_scope)
+            FROM (
+                SELECT project_id FROM experiments_final WHERE project_id != ''
+                UNION DISTINCT SELECT project_id FROM eia_projects
+                UNION DISTINCT SELECT project_id FROM legacy_projects
+            )
+            WHERE project_id != ''
             SETTINGS log_comment = '<log_comment>'
             ;
             """;
