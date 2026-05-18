@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type, TypeVar
 import json
 import dataclasses
 import logging
@@ -540,6 +540,53 @@ class PromptClient:
             if e.status_code != 404:
                 raise e
             return []
+
+    def __internal_api__create_mask(
+        self,
+        name: str,
+        prompt: str,
+        type: prompt_types.PromptType = prompt_types.PromptType.MUSTACHE,
+        metadata: Optional[Dict[str, Any]] = None,
+        template_structure: Literal["text", "chat"] = "text",
+        project_name: Optional[str] = None,
+        change_description: Optional[str] = None,
+    ) -> prompt_version_detail.PromptVersionDetail:
+        """Create a hidden mask prompt version that overrides get_prompt output when mask context is active.
+
+        Internal API — not intended for end-user use. A mask is a hidden
+        prompt version (version_type="mask") that does not appear in the prompt
+        history or version listings. When a mask context is active (via
+        ``prompt_mask_context``), ``get_prompt`` returns the mask's template
+        instead of the latest visible version.
+
+        Args:
+            name: Name of the prompt to attach the mask to. The prompt must
+                already exist.
+            prompt: The template content for the mask version.
+            type: Template type (MUSTACHE or JINJA2).
+            metadata: Optional metadata dict.
+            template_structure: "text" or "chat".
+            project_name: Optional project scope. Uses the default project if
+                not provided.
+            change_description: Optional description of why this mask was
+                created.
+
+        Returns:
+            The created PromptVersionDetail with version_type="mask".
+        """
+        new_version = prompt_version_detail.PromptVersionDetail(
+            template=prompt,
+            metadata=metadata,
+            type=type,
+            version_type="mask",
+            change_description=change_description,
+        )
+        return self._rest_client.prompts.create_prompt_version(
+            name=name,
+            version=new_version,
+            template_structure=template_structure,
+            project_name=project_name,
+        )
 
     def batch_update_prompt_version_tags(
         self,

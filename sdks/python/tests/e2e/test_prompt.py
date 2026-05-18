@@ -4,6 +4,7 @@ import pytest
 import opik
 from opik import opik_context
 from opik.api_objects.prompt import PromptType
+from opik.api_objects.prompt import client as prompt_client_module
 from opik.api_objects.prompt import mask_context as prompt_mask_context_module
 from opik.api_objects.prompt.prompt_cache import get_global_cache
 from opik.rest_api.types.prompt_version_detail import PromptVersionDetail
@@ -1431,3 +1432,44 @@ def test_prompt_mask__chat_prompt_returns_masked_messages(opik_client: opik.Opik
     unmasked = opik_client.get_chat_prompt(name=name)
     assert unmasked is not None
     assert unmasked.template == original_messages
+
+
+def test_prompt_mask__created_via_prompt_client__invisible_in_versions_but_active_in_context(
+    opik_client: opik.Opik,
+):
+    """A mask created via PromptClient.__internal_api__create_mask is not visible
+    in get_prompt or get_prompt_history, but overrides the template when the
+    mask context is active."""
+    name = f"mask-client-{_generate_random_suffix()}"
+    original_template = f"original-{_generate_random_suffix()}"
+    mask_template = f"masked-{_generate_random_suffix()}"
+
+    prompt = opik_client.create_prompt(name=name, prompt=original_template)
+    prompt_id = prompt.__internal_api__prompt_id__
+
+    pc = prompt_client_module.PromptClient(opik_client.rest_client)
+    mask_version = pc._PromptClient__internal_api__create_mask(
+        name=name,
+        prompt=mask_template,
+    )
+
+    # mask must not appear in version history
+    versions = opik_client.get_prompt_history(name=name)
+    version_ids = [v.__internal_api__version_id__ for v in versions]
+    assert mask_version.id not in version_ids
+
+    # without context, get_prompt returns the original
+    get_global_cache().clear()
+    unmasked = opik_client.get_prompt(name=name)
+    assert unmasked is not None
+    assert unmasked.prompt == original_template
+
+    # with mask context, get_prompt returns the masked template
+    get_global_cache().clear()
+    masks = {prompt_id: mask_version.id}
+    with prompt_mask_context_module.prompt_mask_context(masks):
+        masked = opik_client.get_prompt(name=name)
+
+    assert masked is not None
+    assert masked.prompt == mask_template
+    assert masked.__internal_api__version_id__ == mask_version.id
