@@ -171,10 +171,11 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             LEFT ANY JOIN workspace_configurations wc FINAL
                 ON tt.workspace_id = wc.workspace_id
             WHERE tt.status = 'active'
-            AND tt.last_updated_at < parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
+            AND tt.last_updated_at \\< parseDateTime64BestEffort(:now, 6) - INTERVAL IF(wc.timeout_mark_thread_as_inactive > 0 , wc.timeout_mark_thread_as_inactive, :default_timeout_seconds) SECOND
             GROUP BY tt.workspace_id, tt.project_id
             ORDER BY min(tt.last_updated_at)
             LIMIT :limit
+            SETTINGS log_comment = '<log_comment>'
             """;
 
     private static final String OPEN_CLOSURE_THREADS_SQL = """
@@ -402,7 +403,9 @@ class TraceThreadDAOImpl implements TraceThreadDAO {
             @NonNull Instant now, @NonNull Duration defaultTimeoutToMarkThreadAsInactive,
             @NonNull Instant cachedMaxInactivePeriod, int limit) {
         return asyncTemplate.stream(connection -> {
-            var statement = connection.createStatement(FIND_PENDING_CLOSURE_THREADS_SQL)
+            var template = getSTWithLogComment(FIND_PENDING_CLOSURE_THREADS_SQL,
+                    "find_projects_with_pending_closure_threads", "", "", "");
+            var statement = connection.createStatement(template.render())
                     .bind("now", now.truncatedTo(ChronoUnit.MICROS).toString())
                     .bind("default_timeout_seconds", defaultTimeoutToMarkThreadAsInactive.toSeconds())
                     .bind("cached_max_inactive_period",
