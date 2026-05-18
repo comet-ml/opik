@@ -17,9 +17,23 @@ jobs:
           fetch-depth: 0
 
       - name: Install actionlint
+        # Download the latest actionlint release directly from the upstream repo and
+        # verify its GitHub artifact attestation (Sigstore-signed by rhysd's release CI).
+        # Per https://github.com/rhysd/actionlint/blob/main/docs/install.md this is the
+        # upstream-recommended secure install path. Verifies provenance, not just
+        # bytes — strictly stronger than a hardcoded SHA256. `gh` is preinstalled on
+        # GitHub-hosted runners.
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          LATEST_TAG=$(gh release view --repo rhysd/actionlint --json tagName --jq .tagName)
+          echo "Installing actionlint ${LATEST_TAG}"
+          ASSET="actionlint_${LATEST_TAG#v}_linux_amd64.tar.gz"
+          gh release download "${LATEST_TAG}" --repo rhysd/actionlint --pattern "${ASSET}"
+          gh attestation verify "${ASSET}" --repo rhysd/actionlint
+          tar -xzf "${ASSET}" actionlint
           sudo mv actionlint /usr/local/bin/
+          rm -f "${ASSET}"
           actionlint --version
 
       - name: Run actionlint on changed workflow files
