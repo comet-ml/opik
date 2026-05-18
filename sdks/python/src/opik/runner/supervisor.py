@@ -12,6 +12,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from ..cli.local_runner.pairing import RunnerType
 from ..rest_api.core.api_error import ApiError
+from . import pid_file
 from .bridge_handlers import FileLockRegistry
 from .bridge_handlers.edit_file import EditFileHandler
 from .bridge_handlers.exec_command import BackgroundProcessTracker, ExecHandler
@@ -65,6 +66,10 @@ class Supervisor:
         repo_root: Path,
         runner_id: str,
         api: Any,
+        *,
+        runner_type: RunnerType,
+        project_name: str,
+        workspace: Optional[str],
         on_child_output: Optional[Callable[[str, str], None]] = None,
         on_child_restart: Optional[Callable[[str], None]] = None,
         on_error: Optional[Callable[[str], None]] = None,
@@ -72,7 +77,6 @@ class Supervisor:
         on_command_end: Optional[Callable[[str, bool, Optional[str]], None]] = None,
         watch: Optional[bool] = None,
         bridge_key: Optional[bytes] = None,
-        runner_type: RunnerType = RunnerType.ENDPOINT,
         heartbeat_interval_seconds: float = _HEARTBEAT_INTERVAL_SECONDS,
         graceful_timeout_seconds: float = _GRACEFUL_TIMEOUT_SECONDS,
         main_loop_tick_seconds: float = 0.5,
@@ -82,6 +86,8 @@ class Supervisor:
         self._repo_root = repo_root
         self._runner_id = runner_id
         self._api = api
+        self._project_name = project_name
+        self._workspace = workspace
         self._on_child_output = on_child_output or self._default_output_callback
         self._on_child_restart = on_child_restart
         self._on_error = on_error
@@ -110,6 +116,16 @@ class Supervisor:
 
     def run(self) -> None:
         self._install_signal_handlers()
+
+        # Record our pid before any blocking work so `opik <type> stop` can find
+        # us. Best-effort: if we can't write the file, the supervisor still runs;
+        # `stop` callers will simply fall back to the no-match message.
+        pid_file.write(
+            runner_id=self._runner_id,
+            runner_type=self._runner_type.value,
+            project_name=self._project_name,
+            workspace=self._workspace,
+        )
 
         heartbeat_thread = threading.Thread(
             target=self._heartbeat_loop, name="supervisor-heartbeat", daemon=True
@@ -174,6 +190,9 @@ class Supervisor:
             self._bg_tracker.shutdown()
             if self._command is not None:
                 self._stop_child()
+            pid_file.remove(
+                runner_type=self._runner_type.value, runner_id=self._runner_id
+            )
             LOGGER.info("Supervisor shutdown complete")
 
     def _main_loop(self) -> None:

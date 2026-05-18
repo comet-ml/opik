@@ -11,8 +11,8 @@ from opik.rest_api.core.api_error import ApiError
 class TestEndpoint:
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__with_command__calls_pairing_and_supervisor(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
@@ -65,8 +65,8 @@ class TestEndpoint:
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__network_failure__shows_clean_error(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
@@ -88,8 +88,8 @@ class TestEndpoint:
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__tui_stopped_on_pairing_failure(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
@@ -108,8 +108,8 @@ class TestEndpoint:
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__workspace_and_api_key_passed__forwarded_to_opik_constructor(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
@@ -153,8 +153,8 @@ class TestEndpoint:
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__local_api_key_overrides_global(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep
@@ -198,8 +198,8 @@ class TestEndpoint:
 
     @patch("opik.runner.snapshot.has_entrypoint", return_value=True)
     @patch("opik.cli.local_runner._run.RunnerTUI")
-    @patch("opik.cli.local_runner._run.launch_supervisor")
-    @patch("opik.cli.local_runner._run.run_pairing")
+    @patch("opik.cli.local_runner.pairing.launch_supervisor")
+    @patch("opik.cli.local_runner.pairing.run_pairing")
     @patch("opik.cli.local_runner._run.Opik")
     def test_endpoint__no_local_api_key__falls_back_to_global(
         self, mock_opik_cls, mock_run_pairing, mock_launch, mock_tui_cls, _mock_ep

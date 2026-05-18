@@ -111,13 +111,10 @@ class RunnerTUI:
 
     def pairing_completed(self, project_url: Optional[str] = None) -> None:
         with self._lock:
-            was_active = self._pairing_active
             self._pairing_active = False
             self._pairing_deadline = None
             self._pairing_url = None
             self._project_url = project_url
-        if not was_active:
-            return
 
         text = Text()
         text.append(self._PADDING)
