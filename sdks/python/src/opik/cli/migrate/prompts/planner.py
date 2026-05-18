@@ -106,15 +106,22 @@ class MigrationPlan(BaseMigrationPlan):
     prompt-specific (``RenameSource``, ``CreateDestination``,
     ``ReplayVersions``) triple.
 
-    ``prompt_id_remap`` and ``prompt_version_id_remap`` are populated by
-    the executor after a successful run and exist on the plan so Slice 7
-    can read them for the dataset-cascade-prompts integration.
+    ``prompt_version_id_remap`` is populated by the executor after a
+    successful ``ReplayVersions`` run so Slice 7 (OPIK-6575) can remap
+    experiment FK references to prompt versions.
+
+    There is no ``prompt_id_remap``: the destination prompt is resolved
+    by name + project at Slice 7's execution time, mirroring how the
+    dataset experiment cascade resolves the destination dataset
+    (``cli/migrate/datasets/experiments.py`` carries ``dest_name`` +
+    ``dest_project_name`` and looks up the row at apply time).
+    Workspace name uniqueness (``UNIQUE (workspace_id, name)`` on
+    prompts) makes the lookup unambiguous once the rename has happened.
     """
 
     source: ResolvedPrompt
     target_name: str
     to_project: str
-    prompt_id_remap: Dict[str, str] = field(default_factory=dict)
     prompt_version_id_remap: Dict[str, str] = field(default_factory=dict)
 
 
