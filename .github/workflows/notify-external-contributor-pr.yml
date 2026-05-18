@@ -39,6 +39,45 @@ jobs:
             echo "already_notified=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Wait for labeler workflow to finish
+        # Auto Label PR (.github/workflows/labeler.yml) applies the scope
+        # labels (Frontend / Backend / Python SDK / TypeScript SDK) that
+        # drive the component lines in the Slack message. Both workflows
+        # fire on the same PR events, so without this step our run can
+        # race ahead and read an empty/incomplete label set. Poll until
+        # the labeler run for the same head SHA is `completed`, with a
+        # 30s timeout — fail open so a hung/missing labeler run still
+        # lets us notify with whatever labels are present.
+        # NOTE: this is a stopgap until OPIK-6222 follow-up migrates the
+        # trigger to `workflow_run` against the labeler workflow, which
+        # removes the wait entirely.
+        if: steps.marker_check.outputs.already_notified == 'false'
+        run: |
+          set -euo pipefail
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          DEADLINE=$(( $(date +%s) + 30 ))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            STATUS=$(gh api \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/labeler.yml/runs?head_sha=${HEAD_SHA}&per_page=1" \
+              --jq '.workflow_runs[0].status // "missing"')
+            if [ "$STATUS" = "completed" ]; then
+              echo "::notice::Labeler completed for ${HEAD_SHA}; proceeding."
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "::warning::Labeler did not complete within 30s for ${HEAD_SHA}; proceeding with current labels."
+
+      - name: Read PR labels
+        id: read_labels
+        if: steps.marker_check.outputs.already_notified == 'false'
+        run: |
+          set -euo pipefail
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          LABELS=$(gh api "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/labels" --jq '[.[].name] | join(",")')
+          echo "labels=${LABELS}" >> "$GITHUB_OUTPUT"
+          echo "::notice::PR labels: ${LABELS}"
+
       - name: Checkout
         if: steps.marker_check.outputs.already_notified == 'false'
         uses: actions/checkout@v4
@@ -56,6 +95,7 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_LABELS: ${{ steps.read_labels.outputs.labels }}
           AUTHOR_LOGIN: ${{ github.event.pull_request.user.login }}
           AUTHOR_DISPLAY: ${{ github.event.pull_request.user.name }}
         run: .github/scripts/notify-slack-contributor-pr.sh

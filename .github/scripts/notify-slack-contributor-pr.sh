@@ -15,11 +15,15 @@
 #   SLACK_WEBHOOK_URL — Slack incoming webhook URL (must be non-empty)
 #   PR_URL            — URL of the PR
 #   PR_NUMBER         — PR number
-#   PR_TITLE          — PR title (used to extract Jira key and component tag)
+#   PR_TITLE          — PR title (used to extract the Jira key only)
 #   AUTHOR_LOGIN      — PR author's GitHub login
 #
 # Optional env vars:
 #   AUTHOR_DISPLAY    — PR author's display name (falls back to AUTHOR_LOGIN)
+#   PR_LABELS         — comma-separated label names from .github/labeler.yml,
+#                       used to emit component lines (Frontend / Backend /
+#                       Python SDK / TypeScript SDK). Empty / missing labels
+#                       just means no component lines.
 #   GITHUB_OUTPUT     — when set (in CI), `sent=true` is appended on HTTP 200
 #
 set -euo pipefail
@@ -36,21 +40,31 @@ if [[ "$PR_TITLE" =~ ^\[(OPIK-[0-9]+)\] ]]; then
   JIRA_LINE=":jira_epic: jira link: https://comet-ml.atlassian.net/browse/${JIRA_KEY}"
 fi
 
-COMPONENT_LINE=""
-COMPONENT_TAG=""
-if [[ "$PR_TITLE" =~ ^\[[^]]+\]\ *\[([A-Za-z]+)\] ]]; then
-  COMPONENT_TAG="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')"
-elif [[ "$PR_TITLE" =~ ^\[([A-Za-z]+)\] ]]; then
-  COMPONENT_TAG="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')"
+COMPONENT_LINES=()
+# Map .github/labeler.yml scope labels to component lines. The first
+# four mirror the send-code-review-slack skill's emoji set. `:gear:`
+# for Infrastructure is added here so contributor PRs that are purely
+# CI / Docker / scripts (no recognized FE/BE/SDK label) still surface
+# a "this is an infra change" cue to reviewers rather than landing
+# with zero component lines.
+# Order is deterministic regardless of how labels appear in PR_LABELS,
+# so cross-cutting PRs always render the same.
+LABELS_CSV=",${PR_LABELS:-},"
+if [[ "$LABELS_CSV" == *",Frontend,"* ]]; then
+  COMPONENT_LINES+=(":react: fe change")
 fi
-case "$COMPONENT_TAG" in
-  FE)
-    COMPONENT_LINE=":react: fe change"
-    ;;
-  BE)
-    COMPONENT_LINE=":java: be change"
-    ;;
-esac
+if [[ "$LABELS_CSV" == *",Backend,"* ]]; then
+  COMPONENT_LINES+=(":java: be change")
+fi
+if [[ "$LABELS_CSV" == *",Python SDK,"* ]]; then
+  COMPONENT_LINES+=(":python: python change")
+fi
+if [[ "$LABELS_CSV" == *",TypeScript SDK,"* ]]; then
+  COMPONENT_LINES+=(":typescript: typescript change")
+fi
+if [[ "$LABELS_CSV" == *",Infrastructure,"* ]]; then
+  COMPONENT_LINES+=(":gear: infra change")
+fi
 
 AUTHOR_PROFILE_URL="https://github.com/${AUTHOR_LOGIN}"
 if [ -n "${AUTHOR_DISPLAY:-}" ]; then
@@ -76,10 +90,10 @@ MESSAGE_TEXT+="
 ${PR_LINE}
 ${AUTHOR_LINE}"
 
-if [ -n "$COMPONENT_LINE" ]; then
+for line in ${COMPONENT_LINES[@]+"${COMPONENT_LINES[@]}"}; do
   MESSAGE_TEXT+="
-${COMPONENT_LINE}"
-fi
+${line}"
+done
 
 jq -n --arg text "$MESSAGE_TEXT" '{text: $text}' > /tmp/slack-payload.json
 
