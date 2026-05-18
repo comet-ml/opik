@@ -22,6 +22,7 @@ public record Workspace(
         Instant firstTraceReportedAt,
         Instant migrationSkippedAt,
         String migrationSkippedReason,
+        boolean hasLegacyScores,
         Instant createdAt,
         String createdBy,
         Instant lastUpdatedAt,

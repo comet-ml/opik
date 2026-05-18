@@ -43,6 +43,14 @@ import static com.comet.opik.infrastructure.db.TransactionTemplateAsync.WRITE;
 @ImplementedBy(EnvironmentServiceImpl.class)
 public interface EnvironmentService {
 
+    List<String> AUTO_COLORS = List.of(
+            "#64748b", "#8b5cf6", "#bf399e", "#f43f5e", "#ef4444",
+            "#f97316", "#eab308", "#10b981", "#06b6d4", "#3b82f6");
+
+    static String pickAutoColor(String name) {
+        return AUTO_COLORS.get(Math.floorMod(name.hashCode(), AUTO_COLORS.size()));
+    }
+
     Environment create(Environment environment);
 
     void bulkCreate(Set<String> names, String workspaceId, String userName);
@@ -84,8 +92,13 @@ class EnvironmentServiceImpl implements EnvironmentService {
         String userName = requestContext.get().getUserName();
         String workspaceId = requestContext.get().getWorkspaceId();
 
+        String color = StringUtils.isBlank(environment.color())
+                ? EnvironmentService.pickAutoColor(environment.name())
+                : environment.color();
+
         var newEnvironment = environment.toBuilder()
                 .id(id)
+                .color(color)
                 .createdBy(userName)
                 .lastUpdatedBy(userName)
                 .build();
@@ -153,6 +166,7 @@ class EnvironmentServiceImpl implements EnvironmentService {
                             .map(name -> Environment.builder()
                                     .id(idGenerator.generateId())
                                     .name(name)
+                                    .color(EnvironmentService.pickAutoColor(name))
                                     .build())
                             .toList();
 

@@ -97,14 +97,14 @@ export interface UserPermission {
 }
 
 export interface Workspace {
-  createdAt: number;
   workspaceId: string;
   workspaceName: string;
-  workspaceOwner: string;
-  workspaceCreator: string;
   organizationId: string;
-  collaborationFeaturesDisabled: boolean;
   default: boolean;
+  createdAt?: number;
+  workspaceOwner?: string;
+  workspaceCreator?: string;
+  collaborationFeaturesDisabled?: boolean;
 }
 
 export interface OrganizationMember {

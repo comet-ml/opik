@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useRef } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Settings2 } from "lucide-react";
 
 import { Button } from "@/ui/button";
@@ -21,6 +22,10 @@ import {
   Workspace,
 } from "@/plugins/comet/types";
 import { buildUrl } from "@/plugins/comet/utils";
+
+const WORKSPACE_ITEM_HEIGHT = 32;
+const WORKSPACE_VIRTUALIZATION_THRESHOLD = 50;
+const WORKSPACE_VIRTUAL_OVERSCAN = 8;
 
 const canManageOrg = (org: Organization) =>
   org.role === ORGANIZATION_ROLE_TYPE.admin;
@@ -56,167 +61,205 @@ const WorkspaceMenuContent: React.FC<WorkspaceMenuContentProps> = ({
   handleChangeOrganization,
   search,
   setSearch,
-}) => (
-  <>
-    {hasMultipleOrganizations ? (
-      <DropdownMenuSub
-        open={isOrgSubmenuOpen}
-        onOpenChange={setIsOrgSubmenuOpen}
+}) => {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const shouldVirtualize =
+    sortedWorkspaces.length > WORKSPACE_VIRTUALIZATION_THRESHOLD;
+
+  const virtualizer = useVirtualizer({
+    count: shouldVirtualize ? sortedWorkspaces.length : 0,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => WORKSPACE_ITEM_HEIGHT,
+    overscan: WORKSPACE_VIRTUAL_OVERSCAN,
+  });
+
+  const renderWorkspaceItem = (workspace: Workspace) => {
+    const wsDisplayName = calculateWorkspaceName(workspace.workspaceName);
+    const isSelected = workspace.workspaceName === workspaceName;
+
+    return (
+      <DropdownMenuItem
+        key={workspace.workspaceName}
+        size="sm"
+        selected={isSelected}
+        onSelect={(e) => {
+          e.preventDefault();
+          handleChangeWorkspace(workspace);
+          setIsDropdownOpen(false);
+          setSearch("");
+        }}
       >
-        <DropdownMenuSubTrigger
-          variant="menu"
-          size="sm"
-          className="cursor-pointer"
+        <TooltipWrapper content={wsDisplayName}>
+          <span className="comet-body-s min-w-0 flex-1 truncate text-left">
+            {wsDisplayName}
+          </span>
+        </TooltipWrapper>
+      </DropdownMenuItem>
+    );
+  };
+
+  return (
+    <>
+      {hasMultipleOrganizations ? (
+        <DropdownMenuSub
+          open={isOrgSubmenuOpen}
+          onOpenChange={setIsOrgSubmenuOpen}
         >
+          <DropdownMenuSubTrigger
+            variant="menu"
+            size="sm"
+            className="cursor-pointer"
+          >
+            <TooltipWrapper content={currentOrganization.name}>
+              <span className="min-w-0 flex-1 truncate text-left">
+                {currentOrganization.name}
+              </span>
+            </TooltipWrapper>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuPortal>
+            <DropdownMenuSubContent className="w-[280px] p-1" sideOffset={8}>
+              <DropdownMenuLabel size="sm">Organizations</DropdownMenuLabel>
+              <DropdownMenuSeparator className="my-1" />
+              <div className="max-h-[60vh] overflow-auto">
+                {sortedOrganizations.length > 0 ? (
+                  sortedOrganizations.map((org) => {
+                    const isActive = currentOrganization.id === org.id;
+                    return (
+                      <DropdownMenuItem
+                        key={org.id}
+                        size="sm"
+                        selected={isActive}
+                        onSelect={(e) => {
+                          e.preventDefault();
+                          handleChangeOrganization(org);
+                          setIsOrgSubmenuOpen(false);
+                        }}
+                        className="group pr-1.5"
+                      >
+                        <TooltipWrapper content={org.name}>
+                          <span className="comet-body-s min-w-0 flex-1 truncate text-left">
+                            {org.name}
+                          </span>
+                        </TooltipWrapper>
+                        {canManageOrg(org) && (
+                          <Button
+                            variant="minimal"
+                            size="icon-2xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              window.location.href = orgSettingsUrl(
+                                org.id,
+                                workspaceName,
+                              );
+                            }}
+                            aria-label={`Open ${org.name} settings`}
+                            className={cn(
+                              "shrink-0 text-light-slate hover:text-foreground",
+                              !isActive && "invisible group-hover:visible",
+                            )}
+                          >
+                            <Settings2 className="size-3.5" />
+                          </Button>
+                        )}
+                      </DropdownMenuItem>
+                    );
+                  })
+                ) : (
+                  <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
+                    <span className="comet-body-s text-muted-slate">
+                      No organizations found
+                    </span>
+                  </div>
+                )}
+              </div>
+            </DropdownMenuSubContent>
+          </DropdownMenuPortal>
+        </DropdownMenuSub>
+      ) : (
+        <div className="flex h-8 items-center gap-1.5 px-3 pr-1.5">
           <TooltipWrapper content={currentOrganization.name}>
-            <span className="min-w-0 flex-1 truncate text-left">
+            <span className="comet-body-s-accented min-w-0 flex-1 truncate text-foreground">
               {currentOrganization.name}
             </span>
           </TooltipWrapper>
-        </DropdownMenuSubTrigger>
-        <DropdownMenuPortal>
-          <DropdownMenuSubContent className="w-[280px] p-1" sideOffset={8}>
-            <DropdownMenuLabel size="sm">Organizations</DropdownMenuLabel>
-            <DropdownMenuSeparator className="my-1" />
-            <div className="max-h-[60vh] overflow-auto">
-              {sortedOrganizations.length > 0 ? (
-                sortedOrganizations.map((org) => {
-                  const isActive = currentOrganization.id === org.id;
-                  return (
-                    <DropdownMenuItem
-                      key={org.id}
-                      size="sm"
-                      selected={isActive}
-                      onSelect={(e) => {
-                        e.preventDefault();
-                        handleChangeOrganization(org);
-                        setIsOrgSubmenuOpen(false);
-                      }}
-                      className="group pr-1.5"
-                    >
-                      <TooltipWrapper content={org.name}>
-                        <span className="comet-body-s min-w-0 flex-1 truncate text-left">
-                          {org.name}
-                        </span>
-                      </TooltipWrapper>
-                      {canManageOrg(org) && (
-                        <Button
-                          variant="minimal"
-                          size="icon-2xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            window.location.href = orgSettingsUrl(
-                              org.id,
-                              workspaceName,
-                            );
-                          }}
-                          aria-label={`Open ${org.name} settings`}
-                          className={cn(
-                            "shrink-0 text-light-slate hover:text-foreground",
-                            !isActive && "invisible group-hover:visible",
-                          )}
-                        >
-                          <Settings2 className="size-3.5" />
-                        </Button>
-                      )}
-                    </DropdownMenuItem>
-                  );
-                })
-              ) : (
-                <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-                  <span className="comet-body-s text-muted-slate">
-                    No organizations found
-                  </span>
-                </div>
-              )}
-            </div>
-          </DropdownMenuSubContent>
-        </DropdownMenuPortal>
-      </DropdownMenuSub>
-    ) : (
-      <div className="flex h-8 items-center gap-1.5 px-3 pr-1.5">
-        <TooltipWrapper content={currentOrganization.name}>
-          <span className="comet-body-s-accented min-w-0 flex-1 truncate text-foreground">
-            {currentOrganization.name}
-          </span>
-        </TooltipWrapper>
-        {canManageOrg(currentOrganization) && (
-          <Button
-            variant="minimal"
-            size="icon-2xs"
-            onClick={() => {
-              window.location.href = orgSettingsUrl(
-                currentOrganization.id,
-                workspaceName,
-              );
-            }}
-            aria-label={`Open ${currentOrganization.name} settings`}
-            className="shrink-0 text-light-slate hover:text-foreground"
-          >
-            <Settings2 className="size-3.5" />
-          </Button>
-        )}
-      </div>
-    )}
-
-    <DropdownMenuSeparator className="my-1" />
-
-    <div className="px-0.5" onKeyDown={(e) => e.stopPropagation()}>
-      <SearchInput
-        searchText={search}
-        setSearchText={setSearch}
-        placeholder="Search"
-        variant="ghost"
-        size="sm"
-      />
-    </div>
-
-    <DropdownMenuSeparator className="my-1" />
-
-    <div className="max-h-[50vh] overflow-auto">
-      {sortedWorkspaces.length > 0 ? (
-        sortedWorkspaces.map((workspace) => {
-          const wsDisplayName = calculateWorkspaceName(workspace.workspaceName);
-          const isSelected = workspace.workspaceName === workspaceName;
-
-          return (
-            <DropdownMenuItem
-              key={workspace.workspaceName}
-              size="sm"
-              selected={isSelected}
-              onSelect={(e) => {
-                e.preventDefault();
-                handleChangeWorkspace(workspace);
-                setIsDropdownOpen(false);
-                setSearch("");
+          {canManageOrg(currentOrganization) && (
+            <Button
+              variant="minimal"
+              size="icon-2xs"
+              onClick={() => {
+                window.location.href = orgSettingsUrl(
+                  currentOrganization.id,
+                  workspaceName,
+                );
               }}
+              aria-label={`Open ${currentOrganization.name} settings`}
+              className="shrink-0 text-light-slate hover:text-foreground"
             >
-              <TooltipWrapper content={wsDisplayName}>
-                <span className="comet-body-s min-w-0 flex-1 truncate text-left">
-                  {wsDisplayName}
-                </span>
-              </TooltipWrapper>
-            </DropdownMenuItem>
-          );
-        })
-      ) : (
-        <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
-          <span className="comet-body-s text-muted-slate">
-            No workspaces found
-          </span>
+              <Settings2 className="size-3.5" />
+            </Button>
+          )}
         </div>
       )}
-    </div>
 
-    <DropdownMenuSeparator className="my-1" />
+      <DropdownMenuSeparator className="my-1" />
 
-    <ListAction variant="default" size="sm" asChild>
-      <a href={buildUrl("account-settings/workspaces", workspaceName)}>
-        <Settings2 className="size-3.5 text-light-slate" />
-        <span>Manage workspaces</span>
-      </a>
-    </ListAction>
-  </>
-);
+      <div className="px-0.5" onKeyDown={(e) => e.stopPropagation()}>
+        <SearchInput
+          searchText={search}
+          setSearchText={setSearch}
+          placeholder="Search"
+          variant="ghost"
+          size="sm"
+        />
+      </div>
+
+      <DropdownMenuSeparator className="my-1" />
+
+      <div ref={scrollRef} className="max-h-[50vh] overflow-auto">
+        {sortedWorkspaces.length === 0 ? (
+          <div className="flex min-h-[120px] flex-col items-center justify-center px-4 py-2 text-center">
+            <span className="comet-body-s text-muted-slate">
+              No workspaces found
+            </span>
+          </div>
+        ) : shouldVirtualize ? (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              position: "relative",
+            }}
+          >
+            {virtualizer.getVirtualItems().map((virtualRow) => (
+              <div
+                key={virtualRow.key}
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: "100%",
+                  height: `${virtualRow.size}px`,
+                  transform: `translateY(${virtualRow.start}px)`,
+                }}
+              >
+                {renderWorkspaceItem(sortedWorkspaces[virtualRow.index])}
+              </div>
+            ))}
+          </div>
+        ) : (
+          sortedWorkspaces.map(renderWorkspaceItem)
+        )}
+      </div>
+
+      <DropdownMenuSeparator className="my-1" />
+
+      <ListAction variant="default" size="sm" asChild>
+        <a href={buildUrl("account-settings/workspaces", workspaceName)}>
+          <Settings2 className="size-3.5 text-light-slate" />
+          <span>Manage workspaces</span>
+        </a>
+      </ListAction>
+    </>
+  );
+};
 
 export default WorkspaceMenuContent;
