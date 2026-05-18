@@ -25,8 +25,12 @@ function dynamicMasks(page: Page) {
     page.locator('td').filter({ hasText: /[0-9a-f]{8}-[0-9a-f]{4}/ }),
     // mask breadcrumb — shows dynamic project/dataset names on sub-pages
     page.locator('nav[aria-label="breadcrumb"]'),
-    // mask the text label inside "Back to <project name>" button — project name is dynamic
-    page.locator('button').filter({ hasText: /^Back to / }).locator('span.truncate'),
+    // mask "Back to <project name>" button — project name is dynamic
+    page.locator('button').filter({ hasText: /^Back to / }),
+    // mask pagination "Showing X-Y of Z" — counts differ between environments
+    page.locator('span').filter({ hasText: /^Showing \d/ }),
+    // mask duration cells (e.g. "1.23s") — timing varies between environments
+    page.locator('td').filter({ hasText: /^\d+\.?\d*s$/ }),
   ];
 }
 
