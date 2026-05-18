@@ -13,6 +13,7 @@ import com.comet.opik.infrastructure.LocalRunnerConfig;
 import com.comet.opik.infrastructure.bi.AnalyticsService;
 import com.comet.opik.infrastructure.redis.StringRedisClient;
 import com.comet.opik.utils.JsonUtils;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.inject.ImplementedBy;
 import jakarta.inject.Inject;
@@ -22,6 +23,7 @@ import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.core.Response;
 import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.MapUtils;
 import org.redisson.api.RBatch;
 import org.redisson.api.RBlockingDeque;
 import org.redisson.api.RList;
@@ -122,7 +124,11 @@ class EndpointJobServiceImpl implements EndpointJobService {
     private static final String FIELD_TRACE_ID = "trace_id";
     private static final String FIELD_TIMEOUT = "timeout";
     private static final String FIELD_MASK_ID = "mask_id";
+    private static final String FIELD_PROMPT_MASKS = "prompt_masks";
     private static final String FIELD_BLUEPRINT_NAME = "blueprint_name";
+
+    private static final TypeReference<Map<UUID, UUID>> PROMPT_MASKS_TYPE = new TypeReference<>() {
+    };
     private static final String FIELD_METADATA = "metadata";
     private static final String FIELD_LAST_HEARTBEAT = "last_heartbeat";
 
@@ -224,6 +230,9 @@ class EndpointJobServiceImpl implements EndpointJobService {
         }
         if (request.maskId() != null) {
             jobFields.put(FIELD_MASK_ID, request.maskId().toString());
+        }
+        if (MapUtils.isNotEmpty(request.promptMasks())) {
+            jobFields.put(FIELD_PROMPT_MASKS, JsonUtils.writeValueAsString(request.promptMasks()));
         }
         if (request.blueprintName() != null) {
             jobFields.put(FIELD_BLUEPRINT_NAME, request.blueprintName().strip());
@@ -594,6 +603,7 @@ class EndpointJobServiceImpl implements EndpointJobService {
                 .projectId(RunnerServiceImpl.parseUUID(fields.get(FIELD_PROJECT_ID)))
                 .traceId(RunnerServiceImpl.parseUUID(fields.get(FIELD_TRACE_ID)))
                 .maskId(RunnerServiceImpl.parseUUID(fields.get(FIELD_MASK_ID)))
+                .promptMasks(parsePromptMasks(fields.get(FIELD_PROMPT_MASKS)))
                 .blueprintName(fields.get(FIELD_BLUEPRINT_NAME))
                 .metadata(parseMetadata(fields.get(FIELD_METADATA)))
                 .timeout(RunnerServiceImpl.parseIntValue(fields.get(FIELD_TIMEOUT)))
@@ -646,5 +656,12 @@ class EndpointJobServiceImpl implements EndpointJobService {
             return null;
         }
         return JsonUtils.readValue(value, LocalRunnerJobMetadata.class);
+    }
+
+    private Map<UUID, UUID> parsePromptMasks(String value) {
+        if (value == null) {
+            return null;
+        }
+        return JsonUtils.readValue(value, PROMPT_MASKS_TYPE);
     }
 }
