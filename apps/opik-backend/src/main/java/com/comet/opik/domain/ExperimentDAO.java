@@ -1150,14 +1150,14 @@ public class ExperimentDAO {
 
     /**
      * Target project IDs for FIND / FIND_COUNT / FIND_GROUPS / FIND_GROUPS_AGGREGATIONS scoping.
-     * Fast path reads {@code project_id} from {@code experiments}, falls back to
-     * {@code experiment_aggregates}, then to {@code experiment_items -> traces} for legacy rows.
+     * Fast path reads {@code project_id} from {@code experiment_aggregates} (skipping the ZERO_UUID
+     * placeholder that the aggregation job writes when no traces exist yet). Experiments without a
+     * valid aggregate project_id fall back to the {@code experiment_items -> traces} traversal.
      */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_final AS (
                 SELECT
                     id,
-                    project_id,
                     arrayConcat([prompt_id], mapKeys(prompt_versions)) AS prompt_ids
                 FROM (
                     SELECT *
@@ -1178,15 +1178,15 @@ public class ExperimentDAO {
             ),
             eia_projects AS (
                 SELECT id, project_id
-                FROM experiment_aggregates FINAL
+                FROM experiment_aggregates
                 WHERE workspace_id = :workspace_id
-                  AND id IN (SELECT id FROM experiments_final WHERE project_id = '')
+                  AND id IN (SELECT id FROM experiments_final)
+                  AND project_id != :zero_uuid
             ),
             legacy_scope AS (
                 SELECT id
                 FROM experiments_final
-                WHERE project_id = ''
-                  AND id NOT IN (SELECT id FROM eia_projects)
+                WHERE id NOT IN (SELECT id FROM eia_projects)
             ),
             legacy_trace_scope AS (
                 SELECT DISTINCT ei.trace_id
@@ -1202,8 +1202,7 @@ public class ExperimentDAO {
             )
             SELECT DISTINCT project_id
             FROM (
-                SELECT project_id FROM experiments_final WHERE project_id != ''
-                UNION DISTINCT SELECT project_id FROM eia_projects
+                SELECT project_id FROM eia_projects
                 UNION DISTINCT SELECT project_id FROM legacy_projects
             )
             WHERE project_id != ''
@@ -2683,6 +2682,8 @@ public class ExperimentDAO {
                             .ifPresent(filters -> {
                                 filterQueryBuilder.bind(statement, filters, FilterStrategy.EXPERIMENT);
                             });
+
+                    statement.bind("zero_uuid", ExperimentGroupMappers.ZERO_UUID.toString());
 
                     return makeFluxContextAware(bindWorkspaceIdToFlux(statement))
                             .flatMap(result -> result.map((row, metadata) -> {
