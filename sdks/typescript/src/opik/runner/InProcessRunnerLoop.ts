@@ -223,7 +223,7 @@ export class InProcessRunnerLoop {
     const agentName = job.agentName ?? "";
     const inputs = (job.inputs as Record<string, any>) ?? {};
     const maskId = job.maskId;
-    const masks = job.masks;
+    const masks = job.promptMasks;
     const blueprintName = job.blueprintName;
 
     const entry = getAll().get(agentName)!;

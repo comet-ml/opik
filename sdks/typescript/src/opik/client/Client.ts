@@ -1508,10 +1508,10 @@ export class OpikClient {
           {},
           this.api.requestOptions,
         );
-        const promptData: OpikApi.PromptPublic = {
-          name: options.name,
-        };
-        return createInstance(promptData, maskVersion, resolvedProjectName);
+        const basePromptData: OpikApi.PromptPublic = unmasked
+          ? { id: unmasked.id, name: unmasked.name, description: unmasked.description, tags: unmasked.tags ? [...unmasked.tags] : undefined }
+          : { name: options.name };
+        return createInstance(basePromptData, maskVersion, resolvedProjectName);
       };
       result = await promptCacheGetOrFetch<T>(
         options.name,

@@ -1176,4 +1176,91 @@ describe("Opik prompt operations", () => {
       expect(result).toBeInstanceOf(Prompt);
     });
   });
+
+  describe("getPrompt — masked prompt preserves identity fields", () => {
+    const mockPromptPublic: OpikApi.PromptPublic = {
+      id: "prompt-id-orig",
+      name: "masked-prompt",
+      description: "Original description",
+      tags: ["tag-a", "tag-b"],
+    };
+
+    const mockVersionDetail: OpikApi.PromptVersionDetail = {
+      id: "version-id-orig",
+      promptId: "prompt-id-orig",
+      commit: "abc123",
+      template: "Hello {{name}}!",
+      type: "mustache",
+      createdAt: new Date("2024-01-01"),
+      templateStructure: PromptTemplateStructure.Text,
+    };
+
+    const mockMaskedVersionDetail: OpikApi.PromptVersionDetail = {
+      id: "mask-version-id",
+      promptId: "prompt-id-orig",
+      commit: "mask-commit",
+      template: "Masked {{name}}!",
+      type: "mustache",
+      createdAt: new Date("2024-01-02"),
+      templateStructure: PromptTemplateStructure.Text,
+    };
+
+    it("masked prompt retains id, description, and tags from the unmasked prompt", async () => {
+      const { promptMaskContext } = await import("@/prompt/maskContext");
+
+      getPromptsSpy.mockResolvedValue({ content: [mockPromptPublic] } as never);
+      retrievePromptVersionSpy.mockResolvedValue(mockVersionDetail as never);
+
+      const getVersionByIdSpy = vi
+        .spyOn(client.api.prompts, "getPromptVersionById")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(mockMaskedVersionDetail)
+        );
+
+      try {
+        const result = await promptMaskContext(
+          { "prompt-id-orig": "mask-version-id" },
+          () => client.getPrompt({ name: "masked-prompt" })
+        );
+
+        expect(result).toBeInstanceOf(Prompt);
+        expect(result?.id).toBe("prompt-id-orig");
+        expect(result?.description).toBe("Original description");
+        expect(result?.tags).toEqual(["tag-a", "tag-b"]);
+        expect(result?.prompt).toBe("Masked {{name}}!");
+        expect(getVersionByIdSpy).toHaveBeenCalledWith(
+          "mask-version-id",
+          {},
+          client.api.requestOptions
+        );
+      } finally {
+        getVersionByIdSpy.mockRestore();
+      }
+    });
+
+    it("masked prompt falls back to name-only when unmasked is null", async () => {
+      const { promptMaskContext } = await import("@/prompt/maskContext");
+
+      getPromptsSpy.mockResolvedValue({ content: [mockPromptPublic] } as never);
+      retrievePromptVersionSpy.mockResolvedValue(mockVersionDetail as never);
+
+      const getVersionByIdSpy = vi
+        .spyOn(client.api.prompts, "getPromptVersionById")
+        .mockImplementation(() =>
+          createMockHttpResponsePromise(mockMaskedVersionDetail)
+        );
+
+      try {
+        const result = await promptMaskContext(
+          { "prompt-id-orig": "mask-version-id" },
+          () => client.getPrompt({ name: "masked-prompt" })
+        );
+
+        expect(result).not.toBeNull();
+        expect(result?.name).toBe("masked-prompt");
+      } finally {
+        getVersionByIdSpy.mockRestore();
+      }
+    });
+  });
 });

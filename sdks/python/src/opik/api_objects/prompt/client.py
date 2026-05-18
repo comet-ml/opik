@@ -270,36 +270,33 @@ class PromptClient:
                 name, prompt_version, project_name=project_name
             )
 
-        if no_cache:
-            result = _fetch()
-        else:
-            unmasked = prompt_cache.get_or_fetch(
+        def _cached_fetch(
+            mask_id: Optional[str] = None,
+        ) -> Optional[_PromptT]:
+            if no_cache:
+                return _fetch(mask_id=mask_id)
+            return prompt_cache.get_or_fetch(
                 name=name,
                 commit=commit,
                 project_name=project_name,
                 template_structure=template_structure,
-                fetch_fn=_fetch,
+                fetch_fn=lambda: _fetch(mask_id=mask_id) if mask_id else _fetch(),
+                mask_id=mask_id,
             )
 
-            result = unmasked
+        unmasked = _cached_fetch()
+        result = unmasked
 
-            prompt_id = (
-                unmasked.__internal_api__prompt_id__ if unmasked is not None else None
-            )
-            active_mask_id = (
-                prompt_mask_context_module.get_mask_for_prompt(prompt_id)
-                if prompt_id is not None
-                else None
-            )
-            if active_mask_id is not None:
-                result = prompt_cache.get_or_fetch(
-                    name=name,
-                    commit=commit,
-                    project_name=project_name,
-                    template_structure=template_structure,
-                    fetch_fn=lambda: _fetch(mask_id=active_mask_id),
-                    mask_id=active_mask_id,
-                )
+        prompt_id = (
+            unmasked.__internal_api__prompt_id__ if unmasked is not None else None
+        )
+        active_mask_id = (
+            prompt_mask_context_module.get_mask_for_prompt(prompt_id)
+            if prompt_id is not None
+            else None
+        )
+        if active_mask_id is not None:
+            result = _cached_fetch(mask_id=active_mask_id)
 
         if result is not None:
             from opik import opik_context
