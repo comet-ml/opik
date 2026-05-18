@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Iterator, Union
 
 from opik import llm_usage
 from opik.api_objects import span, trace, opik_client, prompt
+from opik.api_objects.observation_data import ObservationData
 from opik.api_objects.attachment import Attachment
 from opik.types import (
     DistributedTraceHeadersDict,
@@ -171,6 +172,50 @@ def update_current_trace(
     current_trace_data.update(**new_params)
 
 
+def attach_prompt_to_current_span(prompt_obj: prompt.BasePrompt) -> None:
+    """
+    Attaches a prompt to the current span's metadata (opik_prompts list), deduplicating by id+commit.
+    """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    span_data = context_storage.top_span_data()
+    if span_data is None:
+        return
+
+    _attach_prompt_to_observation(span_data, prompt_obj)
+
+
+def attach_prompt_to_current_trace(prompt_obj: prompt.BasePrompt) -> None:
+    """
+    Attaches a prompt to the current trace's metadata (opik_prompts list), deduplicating by id+commit.
+    """
+    if not tracing_runtime_config.is_tracing_active():
+        return
+
+    trace_data = context_storage.get_trace_data()
+    if trace_data is None:
+        return
+
+    _attach_prompt_to_observation(trace_data, prompt_obj)
+
+
+def _attach_prompt_to_observation(
+    observation_data: ObservationData, prompt_obj: prompt.BasePrompt
+) -> None:
+    prompt_info = prompt_obj.__internal_api__to_info_dict__()
+    existing = (observation_data.metadata or {}).get("opik_prompts", [])
+    dedup_key = (
+        prompt_info.get("id"),
+        (prompt_info.get("version") or {}).get("commit"),
+    )
+    existing_keys = {
+        (p.get("id"), (p.get("version") or {}).get("commit")) for p in existing
+    }
+    if dedup_key not in existing_keys:
+        observation_data.update(metadata={"opik_prompts": existing + [prompt_info]})
+
+
 @contextlib.contextmanager
 def trace_context(
     trace_data: trace.TraceData,
@@ -232,4 +277,6 @@ __all__ = [
     "update_current_trace",
     "get_distributed_trace_headers",
     "trace_context",
+    "attach_prompt_to_current_span",
+    "attach_prompt_to_current_trace",
 ]

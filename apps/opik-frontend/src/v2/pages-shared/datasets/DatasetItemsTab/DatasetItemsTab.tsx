@@ -475,6 +475,7 @@ function DatasetItemsTab({
         ? [
             generateActionsColumDef({
               cell: DatasetItemRowActionsCell,
+              customMeta: { setActiveRowId },
             }),
           ]
         : []),
@@ -486,6 +487,7 @@ function DatasetItemsTab({
     canEditDatasets,
     getDraftStatusBorderClass,
     handleRowClick,
+    setActiveRowId,
   ]);
 
   const columnsToExport = useMemo(

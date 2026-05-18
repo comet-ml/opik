@@ -20,6 +20,7 @@ import reactor.core.publisher.Mono;
 import ru.vyarus.dropwizard.guice.module.installer.feature.eager.EagerSingleton;
 import ru.vyarus.dropwizard.guice.module.yaml.bind.Config;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -27,7 +28,6 @@ import static com.comet.opik.api.FeedbackScoreItem.FeedbackScoreBatchItem;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.Constants;
 import static com.comet.opik.api.evaluators.AutomationRuleEvaluatorType.SPAN_USER_DEFINED_METRIC_PYTHON;
 import static com.comet.opik.infrastructure.log.LogContextAware.withMdc;
-import static com.comet.opik.infrastructure.log.LogContextAware.wrapWithMdc;
 
 /**
  * This service listens to a Redis stream for Spans to be scored using Python evaluators. It will prepare the Python
@@ -93,22 +93,11 @@ public class OnlineScoringSpanUserDefinedMetricPythonScorer
                 .then();
     }
 
-    private Map<String, String> prepareData(SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
+    private Map<String, Object> prepareData(SpanToScoreUserDefinedMetricPython message, Map<String, String> mdc) {
         var span = message.span();
-        // This is crucial for logging purposes to identify the rule and span
-        try (var logContext = wrapWithMdc(mdc)) {
-            userFacingLogger.info("Evaluating spanId '{}' sampled by rule '{}'", span.id(), message.ruleName());
-            try {
-                var data = OnlineScoringEngine.toReplacements(message.code().arguments(), span);
-                userFacingLogger.info("Sending spanId '{}' to Python evaluator using the following input:\n\n{}",
-                        span.id(), data);
-                return data;
-            } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for spanId '{}': \n\n{}",
-                        span.id(), exception.getMessage());
-                throw exception;
-            }
-        }
+        return OnlineScoringEngine.logAndPrepareEvaluatorInput(
+                userFacingLogger, log, mdc, "spanId", span.id(), message.ruleName(),
+                () -> new LinkedHashMap<>(OnlineScoringEngine.toReplacements(message.code().arguments(), span)));
     }
 
     private static List<FeedbackScoreBatchItem> toFeedbackScores(List<PythonScoreResult> scoreResults, Span span) {

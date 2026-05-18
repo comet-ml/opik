@@ -45,7 +45,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"id\": \"abc\"}", ctx));
+                tool.execute("{\"id\": \"abc\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Missing required argument: type");
     }
@@ -55,7 +55,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"unicorn\", \"id\": \"abc\"}", ctx));
+                tool.execute("{\"type\": \"unicorn\", \"id\": \"abc\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Unknown type");
     }
@@ -67,7 +67,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"trace\", \"id\": \"%s\", \"tier\": \"WHATEVER\"}"
-                        .formatted(trace.id()), ctx));
+                        .formatted(trace.id()), ctx).block());
 
         assertThat(result.get("error").asText()).contains("Unknown tier");
     }
@@ -77,7 +77,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"trace\", \"id\": \"not-a-uuid\"}", ctx));
+                tool.execute("{\"type\": \"trace\", \"id\": \"not-a-uuid\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("Invalid id format");
     }
@@ -87,7 +87,7 @@ class ReadToolTest {
         var ctx = newContextWithSeededTrace();
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"thread\", \"id\": \"any-string\"}", ctx));
+                tool.execute("{\"type\": \"thread\", \"id\": \"any-string\"}", ctx).block());
 
         assertThat(result.get("error").asText()).contains("type=thread is not supported");
     }
@@ -98,7 +98,7 @@ class ReadToolTest {
         var trace = ctx.getTrace();
 
         var json = tool.execute(
-                "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(trace.id()), ctx);
+                "{\"type\": \"trace\", \"id\": \"%s\"}".formatted(trace.id()), ctx).block();
         var result = JsonUtils.getJsonNodeFromString(json);
 
         assertThat(result.get("type").asText()).isEqualTo("trace");
@@ -118,7 +118,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"trace\", \"id\": \"%s\", \"tier\": \"SKELETON\"}"
-                        .formatted(trace.id()), ctx));
+                        .formatted(trace.id()), ctx).block());
 
         assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.SKELETON.name());
         assertThat(result.get("data").has("span_count")).isTrue();
@@ -133,7 +133,7 @@ class ReadToolTest {
         ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
 
         assertThat(result.get("type").asText()).isEqualTo("span");
         assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.FULL.name());
@@ -158,7 +158,7 @@ class ReadToolTest {
         ctx.cache(ref, spanJson);
 
         // Trigger the cap path.
-        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block();
 
         assertThat(ctx.isTruncated(ref)).isTrue();
         var cached = ctx.getCached(ref).orElseThrow();
@@ -187,7 +187,7 @@ class ReadToolTest {
         }
         ctx.cache(ref, spanJson);
 
-        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx);
+        tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block();
 
         var cached = ctx.getCached(ref).orElseThrow();
         var sampleField = cached.get("field_0").asText();
@@ -211,7 +211,7 @@ class ReadToolTest {
         ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
 
         var result = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
 
         // First read after replacing oversized cache: still includes the warning since the
         // cap is checked against the cached node which is the over-cap form.
@@ -235,7 +235,7 @@ class ReadToolTest {
         ctx.cache(ref, oversized);
 
         var first = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
         assertThat(first.has("cache_warning")).isTrue();
         assertThat(ctx.isTruncated(ref))
                 .as("cap must be sticky after first triggering call")
@@ -248,7 +248,7 @@ class ReadToolTest {
                 "{\"id\":\"%s\",\"input\":\"x[TRUNCATED ...]\"}".formatted(spanId)));
 
         var second = JsonUtils.getJsonNodeFromString(
-                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx));
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\"}".formatted(spanId), ctx).block());
         assertThat(second.has("cache_warning"))
                 .as("warning must persist on subsequent reads of a truncated cache")
                 .isTrue();
@@ -281,7 +281,7 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         var inputText = result.get("data").get("input").asText();
         assertThat(inputText)
@@ -305,7 +305,7 @@ class ReadToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        var ctx = new TraceToolContext(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
 
         var spanId = UUID.randomUUID();
         var ref = new EntityRef(EntityType.SPAN, spanId.toString());
@@ -318,11 +318,71 @@ class ReadToolTest {
 
         var result = JsonUtils.getJsonNodeFromString(
                 tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"MEDIUM\"}"
-                        .formatted(spanId), ctx));
+                        .formatted(spanId), ctx).block());
 
         var inputText = result.get("data").get("input").asText();
         assertThat(inputText).contains("use jq('.input') to see full");
         assertThat(result.has("cache_warning")).isFalse();
+    }
+
+    @Test
+    void oversizedFullSpanDowngradesToMedium() {
+        // A span whose FULL-tier serialization exceeds OUTPUT_SAFETY_CHARS must be
+        // auto-downgraded by guardOutput. MEDIUM truncates each string > 1000 chars,
+        // so the resulting payload comfortably fits the safety cap.
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        // Single string field much larger than the per-call cap; cache cap (10 MB)
+        // is not in play, so there is no `cache_warning` to confound the assertion.
+        String fat = "x".repeat(ReadTool.OUTPUT_SAFETY_CHARS + 10_000);
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        spanJson.put("input", fat);
+        ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
+
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
+                        .formatted(spanId), ctx).block());
+
+        assertThat(result.get("tier").asText())
+                .as("tier=FULL must downgrade to MEDIUM when output exceeds safety cap")
+                .isEqualTo(CompressionTier.MEDIUM.name());
+        assertThat(result.get("data").get("input").asText()).contains("[TRUNCATED");
+        assertThat(result.has("cache_warning")).isFalse();
+    }
+
+    @Test
+    void guardOutputTerminatesEvenWhenCompressorCollapsesTiers() {
+        // Regression for an infinite-loop bug: GenericCompressor.pickTier collapses
+        // MEDIUM, SKELETON and SUMMARY requests all to MEDIUM. If guardOutput drove
+        // its walk off `current.tier()` (which is always MEDIUM after the first
+        // downgrade), it would keep asking for SKELETON, getting MEDIUM back, and
+        // looping forever. Many fields × moderate size each is the data shape that
+        // surfaces it: MEDIUM truncation per-string still leaves the whole entity
+        // larger than OUTPUT_SAFETY_CHARS.
+        var ctx = newContextWithSeededTrace();
+        var spanId = UUID.randomUUID();
+        var spanJson = JsonUtils.getMapper().createObjectNode();
+        spanJson.put("id", spanId.toString());
+        // 60 fields × 5 KB each = 300 KB raw → MEDIUM truncates each to 1 KB =
+        // ~60 KB, still > 40 K cap, would loop without the fix.
+        String filler = "k".repeat(5_000);
+        for (int i = 0; i < 60; i++) {
+            spanJson.put("field_" + i, filler);
+        }
+        ctx.cache(new EntityRef(EntityType.SPAN, spanId.toString()), spanJson);
+
+        // The bug manifested as a non-terminating loop, so the assertion here is
+        // primarily that the call returns at all (no timeout). Sanity-check the
+        // response shape.
+        var result = JsonUtils.getJsonNodeFromString(
+                tool.execute("{\"type\": \"span\", \"id\": \"%s\", \"tier\": \"FULL\"}"
+                        .formatted(spanId), ctx).block());
+
+        assertThat(result.has("data")).isTrue();
+        // After exhausting tier downgrades, the tier reported back is the smallest
+        // the compressor would produce — for GenericCompressor that's MEDIUM.
+        assertThat(result.get("tier").asText()).isEqualTo(CompressionTier.MEDIUM.name());
     }
 
     private static TraceToolContext newContextWithSeededTrace() {
@@ -332,7 +392,7 @@ class ReadToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        var ctx = new TraceToolContext(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
         // Mirror the production seed: cache the {trace, spans} composite under EntityRef(TRACE, id).
         JsonNode composite = new TraceCompressor().buildFullJson(trace, List.of());
         ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()), composite);

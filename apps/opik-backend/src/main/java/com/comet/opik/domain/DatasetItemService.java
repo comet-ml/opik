@@ -786,10 +786,10 @@ class DatasetItemServiceImpl implements DatasetItemService {
                             log.info("Feature toggle ON, using latest version for streaming dataset '{}' items",
                                     dataset.id());
                             return Mono
-                                    .fromCallable(() -> versionService.getLatestVersion(dataset.id(), workspaceId))
-                                    .flatMapMany(latestVersionOpt -> {
-                                        if (latestVersionOpt.isPresent()) {
-                                            UUID versionId = latestVersionOpt.get().id();
+                                    .fromCallable(() -> versionService.getLatestVersionId(dataset.id(), workspaceId))
+                                    .flatMapMany(latestVersionIdOpt -> {
+                                        if (latestVersionIdOpt.isPresent()) {
+                                            UUID versionId = latestVersionIdOpt.get();
                                             log.info("Streaming from latest version '{}' for dataset '{}'", versionId,
                                                     dataset.id());
                                             return versionDao.getItems(dataset.id(), versionId, request.steamLimit(),
