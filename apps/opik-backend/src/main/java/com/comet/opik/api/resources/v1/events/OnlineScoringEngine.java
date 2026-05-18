@@ -109,7 +109,8 @@ public class OnlineScoringEngine {
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
-        injectSpansIntoReplacements(replacements, evaluatorCode.variables(), spans);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, spans);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), replacements, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
@@ -127,39 +128,76 @@ public class OnlineScoringEngine {
             StructuredOutputStrategy structuredOutputStrategy, @NonNull PromptType promptType,
             int maxReplacementChars, @NonNull String drillDownHint, @NonNull List<Span> spans) {
         Map<String, String> replacements = toReplacements(evaluatorCode.variables(), trace);
-        injectSpansIntoReplacements(replacements, evaluatorCode.variables(), spans);
+        injectSpansIntoReplacements(replacements, evaluatorCode.variables(),
+                evaluatorCode.messages(), promptType, spans);
         Map<String, String> capped = capReplacements(replacements, maxReplacementChars, drillDownHint);
         var renderedMessages = renderMessagesWithReplacements(evaluatorCode.messages(), capped, promptType);
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
     /**
-     * Whether the user's variable mapping declares a variable that should be substituted with
-     * the trace's spans list. Sentinel value (mirroring the Python-metric convention): any
-     * variable whose value is the bare string {@code "spans"} (no JSONPath prefix) gets the
-     * full spans array serialized as JSON at render time.
+     * Whether the rule needs the trace's spans list rendered into the prompt. Two ways to
+     * opt in:
+     * <ul>
+     *   <li>Sentinel-valued variable: any entry in {@code variables} whose value is the bare
+     *       string {@code "spans"} (no JSONPath prefix) — mirrors the Python-metric convention
+     *       and is what the FE writes when the user types {@code {{spans}}} in the prompt.
+     *   <li>Direct template reference: any message in {@code messages} references
+     *       {@code {{spans}}} (per {@code promptType}) without the variables map mapping it
+     *       to a custom path. Catches API-created rules where the caller put {@code {{spans}}}
+     *       in the prompt but didn't (or didn't know to) set the sentinel mapping.
+     * </ul>
      *
      * <p>Used by the trace scorer to opt-in to the {@code spanService.getByTraceIds(...)} fetch
-     * for inline LLM-as-judge evaluations whose template references {@code {{spans}}} — without
-     * this gate, small traces would skip the fetch and the variable would render as the literal
-     * sentinel rather than the actual spans.
+     * for inline LLM-as-judge evaluations whose template references {@code {{spans}}}.
      */
-    public static boolean templateReferencesSpans(@NonNull Map<String, String> variables) {
-        return variables.containsValue(SPANS_VARIABLE_NAME);
+    public static boolean templateReferencesSpans(
+            @NonNull List<LlmAsJudgeMessage> messages,
+            @NonNull Map<String, String> variables,
+            @NonNull PromptType promptType) {
+        return variables.containsValue(SPANS_VARIABLE_NAME)
+                || messagesReferenceSpansDirectly(messages, variables, promptType);
+    }
+
+    /**
+     * True when at least one message template references {@code {{spans}}} (or the equivalent
+     * for {@code promptType}) AND the variables map does not bind {@code spans} to a custom
+     * path. The second clause respects explicit user mappings — e.g. a rule that maps
+     * {@code spans} to {@code input.something} keeps that mapping instead of being silently
+     * overridden by the spans-list injection.
+     */
+    private static boolean messagesReferenceSpansDirectly(
+            List<LlmAsJudgeMessage> messages, Map<String, String> variables, PromptType promptType) {
+        if (variables.containsKey(SPANS_VARIABLE_NAME)) {
+            return false;
+        }
+        return messages.stream()
+                .map(LlmAsJudgeMessage::content)
+                .filter(Objects::nonNull)
+                .anyMatch(content -> TemplateParseUtils.extractVariables(content, promptType)
+                        .contains(SPANS_VARIABLE_NAME));
     }
 
     /**
      * Replace any variable whose source path is the {@code "spans"} sentinel with the JSON-
      * serialized spans list (sorted by start_time, matching the Python-metric convention).
-     * Mutates {@code replacements} in place. No-op when no variable references the sentinel.
+     * Mutates {@code replacements} in place. No-op when no variable references the sentinel
+     * and no message template references {@code {{spans}}} directly.
      *
      * <p>An empty spans list still triggers the rewrite (rendering as {@code "[]"}) — without
      * it, {@code toReplacements} leaves the bare {@code "spans"} value as a literal and the
      * prompt renders the word "spans" instead of an empty array.
+     *
+     * <p>Also handles the implicit-reference case (template uses {@code {{spans}}} but the
+     * variables map doesn't bind it): mirrors the FE auto-fill server-side so API-created
+     * rules get the same behavior without forcing every caller to know the sentinel convention.
      */
     private static void injectSpansIntoReplacements(
-            Map<String, String> replacements, Map<String, String> variables, List<Span> spans) {
-        if (!templateReferencesSpans(variables)) {
+            Map<String, String> replacements, Map<String, String> variables,
+            List<LlmAsJudgeMessage> messages, PromptType promptType, List<Span> spans) {
+        boolean sentinelMapped = variables.containsValue(SPANS_VARIABLE_NAME);
+        boolean templateOnly = messagesReferenceSpansDirectly(messages, variables, promptType);
+        if (!sentinelMapped && !templateOnly) {
             return;
         }
         String spansJson;
@@ -173,6 +211,9 @@ public class OnlineScoringEngine {
                 replacements.put(name, spansJson);
             }
         });
+        if (templateOnly) {
+            replacements.put(SPANS_VARIABLE_NAME, spansJson);
+        }
     }
 
     static Map<String, String> capReplacements(Map<String, String> replacements,

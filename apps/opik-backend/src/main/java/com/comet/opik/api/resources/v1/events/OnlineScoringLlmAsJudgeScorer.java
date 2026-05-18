@@ -171,7 +171,10 @@ public class OnlineScoringLlmAsJudgeScorer extends OnlineScoringBaseScorer<Trace
                 && (LlmAsJudgeToolsMode.shouldUseTools(message)
                         || serviceTogglesConfig.isAgenticToolsEnabled());
         boolean templateNeedsSpans = OnlineScoringEngine
-                .templateReferencesSpans(message.llmAsJudgeCode().variables());
+                .templateReferencesSpans(
+                        message.llmAsJudgeCode().messages(),
+                        message.llmAsJudgeCode().variables(),
+                        message.promptType());
         boolean spansNeeded = agenticToolsPathPossible || templateNeedsSpans;
         Mono<List<Span>> spansMono = spansNeeded
                 ? spanService.getByTraceIds(Set.of(trace.id()))

@@ -1040,18 +1040,44 @@ class OnlineScoringEngineTest {
     @Test
     @DisplayName("templateReferencesSpans detects the 'spans' sentinel anywhere in the variables map")
     void testTemplateReferencesSpans() {
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of())).isFalse();
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of(
+        var noMessages = List.<com.comet.opik.api.evaluators.LlmAsJudgeMessage>of();
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(), mustache)).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(
                 "summary", "input.foo",
-                "out", "output.bar"))).isFalse();
+                "out", "output.bar"), mustache)).isFalse();
         // Sentinel matches the bare value "spans" — not "input.spans", not "Spans", not "$.spans".
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("mySpans", "spans"))).isTrue();
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of(
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages,
+                Map.of("mySpans", "spans"), mustache)).isTrue();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of(
                 "summary", "input.foo",
-                "spansList", "spans"))).isTrue();
+                "spansList", "spans"), mustache)).isTrue();
         // Case-sensitive: only the lowercase bare sentinel triggers injection.
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("x", "Spans"))).isFalse();
-        assertThat(OnlineScoringEngine.templateReferencesSpans(Map.of("x", "input.spans"))).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages, Map.of("x", "Spans"), mustache)).isFalse();
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noMessages,
+                Map.of("x", "input.spans"), mustache)).isFalse();
+    }
+
+    @Test
+    @DisplayName("templateReferencesSpans detects implicit {{spans}} references in messages when variables omits the binding")
+    void testTemplateReferencesSpansFromMessageTemplate() {
+        var mustache = com.comet.opik.api.PromptType.MUSTACHE;
+        var spansMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .content("Spans: {{spans}}")
+                .build());
+        var noSpansMessage = List.of(com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                .content("Summary: {{summary}}")
+                .build());
+        // Implicit reference: prompt has {{spans}}, variables map doesn't bind "spans" at all.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(spansMessage, Map.of(), mustache)).isTrue();
+        // Variables explicitly map "spans" to something else (e.g. a JSONPath) — respect that
+        // mapping and don't claim the template references the sentinel.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(spansMessage,
+                Map.of("spans", "input.spans"), mustache)).isFalse();
+        // No {{spans}} in template, no sentinel in variables — false.
+        assertThat(OnlineScoringEngine.templateReferencesSpans(noSpansMessage, Map.of(), mustache)).isFalse();
     }
 
     @Test
@@ -1122,6 +1148,70 @@ class OnlineScoringEngineTest {
         assertThat(allText).contains("Spans for this trace: []");
         assertThat(allText).doesNotContain("Spans for this trace: spans");
         assertThat(allText).doesNotContain("{{mySpans}}");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest substitutes {{spans}} from a template-only reference (no sentinel in variables)")
+    void testPrepareLlmRequestInjectsSpansFromTemplateReference() {
+        // No "spans" key in variables. Mirrors an API-created rule where the caller put
+        // {{spans}} in the prompt but didn't (or didn't know to) set the sentinel mapping.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("How many spans? {{spans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of()))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("template-only-span").type(com.comet.opik.domain.SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        assertThat(allText).contains("template-only-span");
+        assertThat(allText).doesNotContain("{{spans}}");
+    }
+
+    @Test
+    @DisplayName("prepareLlmRequest respects an explicit variables mapping over the template-only spans injection")
+    void testPrepareLlmRequestRespectsExplicitSpansMapping() {
+        // The user explicitly mapped "spans" to input.foo. Their intent overrides the
+        // template-only fallback: substitute the JSONPath value, not the spans list.
+        var evaluatorCode = LlmAsJudgeCode.builder()
+                .model(com.comet.opik.api.evaluators.LlmAsJudgeModelParameters.builder()
+                        .name("gpt-4o").temperature(0.3).build())
+                .messages(List.of(
+                        com.comet.opik.api.evaluators.LlmAsJudgeMessage.builder()
+                                .role(dev.langchain4j.data.message.ChatMessageType.USER)
+                                .content("Custom: {{spans}}")
+                                .build()))
+                .variables(new java.util.LinkedHashMap<>(Map.of("spans", "input.foo")))
+                .schema(List.of())
+                .build();
+        var trace = createTrace(generator.generate(), generator.generate());
+        var span = com.comet.opik.api.Span.builder()
+                .id(generator.generate()).name("should-not-appear").type(com.comet.opik.domain.SpanType.general)
+                .startTime(java.time.Instant.now()).traceId(trace.id()).projectId(trace.projectId())
+                .build();
+
+        var request = OnlineScoringEngine.prepareLlmRequest(evaluatorCode, trace, new InstructionStrategy(),
+                List.of(span));
+
+        var allText = request.messages().stream()
+                .map(Object::toString)
+                .collect(java.util.stream.Collectors.joining("\n"));
+        // The spans list should NOT leak in — the user mapped "spans" to a JSONPath.
+        assertThat(allText).doesNotContain("should-not-appear");
     }
 
     @Test
