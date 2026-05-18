@@ -305,7 +305,7 @@ class ReadToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        var ctx = new TraceToolContext(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
 
         var spanId = UUID.randomUUID();
         var ref = new EntityRef(EntityType.SPAN, spanId.toString());
@@ -392,7 +392,7 @@ class ReadToolTest {
                 .name("active")
                 .startTime(Instant.now())
                 .build();
-        var ctx = new TraceToolContext(trace, List.of(), "ws", "user");
+        var ctx = TraceToolContext.forActiveTrace(trace, List.of(), "ws", "user");
         // Mirror the production seed: cache the {trace, spans} composite under EntityRef(TRACE, id).
         JsonNode composite = new TraceCompressor().buildFullJson(trace, List.of());
         ctx.cache(new EntityRef(EntityType.TRACE, trace.id().toString()), composite);

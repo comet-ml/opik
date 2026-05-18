@@ -10,6 +10,7 @@ import com.comet.opik.api.evaluators.LlmAsJudgeMessage;
 import com.comet.opik.api.evaluators.LlmAsJudgeMessageContent;
 import com.comet.opik.api.evaluators.LlmAsJudgeOutputSchema;
 import com.comet.opik.api.resources.v1.events.tools.StringTruncator;
+import com.comet.opik.api.resources.v1.events.tools.ToolRegistry;
 import com.comet.opik.api.resources.v1.events.tools.TraceCompressor;
 import com.comet.opik.domain.evaluators.python.TraceThreadPythonEvaluatorRequest;
 import com.comet.opik.domain.llm.structuredoutput.StructuredOutputStrategy;
@@ -20,6 +21,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import com.google.api.gax.rpc.InvalidArgumentException;
 import com.google.common.base.Preconditions;
 import com.jayway.jsonpath.JsonPath;
@@ -31,6 +34,8 @@ import dev.langchain4j.data.message.TextContent;
 import dev.langchain4j.data.message.UserMessage;
 import dev.langchain4j.data.message.VideoContent;
 import dev.langchain4j.model.chat.request.ChatRequest;
+import dev.langchain4j.model.chat.request.ChatRequestParameters;
+import dev.langchain4j.model.chat.request.ToolChoice;
 import dev.langchain4j.model.chat.response.ChatResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -43,6 +48,7 @@ import org.slf4j.Logger;
 
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -53,6 +59,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Spliterator;
 import java.util.Spliterators;
+import java.util.UUID;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -177,6 +184,109 @@ public class OnlineScoringEngine {
         return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
     }
 
+    /**
+     * Variant for the agentic-tools branch: renders only a compact per-trace
+     * <em>skeleton</em> for the thread (ids, names, durations, span counts) plus a
+     * drill-down hint pointing at {@code read(type=trace, id=X)}. The model fetches
+     * any specific trace's full content (and its spans) on demand via ReadTool —
+     * the same lazy mechanism the trace-level path uses. Keeps the inline prompt
+     * bounded even on threads with thousands of traces.
+     *
+     * <p>The {@code context} variable is replaced with the skeleton + drill-down
+     * guidance so user-supplied prompt templates referencing {@code {{context}}}
+     * keep working without modification.
+     *
+     * <p><strong>Precondition:</strong> all {@code evaluatorCode.messages()} must declare
+     * string content. Multimodal templates aren't supported on this path —
+     * {@link #renderThreadMessagesWithReplacement} throws on the first non-string entry.
+     * Callers should detect multimodal templates upstream via
+     * {@link #hasMultimodalTemplate(List)} and fall back to the inline path.
+     */
+    public static ChatRequest prepareThreadLlmRequestWithTools(
+            @NonNull TraceThreadLlmAsJudgeCode evaluatorCode, @NonNull List<Trace> traces,
+            @NonNull StructuredOutputStrategy structuredOutputStrategy) {
+        String skeleton;
+        try {
+            skeleton = OBJECT_MAPPER.writeValueAsString(toThreadSkeleton(traces));
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
+        String drillDownHint = "Call read(type=trace, id=<uuid>) on any trace id from the"
+                + " thread skeleton above to inspect its full input/output + spans, or"
+                + " jq(type=trace, id=<uuid>, expression='<path>') for path-targeted lookups.";
+        String contextValue = "Thread skeleton (compact per-trace summary; use tools to drill in):\n"
+                + skeleton + "\n\n" + drillDownHint;
+
+        var renderedMessages = renderThreadMessagesWithReplacement(evaluatorCode.messages(),
+                TraceThreadLlmAsJudgeCode.CONTEXT_VARIABLE_NAME, contextValue);
+        return buildChatRequest(renderedMessages, evaluatorCode.schema(), structuredOutputStrategy);
+    }
+
+    /**
+     * Compact per-trace summary the agentic-tools branch renders into the prompt
+     * instead of the full trace list. ~100 chars per trace — so a 10K-trace thread
+     * is ~1 MB, well under the model's window even without further compression. The
+     * model picks ids from this list and drills in via ReadTool.
+     */
+    static List<ThreadTraceSkeleton> toThreadSkeleton(List<Trace> traces) {
+        return traces.stream()
+                .map(trace -> new ThreadTraceSkeleton(
+                        trace.id(),
+                        trace.name(),
+                        trace.startTime(),
+                        trace.endTime(),
+                        trace.duration(),
+                        trace.spanCount(),
+                        trace.llmSpanCount()))
+                .toList();
+    }
+
+    /**
+     * Compact per-trace summary shipped to the model as part of the thread skeleton.
+     * Field set is small on purpose — anything beyond this is a {@code read} away.
+     *
+     * <p>{@code @JsonNaming(SnakeCaseStrategy)} keeps the wire shape consistent with
+     * {@link Trace}'s serialization (also snake_case via the same strategy), so the
+     * model sees the same field names in the skeleton and in a follow-up
+     * {@code read(type=trace, id=X)} response. Camel-case here would surprise the
+     * model with two different schemas for the same entity.
+     */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    @Builder(toBuilder = true)
+    public record ThreadTraceSkeleton(
+            @NonNull UUID id,
+            String name,
+            @NonNull Instant startTime,
+            Instant endTime,
+            Double duration,
+            int spanCount,
+            int llmSpanCount) {
+    }
+
+    /**
+     * Light-weight twin of {@link #renderThreadMessages} that substitutes the
+     * already-rendered {@code context} string directly, skipping the
+     * Jackson-serialize-the-traces step. Used by the tools path where the variable
+     * value (the skeleton + drill-down hint) is computed by the caller.
+     *
+     * <p>The caller (the thread scorer's {@code shouldUseAgenticTools} gate) detects
+     * multimodal templates upstream via {@link #hasMultimodalTemplate(List)} and falls
+     * back to the inline path, so by the time we get here {@code templateMessages} is
+     * guaranteed string-only. The assertion below is a defensive net rather than the
+     * primary safety mechanism — actual rendering delegates to
+     * {@link #renderMessagesWithReplacements} so role-switch / template-engine logic
+     * stays in one place.
+     */
+    private static List<ChatMessage> renderThreadMessagesWithReplacement(
+            List<LlmAsJudgeMessage> templateMessages, String variableName, String contextValue) {
+        if (hasMultimodalTemplate(templateMessages)) {
+            throw new UnsupportedOperationException(
+                    "Multimodal thread message content is not supported on the agentic-tools path");
+        }
+        Map<String, String> replacements = Map.of(variableName, contextValue);
+        return renderMessagesWithReplacements(templateMessages, replacements);
+    }
+
     static List<ChatMessage> renderThreadMessages(
             List<LlmAsJudgeMessage> templateMessages, Map<String, String> variablesMap, List<Trace> traces) {
         // prepare the map of replacements to use in all messages
@@ -196,51 +306,10 @@ public class OnlineScoringEngine {
                 })
                 .collect(
                         Collectors.toMap(MessageVariableMapping::variableName, MessageVariableMapping::valueToReplace));
-
-        // render the message templates from evaluator rule
-        return templateMessages.stream()
-                .map(templateMessage -> {
-                    // Check if content is string (text) or array (multimodal)
-                    if (templateMessage.isStringContent()) {
-                        // String format: plain text content
-                        var renderedMessage = TemplateParseUtils.render(
-                                templateMessage.asString(), replacements, PromptType.MUSTACHE);
-                        return switch (templateMessage.role()) {
-                            case USER -> UserMessage.from(renderedMessage);
-                            case SYSTEM -> SystemMessage.from(renderedMessage);
-                            default -> {
-                                log.info("No mapping for message role type {}", templateMessage.role());
-                                yield null;
-                            }
-                        };
-                    } else if (templateMessage.isStructuredContent()) {
-                        // Array format: structured content parts
-                        return switch (templateMessage.role()) {
-                            case USER -> buildUserMessageFromContentParts(
-                                    templateMessage.asContentList(), replacements);
-                            case SYSTEM -> {
-                                // For SYSTEM messages with array content, extract first text part
-                                var textContent = templateMessage.asContentList().stream()
-                                        .filter(part -> "text".equals(part.type()))
-                                        .map(LlmAsJudgeMessageContent::text)
-                                        .filter(Objects::nonNull)
-                                        .map(text -> TemplateParseUtils.render(text, replacements, PromptType.MUSTACHE))
-                                        .findFirst()
-                                        .orElse("");
-                                yield SystemMessage.from(textContent);
-                            }
-                            default -> {
-                                log.info("No mapping for message role type {}", templateMessage.role());
-                                yield null;
-                            }
-                        };
-                    } else {
-                        log.warn("Unknown content type for message role {}", templateMessage.role());
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .toList();
+        // Rendering itself is identical to trace / span flows once replacements are built —
+        // delegate so role-fan-out, multimodal handling, and prompt-type defaults stay in
+        // one place. The thread-specific bit is just the replacements assembly above.
+        return renderMessagesWithReplacements(templateMessages, replacements);
     }
 
     /**
@@ -695,15 +764,42 @@ public class OnlineScoringEngine {
     }
 
     /**
+     * Rough character-based token estimate for the thread context as it would be
+     * rendered on the inline path (full trace-list JSON, no spans). Used by
+     * {@code OnlineScoringTraceThreadLlmAsJudgeScorer} to decide whether a thread is
+     * big enough to switch to the agentic-tools path (skeleton + drill-down via
+     * ReadTool). The estimate is on the trace bodies only — spans aren't part of
+     * the inline thread render today, so factoring them in would over-trigger the
+     * tools branch.
+     *
+     * <p>Same {@code charsPerToken} contract as {@link #estimateTraceContextTokens}:
+     * configurable via {@code onlineScoring.agenticToolsCharsPerToken}.
+     */
+    public static int estimateThreadContextTokens(@NonNull List<Trace> traces, int charsPerToken) {
+        Preconditions.checkArgument(charsPerToken >= 1, "charsPerToken must be >= 1, got %s", charsPerToken);
+        try {
+            return OBJECT_MAPPER.writeValueAsString(fromTraceToThread(traces)).length() / charsPerToken;
+        } catch (JsonProcessingException ex) {
+            throw new UncheckedIOException(ex);
+        }
+    }
+
+    /**
      * Shared "evaluate → prepare → log" wrapper used by the trace and span Python scorers.
      * Eliminates the boilerplate that duplicated the MDC scope, the "Evaluating X 'id' sampled
      * by rule 'name'" entry log, the "Sending X 'id' to Python evaluator: '<summary>'" exit
      * log, and the rethrow-with-error-log fallback. Callers supply only what actually differs:
      * the entity label ({@code "traceId"} / {@code "spanId"}), the id, the rule name, and a
      * supplier that builds the rendered evaluator input.
+     *
+     * <p>Error-path logging is split: {@code userFacingLogger} gets a sanitized one-liner
+     * (no Throwable, so internal class names / paths from the stack trace don't leak into the
+     * user-facing log sink), and {@code internalLogger} (the scorer's slf4j logger) gets the
+     * full stack trace.
      */
     public static Map<String, Object> logAndPrepareEvaluatorInput(
             @NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger,
             @NonNull Map<String, String> mdc,
             @NonNull String entityLabel,
             @NonNull Object entityId,
@@ -719,8 +815,9 @@ public class OnlineScoringEngine {
                 }
                 return data;
             } catch (Exception exception) {
-                userFacingLogger.error("Error preparing Python request for {} '{}': \n\n{}",
-                        entityLabel, entityId, exception.getMessage());
+                userFacingLogger.error("Error preparing Python request for {} '{}'", entityLabel, entityId);
+                internalLogger.error("Error preparing Python request for {} '{}'",
+                        entityLabel, entityId, exception);
                 throw exception;
             }
         }
@@ -752,10 +849,97 @@ public class OnlineScoringEngine {
      * even when the context exceeds the size threshold (which may overflow the model's
      * window — in that case the operator should pick a different model for those workloads).
      */
+    /**
+     * Shared error-logging helper for the {@code prepareEvaluation} catch blocks on the trace
+     * and thread scorers. The two loggers are intentional:
+     * <ul>
+     *   <li>{@code userFacingLogger} carries a sanitized one-liner with the entity id only —
+     *       no Throwable, so the stack trace (with internal class names / paths) doesn't leak
+     *       into the user-facing log sink.</li>
+     *   <li>{@code internalLogger} (the scorer's slf4j logger) carries the full stack trace
+     *       so an operator can diagnose what actually broke.</li>
+     * </ul>
+     * <p>The {@code idLabel} parameter ({@code "traceId"} / {@code "threadId"}) and {@code id}
+     * are formatted with single-quoted placeholders per the backend logging convention.
+     */
+    public static void logPreparingLlmRequestError(@NonNull Logger userFacingLogger,
+            @NonNull Logger internalLogger, @NonNull String idLabel, @NonNull Object id,
+            @NonNull Exception exception) {
+        userFacingLogger.error("Error preparing LLM request for {} '{}'", idLabel, id);
+        internalLogger.error("Error preparing LLM request for {} '{}'", idLabel, id, exception);
+    }
+
+    /**
+     * Whether any of the template messages declares non-string (multimodal) content. The
+     * agentic-tools render path on threads only substitutes the context variable into string
+     * content — multimodal templates (image / audio / video alongside text) are rejected.
+     * Callers detect this here and fall back to the inline path rather than throwing.
+     */
+    public static boolean hasMultimodalTemplate(@NonNull List<LlmAsJudgeMessage> templateMessages) {
+        return templateMessages.stream().anyMatch(m -> !m.isStringContent());
+    }
+
     public static boolean supportsToolCalling(@NonNull LlmProvider provider) {
         return switch (provider) {
             case OPEN_AI, ANTHROPIC, GEMINI, OPEN_ROUTER, VERTEX_AI, BEDROCK -> true;
             case OLLAMA, CUSTOM_LLM, OPIK_FREE -> false;
         };
+    }
+
+    /**
+     * Build a sanitized one-line description of the outgoing LLM request for user-facing logs.
+     * The full {@link ChatRequest} contains the rendered prompt, the user message with the
+     * trace's input/output, request parameters, and tool specs — surfacing all of it in a
+     * stored log lands trace content (and any tokens or PII it carries) in clear text
+     * downstream of whatever sinks the log feeds. Shape-only summary instead.
+     */
+    public static String summarizeRequest(@NonNull ChatRequest request, @NonNull String modelName,
+            boolean useTools) {
+        // Intentionally NOT computing total chars: m.toString() on a multi-MB rendered prompt
+        // allocates the full string just to measure its length, which would add ~2x prompt-size
+        // heap churn per evaluation. Message count + tool count are enough to identify what's
+        // happening; an operator who needs byte-level detail can hit the rule's debug log.
+        int messageCount = request.messages() == null ? 0 : request.messages().size();
+        int toolSpecCount = request.toolSpecifications() == null ? 0 : request.toolSpecifications().size();
+        return String.format("model='%s', messages=%d, tools=%d, toolsEnabled=%s",
+                modelName, messageCount, toolSpecCount, useTools);
+    }
+
+    /**
+     * Build a sanitized one-line description of the LLM response. The full {@link ChatResponse}
+     * carries the assistant text and any tool-call arguments, both of which can echo trace
+     * content the model is reasoning about — surfacing the raw response in a user-facing log
+     * lands trace content (and any tokens or PII it carries) downstream of whatever sinks the
+     * log feeds. Shape-only summary instead.
+     */
+    public static String summarizeResponse(@NonNull ChatResponse response) {
+        var ai = response.aiMessage();
+        int textLength = ai.text() == null ? 0 : ai.text().length();
+        int toolCallCount = ai.toolExecutionRequests() == null ? 0 : ai.toolExecutionRequests().size();
+        var finishReason = response.metadata() == null ? null : response.metadata().finishReason();
+        return String.format("textChars=%d, toolCalls=%d, finishReason=%s",
+                textLength, toolCallCount, finishReason);
+    }
+
+    /**
+     * Attach the tool specs from {@code toolRegistry} and the given {@code toolChoice} to
+     * {@code request}'s parameters. Tool specs live inside {@link ChatRequestParameters}, so
+     * we copy the existing parameters via {@code overrideWith} and layer tool specs on top —
+     * setting {@code toolSpecifications} directly on the {@link ChatRequest} builder would
+     * conflict with parameters. {@code toBuilder()} (rather than a fresh builder + .messages())
+     * preserves any other top-level fields on ChatRequest, present or future, guarding against
+     * a "silently dropped fields" regression between the initial scoring call and the
+     * structured re-issue in the tool-call wrap-up.
+     */
+    public static ChatRequest addToolSpecs(@NonNull ChatRequest request, @NonNull ToolChoice toolChoice,
+            @NonNull ToolRegistry toolRegistry) {
+        var parameters = ChatRequestParameters.builder()
+                .overrideWith(request.parameters())
+                .toolSpecifications(toolRegistry.specs())
+                .toolChoice(toolChoice)
+                .build();
+        return request.toBuilder()
+                .parameters(parameters)
+                .build();
     }
 }

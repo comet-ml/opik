@@ -115,7 +115,7 @@ public class OnlineScoringUserDefinedMetricPythonScorer
             Map<String, String> mdc) {
         var trace = message.trace();
         return OnlineScoringEngine.logAndPrepareEvaluatorInput(
-                userFacingLogger, mdc, "traceId", trace.id(), message.ruleName(),
+                userFacingLogger, log, mdc, "traceId", trace.id(), message.ruleName(),
                 () -> {
                     if (message.code().arguments().containsKey(SPANS_ARGUMENT_KEY)) {
                         return OnlineScoringEngine.toReplacements(message.code().arguments(), trace, spans);

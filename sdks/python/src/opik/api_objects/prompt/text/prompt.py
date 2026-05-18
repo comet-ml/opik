@@ -53,6 +53,11 @@ class Prompt(base_prompt.BasePrompt):
             PromptTemplateStructureMismatch: If a chat prompt with the same name already exists (template structure is immutable).
         """
 
+        LOGGER.warning(
+            "opik.Prompt() is deprecated. Use client.create_prompt() to create or "
+            "client.get_prompt() to retrieve text prompts instead."
+        )
+
         self._template = prompt_template.PromptTemplate(
             template=prompt, type=type, validate_placeholders=validate_placeholders
         )
