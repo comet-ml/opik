@@ -26,28 +26,22 @@ The `opik connect` and `opik endpoint` CLI commands have been reorganized with a
 - **Auto-configure on first run** — if no `~/.opik.config` file exists, `opik connect` now offers to run `opik configure` automatically (skipped in non-interactive / headless environments)
 - **Instant disconnect** — stopping a local runner session now notifies the backend immediately, so the connection status in the UI updates right away instead of waiting for a timeout
 
-## 🎮 Playground: Gemma 4 Reasoning & Updated Default Models
-
-- **Gemma 4 no longer leaks reasoning traces** — the internal thinking output from Gemma 4 models was appearing at the top of Playground responses. It is now suppressed so you see only the final model response
-- **Updated default models for Gemini and Vertex AI** — the provider dropdown previously defaulted to deprecated model aliases that weren't selectable in the picker. Both providers now default to their current recommended models (`gemini-3.1-pro` for Gemini, `gemini-3.1-pro` for Vertex AI)
-
-## 🤖 Google ADK Integration: Re-patching Fix
-
-Fixed a bug in the `OpikADKOtelTracer` integration where the tracer would kill all active OpenTelemetry spans and re-patch the ADK exporter on every request via `__setstate__`. The patcher is now idempotent and delegates span creation to the original ADK tracer, so user-configured OTel pipelines are preserved.
-
 ## 🔧 Bug Fixes & Improvements
 
+- **Playground: Gemma 4 no longer leaks reasoning traces** — the internal thinking output from Gemma 4 models was appearing at the top of Playground responses; it is now suppressed so you see only the final model response
+- **Playground: updated default models for Gemini and Vertex AI** — the provider dropdown previously defaulted to deprecated model aliases that weren't selectable in the picker; both providers now default to their current recommended models
+- **Google ADK integration: re-patching fixed** — `OpikADKOtelTracer` was killing all active OpenTelemetry spans and re-patching the ADK exporter on every request; the patcher is now idempotent and preserves user-configured OTel pipelines
 - **Environments: auto-created environments get distinct colors** — environments created automatically from trace ingestion now receive a color from the palette (assigned deterministically by name hash), so they no longer all appear identical
 - **Environments: inline validation errors** — when creating or editing an environment, backend errors (duplicate name, invalid value) now appear inline below the field; the dialog stays open so you don't lose your input
 - **Environments: SDK preserves environment on update** — calling `span.end()`, `span.update()`, `trace.end()`, or `trace.update()` no longer clears the `environment` field set at creation time
 - **Experiments: "Item source" column** — the column previously labeled "Test suite" in the Experiments table is now called "Item source" and shows a dynamic icon reflecting the actual source (dataset, trace, manual, etc.)
-- **Dataset version copy no longer drops items** — when a dataset version was copied and the stored item count had drifted from the actual ClickHouse row count, some items could be silently lost. The copy now uses a live count, eliminating the discrepancy
-- **Self-hosted onboarding skip no longer loops** — clicking "Skip" during onboarding on deployments without demo data (self-hosted Docker Compose, self-hosted EKS) previously started a 5-minute polling loop. It now routes directly to the home page
-- **CSV dataset upload always available** — the CSV upload button in the dataset UI is now always shown. It was previously hidden on self-hosted Docker Compose and some staging environments even though the feature was fully functional
+- **Dataset version copy no longer drops items** — when a dataset version was copied and the stored item count had drifted from the actual ClickHouse row count, some items could be silently lost; the copy now uses a live count, eliminating the discrepancy
+- **Self-hosted onboarding skip no longer loops** — clicking "Skip" during onboarding on deployments without demo data (self-hosted Docker Compose, self-hosted EKS) previously started a 5-minute polling loop; it now routes directly to the home page
+- **CSV dataset upload always available** — the CSV upload button in the dataset UI is now always shown; it was previously hidden on self-hosted Docker Compose and some staging environments even though the feature was fully functional
 
 ## ⚡ Performance Improvements
 
-- **Dataset streaming uses less backend CPU** — resolved a query pattern that caused the MySQL reader to scan all dataset versions on every `/datasets/items/stream` call. Under high request volume this was pushing database CPU to 80–99%; it now uses a direct primary-key lookup instead
+- **Dataset streaming uses less backend CPU** — resolved a query pattern that caused the MySQL reader to scan all dataset versions on every `/datasets/items/stream` call; under high request volume this was pushing database CPU to 80–99%, it now uses a direct primary-key lookup instead
 - **Workspace selector loads faster** — the workspace dropdown now fetches a lighter summary endpoint, reducing the number of backend queries on each page load for users with many workspaces
 
 ---
