@@ -117,6 +117,37 @@ def test_message_queue_task_done__maxlen_eviction__does_not_increment_counter():
     assert queue.all_tasks_done() is True
 
 
+def test_message_queue_put_back__bounded_queue_full__evicted_task_is_released():
+    # Regression: on a bounded queue, `put_back` (used by the rate-limit
+    # retry path) silently evicts an item from the opposite end. That
+    # evicted item was already counted in `_unfinished_tasks` at its
+    # original `put()` time and will never see `task_done()` — so the
+    # counter must drop by 1 to avoid stalling `join()`.
+    queue: message_queue.MessageQueue[str] = message_queue.MessageQueue(max_length=2)
+
+    queue.put("a")  # unfinished=1
+    queue.put("b")  # unfinished=2; deque [b, a]
+
+    # Simulate a consumer popping a message and being rate-limited mid-process.
+    msg = queue.get(0.0001)  # deque [b]; unfinished=2 (msg still in flight)
+    assert msg == "a"
+
+    queue.put("c")  # unfinished=3; deque [c, b]
+
+    # Re-enqueue the popped message: the deque is full, so `append` evicts
+    # "c" from the left. "c" will never be processed, so its task slot must
+    # be released.
+    queue.put_back(msg)
+
+    # Two reachable messages — two task_done() calls must restore quiescence.
+    queue.get(0.0001)
+    queue.task_done()
+    queue.get(0.0001)
+    queue.task_done()
+    assert queue.all_tasks_done() is True
+    assert queue.join(timeout=0.05) is True
+
+
 def test_message_queue_clear__resets_counter_and_unblocks_join():
     queue: message_queue.MessageQueue[str] = message_queue.MessageQueue()
 
