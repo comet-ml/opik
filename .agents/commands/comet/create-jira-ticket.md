@@ -4,7 +4,7 @@ Create a new Jira ticket in the OPIK project following the standard template str
 
 ## Instructions
 
-When the user wants to create a Jira ticket, gather the following information through conversation and then use the `mcp_Jira_home_jira_create_issue` tool to create the ticket.
+When the user wants to create a Jira ticket, gather the following information through conversation and then use the `mcp__Jira__home___jira_create_issue` tool to create the ticket.
 
 ## Required Information to Gather
 
@@ -13,7 +13,7 @@ When the user wants to create a Jira ticket, gather the following information th
 3. **Priority**: Low, Medium, High, or Highest
 4. **Labels**: Relevant labels (e.g., frontend, backend, sdk, playground, traces, ux-improvement)
 5. **Story Points**: Fibonacci scale (1, 2, 3, 5, 8, 13). If the user doesn't provide one, guesstimate based on the ticket's scope and complexity, and present your estimate for confirmation. **If the estimate is 21 or higher, do NOT create the ticket.** Instead, suggest splitting the work into 2+ smaller tickets so that each one is ≤ 13 story points. Help plan the split before proceeding.
-6. **Sprint**: Ask whether to add to the **active sprint** or **next sprint**. Use sprints with the "Opik Sprint" prefix. To find available sprints, use `mcp_Jira_home_jira_get_sprints_from_board` with board ID `524`.
+6. **Sprint**: Ask whether to add to the **active sprint** or **next sprint**. Use sprints with the "Opik Sprint" prefix. To find available sprints, use `mcp__Jira__home___jira_get_sprints_from_board` with board ID `524`.
 7. **Due Date**: Ask whether to set a due date: today, tomorrow, a week from today, or leave unset. Format as `YYYY-MM-DD`.
 8. **Assignee**: (Optional) Who should work on this
 
@@ -24,7 +24,7 @@ Every Task or Story **must** have a parent epic. Follow this logic:
 1. **If the user explicitly specifies an epic** in the prompt (e.g., "under OPIK-1234"), use that.
 2. **If the ticket is clearly tech debt** (refactoring, cleanup, paying down debt, removing workarounds, etc.), automatically use **OPIK-670** (Tech debt). No need to ask.
 3. **Otherwise**, you must help the user pick an epic:
-   - Use `mcp_Jira_home_jira_search` to find open epics in the OPIK project (JQL: `project = OPIK AND issuetype = Epic AND status != Done ORDER BY updated DESC`).
+   - Use `mcp__Jira__home___jira_search` to find open epics in the OPIK project (JQL: `project = OPIK AND issuetype = Epic AND status != Done ORDER BY updated DESC`).
    - Present the results as a table with columns: **#** (number for selection), **Key**, **Summary**, **Status**.
    - Based on the ticket's description, suggest which epic seems like the best fit.
    - Include a final option: **"Skip for now"** — if the user picks this, create the ticket without a parent.
@@ -98,7 +98,7 @@ The intent of this split:
 Once all information is gathered, use the Jira MCP tool:
 
 ```
-mcp_Jira_home_jira_create_issue(
+mcp__Jira__home___jira_create_issue(
   project_key="OPIK",
   summary="[PREFIX] Title of the ticket",
   issue_type="Story|Task|Bug|Epic",
@@ -116,16 +116,16 @@ mcp_Jira_home_jira_create_issue(
 
 ### Field Reference
 - **Story Points**: use `customfield_10028` directly (the `story_points` alias does NOT work at creation time)
-- **Sprint**: use `customfield_10020` with the sprint ID (a plain number). Look up sprints via `mcp_Jira_home_jira_get_sprints_from_board` (board ID `524`), filter by "Opik Sprint" prefix, and pick the active or next future sprint based on user choice.
+- **Sprint**: use `customfield_10020` with the sprint ID (a plain number). Look up sprints via `mcp__Jira__home___jira_get_sprints_from_board` (board ID `524`), filter by "Opik Sprint" prefix, and pick the active or next future sprint based on user choice.
 - **Due Date**: use `duedate` with format `YYYY-MM-DD`. Calculate relative to today's date.
 - **Parent**: use `"parent": "OPIK-XXX"` (plain string, not an object) when creating under an epic.
 
 ## Post-Creation: Status Transition
 
 After creating the ticket:
-1. Wait briefly, then use `mcp_Jira_home_jira_get_issue` to check the ticket's status. A Jira automation will move it to **BACKLOG** status automatically.
+1. Wait briefly, then use `mcp__Jira__home___jira_get_issue` to check the ticket's status. A Jira automation will move it to **BACKLOG** status automatically.
 2. Once the status is confirmed as **BACKLOG**, **you MUST use the `AskUserQuestion` tool** (not inline text) to prompt: "The ticket is now in Backlog. Would you like me to move it to **TO DO**?"
-3. If the user confirms, use `mcp_Jira_home_jira_transition_issue` to move it to "TO DO".
+3. If the user confirms, use `mcp__Jira__home___jira_transition_issue` to move it to "TO DO".
 
 ## Post-Creation: HOW Comment (optional)
 
