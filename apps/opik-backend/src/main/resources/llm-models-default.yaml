@@ -161,8 +161,6 @@ gemini:
   - id: "gemini-3.1-pro-preview"
     label: "Gemini 3.1 Pro Preview"
     structuredOutput: true
-  - id: "gemini-3.1-flash-tts-preview"
-    label: "Gemini 3.1 Flash TTS Preview"
   - id: "gemini-3.1-flash-lite"
     label: "Gemini 3.1 Flash Lite"
   - id: "gemini-3.1-flash-lite-preview"
@@ -186,6 +184,10 @@ gemini:
   - id: "gemini-2.0-flash-lite"
     label: "Gemini 2.0 Flash-Lite"
     structuredOutput: true
+  - id: "gemma-4-26b-a4b-it"
+    label: "Gemma 4 26B A4B IT"
+  - id: "gemma-4-31b-it"
+    label: "Gemma 4 31B IT"
   - id: "lyria-3-clip-preview"
     label: "Lyria 3 Clip Preview"
   - id: "lyria-3-pro-preview"
@@ -204,6 +206,7 @@ gemini:
     structuredOutput: true
   - id: "gemini-3.1-flash-image-preview"
     structuredOutput: true
+  - id: "gemini-3.1-flash-tts-preview"
   - id: "gemini-pro-vision"
   - id: "nano-banana-pro-preview"
   - id: "text-embedding-004"
@@ -372,6 +375,8 @@ openrouter:
     label: "baidu/ernie-4.5-vl-28b-a3b"
   - id: "baidu/ernie-4.5-vl-424b-a47b"
     label: "baidu/ernie-4.5-vl-424b-a47b"
+  - id: "baidu/qianfan-ocr-fast"
+    label: "baidu/qianfan-ocr-fast"
   - id: "baidu/qianfan-ocr-fast:free"
     label: "baidu/qianfan-ocr-fast:free"
   - id: "bytedance-seed/seed-1.6"
@@ -573,6 +578,8 @@ openrouter:
     label: "inclusionai/ling-2.6-flash"
   - id: "inclusionai/ling-2.6-flash:free"
     label: "inclusionai/ling-2.6-flash:free"
+  - id: "inclusionai/ring-2.6-1t"
+    label: "inclusionai/ring-2.6-1t"
   - id: "inclusionai/ring-2.6-1t:free"
     label: "inclusionai/ring-2.6-1t:free"
   - id: "inflection/inflection-3-pi"

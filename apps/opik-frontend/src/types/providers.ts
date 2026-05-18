@@ -166,6 +166,7 @@ export enum PROVIDER_MODEL_TYPE {
   BAIDU_ERNIE_4_5_300B_A47B = "baidu/ernie-4.5-300b-a47b",
   BAIDU_ERNIE_4_5_VL_28B_A3B = "baidu/ernie-4.5-vl-28b-a3b",
   BAIDU_ERNIE_4_5_VL_424B_A47B = "baidu/ernie-4.5-vl-424b-a47b",
+  BAIDU_QIANFAN_OCR_FAST = "baidu/qianfan-ocr-fast",
   BAIDU_QIANFAN_OCR_FAST_FREE = "baidu/qianfan-ocr-fast:free",
   BYTEDANCE_SEED_SEED_1_6 = "bytedance-seed/seed-1.6",
   BYTEDANCE_SEED_SEED_1_6_FLASH = "bytedance-seed/seed-1.6-flash",
@@ -254,6 +255,7 @@ export enum PROVIDER_MODEL_TYPE {
   INCLUSIONAI_LING_2_6_1T_FREE = "inclusionai/ling-2.6-1t:free",
   INCLUSIONAI_LING_2_6_FLASH = "inclusionai/ling-2.6-flash",
   INCLUSIONAI_LING_2_6_FLASH_FREE = "inclusionai/ling-2.6-flash:free",
+  INCLUSIONAI_RING_2_6_1T = "inclusionai/ring-2.6-1t",
   INCLUSIONAI_RING_2_6_1T_FREE = "inclusionai/ring-2.6-1t:free",
   INFLECTION_INFLECTION_3_PI = "inflection/inflection-3-pi",
   INFLECTION_INFLECTION_3_PRODUCTIVITY = "inflection/inflection-3-productivity",
@@ -633,6 +635,8 @@ export enum PROVIDER_MODEL_TYPE {
   LYRIA_3_PRO_PREVIEW = "lyria-3-pro-preview",
   NANO_BANANA_PRO_PREVIEW = "nano-banana-pro-preview",
   TEXT_EMBEDDING = "text-embedding-004",
+  GEMMA_4_26B_A4B_IT = "gemma-4-26b-a4b-it",
+  GEMMA_4_31B_IT = "gemma-4-31b-it",
 
   //   <------ vertex ai
   VERTEX_AI_GEMINI_2_0_FLASH = "vertex_ai/gemini-2.0-flash-001",
