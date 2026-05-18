@@ -1149,17 +1149,9 @@ public class ExperimentDAO {
             """;
 
     /**
-     * Query to get target project IDs for experiment queries.
-     * Used to optimize FIND, FIND_COUNT, FIND_GROUPS, and FIND_GROUPS_AGGREGATIONS queries
-     * by pre-computing project IDs, reducing traces, spans, and feedback_scores table scans.
-     *
-     * <p>OPIK-6311 fast path: prefer {@code experiments.project_id} (populated for modern
-     * experiments) and fall back to {@code experiment_aggregates.project_id} for experiments
-     * that don't have it on the experiment row yet but already have aggregates. Only experiments
-     * missing from BOTH go through the legacy {@code experiment_items -> traces} traversal,
-     * which is the expensive step (10 GiB / 35 M rows scanned in production for workspaces with
-     * many experiments). On observed prod workspaces this legacy branch is empty, so the query
-     * collapses from ~23 s to sub-second.
+     * Target project IDs for FIND / FIND_COUNT / FIND_GROUPS / FIND_GROUPS_AGGREGATIONS scoping.
+     * Fast path reads {@code project_id} from {@code experiments}, falls back to
+     * {@code experiment_aggregates}, then to {@code experiment_items -> traces} for legacy rows.
      */
     private static final String SELECT_TARGET_PROJECTS = """
             WITH experiments_final AS (

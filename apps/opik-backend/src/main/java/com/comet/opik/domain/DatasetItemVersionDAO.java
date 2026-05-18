@@ -427,27 +427,38 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
             """;
 
     /**
-     * Counts dataset items with experiment items, applying all filters from search criteria.
-     * This ensures pagination totals match the filtered results.
-     * Note: Uses simplified feedback scores processing (only aggregated values, not full details)
-     * since we only need values for filtering in HAVING clauses, not for display.
-     * This keeps the count query closer to the legacy pattern while supporting all required filters.
-     *
-     * <p>OPIK-6177: same stable-id resolution shape as
-     * {@link #SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS} — see that constant's comment
-     * for the rationale on the lookup_for_count CTE and the direct-table lookup_div LEFT JOIN.
-     *
-     * <p>OPIK-6311 {@code slim_count} fast path: when the data side takes the
-     * {@code push_top_limit} fast path AND the criteria carry no filters / no search, the count
-     * collapses to a direct DISTINCT count over {@code experiment_item_aggregates} (which already
-     * holds one row per (experiment, dataset_item)). The {@code dataset_item_versions FINAL}
-     * lookup is preserved for legacy {@code stable_dataset_item_id} resolution but pre-pruned by
-     * {@code (workspace_id, dataset_id)} — the first two columns of DIV's primary key — so
-     * ClickHouse can prune the FINAL merge instead of scanning the whole DIV table. Result is
-     * exact, not approximate.
+     * Counts dataset items with experiment items. The {@code slim_count} branch routes the count
+     * through {@code experiment_item_aggregates}; the legacy branch keeps the full CTE chain for
+     * search and raw-only inputs. OPIK-6177 stable-id resolution shape is preserved in both.
      */
     private static final String SELECT_DATASET_ITEM_VERSIONS_WITH_EXPERIMENT_ITEMS_COUNT = """
             <if(slim_count)>
+            <if(dataset_item_filters)>
+            WITH dataset_items_filtered_ids AS (
+                SELECT id, row_id
+                FROM (
+                    SELECT
+                        dataset_item_id AS id,
+                        id AS row_id,
+                        data,
+                        description,
+                        source,
+                        trace_id,
+                        span_id,
+                        tags,
+                        evaluators,
+                        execution_policy,
+                        created_at,
+                        last_updated_at,
+                        created_by,
+                        last_updated_by
+                    FROM dataset_item_versions FINAL
+                    WHERE workspace_id = :workspace_id
+                      AND dataset_id = :datasetId
+                ) AS resolved
+                WHERE <dataset_item_filters>
+            )
+            <endif>
             SELECT count(DISTINCT
                 if(notEmpty(lookup_div.dataset_item_id),
                    lookup_div.dataset_item_id,
@@ -470,6 +481,10 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                   AND dataset_id = :datasetId
                   <if(experiment_ids)>AND id IN :experiment_ids<endif>
             )
+            <if(experiment_item_filters)>AND <experiment_item_filters><endif>
+            <if(feedback_scores_filters_agg)>AND <feedback_scores_filters_agg><endif>
+            <if(feedback_scores_empty_filters_agg)>AND <feedback_scores_empty_filters_agg><endif>
+            <if(dataset_item_filters)>AND eia.dataset_item_id IN (SELECT arrayJoin([id, row_id]) FROM dataset_items_filtered_ids)<endif>
             SETTINGS log_comment = '<log_comment>'
             <else>
             WITH experiment_aggregated_scope_ids AS (
@@ -2894,12 +2909,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
         log.debug("Getting filtered count for dataset '{}' version '{}' with experiment filters", criteria.datasetId(),
                 versionId);
 
-        // OPIK-6311 slim_count: when the data side takes the push_top_limit fast path AND there
-        // are no filters or search, the heavy CTE chain is unnecessary — a direct DISTINCT count
-        // on experiment_item_aggregates produces the exact same value.
-        boolean slimCount = hasAggregated && !hasRaw
-                && CollectionUtils.isEmpty(criteria.filters())
-                && StringUtils.isBlank(criteria.search());
+        // OPIK-6311: slim_count routes the count through EIA when search is absent; filters use
+        // the same renderable strategies as the data path's top_dataset_items CTE.
+        boolean slimCount = hasAggregated && !hasRaw && StringUtils.isBlank(criteria.search());
 
         return Mono.deferContextual(ctx -> {
             String workspaceId = ctx.get(RequestContext.WORKSPACE_ID);
@@ -2939,12 +2951,9 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                 var statement = connection.createStatement(template.render())
                         .bind("datasetId", criteria.datasetId());
 
-                // The slim branch only references :workspace_id, :datasetId and optionally
-                // :experiment_ids — skip the rest of the binds to keep the statement clean.
                 if (!slimCount) {
                     statement.bind("versionId", versionId);
 
-                    // Bind target project IDs (from separate query to reduce traces table scans)
                     if (CollectionUtils.isNotEmpty(targetProjectIds)) {
                         statement.bind("target_project_ids", targetProjectIds.toArray(UUID[]::new));
                     }
@@ -2954,11 +2963,7 @@ class DatasetItemVersionDAOImpl implements DatasetItemVersionDAO {
                     statement.bind("experiment_ids", criteria.experimentIds().toArray(UUID[]::new));
                 }
 
-                // Bind search and filter parameters using helper method (no-op on the slim branch
-                // since filters / search are empty when slimCount is true).
-                if (!slimCount) {
-                    statement = bindSearchAndFilters(statement, criteria);
-                }
+                statement = bindSearchAndFilters(statement, criteria);
 
                 Segment segment = startSegment(DATASET_ITEM_VERSIONS, CLICKHOUSE,
                         slimCount
