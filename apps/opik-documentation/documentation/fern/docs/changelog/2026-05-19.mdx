@@ -26,14 +26,6 @@ The `opik connect` and `opik endpoint` CLI commands have been reorganized with a
 - **Auto-configure on first run** — if no `~/.opik.config` file exists, `opik connect` now offers to run `opik configure` automatically (skipped in non-interactive / headless environments)
 - **Instant disconnect** — stopping a local runner session now notifies the backend immediately, so the connection status in the UI updates right away instead of waiting for a timeout
 
-## 🌍 Environments: Color Assignments & Bug Fixes
-
-Several improvements to how environments work in the UI and SDK:
-
-- **Auto-created environments get distinct colors** — environments created automatically from trace ingestion now receive a color from the palette (assigned deterministically by name hash), so they no longer all appear identical
-- **Inline validation errors** — when creating or editing an environment, backend errors (duplicate name, invalid value) now appear inline below the field instead of silently failing; the dialog stays open so you don't lose your input
-- **SDK: environment preserved on update** — calling `span.end()`, `span.update()`, `trace.end()`, or `trace.update()` no longer clears the `environment` field set at creation time
-
 ## 🎮 Playground: Gemma 4 Reasoning & Updated Default Models
 
 - **Gemma 4 no longer leaks reasoning traces** — the internal thinking output from Gemma 4 models was appearing at the top of Playground responses. It is now suppressed so you see only the final model response
@@ -43,8 +35,11 @@ Several improvements to how environments work in the UI and SDK:
 
 Fixed a bug in the `OpikADKOtelTracer` integration where the tracer would kill all active OpenTelemetry spans and re-patch the ADK exporter on every request via `__setstate__`. The patcher is now idempotent and delegates span creation to the original ADK tracer, so user-configured OTel pipelines are preserved.
 
-## 🔧 Bug Fixes
+## 🔧 Bug Fixes & Improvements
 
+- **Environments: auto-created environments get distinct colors** — environments created automatically from trace ingestion now receive a color from the palette (assigned deterministically by name hash), so they no longer all appear identical
+- **Environments: inline validation errors** — when creating or editing an environment, backend errors (duplicate name, invalid value) now appear inline below the field; the dialog stays open so you don't lose your input
+- **Environments: SDK preserves environment on update** — calling `span.end()`, `span.update()`, `trace.end()`, or `trace.update()` no longer clears the `environment` field set at creation time
 - **Experiments: "Item source" column** — the column previously labeled "Test suite" in the Experiments table is now called "Item source" and shows a dynamic icon reflecting the actual source (dataset, trace, manual, etc.)
 - **Dataset version copy no longer drops items** — when a dataset version was copied and the stored item count had drifted from the actual ClickHouse row count, some items could be silently lost. The copy now uses a live count, eliminating the discrepancy
 - **Self-hosted onboarding skip no longer loops** — clicking "Skip" during onboarding on deployments without demo data (self-hosted Docker Compose, self-hosted EKS) previously started a 5-minute polling loop. It now routes directly to the home page
